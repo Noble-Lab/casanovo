@@ -1,0 +1,24 @@
+name: Lint
+
+on: [push, pull_request]
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Setup Python 3.8
+        uses: actions/setup-python@v2
+        with:
+          python-version: "3.8"
+
+      - name: Run black
+        uses: psf/black@stable
+
+      - name: Check for debugging print statements
+        run: |
+          if grep -rq "print(" casanovo; then
+              echo "Found the following print statements:"
+              grep -r "print(" casanovo
+              exit 1
+          fi
