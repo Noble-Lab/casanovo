@@ -12,7 +12,7 @@ Install `casanovo` as a Python package from this repo (dependencies will be inst
 pip install git+https://github.com/Noble-Lab/casanovo.git#egg=casanovo
 ```
 
-Once installed, Casanovo can be used with a simple command line interface. All data, model and training-related options can be specified in `casanovo/config.py`.
+Once installed, Casanovo can be used with a simple command line interface. All data, model and training-related options can be specified in `casanovo/config.py`, default configuration was used to obtain the reported results.
 - To run _de novo_ sequencing with a pre-trained model:
 ```
 casanovo test
