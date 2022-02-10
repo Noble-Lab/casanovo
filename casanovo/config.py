@@ -7,18 +7,15 @@ import os
 random_seed = 454
 
 #Train data options
-train_data_path = ''
-train_annot_spec_idx_path = ''
+train_annot_spec_idx_path = os.path.join(os.getcwd(),'casanovo_train.hdf5') #path to write the training data index file
 train_spec_idx_overwrite = True
 
 #Validation data options
-val_data_path = ''
-val_annot_spec_idx_path = ''
+val_annot_spec_idx_path = os.path.join(os.getcwd(),'casanovo_val.hdf5') #path to write the validation data index file
 val_spec_idx_overwrite = True
 
 #Test data options
-test_data_path = ''
-test_annot_spec_idx_path = ''
+test_annot_spec_idx_path = os.path.join(os.getcwd(),'casanovo_test.hdf5') #path to write the test data index file
 test_spec_idx_overwrite = True
 
 #Preprocessing parameters
@@ -28,7 +25,7 @@ min_mz = 1.0005079* 50.5
 
 #Hardware options
 num_workers = 0
-gpus = [0] #None for CPU, int list to specify GPUs
+gpus = None #None for CPU, int list to specify GPUs
 
 #Model options
 max_charge = 10
@@ -86,12 +83,8 @@ max_epochs = 30
 num_sanity_val_steps = 0
 
 train_from_scratch = True
-model_full_path = ''
 
 save_model = False
 model_save_folder_path = ''
 save_weights_only = True
 every_n_epochs = 1
-
-
-

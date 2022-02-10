@@ -1,20 +1,26 @@
 """Training and testing functionality for the de novo peptide sequencing model"""
-import logging
+import logging, importlib
 from pathlib import Path
+import pytorch_lightning as pl
 from depthcharge.data import AnnotatedSpectrumIndex 
 from casanovo.denovo import DeNovoDataModule, Spec2Pep
-from casanovo import config
-import pytorch_lightning as pl
 
-def train():
-    """Train a Casanovo model with options specified in config.py."""    
+def train(train_data_path, val_data_path, model_path, config_path):
+    """Train a Casanovo model with options specified in config.py.""" 
     
+    #Use custom config file if specified    
+    if config_path == None:
+        from casanovo import config
+    else:
+        importlib.machinery.SourceFileLoader('config', config_path).load_module()
+        import config
+        
     #Set random seed across PyTorch, numpy and python.random
     pl.utilities.seed.seed_everything(seed=config.random_seed, workers=True)
 
     #Index training and validation data
-    train_mgf_file = Path(config.train_data_path)
-    val_mgf_file = Path(config.val_data_path)
+    train_mgf_file = Path(train_data_path)
+    val_mgf_file = Path(val_data_path)
 
     train_index = AnnotatedSpectrumIndex(config.train_annot_spec_idx_path, train_mgf_file, overwrite=config.train_spec_idx_overwrite)
     val_index = AnnotatedSpectrumIndex(config.val_annot_spec_idx_path, val_mgf_file, overwrite=config.val_spec_idx_overwrite)
@@ -64,7 +70,7 @@ def train():
 
     else:
         model = Spec2Pep().load_from_checkpoint(
-        config.model_full_path,
+        model_path,
         dim_model=config.dim_model,
         n_head=config.n_head,
         dim_feedforward=config.dim_feedforward,
@@ -97,7 +103,7 @@ def train():
         )
 
         trainer = pl.Trainer(
-            strategy=config.accelerator,
+            accelerator=config.accelerator,
             logger=config.logger,
             gpus=config.gpus,
             max_epochs=config.max_epochs,
@@ -108,7 +114,7 @@ def train():
     else:
 
         trainer = pl.Trainer(
-            strategy=config.accelerator,
+            accelerator=config.accelerator,
             logger=config.logger,
             gpus=config.gpus,
             max_epochs=config.max_epochs,
@@ -118,12 +124,19 @@ def train():
     #Train the model
     trainer.fit(model, train_loader.train_dataloader(), val_loader.val_dataloader())
 
-def test_denovo():
+def test_denovo(test_data_path, model_path, config_path):
     """Test a pre-trained Casanovo model with options specified in config.py."""
     
+    #Use custom config file if specified
+    if config_path == None:
+        from casanovo import config
+    else:
+        importlib.machinery.SourceFileLoader('config', config_path).load_module()
+        import config
+        
     # Initialize the pre-trained model
     model_trained = Spec2Pep().load_from_checkpoint(
-    config.model_full_path,
+    model_path,
     dim_model=config.dim_model,
     n_head=config.n_head,
     dim_feedforward=config.dim_feedforward,
@@ -137,7 +150,7 @@ def test_denovo():
     n_log=config.n_log,       
 )
     #Index test data
-    mgf_file = Path(config.test_data_path)
+    mgf_file = Path(test_data_path)
     index = AnnotatedSpectrumIndex(config.test_annot_spec_idx_path, mgf_file, overwrite=config.test_spec_idx_overwrite)
     
     #Initialize the data loader
@@ -154,7 +167,7 @@ def test_denovo():
 
     #Create Trainer object
     trainer = pl.Trainer(
-        strategy=config.accelerator,
+        accelerator=config.accelerator,
         logger=config.logger,
         gpus=config.gpus,
         max_epochs=config.max_epochs,
@@ -163,5 +176,3 @@ def test_denovo():
     
     #Run test
     trainer.validate(model_trained, loaders.test_dataloader())
-
-
