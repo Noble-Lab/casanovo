@@ -7,20 +7,20 @@ Data and pre-trained model weights are available [here](https://zenodo.org/recor
 
 ## How to get started with Casanovo?
 
-Install `casanovo` as a Python package from this repo (dependencies will be installed automatically as needed):
+Install `casanovo` as a Python package from this repo (requires Python 3.7+, dependencies will be installed automatically as needed):
 ```
 pip install git+https://github.com/Noble-Lab/casanovo.git#egg=casanovo
 ```
 
-Once installed, Casanovo can be used with a simple command line interface. All data, model and training-related options can be specified in `casanovo/config.py`, default configuration was used to obtain the reported results.
+Once installed, Casanovo can be used with a simple command line interface. Run `casanovo --help` for more details. All auxiliary data, model and training-related variables can be specified in a user created `.py` file, see `casanovo/config.py` for the default configuration that was used to obtain the reported results.
 - To run _de novo_ sequencing with a pre-trained model:
 ```
-casanovo test
+casanovo --mode=test --model_path='path/to/pretrained' --test_data_path='path/to/test' --config_path='path/to/config'
 ```
 
 - To train a model from scratch or continue training a pre-trained model:
 ```
-casanovo train
+casanovo train --mode=train --model_path='path/to/pretrained' --train_data_path='path/to/train'  --val_data_path='path/to/validation' --config_path='path/to/config'
 ```
 
 
