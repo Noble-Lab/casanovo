@@ -59,6 +59,8 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         Number of warm up iterations for learning rate scheduler
     max_iters: int, optional
         Total number of iterations for learning rate scheduler
+    output_path: str, optional
+        Path to write csv file with denovo peptide sequences        
     **kwargs : Dict
         Keyword arguments passed to the Adam optimizer
     """
@@ -76,9 +78,10 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         residues="canonical",
         max_charge=5,
         n_log=10,
-        tb_summarywriter = None,
-        warmup_iters = 100000,
-        max_iters = 600000,
+        tb_summarywriter=None,
+        warmup_iters=100000,
+        max_iters=600000,
+        output_path=None,
         **kwargs,
     ):
         """Initialize a Spec2Pep model"""
@@ -128,6 +131,10 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
                
         self.warmup_iters = warmup_iters
         self.max_iters = max_iters
+        
+        # Store de novo sequences to be saved
+        self.denovo_seqs = []
+        self.output_path = output_path
 
     def forward(self, spectra, precursors):
         """Sequence a batch of mass spectra.
@@ -377,7 +384,27 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         
         
         return loss
+    
+    def test_step(self, batch, *args):
+        """A single test step
 
+        Note that this is used within the context of a pytorch-lightning
+        Trainer to generate a prediction.
+
+        Parameters
+        ----------
+        batch : tuple of torch.Tensor
+            A batch is expected to contain mass spectra (index 0), the
+            precursor mass and charge (index 1), and the spectrum identifier
+            (index 2)
+
+        """
+        #De novo sequence the batch
+        pred_seqs, scores = self.predict_step(batch)
+        spectrum_order_id = batch[-1]
+        self.denovo_seqs += [(spectrum_order_id, pred_seqs)]
+          
+    
     def on_train_epoch_end(self):
         """Log the training loss.
 
@@ -399,6 +426,18 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
             "valid_pep_recall": self.trainer.callback_metrics["pep_recall"]["valid"].item(),
         }
         self._history.append(metrics)
+        
+    def on_test_epoch_end(self):
+        """Write de novo sequences to csv file.
+
+        This is a pytorch-lightning hook.
+        """
+        with open(os.path.join(self.output_path,'casanovo_output.csv'), 'w') as f:
+            f.write(f'spectrum_id,denovo_seq\n')
+            for batch in self.denovo_seqs:
+                for i in range(len(batch[0])):
+                    f.write(f'{batch[0][i]},{batch[1][i][1:]}\n')
+                    
         
     def on_epoch_end(self):
         """Print log to console, if requested."""

@@ -9,7 +9,7 @@ import torch
 import numpy as np
 import pytorch_lightning as pl
 
-from ..data import AnnotatedSpectrumDataset
+from ..data import AnnotatedSpectrumDataset, SpectrumDataset
 
 
 class DeNovoDataModule(pl.LightningDataModule):
@@ -69,7 +69,7 @@ class DeNovoDataModule(pl.LightningDataModule):
         if self.num_workers is None:
             self.num_workers = os.cpu_count()
 
-    def setup(self, stage=None):
+    def setup(self, stage=None, annotated=True):
         """Set up the PyTorch Datasets.
 
         Parameters
@@ -77,28 +77,44 @@ class DeNovoDataModule(pl.LightningDataModule):
         stage : str {"fit", "validate", "test"}
             The stage indicating which Datasets to prepare. All are prepared
             by default.
+        annotated: bool
+            True if peptide sequence annotations available for test data
         """
-        make_dataset = partial(
-            AnnotatedSpectrumDataset,
-            n_peaks=self.n_peaks,
-            min_mz=self.min_mz,
-            preprocess_spec=self.preprocess_spec
-        )
 
         if stage in (None, "fit", "validate"):
+            make_dataset = partial(
+                AnnotatedSpectrumDataset,
+                n_peaks=self.n_peaks,
+                min_mz=self.min_mz,
+                preprocess_spec=self.preprocess_spec
+            )
             if self.train_index is not None:
+                
                 self.train_dataset = make_dataset(
                     self.train_index,
                     random_state=self.rng,
                 )
-
             if self.valid_index is not None:
                 self.valid_dataset = make_dataset(self.valid_index)
 
         if stage in (None, "test"):
+            if annotated == True:             
+                make_dataset = partial(
+                    AnnotatedSpectrumDataset,
+                    n_peaks=self.n_peaks,
+                    min_mz=self.min_mz,
+                    preprocess_spec=self.preprocess_spec
+                )        
+            else:    
+                make_dataset = partial(
+                    SpectrumDataset,
+                    n_peaks=self.n_peaks,
+                    min_mz=self.min_mz,
+                    preprocess_spec=self.preprocess_spec
+                )                
             if self.test_index is not None:
                 self.test_dataset = make_dataset(self.test_index)
-
+                
     def _make_loader(self, dataset):
         """Create a PyTorch DataLoader.
 
@@ -151,14 +167,12 @@ def prepare_batch(batch):
         and ``X[:, :, 1]`` are their associated intensities.
     precursors : torch.Tensor of shape (batch_size, 2)
         The precursor mass and charge state.
-    sequence : list of str
-        The peptide sequence annotations.
-    ids: list of str
-        Spectrum identifier        
+    sequence_or_ids : list of str
+        The peptide sequence annotations in training, the spectrum identifier in de novo sequencing  
     """
-    spec, mz, charge, seq = list(zip(*batch))
+    spec, mz, charge, sequence_or_ids = list(zip(*batch))
     charge = torch.tensor(charge)
     mass = (torch.tensor(mz) - 1.007276) * charge
     precursors = torch.vstack([mass, charge]).T.float()
     spec = torch.nn.utils.rnn.pad_sequence(spec, batch_first=True)
-    return spec, precursors, seq
+    return spec, precursors, sequence_or_ids

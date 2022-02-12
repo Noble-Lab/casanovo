@@ -25,7 +25,7 @@ min_mz = 1.0005079* 50.5
 
 #Hardware options
 num_workers = 0
-gpus = None #None for CPU, int list to specify GPUs
+gpus = [0] #None for CPU, int list to specify GPUs
 
 #Model options
 max_charge = 10

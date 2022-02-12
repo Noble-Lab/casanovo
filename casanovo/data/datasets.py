@@ -74,13 +74,15 @@ class SpectrumDataset(Dataset):
             The m/z of the precursor.
         precursor_charge : int
             The charge of the precursor.
+        spectrum_order_id: str
+            The unique identifier for spectrum based on its order in the original mgf file
         """
         mz_array, int_array, prec_mz, prec_charge = self.index[idx]
         spec = self._process_peaks(mz_array, int_array)
         if not spec.sum():
             spec = torch.tensor([[0, 1]]).float()
-
-        return spec, prec_mz, prec_charge
+        spectrum_order_id = f'{idx}'
+        return spec, prec_mz, prec_charge, spectrum_order_id
 
     def _process_peaks(self, mz_array, int_array):
         """Choose the top n peaks and normalize the spectrum intensities.
@@ -205,5 +207,5 @@ class AnnotatedSpectrumDataset(SpectrumDataset):
         if self.preprocess_spec == True:
             spec = self._process_peaks(mz_array, int_array)
         else:
-            spec = torch.tensor([mz_array, int_array]).T.float()
+            spec = torch.tensor(np.array([mz_array, int_array])).T.float()
         return spec, prec_mz, prec_charge, pep
