@@ -30,6 +30,9 @@ def train(train_data_path, val_data_path, model_path, config_path):
         train_index=train_index,
         n_peaks=config.n_peaks,
         min_mz=config.min_mz,
+        max_mz=config.max_mz,
+        min_intensity=config.min_intensity,
+        fragment_tol_mass=config.fragment_tol_mass,        
         preprocess_spec=config.preprocess_spec,
         num_workers=config.num_workers,
         batch_size=config.train_batch_size
@@ -39,6 +42,9 @@ def train(train_data_path, val_data_path, model_path, config_path):
         valid_index=val_index,
         n_peaks=config.n_peaks,
         min_mz=config.min_mz,
+        max_mz=config.max_mz,
+        min_intensity=config.min_intensity,
+        fragment_tol_mass=config.fragment_tol_mass,       
         preprocess_spec=config.preprocess_spec,
         num_workers=config.num_workers,
         batch_size=config.val_batch_size
@@ -158,6 +164,9 @@ def test_evaluate(test_data_path, model_path, config_path):
         test_index=index,
         n_peaks=config.n_peaks,
         min_mz=config.min_mz,
+        max_mz=config.max_mz,
+        min_intensity=config.min_intensity,
+        fragment_tol_mass=config.fragment_tol_mass,        
         preprocess_spec=config.preprocess_spec,
         num_workers=config.num_workers,
         batch_size=config.test_batch_size
@@ -212,6 +221,9 @@ def test_denovo(test_data_path, model_path, config_path, output_path):
         test_index=index,
         n_peaks=config.n_peaks,
         min_mz=config.min_mz,
+        max_mz=config.max_mz,
+        min_intensity=config.min_intensity,
+        fragment_tol_mass=config.fragment_tol_mass,
         preprocess_spec=config.preprocess_spec,
         num_workers=config.num_workers,
         batch_size=config.test_batch_size

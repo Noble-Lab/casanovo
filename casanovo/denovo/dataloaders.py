@@ -31,6 +31,14 @@ class DeNovoDataModule(pl.LightningDataModule):
     min_mz : float, optional
         The minimum m/z to include. The default is 140 m/z, in order to
         exclude TMT and iTRAQ reporter ions.
+    max_mz : float, optional
+        The maximum m/z to include. 
+    min_intensity : float, optional
+        Remove peaks whose intensity is below `min_intensity` percentage
+        of the intensity of the most intense peak
+    fragment_tol_mass : float, optional
+        Fragment mass tolerance around the precursor mass in Da to remove the
+        precursor peak.       
     num_workers : int, optional
         The number of workers to use for data loading. By default, the number
         of available CPU cores on the current machine is used.
@@ -47,6 +55,9 @@ class DeNovoDataModule(pl.LightningDataModule):
         batch_size=128,
         n_peaks=200,
         min_mz=140,
+        max_mz=2500,
+        min_intensity=0.01,
+        fragment_tol_mass=2,        
         num_workers=None,
         random_state=None,
         preprocess_spec=False
@@ -59,6 +70,9 @@ class DeNovoDataModule(pl.LightningDataModule):
         self.batch_size = batch_size
         self.n_peaks = n_peaks
         self.min_mz = min_mz
+        self.max_mz = max_mz
+        self.min_intensity = min_intensity
+        self.fragment_tol_mass = fragment_tol_mass       
         self.num_workers = num_workers
         self.rng = np.random.default_rng(random_state)
         self.preprocess_spec = preprocess_spec
@@ -86,10 +100,12 @@ class DeNovoDataModule(pl.LightningDataModule):
                 AnnotatedSpectrumDataset,
                 n_peaks=self.n_peaks,
                 min_mz=self.min_mz,
-                preprocess_spec=self.preprocess_spec
+                max_mz=self.max_mz,
+                min_intensity=self.min_intensity,
+                fragment_tol_mass=self.fragment_tol_mass,                
+                preprocess_spec=self.preprocess_spec,
             )
             if self.train_index is not None:
-                
                 self.train_dataset = make_dataset(
                     self.train_index,
                     random_state=self.rng,
@@ -103,6 +119,9 @@ class DeNovoDataModule(pl.LightningDataModule):
                     AnnotatedSpectrumDataset,
                     n_peaks=self.n_peaks,
                     min_mz=self.min_mz,
+                    max_mz=self.max_mz,
+                    min_intensity=self.min_intensity,
+                    fragment_tol_mass=self.fragment_tol_mass,                   
                     preprocess_spec=self.preprocess_spec
                 )        
             else:    
@@ -110,6 +129,9 @@ class DeNovoDataModule(pl.LightningDataModule):
                     SpectrumDataset,
                     n_peaks=self.n_peaks,
                     min_mz=self.min_mz,
+                    max_mz=self.max_mz,
+                    min_intensity=self.min_intensity,
+                    fragment_tol_mass=self.fragment_tol_mass,                      
                     preprocess_spec=self.preprocess_spec
                 )                
             if self.test_index is not None:

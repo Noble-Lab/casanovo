@@ -22,10 +22,13 @@ test_spec_idx_overwrite = True
 preprocess_spec = False
 n_peaks = 150
 min_mz = 1.0005079* 50.5
+max_mz = 2500
+min_intensity = 0.01
+fragment_tol_mass = 2  # Da
 
 #Hardware options
 num_workers = 0
-gpus = [0] #None for CPU, int list to specify GPUs
+gpus = None #None for CPU, int list to specify GPUs
 
 #Model options
 max_charge = 10
