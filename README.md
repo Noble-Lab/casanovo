@@ -14,7 +14,7 @@ pip install git+https://github.com/Noble-Lab/casanovo.git#egg=casanovo
 
 Once installed, Casanovo can be used with a simple command line interface. Run `casanovo --help` for more details. All auxiliary data, model and training-related variables can be specified in a user created `.py` file, see `casanovo/config.py` for the default configuration that was used to obtain the reported results.
 
-- To evaluate _de novo_ sequencing performance of a pre-trained model, peptide annotations are needed for spectra:
+- To evaluate _de novo_ sequencing performance of a pre-trained model (peptide annotations are needed for spectra):
 ```
 casanovo --mode=eval --model_path='path/to/pretrained' --test_data_path='path/to/test' --config_path='path/to/config'
 ```
