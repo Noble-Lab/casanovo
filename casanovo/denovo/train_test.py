@@ -19,8 +19,10 @@ def train(train_data_path, val_data_path, model_path, config_path):
     pl.utilities.seed.seed_everything(seed=config.random_seed, workers=True)
 
     #Index training and validation data
-    train_mgf_files = [os.path.join(train_data_path, f) for f in os.listdir(train_data_path) if Path(os.path.join(train_data_path, f)).suffix.lower() == ".mgf"]
-    val_mgf_files = [os.path.join(val_data_path, f) for f in os.listdir(val_data_path) if Path(os.path.join(val_data_path, f)).suffix.lower() == ".mgf"]    
+    train_data_path = Path(train_data_path)
+    train_mgf_files = [train_data_path / f for f in os.listdir(train_data_path) if train_data_path/f.suffix.lower() == ".mgf"]
+    val_data_path = Path(val_data_path)
+    val_mgf_files = [val_data_path/f for f in os.listdir(val_data_path) if (val_data_path/f).suffix.lower() == ".mgf"]   
     
     train_index = AnnotatedSpectrumIndex(config.train_annot_spec_idx_path, train_mgf_files, overwrite=config.train_spec_idx_overwrite)
     val_index = AnnotatedSpectrumIndex(config.val_annot_spec_idx_path, val_mgf_files, overwrite=config.val_spec_idx_overwrite)
@@ -156,7 +158,8 @@ def test_evaluate(test_data_path, model_path, config_path):
     n_log=config.n_log,       
 )
     #Index test data
-    mgf_files = [os.path.join(test_data_path, f) for f in os.listdir(test_data_path) if Path(os.path.join(test_data_path, f)).suffix.lower() == ".mgf"]
+    test_data_path = Path(test_data_path)
+    mgf_files = [test_data_path/f for f in os.listdir(test_data_path) if (test_data_path/f).suffix.lower() == ".mgf"]
     index = AnnotatedSpectrumIndex(config.test_annot_spec_idx_path, mgf_files, overwrite=config.test_spec_idx_overwrite)
     
     #Initialize the data loader
@@ -213,7 +216,8 @@ def test_denovo(test_data_path, model_path, config_path, output_path):
     output_path=output_path        
 )
     #Index test data
-    mgf_files = [os.path.join(test_data_path, f) for f in os.listdir(test_data_path) if Path(os.path.join(test_data_path, f)).suffix.lower() == ".mgf"]
+    test_data_path = Path(test_data_path)
+    mgf_files = [test_data_path/f for f in os.listdir(test_data_path) if (test_data_path/f).suffix.lower() == ".mgf"]
     index = SpectrumIndex(config.test_annot_spec_idx_path, mgf_files, overwrite=config.test_spec_idx_overwrite)
     
     #Initialize the data loader
