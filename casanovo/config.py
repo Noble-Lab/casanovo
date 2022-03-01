@@ -73,7 +73,6 @@ warmup_iters = 100000
 max_iters = 600000
 learning_rate = 5e-4
 weight_decay = 1e-5
-reverse_peptide_seqs = True
 
 #Training/inference options
 train_batch_size = 32
