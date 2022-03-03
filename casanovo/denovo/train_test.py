@@ -20,8 +20,12 @@ def train(train_data_path, val_data_path, model_path, config_path):
 
     #Index training and validation data
     train_data_path = Path(train_data_path)
+    if train_data_path.is_file():
+        raise FileNotFoundError(f'train_data_path expects directory path but file path was provided instead')    
     train_mgf_files = [train_data_path / f for f in os.listdir(train_data_path) if train_data_path/f.suffix.lower() == ".mgf"]
     val_data_path = Path(val_data_path)
+    if val_data_path.is_file():
+        raise FileNotFoundError(f'val_data_path expects directory path but file path was provided instead')        
     val_mgf_files = [val_data_path/f for f in os.listdir(val_data_path) if (val_data_path/f).suffix.lower() == ".mgf"]   
     
     train_index = AnnotatedSpectrumIndex(config.train_annot_spec_idx_path, train_mgf_files, overwrite=config.train_spec_idx_overwrite)
@@ -77,6 +81,9 @@ def train(train_data_path, val_data_path, model_path, config_path):
         ) 
 
     else:
+        model_path = Path(model_path)
+        if model_path.is_dir():
+            raise FileNotFoundError(f'model_path expects file path but directory path was provided instead')        
         model = Spec2Pep().load_from_checkpoint(
         model_path,
         dim_model=config.dim_model,
@@ -143,6 +150,9 @@ def test_evaluate(test_data_path, model_path, config_path):
         import config
         
     # Initialize the pre-trained model
+    model_path = Path(model_path)
+    if model_path.is_dir():
+        raise FileNotFoundError(f'model_path expects file path but directory path was provided instead')    
     model_trained = Spec2Pep().load_from_checkpoint(
     model_path,
     dim_model=config.dim_model,
@@ -159,6 +169,8 @@ def test_evaluate(test_data_path, model_path, config_path):
 )
     #Index test data
     test_data_path = Path(test_data_path)
+    if test_data_path.is_file():
+        raise FileNotFoundError(f'test_data_path expects directory path but file path was provided instead')        
     mgf_files = [test_data_path/f for f in os.listdir(test_data_path) if (test_data_path/f).suffix.lower() == ".mgf"]
     index = AnnotatedSpectrumIndex(config.test_annot_spec_idx_path, mgf_files, overwrite=config.test_spec_idx_overwrite)
     
@@ -200,6 +212,9 @@ def test_denovo(test_data_path, model_path, config_path, output_path):
         import config
         
     # Initialize the pre-trained model
+    model_path = Path(model_path)
+    if model_path.is_dir():
+        raise FileNotFoundError(f'model_path expects file path but directory path was provided instead')
     model_trained = Spec2Pep().load_from_checkpoint(
     model_path,
     dim_model=config.dim_model,
@@ -217,6 +232,8 @@ def test_denovo(test_data_path, model_path, config_path, output_path):
 )
     #Index test data
     test_data_path = Path(test_data_path)
+    if test_data_path.is_file():
+        raise FileNotFoundError(f'test_data_path expects directory path but file path was provided instead')    
     mgf_files = [test_data_path/f for f in os.listdir(test_data_path) if (test_data_path/f).suffix.lower() == ".mgf"]
     index = SpectrumIndex(config.test_annot_spec_idx_path, mgf_files, overwrite=config.test_spec_idx_overwrite)
     
