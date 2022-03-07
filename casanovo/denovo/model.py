@@ -1,5 +1,5 @@
 """A de novo peptide sequencing model"""
-import logging, time, random, os
+import logging, time, random, os, csv
 
 import torch
 import numpy as np
@@ -402,7 +402,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         #De novo sequence the batch
         pred_seqs, scores = self.predict_step(batch)
         spectrum_order_id = batch[-1]
-        self.denovo_seqs += [(spectrum_order_id, pred_seqs)]
+        self.denovo_seqs += [(spectrum_order_id, pred_seqs,scores)]
           
     
     def on_train_epoch_end(self):
@@ -428,17 +428,39 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         self._history.append(metrics)
         
     def on_test_epoch_end(self):
-        """Write de novo sequences to csv file.
+        """Write de novo sequences and confidence scores to csv file.
 
         This is a pytorch-lightning hook.
         """
-        with open(os.path.join(self.output_path,'casanovo_output.csv'), 'w') as f:
-            f.write(f'spectrum_id,denovo_seq\n')
+        with open(os.path.join(self.output_path,'casanovo_output.csv'), 'w') as f: 
+            writer = csv.writer(f)
+            writer.writerow(['spectrum_id','denovo_seq','peptide_score','aa_scores'])
+            
             for batch in self.denovo_seqs:
+                scores = batch[2].cpu() #transfer to cpu in case in gpu
+                
                 for i in range(len(batch[0])):
-                    f.write(f'{batch[0][i]},{batch[1][i][1:]}\n')
+                    top_scores = torch.max(scores[i],axis=1)[0] #take the score of most probable AA                
+                    empty_index = torch.where(top_scores==0.04)[0] #find the indices of positions after stop token
                     
-        
+                    if len(empty_index)>0:#check if decoding was stopped
+                        last_index = empty_index[0]-1 #select index of the last AA
+                        
+                        if last_index >= 1: #check if peptide is at least one AA long
+                            top_scores_list = top_scores[:last_index].tolist() #omit the stop token
+                            peptide_score = np.mean(top_scores_list)
+                            aa_scores = list(reversed(top_scores_list))
+                            
+                        else:
+                            peptide_score = None
+                            aa_scores = None
+                            
+                    else:
+                        peptide_score = None
+                        aa_scores = None
+                        
+                    writer.writerow([batch[0][i],batch[1][i][1:],peptide_score,aa_scores])
+                    
     def on_epoch_end(self):
         """Print log to console, if requested."""
         
