@@ -16,17 +16,17 @@ Once installed, Casanovo can be used with a simple command line interface. Run `
 
 - To evaluate _de novo_ sequencing performance of a pre-trained model (peptide annotations are needed for spectra):
 ```
-casanovo --mode=eval --model_path='path/to/pretrained' --test_data_path='path/to/test' --config_path='path/to/config'
+casanovo --mode=eval --model_path='path/to/pretrained' --test_data_path='path/to/test/mgf/files/dir' --config_path='path/to/config'
 ```
 
-- To run _de novo_ sequencing without evaluation (specificy directory path for output csv file with _de novo_ sequences):
+- To run _de novo_ sequencing without evaluation (specificy directory path for output csv file with _de novo_ sequences, see `casanovo_sample_output.csv` for a sample output file):
 ```
-casanovo --mode=denovo --model_path='path/to/pretrained' --test_data_path='path/to/test' --config_path='path/to/config' --output_path='path/to/output'
+casanovo --mode=denovo --model_path='path/to/pretrained' --test_data_path='path/to/test/mgf/files/dir' --config_path='path/to/config' --output_path='path/to/output'
 ```
 
 - To train a model from scratch or continue training a pre-trained model:
 ```
-casanovo train --mode=train --model_path='path/to/pretrained' --train_data_path='path/to/train'  --val_data_path='path/to/validation' --config_path='path/to/config'
+casanovo train --mode=train --model_path='path/to/pretrained' --train_data_path='path/to/train/mgf/files/dir'  --val_data_path='path/to/validation/mgf/files/dir' --config_path='path/to/config'
 ```
 
 
