@@ -19,7 +19,7 @@ test_annot_spec_idx_path = os.path.join(os.getcwd(),'casanovo_test.hdf5') #path 
 test_spec_idx_overwrite = True
 
 #Preprocessing parameters
-preprocess_spec = False
+preprocess_spec = True #Should be True when using raw mass spec data. Use False when reproducing Casanovo results with the provided benchmark data set which is pre-processed
 n_peaks = 150
 min_mz = 1.0005079* 50.5
 max_mz = 2500
