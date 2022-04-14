@@ -11,7 +11,7 @@ def train(train_data_path, val_data_path, model_path, config_path):
     
     #Use custom config file if specified
     if config_path == None:
-        with open('casanovo/config.yaml') as f:
+        with open('casanovo/casanovo/config.yaml') as f:
             config = yaml.safe_load(f)
     else:
         with open(config_path) as f:
@@ -146,7 +146,7 @@ def test_evaluate(test_data_path, model_path, config_path):
     
     #Use custom config file if specified
     if config_path == None:
-        with open('casanovo/config.yaml') as f:
+        with open('casanovo/casanovo/config.yaml') as f:
             config = yaml.safe_load(f)
     else:
         with open(config_path) as f:
@@ -209,7 +209,7 @@ def test_denovo(test_data_path, model_path, config_path, output_path):
     
     #Use custom config file if specified
     if config_path == None:
-        with open('casanovo/config.yaml') as f:
+        with open('casanovo/casanovo/config.yaml') as f:
             config = yaml.safe_load(f)
     else:
         with open(config_path) as f:
