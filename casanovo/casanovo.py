@@ -39,7 +39,7 @@ def main(
     elif mode == 'denovo':
         
         logging.info('De novo sequencing with Casanovo...')
-        test_denovo(test_data_path, model_path, config_path, output_path)        
+        test_denovo(test_data_path, model_path, config_path, output_path)  
         
     pass
 
