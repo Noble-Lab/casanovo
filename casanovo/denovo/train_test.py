@@ -6,16 +6,8 @@ from depthcharge.data import AnnotatedSpectrumIndex, SpectrumIndex
 from casanovo.denovo import DeNovoDataModule, Spec2Pep
 import yaml
 
-def train(train_data_path, val_data_path, model_path, config_path):
+def train(train_data_path, val_data_path, model_path, config):
     """Train a Casanovo model with options specified in config.py.""" 
-    
-    #Use custom config file if specified
-    if config_path == None:
-        with open('casanovo/casanovo/config.yaml') as f:
-            config = yaml.safe_load(f)
-    else:
-        with open(config_path) as f:
-            config = yaml.safe_load(f)
         
     #Set random seed across PyTorch, numpy and python.random
     pl.utilities.seed.seed_everything(seed=config['random_seed'], workers=True)
@@ -141,16 +133,8 @@ def train(train_data_path, val_data_path, model_path, config_path):
     #Train the model
     trainer.fit(model, train_loader.train_dataloader(), val_loader.val_dataloader())
 
-def test_evaluate(test_data_path, model_path, config_path):
+def test_evaluate(test_data_path, model_path, config):
     """Run inference a pre-trained Casanovo model with evaluation and using options specified in config.py."""
-    
-    #Use custom config file if specified
-    if config_path == None:
-        with open('casanovo/casanovo/config.yaml') as f:
-            config = yaml.safe_load(f)
-    else:
-        with open(config_path) as f:
-            config = yaml.safe_load(f)
         
     # Initialize the pre-trained model
     model_path = Path(model_path)
@@ -204,17 +188,9 @@ def test_evaluate(test_data_path, model_path, config_path):
     #Run test
     trainer.validate(model_trained, loaders.test_dataloader())
 
-def test_denovo(test_data_path, model_path, config_path, output_path):
+def test_denovo(test_data_path, model_path, config, output_path):
     """Run inference with a pre-trained Casanovo model without evaluation and using options specified in config.py."""
-    
-    #Use custom config file if specified
-    if config_path == None:
-        with open('casanovo/casanovo/config.yaml') as f:
-            config = yaml.safe_load(f)
-    else:
-        with open(config_path) as f:
-            config = yaml.safe_load(f)
-        
+
     # Initialize the pre-trained model
     model_path = Path(model_path)
     if model_path.is_dir():

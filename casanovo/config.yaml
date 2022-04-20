@@ -31,7 +31,6 @@ num_workers: 0
 gpus: #None for CPU, int list to specify GPUs
 
 #Model options
-max_charge: 10
 dim_model: 512
 n_head: 8
 dim_feedforward: 1024
