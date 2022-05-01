@@ -1,4 +1,5 @@
 """The command line entry point for casanovo"""
+from email.policy import default
 import click, logging
 import yaml
 import os
@@ -15,9 +16,9 @@ from casanovo.denovo import train, test_evaluate, test_denovo
 @click.option("--config_path", help="Specify path to custom config file which includes data and model related options. If not included, the default config.yaml will be used.", type=click.Path(exists=True, dir_okay=False, file_okay=True))
 @click.option("--output_path", help="Specify path to output de novo sequences. Output format is .csv", type=click.Path(exists=True, dir_okay=True, file_okay=False))
 #De Novo sequencing options
-@click.option("--preprocess_spec", help="True if spectra data should be preprocessed, False if using preprocessed data.", type=click.BOOL)
-@click.option("--num_workers", help="Number of workers to use for spectra reading.", type=click.INT)
-@click.option("--gpus", help="Specify gpus for usage. For multiple gpus, use format: --gpus=0 --gpus=1 --gpus=2... etc. etc.", type=click.INT, multiple=True)
+@click.option("--preprocess_spec", default=None, help="True if spectra data should be preprocessed, False if using preprocessed data.", type=click.BOOL)
+@click.option("--num_workers", default=None, help="Number of workers to use for spectra reading.", type=click.INT)
+@click.option("--gpus", default=(), help="Specify gpus for usage. For multiple gpus, use format: --gpus=0 --gpus=1 --gpus=2... etc. etc.", type=click.INT, multiple=True)
 
 def main(
     #Req + base vars
@@ -59,16 +60,19 @@ def main(
     else:
         with open(config_path) as f:
             config = yaml.safe_load(f)
-    config['preprocess_spec'] = preprocess_spec
-    config['num_workers'] = num_workers
-    config['gpus'] = gpus
+
+    if(preprocess_spec != None): 
+        config['preprocess_spec'] = preprocess_spec
+    if(num_workers != None): 
+            config['num_workers'] = num_workers
+    if(gpus != ()):
+            config['gpus'] = gpus
     if mode == 'train':
-        
+
         logging.info('Training Casanovo...')
         train(train_data_path, val_data_path, model_path, config)
         
     elif mode == 'eval':
-        
         logging.info('Evaluating Casanovo...')
         test_evaluate(test_data_path, model_path, config)
 

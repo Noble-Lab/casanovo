@@ -27,8 +27,8 @@ min_intensity: 0.01
 fragment_tol_mass: 2  # Da
 
 #Hardware options
-num_workers: 0
-gpus: #None for CPU, int list to specify GPUs
+num_workers: 8
+gpus: [0] #None for CPU, int list to specify GPUs
 
 #Model options
 dim_model: 512
