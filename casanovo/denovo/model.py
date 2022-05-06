@@ -81,7 +81,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         tb_summarywriter=None,
         warmup_iters=100000,
         max_iters=600000,
-        output_path=None,
+        output_path='',
         **kwargs,
     ):
         """Initialize a Spec2Pep model"""
@@ -432,7 +432,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
 
         This is a pytorch-lightning hook.
         """
-        with open(os.path.join(self.output_path,'casanovo_output.csv'), 'w') as f: 
+        with open(os.path.join(str(self.output_path),'casanovo_output.csv'), 'w') as f: 
             writer = csv.writer(f)
             writer.writerow(['spectrum_id','denovo_seq','peptide_score','aa_scores'])
             

@@ -5,6 +5,8 @@
 
 Data and pre-trained model weights are available [here](https://zenodo.org/record/5976003).
 
+A link to the preprint of the paper where we discuss our methods and tests can be found [here](https://www.biorxiv.org/content/10.1101/2022.02.07.479481v1).
+
 # How to get started with Casanovo?
 ## Our recommendation:
 
@@ -55,11 +57,43 @@ casanovo --mode=denovo --model_path='path/to/pretrained' --test_data_path='path/
 ```
 casanovo train --mode=train --model_path='path/to/pretrained' --train_data_path='path/to/train/mgf/files/dir'  --val_data_path='path/to/validation/mgf/files/dir' --config_path='path/to/config'
 ```
-# Common Troubleshooting
+# Example Job:
+## A small walkthrough on how to use casanovo with a very small spectra (~100) set
+
+### The spectra file (.mgf) that we will be running this job on can be seen in the sample_data folder.
+
+- Step 1: Install casanovo (see above for details)
+- Step 2: Download the casanovo_pretrained_model_weights.zip from [here](https://zenodo.org/record/5976003). Place these models in a location that you can easly access and know the path of.
+    - We will be using pretrained_excl_mouse.ckpt for this job.
+- Step 3: Ensure you are in the proper anaconda environment by typing ```conda activate casanovo_env```. (If you named it differently, type in that name instead)
+- Step 4: Run this command:
+```
+casanovo --mode=denovo --model_path='[PATH_TO]/pretrained_excl_mouse.ckpt' --test_data_path='sample_data' --preprocess_spec=False
+```
+Make sure you have the proper filepath to the pretrained_excl_mouse.ckpt file.
+ - Note: If you want to get the ouput csv in a place OTHER than where you ran this command, specify where you would like the output to be placed by specifying a directory in the --output_path CLI field
+    - It would look like ```--output_path='path/to/output/location'``` appended onto the end of the above command. Be sure to provide a directory, not a file!
+
+This job should take very little time to run (< 1 minute), and the result should be a file named ```casanovo_output.csv``` wherever you specified.
+
+If the first few lines look like:
+```
+spectrum_id,denovo_seq,peptide_score,aa_scores
+0,LAHYNKR,0.9912219984190804,"[1.0, 1.0, 1.0, 0.99948...
+```
+Congratulations! You got casanovo to work!
+
+# Common Troubleshooting/FAQ
 
 ## Installed casanovo and it worked before, but I reopened Anaconda again and now it says casanovo is not installed
 Make sure you are in the `casanovo_env` environment. You can make sure you are in it by typing
 ```
 conda activate casanovo_env
 ```
+## What CLI Prompts can I use?
+Run the following command in your command prompt:
+```
+casanovo --help
+```
+It should give you a comprehensive list of all CLI options you can tag onto a casanovo job and how/why to use them.
 
