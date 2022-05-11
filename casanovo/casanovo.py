@@ -3,7 +3,7 @@ from email.policy import default
 import click, logging
 import yaml
 import os
-from casanovo.denovo import train, test_evaluate, test_denovo
+from casanovo.denovo import train, evaluate, denovo
 
 #Required options
 @click.command()
@@ -73,13 +73,14 @@ def main(
         train(train_data_path, val_data_path, model_path, config)
         
     elif mode == 'eval':
+        
         logging.info('Evaluating Casanovo...')
-        test_evaluate(test_data_path, model_path, config)
+        evaluate(test_data_path, model_path, config)
 
     elif mode == 'denovo':
         
         logging.info('De novo sequencing with Casanovo...')
-        test_denovo(test_data_path, model_path, config, output_path)  
+        denovo(test_data_path, model_path, config, output_path)  
         
     pass
 

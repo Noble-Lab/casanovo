@@ -1,4 +1,5 @@
 """Training and testing functionality for the de novo peptide sequencing model"""
+import pytest
 import logging, importlib, os
 from pathlib import Path
 import pytorch_lightning as pl
@@ -133,7 +134,7 @@ def train(train_data_path, val_data_path, model_path, config):
     #Train the model
     trainer.fit(model, train_loader.train_dataloader(), val_loader.val_dataloader())
 
-def test_evaluate(test_data_path, model_path, config):
+def evaluate(test_data_path, model_path, config):
     """Run inference a pre-trained Casanovo model with evaluation and using options specified in config.py."""
         
     # Initialize the pre-trained model
@@ -187,8 +188,8 @@ def test_evaluate(test_data_path, model_path, config):
     
     #Run test
     trainer.validate(model_trained, loaders.test_dataloader())
-
-def test_denovo(test_data_path, model_path, config, output_path):
+    
+def denovo(test_data_path, model_path, config, output_path):
     """Run inference with a pre-trained Casanovo model without evaluation and using options specified in config.py."""
 
     # Initialize the pre-trained model
