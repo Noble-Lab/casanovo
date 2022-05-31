@@ -26,4 +26,4 @@ Contents
 
 .. toctree::
 
-   methods
+   methods_doc
