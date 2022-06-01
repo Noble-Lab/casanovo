@@ -1,12 +1,10 @@
 dataloaders.py
 ==============
 
-setup yoo
+setup
 ---------------------------------------
 
 .. autofunction:: casanovo.denovo.dataloaders.DeNovoDataModule.setup()
-
-hello hello
 
 _make_loader
 ---------------------------
@@ -17,3 +15,8 @@ prepare_batch
 --------------------
 
 .. autofunction:: casanovo.denovo.dataloaders.prepare_batch()
+
+test_method
+-----------
+
+.. autofunction:: casanovo.denovo.dataloaders.test_method()

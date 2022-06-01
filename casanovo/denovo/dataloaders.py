@@ -11,6 +11,13 @@ import pytorch_lightning as pl
 
 from ..data import AnnotatedSpectrumDataset, SpectrumDataset
 
+def test_method():
+    """
+    DESC!
+    
+    :return: True
+    """
+    return True
 
 class DeNovoDataModule(pl.LightningDataModule):
     """Prepare data for a Spec2Pep.
