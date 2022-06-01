@@ -15,8 +15,3 @@ prepare_batch
 --------------------
 
 .. autofunction:: casanovo.denovo.dataloaders.prepare_batch()
-
-test_method
------------
-
-.. autofunction:: casanovo.denovo.dataloaders.test_method()
