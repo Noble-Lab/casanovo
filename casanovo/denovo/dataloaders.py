@@ -84,15 +84,13 @@ class DeNovoDataModule(pl.LightningDataModule):
             self.num_workers = os.cpu_count()
 
     def setup(self, stage=None, annotated=True):
-        """Set up the PyTorch Datasets.
+        """
+        Sets up the PyTorch Datasets.
 
-        Parameters
-        ----------
-        stage : str {"fit", "validate", "test"}
-            The stage indicating which Datasets to prepare. All are prepared
-            by default.
-        annotated: bool
-            True if peptide sequence annotations available for test data
+        :param stage: The stage indicating which Datasets to prepare. All are prepared by default.
+        :type stage: str {"fit", "validate", "test"}
+        :param annotated: True if peptide sequence annotations available for test data
+        :type annotated: bool
         """
 
         if stage in (None, "fit", "validate"):
@@ -138,17 +136,13 @@ class DeNovoDataModule(pl.LightningDataModule):
                 self.test_dataset = make_dataset(self.test_index)
                 
     def _make_loader(self, dataset):
-        """Create a PyTorch DataLoader.
+        """
+        Creates a PyTorch DataLoader.
 
-        Parameters
-        ----------
-        dataset : torch.utils.data.Dataset
-            A PyTorch Dataset.
-
-        Returns
-        -------
-        torch.utils.data.DataLoader
-            A PyTorch DataLoader.
+        :param dataset: A PyTorch dataset
+        :type dataset: torch.utils.data.Dataset
+        :return: A PyTorch DataLoader
+        :rtype: torch.utils.data.DataLoader
         """
         return torch.utils.data.DataLoader(
             dataset,
@@ -172,26 +166,22 @@ class DeNovoDataModule(pl.LightningDataModule):
 
 
 def prepare_batch(batch):
-    """This is the collate function
+    """
+    This is the collate function
 
     The mass spectra must be padded so that they fit nicely as a tensor.
     However, the padded elements are ignored during the subsequent steps.
 
-    Parameters
-    ----------
-    batch : tuple of tuple of torch.Tensor
-        A batch of data from an AnnotatedSpectrumDataset.
-
-    Returns
-    -------
-    spectra : torch.Tensor of shape (batch_size, n_peaks, 2)
-        The mass spectra to sequence, where ``X[:, :, 0]`` are the m/z values
-        and ``X[:, :, 1]`` are their associated intensities.
-    precursors : torch.Tensor of shape (batch_size, 2)
-        The precursor mass and charge state.
-    sequence_or_ids : list of str
-        The peptide sequence annotations in training, the spectrum identifier in de novo sequencing  
+    :param batch: A batch of data from an AnnotatedSpectrumDataset.
+    :type batch: tuple of tuple of torch.Tensor
+    :return: spectra - The mass spectra to sequence, where ``X[:, :, 0]`` are the m/z values and ``X[:, :, 1]`` are their associated intensities.
+    :rtype: torch.Tensor of shape (batch_size, n_peaks, 2)
+    :return: precursors - The precursor mass and charge state.
+    :rtype: torch.Tensor of shape (batch_size, 2)
+    :returns: sequence_or_ids - The peptide sequence annotations in training, the spectrum identifier in de novo sequencing.
+    :rtype: list of str
     """
+    
     spec, mz, charge, sequence_or_ids = list(zip(*batch))
     charge = torch.tensor(charge)
     mass = (torch.tensor(mz) - 1.007276) * charge

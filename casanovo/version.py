@@ -3,14 +3,14 @@
 
 def _get_version():
     """
-    Return a list of random ingredients as strings.
+    Retreive the package version.
 
-    :param kind: Optional "kind" of ingredients.
-    :type kind: list[str] or None
-    :raise lumache.InvalidKindError: If the kind is invalid.
-    :return: The ingredients list.
-    :rtype: list[str]
+    Using setuptools-scm dynamically sets the pacakge version depending on
+    the latest git release and commits since that point. This function
+    returns the current version number.
 
+    :return: The package version number. If not version is found, returns None.
+    :rtype: str or None
     """
     try:
         # Fast, but only works in Python 3.8+

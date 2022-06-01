@@ -36,6 +36,8 @@ release = '1.0'
 extensions = [
     'sphinx.ext.autodoc'
 ]
+autodoc_mock_imports = ["torch"]
+autodoc_mock_imports = ["pytorch_lightning"]
 
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ['_templates']
