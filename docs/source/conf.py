@@ -23,7 +23,7 @@ author = 'Melih Yilmaz'
 # The full version, including alpha/beta/rc tags
 release = '1.0'
 
-autodoc_mock_imports = ["torch", "pytorch_lightning", "depthcharge", "spectrum_utils"]
+autodoc_mock_imports = ["torch", "pytorch_lightning", "depthcharge", "spectrum_utils", "numpy"]
 
 # -- General configuration ---------------------------------------------------
 
