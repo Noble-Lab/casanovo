@@ -10,13 +10,9 @@
 # add these directories to sys.path here. If the directory is relative to the
 # documentation root, use os.path.abspath to make it absolute, like shown here.
 #
-# import os
-# import sys
-# sys.path.insert(0, os.path.abspath('.'))
-
-import pathlib
+import os
 import sys
-sys.path.insert(0, pathlib.Path(__file__).parents[2].resolve().as_posix())
+sys.path.insert(0, os.path.abspath('../../'))
 
 # -- Project information -----------------------------------------------------
 
@@ -27,6 +23,7 @@ author = 'Melih Yilmaz'
 # The full version, including alpha/beta/rc tags
 release = '1.0'
 
+autodoc_mock_imports = ["torch", "pytorch_lightning", "depthcharge", "spectrum_utils"]
 
 # -- General configuration ---------------------------------------------------
 

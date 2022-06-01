@@ -1,7 +1,5 @@
 """Get the package version"""
 
-import torch 
-
 def _get_version():
     """
     Retreive the package version.
