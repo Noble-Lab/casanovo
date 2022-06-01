@@ -1,38 +1,3 @@
-version.py
-==========
-
-_get_version
---------------
-
-.. autofunction:: casanovo.version._get_version()
-
-casanovo.py
-===========
-
-main
-------
-
-.. autofunction:: casanovo.casanovo.main()
-
-dataloaders.py
-==============
-
-setup
----------------------------------------
-
-.. autofunction:: casanovo.denovo.dataloaders.DeNovoDataModule.setup()
-
-_make_loader
----------------------------
-
-.. autofunction:: casanovo.denovo.dataloaders.DeNovoDataModule._make_loader()
-
-prepare_batch
---------------------
-
-.. autofunction:: casanovo.denovo.dataloaders.prepare_batch()
-
-
 evaluate.py
 ===========
 
@@ -65,6 +30,3 @@ aa_precision_recall_with_threshold
 ----------------------------------------------------------------------------------------------------------
 
 .. autofunction:: casanovo.denovo.evaluate.aa_precision_recall_with_threshold()
-
-
-

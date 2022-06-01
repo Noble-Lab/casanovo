@@ -26,4 +26,7 @@ Contents
 
 .. toctree::
 
-   methods
+   casanovo
+   dataloaders
+   evaluate
+   version
