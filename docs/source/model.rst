@@ -2,7 +2,7 @@ model.py
 ==========
 
 Spec2Pep
----------
+=========
 
 .. autoclass:: casanovo.denovo.model.Spec2Pep
 
