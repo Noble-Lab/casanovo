@@ -8,7 +8,18 @@ from casanovo.denovo import DeNovoDataModule, Spec2Pep
 import yaml
 
 def train(train_data_path, val_data_path, model_path, config):
-    """Train a Casanovo model with options specified in config.py.""" 
+    """
+    Train a Casanovo model with options specified in config.py.
+
+    :param train_data_path: Path to .mgf files this model will be trained on
+    :type train_data_path: str
+    :param val_data_path: Path to .mgf files this model will be validated on
+    :type val_data_path: str
+    :param model_path: Path to .ckpt file to continue training (if needed)
+    :type model_path: str
+    :param config: Config dict passed in though casanovo
+    :type config: dict 
+    """ 
         
     #Set random seed across PyTorch, numpy and python.random
     pl.utilities.seed.seed_everything(seed=config['random_seed'], workers=True)
@@ -135,7 +146,16 @@ def train(train_data_path, val_data_path, model_path, config):
     trainer.fit(model, train_loader.train_dataloader(), val_loader.val_dataloader())
 
 def evaluate(test_data_path, model_path, config):
-    """Run inference a pre-trained Casanovo model with evaluation and using options specified in config.py."""
+    """
+    Run inference a pre-trained Casanovo model with evaluation and using options specified in config.py.
+
+    :param test_data_path: Path to .mgf files this model will be tested on
+    :type test_data_path: str
+    :param model_path: Path to .ckpt file to evaluate
+    :type model_path: str
+    :param config: Config dict passed in though casanovo
+    :type config: dict 
+    """
         
     # Initialize the pre-trained model
     model_path = Path(model_path)
@@ -190,7 +210,18 @@ def evaluate(test_data_path, model_path, config):
     trainer.validate(model_trained, loaders.test_dataloader())
     
 def denovo(test_data_path, model_path, config, output_path):
-    """Run inference with a pre-trained Casanovo model without evaluation and using options specified in config.py."""
+    """
+    Run inference with a pre-trained Casanovo model without evaluation and using options specified in config.py.
+
+    :param test_data_path: Path to .mgf files this model will be tested on
+    :type test_data_path: str
+    :param model_path: Path to .ckpt file to evaluate
+    :type model_path: str
+    :param config: Config dict passed in though casanovo
+    :type config: dict 
+    :param output_path: Path to output de novo sequencing
+    :type output_path: str
+    """
 
     # Initialize the pre-trained model
     model_path = Path(model_path)

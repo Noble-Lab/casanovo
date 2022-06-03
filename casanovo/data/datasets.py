@@ -80,24 +80,20 @@ class SpectrumDataset(Dataset):
         return self.n_spectra
 
     def __getitem__(self, idx):
-        """Return a single mass spectrum.
-
-        Parameters
-        ----------
-        idx : int
-            The index to return.
-
-        Returns
-        -------
-        spectrum : torch.Tensor of shape (n_peaks, 2)
-            The mass spectrum where ``spectrum[:, 0]`` are the m/z values and
+        """
+        Return a single mass spectrum.
+        
+        :param idx: The index to return.
+        :type idx: int
+        :return: spectrum - The mass spectrum where ``spectrum[:, 0]`` are the m/z values and
             ``spectrum[:, 1]`` are their associated intensities.
-        precursor_mz : float
-            The m/z of the precursor.
-        precursor_charge : int
-            The charge of the precursor.
-        spectrum_order_id: str
-            The unique identifier for spectrum based on its order in the original mgf file
+        :rtype: torch.Tensor of shape (n_peaks, 2)
+        :return: precursor_mz - The m/z of the precursor.
+        :rtype: float
+        :return: precursor_charge - The charge of the precursor.
+        :rtype: int
+        :return: spectrum_order_id - The unique identifier for spectrum based on its order in the original mgf file
+        :rtype: str
         """
         mz_array, int_array, prec_mz, prec_charge = self.index[idx]
  
@@ -123,22 +119,19 @@ class SpectrumDataset(Dataset):
         """
         Get a mask to remove peaks that are close to the precursor mass peak (at
         different charges and isotopes).
-        ----------
-        mz : np.ndarray
-            The mass-to-charge ratios of the spectrum fragment peaks.
-        pep_mass : float
-            The mono-isotopic mass of the uncharged peptide.
-        max_charge : int
-            The maximum precursor loss charge.
-        fragment_tol_mass : float
-                Fragment mass tolerance around the precursor mass to remove the
-                precursor peak (Da).
 
-        Returns
-        -------
-        np.ndarray
-            Index mask specifying which peaks are retained after precursor peak
+        :param mz: The mass-to-charge ratios of the spectrum fragment peaks.
+        :type mz: np.ndarray
+        :param pep_mass: The mono-isotopic mass of the uncharged peptide. 
+        :type pep_mass: float
+        :param max_charge: The maximum precursor loss charge.
+        :type max_charge: int
+        :param fragment_tol_mass: Fragment mass tolerance around the precursor mass to remove the
+                precursor peak (Da).
+        :type: fragment_tol_mass: float
+        :return: mask - Index mask specifying which peaks are retained after precursor peak
             filtering.
+        :rtype: np.ndarray
         """
         isotope = 0
         remove_mz = []
@@ -165,21 +158,17 @@ class SpectrumDataset(Dataset):
         Get a mask to remove low-intensity peaks and retain only the given number
         of most intense peaks.
 
-        Parameters
-        ----------
-        intensity : np.ndarray
-            The intensities of the spectrum fragment peaks.
-        min_intensity : float
-            Remove peaks whose intensity is below `min_intensity` percentage of the
+        :param intensity: The intensities of the spectrum fragment peaks.
+        :type intensity: np.ndarray
+        :param min_intensity: Remove peaks whose intensity is below `min_intensity` percentage of the
             intensity of the most intense peak.
-        max_num_peaks : int
-            Only retain the `max_num_peaks` most intense peaks.
-        Returns
-        -------
-        np.ndarray
-            Index mask specifying which peaks are retained after filtering the at
+        :type min_intensity: float
+        :param max_num_peaks: Only retain the `max_num_peaks` most intense peaks.
+        :type max_num_peaks: int
+        :return: mask -  Index mask specifying which peaks are retained after filtering the at
             most `max_num_peaks` most intense intensities above the minimum
             intensity threshold.
+        :rtype: np.ndarray
         """
         intensity_idx = np.argsort(intensity)
         min_intensity *= intensity[intensity_idx[-1]]
@@ -199,22 +188,17 @@ class SpectrumDataset(Dataset):
     def _process_peaks(self, mz_array, int_array, prec_mz, prec_charge):
         """Choose the top n peaks and normalize the spectrum intensities.
 
-        Parameters
-        ----------
-        mz_array : numpy.ndarray of shape (n_peaks,)
-            The m/z values of the peaks in the spectrum.
-        int_array : numpy.ndarray of shape (n_peaks,)
-            The intensity values of the peaks in the spectrum.
-        precursor_mz : float
-            The m/z of the precursor.
-        precursor_charge : int
-            The charge of the precursor.            
-
-        Returns
-        -------
-        torch.Tensor of shape (n_peaks, 2)
-            The mass spectrum where ``spectrum[:, 0]`` are the m/z values and
+        :param mz_array: The m/z values of the peaks in the spectrum.
+        :type mz_array: numpy.ndarray of shape (n_peaks,)
+        :param int_array: The intensity values of the peaks in the spectrum.
+        :type: int_array: numpy.ndarray of shape (n_peaks,)
+        :param prec_mz: The m/z of the precursor.
+        :type prec_mz: float
+        :param prec_charge: The charge of the precursor.
+        :type prec_charge: int
+        :return: ms - The mass spectrum where ``spectrum[:, 0]`` are the m/z values and
             ``spectrum[:, 1]`` are their associated intensities.
+        :rtype: torch.Tensor of shape (n_peaks, 2)
         """
         #Set m/z range for fragments
         if self.min_mz is not None:
@@ -322,7 +306,9 @@ class AnnotatedSpectrumDataset(SpectrumDataset):
         random_state=None,
         preprocess_spec=False
     ):
-        """Initialize an AnnotatedSpectrumDataset"""
+        """
+        Initialize an AnnotatedSpectrumDataset
+        """
         super().__init__(
             annotated_spectrum_index,
             n_peaks=n_peaks,
@@ -335,24 +321,21 @@ class AnnotatedSpectrumDataset(SpectrumDataset):
         )
 
     def __getitem__(self, idx):
-        """Return a single annotated mass spectrum.
+        """
+        Return a single annotated mass spectrum.
 
-        Parameters
-        ----------
-        idx : int
-            The index to return.
+        :param idx:
+        :type idx:
 
-        Returns
-        -------
-        spectrum : torch.Tensor of shape (n_peaks, 2)
-            The mass spectrum where ``spectrum[:, 0]`` are the m/z values and
+        :return: spectrum - The mass spectrum where ``spectrum[:, 0]`` are the m/z values and
             ``spectrum[:, 1]`` are their associated intensities.
-        precursor_mz : float
-            The m/z of the precursor.
-        precursor_charge : int
-            The charge of the precursor.
-        annotation : str
-            The annotation for the mass spectrum.
+        :rtype: torch.Tensor of shape (n_peaks, 2)
+        :return: precursor_mz - The m/z of the precursor.
+        :rtype: float
+        :return: precursor_charge - The charge of the precursor.
+        :rtype: int
+        :return: annotation - The annotation for the mass spectrum.
+        :rtype: str
         """
         mz_array, int_array, prec_mz, prec_charge, pep = self.index[idx]
         if self.preprocess_spec == True:

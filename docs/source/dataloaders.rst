@@ -1,12 +1,12 @@
 dataloaders.py
 ==============
 
-setup
+DeNovoDataModule.setup
 ---------------------------------------
 
 .. autofunction:: casanovo.denovo.dataloaders.DeNovoDataModule.setup()
 
-_make_loader
+DeNovoDataModule._make_loader
 ---------------------------
 
 .. autofunction:: casanovo.denovo.dataloaders.DeNovoDataModule._make_loader()

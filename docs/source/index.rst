@@ -28,5 +28,8 @@ Contents
 
    casanovo
    dataloaders
+   datasets
    evaluate
+   model
+   train_test
    version
