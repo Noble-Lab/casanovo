@@ -8,7 +8,7 @@ def _get_version():
     the latest git release and commits since that point. This function
     returns the current version number.
 
-    :return: The package version number. If not version is found, returns None.
+    :return: *num* - The package version number. If not version is found, returns None.
     :rtype: str or None
     """
     try:

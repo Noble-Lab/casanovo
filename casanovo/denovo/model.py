@@ -149,9 +149,9 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         :param precursors: The measured precursor mass (axis 0) and charge (axis 1) of each
             tandem mass spectrum.
         :type precursors: torch.Tensor of size (n_spectra, 2)
-        :return: sequences - The sequence for each spectrum.
+        :return: *sequences* - The sequence for each spectrum.
         :rtype: list or str
-        :return: scores - The score for each amino acid.
+        :return: *scores* - The score for each amino acid.
         :rtype: torch.Tensor of shape (n_spectra, length, n_amino_acids)
         """
         spectra = spectra.to(self.encoder.device)
@@ -171,9 +171,9 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
             precursor mass and charge (index 1). It may have more indices,
             but these will be ignored.
         :type batch: tuple of torch.Tensor
-                :return: sequences - The sequence for each spectrum.
+        :return: *sequences* - The sequence for each spectrum.
         :rtype: list or str
-        :return: scores - The score for each amino acid.
+        :return: *scores* - The score for each amino acid.
         :rtype: torch.Tensor of shape (n_spectra, length, n_amino_acids)
         """
         return self(batch[0], batch[1])
@@ -191,9 +191,9 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         :param precursors: The measured precursor mass (axis 0) and charge (axis 1) of each
             tandem mass spectrum.
         :type precursors: torch.Tensor of size (n_spectra, 2)
-        :return: tokens - The token sequence for each spectrum.
+        :return: *tokens* - The token sequence for each spectrum.
         :rtype: torch.Tensor of shape (n_spectra, max_length, n_amino_acids)
-        :return: scores - The score for each amino acid.
+        :return: *scores* - The score for each amino acid.
         :rtype: torch.Tensor of shape (n_spectra, length, n_amino_acids)
         """
         memories, mem_masks = self.encoder(spectra)
@@ -248,9 +248,9 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         :type precursors: torch.Tensor of size (n_spectra, 2)
         :param sequences: The partial peptide sequences to predict.
         :type sequences: list or str of length n_spectra
-        :return: scores - The raw scores for each amino acid at each position.
+        :return: *scores* - The raw scores for each amino acid at each position.
         :rtype: torch.Tensor of shape (n_spectra, length, n_amino_acids)
-        :return: tokens - The best token at each sequence position
+        :return: *tokens* - The best token at each sequence position
         :rtype: torch.Tensor of shape (n_spectra, length)
         """
         memory, mem_mask = self.encoder(spectra)
@@ -268,7 +268,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
             precursor mass and charge (index 1), and the peptide sequence
             (index 2)
         :type batch: tuple of torch.Tensor
-        :return: loss - The loss
+        :return: *loss* - The loss
         :rtype: torch.Tensor
         """
         
@@ -297,7 +297,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
             precursor mass and charge (index 1), and the peptide sequence
             (index 2)
         :type batch: tuple of torch.Tensor
-        :return: loss - The loss
+        :return: *loss* - The loss
         :rtype: torch.Tensor
         """
         spectra, precursors, sequences = batch
@@ -475,7 +475,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         This is used by pytorch-lightning when preparing the model for
         training.
 
-        :return: adam - The intialized Adam optimizer.
+        :return: *adam* - The intialized Adam optimizer.
         :rtype: torch.optim.Adam
         """
         optimizer = torch.optim.Adam(self.parameters(), **self.opt_kwargs)

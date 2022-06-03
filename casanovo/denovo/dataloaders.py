@@ -140,7 +140,7 @@ class DeNovoDataModule(pl.LightningDataModule):
 
         :param dataset: A PyTorch dataset
         :type dataset: torch.utils.data.Dataset
-        :return: A PyTorch DataLoader
+        :return: *loader* - A PyTorch DataLoader
         :rtype: torch.utils.data.DataLoader
         """
         return torch.utils.data.DataLoader(
@@ -173,11 +173,11 @@ def prepare_batch(batch):
 
     :param batch: A batch of data from an AnnotatedSpectrumDataset.
     :type batch: tuple of tuple of torch.Tensor
-    :return: spectra - The mass spectra to sequence, where ``X[:, :, 0]`` are the m/z values and ``X[:, :, 1]`` are their associated intensities.
+    :return: *spectra* - The mass spectra to sequence, where ``X[:, :, 0]`` are the m/z values and ``X[:, :, 1]`` are their associated intensities.
     :rtype: torch.Tensor of shape (batch_size, n_peaks, 2)
-    :return: precursors - The precursor mass and charge state.
+    :return: *precursors* - The precursor mass and charge state.
     :rtype: torch.Tensor of shape (batch_size, 2)
-    :returns: sequence_or_ids - The peptide sequence annotations in training, the spectrum identifier in de novo sequencing.
+    :returns: *sequence_or_ids* - The peptide sequence annotations in training, the spectrum identifier in de novo sequencing.
     :rtype: list of str
     """
     

@@ -85,14 +85,14 @@ class SpectrumDataset(Dataset):
         
         :param idx: The index to return.
         :type idx: int
-        :return: spectrum - The mass spectrum where ``spectrum[:, 0]`` are the m/z values and
+        :return: *spectrum* - The mass spectrum where ``spectrum[:, 0]`` are the m/z values and
             ``spectrum[:, 1]`` are their associated intensities.
         :rtype: torch.Tensor of shape (n_peaks, 2)
-        :return: precursor_mz - The m/z of the precursor.
+        :return: *precursor_mz* - The m/z of the precursor.
         :rtype: float
-        :return: precursor_charge - The charge of the precursor.
+        :return: *precursor_charge* - The charge of the precursor.
         :rtype: int
-        :return: spectrum_order_id - The unique identifier for spectrum based on its order in the original mgf file
+        :return: *spectrum_order_id* - The unique identifier for spectrum based on its order in the original mgf file
         :rtype: str
         """
         mz_array, int_array, prec_mz, prec_charge = self.index[idx]
@@ -129,7 +129,7 @@ class SpectrumDataset(Dataset):
         :param fragment_tol_mass: Fragment mass tolerance around the precursor mass to remove the
                 precursor peak (Da).
         :type: fragment_tol_mass: float
-        :return: mask - Index mask specifying which peaks are retained after precursor peak
+        :return: *mask* - Index mask specifying which peaks are retained after precursor peak
             filtering.
         :rtype: np.ndarray
         """
@@ -165,7 +165,7 @@ class SpectrumDataset(Dataset):
         :type min_intensity: float
         :param max_num_peaks: Only retain the `max_num_peaks` most intense peaks.
         :type max_num_peaks: int
-        :return: mask -  Index mask specifying which peaks are retained after filtering the at
+        :return: *mask* -  Index mask specifying which peaks are retained after filtering the at
             most `max_num_peaks` most intense intensities above the minimum
             intensity threshold.
         :rtype: np.ndarray
@@ -196,7 +196,7 @@ class SpectrumDataset(Dataset):
         :type prec_mz: float
         :param prec_charge: The charge of the precursor.
         :type prec_charge: int
-        :return: ms - The mass spectrum where ``spectrum[:, 0]`` are the m/z values and
+        :return: *ms* - The mass spectrum where ``spectrum[:, 0]`` are the m/z values and
             ``spectrum[:, 1]`` are their associated intensities.
         :rtype: torch.Tensor of shape (n_peaks, 2)
         """
@@ -327,14 +327,14 @@ class AnnotatedSpectrumDataset(SpectrumDataset):
         :param idx:
         :type idx:
 
-        :return: spectrum - The mass spectrum where ``spectrum[:, 0]`` are the m/z values and
+        :return: *spectrum* - The mass spectrum where ``spectrum[:, 0]`` are the m/z values and
             ``spectrum[:, 1]`` are their associated intensities.
         :rtype: torch.Tensor of shape (n_peaks, 2)
-        :return: precursor_mz - The m/z of the precursor.
+        :return: *precursor_mz* - The m/z of the precursor.
         :rtype: float
-        :return: precursor_charge - The charge of the precursor.
+        :return: *precursor_charge* - The charge of the precursor.
         :rtype: int
-        :return: annotation - The annotation for the mass spectrum.
+        :return: *annotation* - The annotation for the mass spectrum.
         :rtype: str
         """
         mz_array, int_array, prec_mz, prec_charge, pep = self.index[idx]

@@ -14,9 +14,9 @@ def best_aa_match(orig_seq, pred_seq, aa_dict):
     :type pred_seq: list
     :param aa_dict: Dictionary of amino acid masses
     :type aa_dict: dict
-    :return: aa_match - Binary list of matches over predicted peptide
+    :return: *aa_match* - Binary list of matches over predicted peptide
     :rtype: list
-    :return: 1 if all amino acid in two sequences match
+    :return: *val* - 1 if all amino acid in two sequences match
     :rtype: int    
     """    
     
@@ -80,9 +80,9 @@ def find_aa_match_single_pep(orig_seq, pred_seq, aa_dict):
     :type pred_seq: list
     :param aa_dict: Dictionary of amino acid masses
     :type aa_dict: dict
-    :return: aa_match - Binary list of c
+    :return: *aa_match* - Binary list of c
     :rtype: list
-    :return: 1 if all amino acid in two sequences match
+    :return: *val* - 1 if all amino acid in two sequences match
     :rtype: int 
     """
 
@@ -143,9 +143,9 @@ def match_aa(orig_seq, pred_seq, aa_dict, eval_direction = 'best'):
     :type aa_dict: dict
     :param eval_direction: Direction of evaluation while finding amino acid matches, e.g. 'forward', 'backward', 'best'
     :type eval_direction: str {'forward', 'backward', 'best'}
-    :return: aa_match - Binary list of c
+    :return: *aa_match* - Binary list of c
     :rtype: list
-    :return: 1 if all amino acid in two sequences match
+    :return: *val* - 1 if all amino acid in two sequences match
     :rtype: int
     """
     
@@ -184,11 +184,11 @@ def batch_aa_match(pred_pep_seqs, true_pep_seqs, aa_dict, eval_direction = 'best
     :type aa_dict: dict
     :param eval_direction: Direction of evaluation while finding amino acid matches, e.g. 'forward', 'backward', 'best'
     :type eval_direction: str {'forward', 'backward', 'best'}
-    :return: all_aa_match - Binary list of lists corresponding to amino acid matches for all predicted peptides
+    :return: *all_aa_match* - Binary list of lists corresponding to amino acid matches for all predicted peptides
     :rtype: list
-    :return: orig_total_num_aa - Total number of amino acids in the ground truth peptide labels
+    :return: *orig_total_num_aa* - Total number of amino acids in the ground truth peptide labels
     :rtype: int
-    :return: pred_total_num_aa - Total number of amino acids in the predicted peptide labels
+    :return: *pred_total_num_aa* - Total number of amino acids in the predicted peptide labels
     :rtype: int
     """
 
@@ -218,11 +218,11 @@ def calc_eval_metrics(aa_match_binary_list, orig_total_num_aa, pred_total_num_aa
     :type orig_total_num_aa: int
     :param pred_total_num_aa: Number of amino acids in the predicted peptide sequences
     :type pred_total_num_aa: int
-    :return: aa_precision - Number of correct aa predictions divided by all predicted aa
+    :return: *aa_precision* - Number of correct aa predictions divided by all predicted aa
     :rtype: float
-    :return: aa_recall - Number of correct aa predictions divided by all original aa  
+    :return: *aa_recall* - Number of correct aa predictions divided by all original aa  
     :rtype: float:
-    :return: pep_recall - Number of correct peptide predictions divided by all original peptide
+    :return: *pep_recall* - Number of correct peptide predictions divided by all original peptide
     :rtype: float 
     """ 
     
@@ -245,9 +245,9 @@ def aa_precision_recall_with_threshold(correct_aa_confidences, all_aa_confidence
     :type num_original_aa: int
     :param threshold: Amino acid confidence score threshold
     :type threshold: float
-    :return: aa_precision - Number of correct aa predictions divided by all predicted aa
+    :return: *aa_precision* - Number of correct aa predictions divided by all predicted aa
     :rtype: float
-    :return: aa_recall - Number of correct aa predictions divided by all original aa
+    :return: *aa_recall* - Number of correct aa predictions divided by all original aa
     :rtype: float    
     """    
    
