@@ -12,38 +12,37 @@ import pytorch_lightning as pl
 from ..data import AnnotatedSpectrumDataset, SpectrumDataset
 
 class DeNovoDataModule(pl.LightningDataModule):
-    """Prepare data for a Spec2Pep.
+    """
+    Prepare data for a Spec2Pep.
 
-    Parameters
-    ----------
-    train_index : AnnotatedSpectrumIndex
-        The spectrum index file for training.
-    valid_index : AnnotatedSpectrumIndex
-        The spectrum index file for validation.
-    test_index : AnnotatedSpectrumIndex
-        The spectrum index file for testing.
-    batch_size : int, optional
-        The batch size to use for training and evaluations
-    n_peaks : int, optional
-        Keep only the top-n most intense peaks in any spectrum. ``None``
+    :param train_index: The spectrum index file for training.
+    :type train_index: AnnotatedSpectrumIndex
+    :param valid_index: The spectrum index file for validation.
+    :type valid_index: AnnotatedSpectrumIndex
+    :param test_index: The spectrum index file for testing.
+    :type test_index: AnnotatedSpectrumIndex
+    :param batch_size: The batch size to use for training and evaluations
+    :type batch_size: int, optional
+    :param n_peaks: Keep only the top-n most intense peaks in any spectrum. ``None``
         retains all of the peaks.
-    min_mz : float, optional
-        The minimum m/z to include. The default is 140 m/z, in order to
+    :type n_peaks: int, optional
+    :param min_mz: The minimum m/z to include. The default is 140 m/z, in order to
         exclude TMT and iTRAQ reporter ions.
-    max_mz : float, optional
-        The maximum m/z to include. 
-    min_intensity : float, optional
-        Remove peaks whose intensity is below `min_intensity` percentage
+    :type min_mz: float, optional
+    :param max_mz: The maximum m/z to include. 
+    :type max_mz: float, optional
+    :param min_intensity: Remove peaks whose intensity is below `min_intensity` percentage
         of the intensity of the most intense peak
-    fragment_tol_mass : float, optional
-        Fragment mass tolerance around the precursor mass in Da to remove the
-        precursor peak.       
-    num_workers : int, optional
-        The number of workers to use for data loading. By default, the number
+    :type min_intensity: float, optional
+    :param fragment_tol_mass: Fragment mass tolerance around the precursor mass in Da to remove the
+        precursor peak. 
+    :type fragment_tol_mass: float, optional
+    :param num_workers: The number of workers to use for data loading. By default, the number
         of available CPU cores on the current machine is used.
-    random_state : int or Generator, optional.
-        The numpy random state. ``None`` leaves mass spectra in the order
+    :type num_workers: int, optional
+    :param random_state: The numpy random state. ``None`` leaves mass spectra in the order
         they were parsed.
+    :type random_state: int or Generator, optional.
     """
 
     def __init__(

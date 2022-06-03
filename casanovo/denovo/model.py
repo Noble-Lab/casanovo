@@ -44,7 +44,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
     :type max_length: int, optional
     :param residues: The amino acid dictionary and their masses. By default this is only
         the 20 canonical amino acids, with cysteine carbamidomethylated. If
-        "massivekb", this dictionary will include the modifications found in
+        'massivekb', this dictionary will include the modifications found in
         MassIVE-KB. Additionally, a dictionary can be used to specify a custom
         collection of amino acids and masses.
     :type residues: Dict or str {"massivekb", "canonical"}, optional

@@ -7,50 +7,30 @@ from torch.utils.data import Dataset, IterableDataset
 
 
 class SpectrumDataset(Dataset):
-    """Parse and retrieve collections of mass spectra.
+    """
+    Parse and retrieve collections of mass spectra.
 
-    Parameters
-    ----------
-    spectrum_index : depthcharge.data.SpectrumIndex
-        The collection of spectra to use as a dataset.
-    n_peaks : int, optional
-        Keep only the top-n most intense peaks in any spectrum. ``None``
+    :param spectrum_index: The collection of spectra to use as a dataset.
+    :type spectrum_index: depthcharge.data.SpectrumIndex
+    :param n_peaks: Keep only the top-n most intense peaks in any spectrum. ``None``
         retains all of the peaks.
-    min_mz : float, optional
-        The minimum m/z to include. The default is 140 m/z, in order to
+    :type n_peaks: int, optional
+    :param min_mz: The minimum m/z to include. The default is 140 m/z, in order to
         exclude TMT and iTRAQ reporter ions.
-    max_mz : float, optional
-        The maximum m/z to include. 
-    min_intensity : float, optional
-        Remove peaks whose intensity is below `min_intensity` percentage
+    :type min_mz: float, optional
+    :param max_mz: The maximum m/z to include. 
+    :type max_mz: float, optional
+    :param min_intensity: Remove peaks whose intensity is below `min_intensity` percentage
         of the intensity of the most intense peak
-    fragment_tol_mass : float, optional
-        Fragment mass tolerance around the precursor mass in Da to remove the
-        precursor peak.           
-    random_state : int or RandomState, optional.
-        The numpy random state. ``None`` leaves mass spectra in the order
+    :type min_intensity: float, optional
+    :param fragment_tol_mass: Fragment mass tolerance around the precursor mass in Da to remove the
+        precursor peak.   
+    :type fragment_tol_mass: float, optional
+    :param random_state: The numpy random state. ``None`` leaves mass spectra in the order
         they were parsed.
-    preprocess_spec : bool, optional
-        Preprocess the provided spectra
-        
-    Attributes
-    ----------
-    n_peaks : int
-        The maximum number of mass speak to consider for each mass spectrum.
-    min_mz : float
-        The minimum m/z to consider for each mass spectrum.
-    max_mz : float
-        The maximum m/z to include. 
-    min_intensity : float
-        Remove peaks whose intensity is below `min_intensity` percentage
-        of the intensity of the most intense peak
-    fragment_tol_mass : float
-        Fragment mass tolerance around the precursor mass in Da to remove the
-        precursor peak.           
-    n_spectra : int
-    index : depthcharge.data.SpectrumIndex
-    rng : numpy.random.Generator
-    preprocess_spec : bool
+    :type random_state: int or RandomState, optional.
+    :param preprocess_spec: Preprocess the provided spectra
+    :type preprocess_spec: bool, optional
     """
 
     def __init__(
@@ -249,50 +229,30 @@ class SpectrumDataset(Dataset):
         self._rng = np.random.default_rng(seed)
 
 class AnnotatedSpectrumDataset(SpectrumDataset):
-    """Parse and retrieve collections of mass spectra
+    """
+    Parse and retrieve collections of mass spectra.
 
-    Parameters
-    ----------
-    annotated_spectrum_index : depthcharge.data.SpectrumIndex
-        The collection of annotated mass spectra to use as a dataset.
-    n_peaks : int, optional
-        Keep only the top-n most intense peaks in any spectrum. ``None``
+    :param annotated_spectrum_index: The collection of annotated mass spectra to use as a dataset.
+    :type annotated_spectrum_index: depthcharge.data.SpectrumIndex
+    :param n_peaks: Keep only the top-n most intense peaks in any spectrum. ``None``
         retains all of the peaks.
-    min_mz : float, optional
-        The minimum m/z to include. The default is 140 m/z, in order to
+    :type n_peaks: int, optional
+    :param min_mz: The minimum m/z to include. The default is 140 m/z, in order to
         exclude TMT and iTRAQ reporter ions.
-    max_mz : float
-        The maximum m/z to include. 
-    min_intensity : float
-        Remove peaks whose intensity is below `min_intensity` percentage
+    :type min_mz: float, optional
+    :param max_mz: The maximum m/z to include. 
+    :type max_mz: float, optional
+    :param min_intensity: Remove peaks whose intensity is below `min_intensity` percentage
         of the intensity of the most intense peak
-    fragment_tol_mass : float
-        Fragment mass tolerance around the precursor mass in Da to remove the
-        precursor peak.          
-    random_state : int or RandomState, optional.
-        The numpy random state. ``None`` leaves mass spectra in the order
+    :type min_intensity: float, optional
+    :param fragment_tol_mass: Fragment mass tolerance around the precursor mass in Da to remove the
+        precursor peak.   
+    :type fragment_tol_mass: float, optional
+    :param random_state: The numpy random state. ``None`` leaves mass spectra in the order
         they were parsed.
-    preprocess_spec : bool, optional
-        Preprocess the provided spectra
-
-    Attributes
-    ----------
-    n_peaks : int
-        The maximum number of mass speak to consider for each mass spectrum.
-    min_mz : float
-        The minimum m/z to consider for each mass spectrum.
-    max_mz : float
-        The maximum m/z to include. 
-    min_intensity : float
-        Remove peaks whose intensity is below `min_intensity` percentage
-        of the intensity of the most intense peak
-    fragment_tol_mass : float
-        Fragment mass tolerance around the precursor mass in Da to remove the
-        precursor peak.          
-    n_spectra : int
-    index : depthcharge.data.SpectrumIndex
-    rng : numpy.random.Generator
-    preprocess_spec : bool
+    :type random_state: int or RandomState, optional.
+    :param preprocess_spec: Preprocess the provided spectra
+    :type preprocess_spec: bool, optional
     """
 
     def __init__(

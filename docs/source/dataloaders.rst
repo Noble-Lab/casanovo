@@ -1,6 +1,11 @@
 dataloaders.py
 ==============
 
+DeNovoDataModule
+---------------------------------------
+
+.. autoclass:: casanovo.denovo.dataloaders.DeNovoDataModule
+
 DeNovoDataModule.setup
 ---------------------------------------
 
