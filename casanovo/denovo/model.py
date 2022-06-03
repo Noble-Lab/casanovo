@@ -14,55 +14,54 @@ LOGGER = logging.getLogger(__name__)
 
 
 class Spec2Pep(pl.LightningModule, ModelMixin):
-    """A Transformer model for de novo peptide sequencing.
+    """
+    A Transformer model for de novo peptide sequencing.
 
     Use this model in conjunction with a pytorch-lightning Trainer.
-
-    Parameters
-    ----------
-    dim_model : int, optional
-        The latent dimensionality used by the Transformer model.
-    n_head : int, optional
-        The number of attention heads in each layer. ``dim_model`` must be
+    
+    :param dim_model: The latent dimensionality used by the Transformer model.
+    :type dim_model: int, optional
+    :param n_head: The number of attention heads in each layer. ``dim_model`` must be
         divisible by ``n_head``.
-    dim_feedforward : int, optional
-        The dimensionality of the fully connected layers in the Transformer
+    :type n_head: int, optional
+    :param dim_feedforward: The dimensionality of the fully connected layers in the Transformer
         model.
-    n_layers : int, optional
-        The number of Transformer layers.
-    dropout : float, optional
-        The dropout probability for all layers.
-    dim_intensity : int or None, optional
-        The number of features to use for encoding peak intensity.
+    :type dim_feedforward: int, optional
+    :param n_layers: The number of Transformer layers.
+    :type n_layers: int, optional
+    :param dropout: The dropout probability for all layers.
+    :type dropout: float, optional
+    :param dim_intensity: The number of features to use for encoding peak intensity.
         The remaining (``dim_model - dim_intensity``) are reserved for
         encoding the m/z value. If ``None``, the intensity will be projected
         up to ``dim_model`` using a linear layer, then summed with the m/z
         emcoding for each peak.
-    custom_encoder : SpectrumEncoder or PairedSpectrumEncoder, optional
-        A pretrained encoder to use. The ``dim_model`` of the encoder must
+    :type dim_intensity: int or None, optional
+    :param custom_encoder: A pretrained encoder to use. The ``dim_model`` of the encoder must
         be the same as that specified by the ``dim_model`` parameter here.
-    max_length : int, optional
-        The maximum peptide length to decode.
-    residues: Dict or str {"massivekb", "canonical"}, optional
-        The amino acid dictionary and their masses. By default this is only
+    :type custom_encoder: SpectrumEncoder or PairedSpectrumEncoder, optional
+    :param max_length: The maximum peptide length to decode.
+    :type max_length: int, optional
+    :param residues: The amino acid dictionary and their masses. By default this is only
         the 20 canonical amino acids, with cysteine carbamidomethylated. If
         "massivekb", this dictionary will include the modifications found in
         MassIVE-KB. Additionally, a dictionary can be used to specify a custom
         collection of amino acids and masses.
-    max_charge : int, optional
-        The maximum charge state to consider.
-    n_log : int, optional
-        The number of epochs to wait between logging messages.
-    tb_summarywriter: torch.utils.tensorboard.SummaryWriter object or None, optional
-        Object to record performance metrics during training. If ``None``, don't use a SummarWriter
-    warmup_iters: int, optional
-        Number of warm up iterations for learning rate scheduler
-    max_iters: int, optional
-        Total number of iterations for learning rate scheduler
-    output_path: str, optional
-        Path to write csv file with denovo peptide sequences        
-    **kwargs : Dict
-        Keyword arguments passed to the Adam optimizer
+    :type residues: Dict or str {"massivekb", "canonical"}, optional
+    :param max_charge: The maximum charge state to consider.
+    :type max_charge: int, optional
+    :param n_log: The number of epochs to wait between logging messages.
+    :type n_log: int, optional
+    :param tb_summarywriter: Object to record performance metrics during training. If ``None``, don't use a SummarWriter
+    :type tb_summarywriter: torch.utils.tensorboard.SummaryWriter object or None, optional
+    :param warmup_iters: Number of warm up iterations for learning rate scheduler
+    :type warmup_iters: int, optional
+    :param max_iters: Total number of iterations for learning rate scheduler
+    :type max_iters: int, optional
+    :param output_path: Path to write csv file with denovo peptide sequences  
+    :type output_path: str, optional
+    :param **kwargs: Keyword arguments passed to the Adam optimizer
+    :type **kwargs: Dict
     """
 
     def __init__(
