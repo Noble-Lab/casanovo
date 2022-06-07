@@ -7,6 +7,9 @@ Data and pre-trained model weights are available [here](https://zenodo.org/recor
 
 A link to the preprint of the paper where we discuss our methods and tests can be found [here](https://www.biorxiv.org/content/10.1101/2022.02.07.479481v1).
 
+# Documentation:
+#### https://casanovo.readthedocs.io/en/latest/
+
 # How to get started with Casanovo?
 ## Our recommendation:
 
