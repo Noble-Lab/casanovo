@@ -100,3 +100,13 @@ casanovo --help
 ```
 It should give you a comprehensive list of all CLI options you can tag onto a casanovo job and how/why to use them.
 
+# Release Notes
+
+- Release 1.0 1-28-22: Initial commit
+- Release 1.1 2-4-22: Add data infrastructure, model and training/testing functionality
+- Release 1.11 2-10-22: Add more cli options and specify custom config file
+- Release 1.12 2-20-22: Add support for multiple mgf files in a directory
+- Release 1.2 3-7-22: Add peptide and amino acid confidence scores to output file
+- Release 2.0 6-5-22: Added additional CLI functionality, changed config file format, added pytest functionality, tutorial added, documentation with sphinx/ReadTheDocs added
+- Release 2.01 6-13-22: Release notes added
+
