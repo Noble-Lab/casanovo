@@ -197,4 +197,4 @@ def prepare_batch(batch):
     mass = (torch.tensor(mz) - 1.007276) * charge
     precursors = torch.vstack([mass, charge]).T.float()
     spec = torch.nn.utils.rnn.pad_sequence(spec, batch_first=True)
-    return spec, precursors, sequence_or_ids
+    return spec, precursors, np.array(sequence_or_ids)

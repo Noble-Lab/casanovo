@@ -7,7 +7,7 @@ import pytorch_lightning as pl
 from torch.utils.tensorboard import SummaryWriter
 
 from depthcharge.components import SpectrumEncoder, PeptideDecoder, ModelMixin
-from depthcharge.embed.model import SiameseSpectrumEncoder
+from depthcharge.models.embed.model import PairedSpectrumEncoder
 from .evaluate import batch_aa_match, calc_eval_metrics
 
 LOGGER = logging.getLogger(__name__)
@@ -95,7 +95,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         
         # Build the model
         if custom_encoder is not None:
-            if isinstance(custom_encoder, SiameseSpectrumEncoder):
+            if isinstance(custom_encoder, PairedSpectrumEncoder):
                 self.encoder = custom_encoder.encoder
             else:
                 self.encoder = custom_encoder

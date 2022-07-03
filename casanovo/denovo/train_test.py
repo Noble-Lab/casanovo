@@ -17,7 +17,7 @@ def train(train_data_path, val_data_path, model_path, config):
     train_data_path = Path(train_data_path)
     if train_data_path.is_file():
         raise FileNotFoundError(f'train_data_path expects directory path but file path was provided instead')    
-    train_mgf_files = [train_data_path / f for f in os.listdir(train_data_path) if train_data_path/f.suffix.lower() == ".mgf"]
+    train_mgf_files = [train_data_path / f for f in os.listdir(train_data_path) if (train_data_path/f).suffix.lower() == ".mgf"]
     val_data_path = Path(val_data_path)
     if val_data_path.is_file():
         raise FileNotFoundError(f'val_data_path expects directory path but file path was provided instead')        
