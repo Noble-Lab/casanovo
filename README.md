@@ -3,7 +3,7 @@
 
 ![image](https://user-images.githubusercontent.com/32707537/152622912-ca87da20-a64c-4e3f-9ca1-721c6b0d9c64.png)
 
-Data and pre-trained model weights are available [here](https://zenodo.org/record/5976003).
+Data and pre-trained model weights are available [here](https://zenodo.org/record/6791263).
 
 A link to the preprint of the paper where we discuss our methods and tests can be found [here](https://www.biorxiv.org/content/10.1101/2022.02.07.479481v1).
 
@@ -109,4 +109,5 @@ It should give you a comprehensive list of all CLI options you can tag onto a ca
 - Release 1.2 3-7-22: Add peptide and amino acid confidence scores to output file
 - Release 2.0 6-5-22: Added additional CLI functionality, changed config file format, added pytest functionality, tutorial added, documentation with sphinx/ReadTheDocs added
 - Release 2.01 6-13-22: Release notes added
+- Release 2.11 7-2-22: Import latest Depthcharge version with stable memory usage and fix to positional encoding for AA
 
