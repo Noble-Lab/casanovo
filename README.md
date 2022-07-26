@@ -51,7 +51,7 @@ Once installed, Casanovo can be used with a simple command line interface. **Run
 casanovo --mode=eval --model_path='path/to/pretrained' --test_data_path='path/to/test/mgf/files/dir' --config_path='path/to/config'
 ```
 
-- To run _de novo_ sequencing without evaluation (specificy directory path for output csv file with _de novo_ sequences, see `casanovo_sample_output.csv` for a sample output file):
+- To run _de novo_ sequencing without evaluation (specify directory path for output csv file with _de novo_ sequences, see `casanovo_sample_output.csv` for a sample output file):
 ```
 casanovo --mode=denovo --model_path='path/to/pretrained' --test_data_path='path/to/test/mgf/files/dir' --config_path='path/to/config' --output_path='path/to/output'
 ```
@@ -66,7 +66,7 @@ casanovo train --mode=train --model_path='path/to/pretrained' --train_data_path=
 ### The spectra file (.mgf) that we will be running this job on can be seen in the sample_data folder.
 
 - Step 1: Install casanovo (see above for details)
-- Step 2: Download the casanovo_pretrained_model_weights.zip from [here](https://zenodo.org/record/5976003). Place these models in a location that you can easly access and know the path of.
+- Step 2: Download the casanovo_pretrained_model_weights.zip from [here](https://zenodo.org/record/6791263). Place these models in a location that you can easily access and know the path of.
     - We will be using pretrained_excl_mouse.ckpt for this job.
 - Step 3: Ensure you are in the proper anaconda environment by typing ```conda activate casanovo_env```. (If you named it differently, type in that name instead)
 - Step 4: Run this command:
