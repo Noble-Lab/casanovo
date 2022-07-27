@@ -21,14 +21,14 @@ test_spec_idx_overwrite: True
 #Preprocessing parameters
 preprocess_spec: True #Should be True when using raw mass spec data. Use False when reproducing Casanovo results with the provided benchmark data set which is pre-processed
 n_peaks: 150
-min_mz: 50.52564895 #1.0005079 * 50.5 
+min_mz: 50.52564895 #1.0005079 * 50.5
 max_mz: 2500
 min_intensity: 0.01
 fragment_tol_mass: 2  # Da
 
 #Hardware options
 num_workers: 8
-gpus: [0] #None for CPU, int list to specify GPUs
+gpus: [0] #[] (empty list) for CPU, int list to specify GPUs
 
 #Model options
 dim_model: 512
@@ -36,8 +36,8 @@ n_head: 8
 dim_feedforward: 1024
 n_layers: 9
 dropout: 0
-dim_intensity: 
-custom_encoder: 
+dim_intensity:
+custom_encoder:
 max_length: 100
 residues:
   G: 57.021463735
@@ -66,7 +66,7 @@ residues:
   Q+0.984: 129.04259354 #128.058577540 + 0.984016,  # Gln Deamidation
 max_charge: 10
 n_log: 1
-tb_summarywriter: 
+tb_summarywriter:
 warmup_iters: 100000
 max_iters: 600000
 learning_rate: 5e-4
@@ -78,7 +78,7 @@ val_batch_size: 1024
 test_batch_size: 1024
 
 accelerator: "ddp"
-logger: 
+logger:
 max_epochs: 30
 num_sanity_val_steps: 0
 
