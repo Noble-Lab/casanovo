@@ -28,7 +28,7 @@ fragment_tol_mass: 2  # Da
 
 #Hardware options
 num_workers: 1
-gpus: None #None for CPU, int list (ex. [0, 1, ...]) to specify GPUs
+gpus: [] #[] for CPU, int list (ex. [0, 1, ...]) to specify GPUs
 
 #Model options
 dim_model: 512
