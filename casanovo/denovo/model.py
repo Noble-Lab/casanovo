@@ -81,7 +81,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         tb_summarywriter=None,
         warmup_iters=100000,
         max_iters=600000,
-        output_path='',
+        output_path="",
         **kwargs,
     ):
         """Initialize a Spec2Pep model"""
@@ -339,26 +339,33 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
             sync_dist=True,
         )
 
-        #De novo sequence the batch
+        # De novo sequence the batch
         pred_seqs, scores = self.predict_step(batch)
 
-        #Temporary solution to predictions with multiple stop token '$', filter them out
+        # Temporary solution to predictions with multiple stop token '$', filter them out
         filtered_pred_seqs = []
         filtered_sequences = []
         for i in range(len(pred_seqs)):
             if len(pred_seqs[i]) > 0:
                 ps = pred_seqs[i]
                 if pred_seqs[i][0] == "$":
-                    ps = pred_seqs[i][1:] #Remove stop token
-                if "$" not in ps and len(ps)>0:
+                    ps = pred_seqs[i][1:]  # Remove stop token
+                if "$" not in ps and len(ps) > 0:
                     filtered_pred_seqs += [ps]
                     filtered_sequences += [sequences[i]]
 
-        #Find AA and peptide matches
-        all_aa_match, orig_total_num_aa, pred_total_num_aa = batch_aa_match(filtered_pred_seqs, filtered_sequences, self.decoder._peptide_mass.masses, 'best')
+        # Find AA and peptide matches
+        all_aa_match, orig_total_num_aa, pred_total_num_aa = batch_aa_match(
+            filtered_pred_seqs,
+            filtered_sequences,
+            self.decoder._peptide_mass.masses,
+            "best",
+        )
 
-        #Calculate evaluation metrics based on matches
-        aa_precision, aa_recall, pep_recall = calc_eval_metrics(all_aa_match, orig_total_num_aa, pred_total_num_aa)
+        # Calculate evaluation metrics based on matches
+        aa_precision, aa_recall, pep_recall = calc_eval_metrics(
+            all_aa_match, orig_total_num_aa, pred_total_num_aa
+        )
 
         self.log(
             "aa_precision",
@@ -384,7 +391,6 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
             sync_dist=True,
         )
 
-
         return loss
 
     def test_step(self, batch, *args):
@@ -401,11 +407,10 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
             (index 2)
 
         """
-        #De novo sequence the batch
+        # De novo sequence the batch
         pred_seqs, scores = self.predict_step(batch)
         spectrum_order_id = batch[-1]
-        self.denovo_seqs += [(spectrum_order_id, pred_seqs,scores)]
-
+        self.denovo_seqs += [(spectrum_order_id, pred_seqs, scores)]
 
     def on_train_epoch_end(self):
         """Log the training loss.
@@ -423,9 +428,15 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         metrics = {
             "epoch": self.trainer.current_epoch,
             "valid": self.trainer.callback_metrics["CELoss"]["valid"].item(),
-            "valid_aa_precision": self.trainer.callback_metrics["aa_precision"]["valid"].item(),
-            "valid_aa_recall": self.trainer.callback_metrics["aa_recall"]["valid"].item(),
-            "valid_pep_recall": self.trainer.callback_metrics["pep_recall"]["valid"].item(),
+            "valid_aa_precision": self.trainer.callback_metrics[
+                "aa_precision"
+            ]["valid"].item(),
+            "valid_aa_recall": self.trainer.callback_metrics["aa_recall"][
+                "valid"
+            ].item(),
+            "valid_pep_recall": self.trainer.callback_metrics["pep_recall"][
+                "valid"
+            ].item(),
         }
         self._history.append(metrics)
 
@@ -434,22 +445,36 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
 
         This is a pytorch-lightning hook.
         """
-        with open(os.path.join(self.output_path, 'casanovo_output.csv'), 'w') as f:
+        with open(
+            os.path.join(str(self.output_path), "casanovo_output.csv"), "w"
+        ) as f:
             writer = csv.writer(f)
-            writer.writerow(['spectrum_id','denovo_seq','peptide_score','aa_scores'])
+            writer.writerow(
+                ["spectrum_id", "denovo_seq", "peptide_score", "aa_scores"]
+            )
 
             for batch in self.denovo_seqs:
-                scores = batch[2].cpu() #transfer to cpu in case in gpu
+                scores = batch[2].cpu()  # transfer to cpu in case in gpu
 
                 for i in range(len(batch[0])):
-                    top_scores = torch.max(scores[i],axis=1)[0] #take the score of most probable AA
-                    empty_index = torch.where(top_scores==0.04)[0] #find the indices of positions after stop token
+                    top_scores = torch.max(scores[i], axis=1)[
+                        0
+                    ]  # take the score of most probable AA
+                    empty_index = torch.where(top_scores == 0.04)[
+                        0
+                    ]  # find the indices of positions after stop token
 
-                    if len(empty_index)>0:#check if decoding was stopped
-                        last_index = empty_index[0]-1 #select index of the last AA
+                    if len(empty_index) > 0:  # check if decoding was stopped
+                        last_index = (
+                            empty_index[0] - 1
+                        )  # select index of the last AA
 
-                        if last_index >= 1: #check if peptide is at least one AA long
-                            top_scores_list = top_scores[:last_index].tolist() #omit the stop token
+                        if (
+                            last_index >= 1
+                        ):  # check if peptide is at least one AA long
+                            top_scores_list = top_scores[
+                                :last_index
+                            ].tolist()  # omit the stop token
                             peptide_score = np.mean(top_scores_list)
                             aa_scores = list(reversed(top_scores_list))
 
@@ -461,18 +486,31 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
                         peptide_score = None
                         aa_scores = None
 
-                    writer.writerow([batch[0][i],batch[1][i][1:],peptide_score,aa_scores])
+                    writer.writerow(
+                        [
+                            batch[0][i],
+                            batch[1][i][1:],
+                            peptide_score,
+                            aa_scores,
+                        ]
+                    )
 
     def on_epoch_end(self):
         """Print log to console, if requested."""
 
         if len(self._history) > 0:
-            #Print only if all output for the current epoch is recorded
+            # Print only if all output for the current epoch is recorded
             if len(self._history[-1]) == 6:
                 if len(self._history) == 1:
-                    LOGGER.info("---------------------------------------------------------------------------------------------------------")
-                    LOGGER.info("  Epoch |   Train Loss  |  Valid Loss | Valid AA precision | Valid AA recall | Valid Peptide recall ")
-                    LOGGER.info("---------------------------------------------------------------------------------------------------------")
+                    LOGGER.info(
+                        "---------------------------------------------------------------------------------------------------------"
+                    )
+                    LOGGER.info(
+                        "  Epoch |   Train Loss  |  Valid Loss | Valid AA precision | Valid AA recall | Valid Peptide recall "
+                    )
+                    LOGGER.info(
+                        "---------------------------------------------------------------------------------------------------------"
+                    )
 
                 metrics = self._history[-1]
                 if not metrics["epoch"] % self.n_log:
@@ -485,14 +523,34 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
                         metrics.get("valid_aa_recall", np.nan),
                         metrics.get("valid_pep_recall", np.nan),
                     )
-                    #Add metrics to SummaryWriter object if provided
+                    # Add metrics to SummaryWriter object if provided
                     if self.tb_summarywriter is not None:
-                        self.tb_summarywriter.add_scalar('loss/train_crossentropy_loss', metrics.get("train", np.nan), metrics["epoch"]+1)
-                        self.tb_summarywriter.add_scalar('loss/dev_crossentropy_loss', metrics.get("valid", np.nan), metrics["epoch"]+1)
+                        self.tb_summarywriter.add_scalar(
+                            "loss/train_crossentropy_loss",
+                            metrics.get("train", np.nan),
+                            metrics["epoch"] + 1,
+                        )
+                        self.tb_summarywriter.add_scalar(
+                            "loss/dev_crossentropy_loss",
+                            metrics.get("valid", np.nan),
+                            metrics["epoch"] + 1,
+                        )
 
-                        self.tb_summarywriter.add_scalar('eval/dev_aa_precision', metrics.get("valid_aa_precision", np.nan), metrics["epoch"]+1)
-                        self.tb_summarywriter.add_scalar('eval/dev_aa_recall', metrics.get("valid_aa_recall", np.nan), metrics["epoch"]+1)
-                        self.tb_summarywriter.add_scalar('eval/dev_pep_recall', metrics.get("valid_pep_recall", np.nan), metrics["epoch"]+1)
+                        self.tb_summarywriter.add_scalar(
+                            "eval/dev_aa_precision",
+                            metrics.get("valid_aa_precision", np.nan),
+                            metrics["epoch"] + 1,
+                        )
+                        self.tb_summarywriter.add_scalar(
+                            "eval/dev_aa_recall",
+                            metrics.get("valid_aa_recall", np.nan),
+                            metrics["epoch"] + 1,
+                        )
+                        self.tb_summarywriter.add_scalar(
+                            "eval/dev_pep_recall",
+                            metrics.get("valid_pep_recall", np.nan),
+                            metrics["epoch"] + 1,
+                        )
 
     def configure_optimizers(self):
         """Initialize the optimizer.
@@ -508,9 +566,12 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         optimizer = torch.optim.Adam(self.parameters(), **self.opt_kwargs)
 
         # Apply lr scheduler per step
-        lr_scheduler = CosineWarmupScheduler(optimizer, warmup=self.warmup_iters, max_iters=self.max_iters)
+        lr_scheduler = CosineWarmupScheduler(
+            optimizer, warmup=self.warmup_iters, max_iters=self.max_iters
+        )
 
-        return [optimizer], [{'scheduler': lr_scheduler, 'interval': 'step'}]
+        return [optimizer], [{"scheduler": lr_scheduler, "interval": "step"}]
+
 
 class CosineWarmupScheduler(torch.optim.lr_scheduler._LRScheduler):
     """Learning rate scheduler with linear warm up followed by cosine shaped decay.

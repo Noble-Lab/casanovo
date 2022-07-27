@@ -20,19 +20,19 @@ class SpectrumDataset(Dataset):
         The minimum m/z to include. The default is 140 m/z, in order to
         exclude TMT and iTRAQ reporter ions.
     max_mz : float, optional
-        The maximum m/z to include. 
+        The maximum m/z to include.
     min_intensity : float, optional
         Remove peaks whose intensity is below `min_intensity` percentage
         of the intensity of the most intense peak
     fragment_tol_mass : float, optional
         Fragment mass tolerance around the precursor mass in Da to remove the
-        precursor peak.           
+        precursor peak.
     random_state : int or RandomState, optional.
         The numpy random state. ``None`` leaves mass spectra in the order
         they were parsed.
     preprocess_spec : bool, optional
         Preprocess the provided spectra
-        
+
     Attributes
     ----------
     n_peaks : int
@@ -40,13 +40,13 @@ class SpectrumDataset(Dataset):
     min_mz : float
         The minimum m/z to consider for each mass spectrum.
     max_mz : float
-        The maximum m/z to include. 
+        The maximum m/z to include.
     min_intensity : float
         Remove peaks whose intensity is below `min_intensity` percentage
         of the intensity of the most intense peak
     fragment_tol_mass : float
         Fragment mass tolerance around the precursor mass in Da to remove the
-        precursor peak.           
+        precursor peak.
     n_spectra : int
     index : depthcharge.data.SpectrumIndex
     rng : numpy.random.Generator
@@ -60,9 +60,9 @@ class SpectrumDataset(Dataset):
         min_mz=140,
         max_mz=2500,
         min_intensity=0.01,
-        fragment_tol_mass=2,          
+        fragment_tol_mass=2,
         random_state=None,
-        preprocess_spec=False
+        preprocess_spec=False,
     ):
         """Initialize a SpectrumDataset"""
         super().__init__()
@@ -70,7 +70,7 @@ class SpectrumDataset(Dataset):
         self.min_mz = min_mz
         self.max_mz = max_mz
         self.min_intensity = min_intensity
-        self.fragment_tol_mass = fragment_tol_mass          
+        self.fragment_tol_mass = fragment_tol_mass
         self.rng = np.random.default_rng(random_state)
         self._index = spectrum_index
         self.preprocess_spec = preprocess_spec
@@ -100,17 +100,19 @@ class SpectrumDataset(Dataset):
             The unique identifier for spectrum based on its order in the original mgf file
         """
         mz_array, int_array, prec_mz, prec_charge = self.index[idx]
- 
+
         if self.preprocess_spec == True:
-            spec = self._process_peaks(mz_array, int_array, prec_mz, prec_charge)
+            spec = self._process_peaks(
+                mz_array, int_array, prec_mz, prec_charge
+            )
         else:
             spec = torch.tensor(np.array([mz_array, int_array])).T.float()
-            
+
         if not spec.sum():
-            spec = torch.tensor([[0, 1]]).float()            
-            
-        spectrum_order_id = f'{idx}'
-        
+            spec = torch.tensor([[0, 1]]).float()
+
+        spectrum_order_id = f"{idx}"
+
         return spec, prec_mz, prec_charge, spectrum_order_id
 
     def _get_non_precursor_peak_mask(
@@ -149,7 +151,7 @@ class SpectrumDataset(Dataset):
         mask = np.full_like(mz, True, np.bool_)
         mz_i = remove_i = 0
         while mz_i < len(mz) and remove_i < len(remove_mz):
-            md = mz[mz_i] - remove_mz[remove_i] # in Da
+            md = mz[mz_i] - remove_mz[remove_i]  # in Da
             if md < -fragment_tol_mass:
                 mz_i += 1
             elif md > fragment_tol_mass:
@@ -158,9 +160,11 @@ class SpectrumDataset(Dataset):
                 mask[mz_i] = False
                 mz_i += 1
 
-        return mask    
-    
-    def _get_filter_intensity_mask(self, intensity, min_intensity, max_num_peaks):
+        return mask
+
+    def _get_filter_intensity_mask(
+        self, intensity, min_intensity, max_num_peaks
+    ):
         """
         Get a mask to remove low-intensity peaks and retain only the given number
         of most intense peaks.
@@ -195,7 +199,7 @@ class SpectrumDataset(Dataset):
             intensity_idx[max(start_i, len(intensity_idx) - max_num_peaks) :]
         ] = True
         return mask
-    
+
     def _process_peaks(self, mz_array, int_array, prec_mz, prec_charge):
         """Choose the top n peaks and normalize the spectrum intensities.
 
@@ -208,7 +212,7 @@ class SpectrumDataset(Dataset):
         precursor_mz : float
             The m/z of the precursor.
         precursor_charge : int
-            The charge of the precursor.            
+            The charge of the precursor.
 
         Returns
         -------
@@ -216,13 +220,13 @@ class SpectrumDataset(Dataset):
             The mass spectrum where ``spectrum[:, 0]`` are the m/z values and
             ``spectrum[:, 1]`` are their associated intensities.
         """
-        #Set m/z range for fragments
+        # Set m/z range for fragments
         if self.min_mz is not None:
             keep = (mz_array >= self.min_mz) & (mz_array <= self.max_mz)
             mz_array = mz_array[keep]
             int_array = int_array[keep]
-        
-        #Remove fragment peak(s) close to the precursor m/z
+
+        # Remove fragment peak(s) close to the precursor m/z
         neutral_mass = (prec_mz - 1.0072766) * prec_charge
         peak_mask = self._get_non_precursor_peak_mask(
             mz_array,
@@ -232,13 +236,17 @@ class SpectrumDataset(Dataset):
         )
         mz_array = mz_array[peak_mask]
         int_array = int_array[peak_mask]
-        
-        #Remove low-intensity fragment peaks and keep a maximum pre-specified number of peaks
-        top_p = self._get_filter_intensity_mask(intensity=int_array, min_intensity=self.min_intensity, max_num_peaks=self.n_peaks)
+
+        # Remove low-intensity fragment peaks and keep a maximum pre-specified number of peaks
+        top_p = self._get_filter_intensity_mask(
+            intensity=int_array,
+            min_intensity=self.min_intensity,
+            max_num_peaks=self.n_peaks,
+        )
         mz_array = mz_array[top_p]
         int_array = int_array[top_p]
-        
-        #Square root normalize the peak intensities
+
+        # Square root normalize the peak intensities
         int_array = np.sqrt(int_array)
         int_array = int_array / np.linalg.norm(int_array)
 
@@ -264,6 +272,7 @@ class SpectrumDataset(Dataset):
         """Set the numpy random number generator."""
         self._rng = np.random.default_rng(seed)
 
+
 class AnnotatedSpectrumDataset(SpectrumDataset):
     """Parse and retrieve collections of mass spectra
 
@@ -278,13 +287,13 @@ class AnnotatedSpectrumDataset(SpectrumDataset):
         The minimum m/z to include. The default is 140 m/z, in order to
         exclude TMT and iTRAQ reporter ions.
     max_mz : float
-        The maximum m/z to include. 
+        The maximum m/z to include.
     min_intensity : float
         Remove peaks whose intensity is below `min_intensity` percentage
         of the intensity of the most intense peak
     fragment_tol_mass : float
         Fragment mass tolerance around the precursor mass in Da to remove the
-        precursor peak.          
+        precursor peak.
     random_state : int or RandomState, optional.
         The numpy random state. ``None`` leaves mass spectra in the order
         they were parsed.
@@ -298,13 +307,13 @@ class AnnotatedSpectrumDataset(SpectrumDataset):
     min_mz : float
         The minimum m/z to consider for each mass spectrum.
     max_mz : float
-        The maximum m/z to include. 
+        The maximum m/z to include.
     min_intensity : float
         Remove peaks whose intensity is below `min_intensity` percentage
         of the intensity of the most intense peak
     fragment_tol_mass : float
         Fragment mass tolerance around the precursor mass in Da to remove the
-        precursor peak.          
+        precursor peak.
     n_spectra : int
     index : depthcharge.data.SpectrumIndex
     rng : numpy.random.Generator
@@ -318,9 +327,9 @@ class AnnotatedSpectrumDataset(SpectrumDataset):
         min_mz=140,
         max_mz=2500,
         min_intensity=0.01,
-        fragment_tol_mass=2,        
+        fragment_tol_mass=2,
         random_state=None,
-        preprocess_spec=False
+        preprocess_spec=False,
     ):
         """Initialize an AnnotatedSpectrumDataset"""
         super().__init__(
@@ -329,9 +338,9 @@ class AnnotatedSpectrumDataset(SpectrumDataset):
             min_mz=min_mz,
             max_mz=max_mz,
             min_intensity=min_intensity,
-            fragment_tol_mass=fragment_tol_mass,            
+            fragment_tol_mass=fragment_tol_mass,
             random_state=random_state,
-            preprocess_spec=preprocess_spec
+            preprocess_spec=preprocess_spec,
         )
 
     def __getitem__(self, idx):
@@ -356,7 +365,9 @@ class AnnotatedSpectrumDataset(SpectrumDataset):
         """
         mz_array, int_array, prec_mz, prec_charge, pep = self.index[idx]
         if self.preprocess_spec == True:
-            spec = self._process_peaks(mz_array, int_array, prec_mz, prec_charge)
+            spec = self._process_peaks(
+                mz_array, int_array, prec_mz, prec_charge
+            )
         else:
             spec = torch.tensor(np.array([mz_array, int_array])).T.float()
         return spec, prec_mz, prec_charge, pep
