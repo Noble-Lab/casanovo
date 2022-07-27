@@ -68,10 +68,13 @@ casanovo train --mode=train --model_path='path/to/pretrained' --train_data_path=
 - Step 1: Install casanovo (see above for details)
 - Step 2: Download the casanovo_pretrained_model_weights.zip from [here](https://zenodo.org/record/6791263). Place these models in a location that you can easily access and know the path of.
     - We will be using pretrained_excl_mouse.ckpt for this job.
-- Step 3: Ensure you are in the proper anaconda environment by typing ```conda activate casanovo_env```. (If you named it differently, type in that name instead)
-- Step 4: Run this command:
+- Step 3: Copy the example config.yaml file into a location you can easily access. 
+- Step 4: Chnage the `num_workers` and the `gpus` fields to reflect the number of cores and gpus on the machine you are running the job on.
+    - For example, if you have 4 CPU cores and 0 gpus, then num_workers would be 4, and gpus would be None
+- Step 5: Ensure you are in the proper anaconda environment by typing ```conda activate casanovo_env```. (If you named it differently, type in that name instead)
+- Step 6: Run this command:
 ```
-casanovo --mode=denovo --model_path='[PATH_TO]/pretrained_excl_mouse.ckpt' --test_data_path='sample_data' --preprocess_spec=False
+casanovo --mode=denovo --model_path='[PATH_TO]/pretrained_excl_mouse.ckpt' --test_data_path='sample_data' --config_path='path/to/config.yaml' --preprocess_spec=False
 ```
 Make sure you have the proper filepath to the pretrained_excl_mouse.ckpt file.
  - Note: If you want to get the ouput csv in a place OTHER than where you ran this command, specify where you would like the output to be placed by specifying a directory in the --output_path CLI field
@@ -110,4 +113,5 @@ It should give you a comprehensive list of all CLI options you can tag onto a ca
 - Release 2.0 6-5-22: Added additional CLI functionality, changed config file format, added pytest functionality, tutorial added, documentation with sphinx/ReadTheDocs added
 - Release 2.01 6-13-22: Release notes added
 - Release 2.11 7-2-22: Import latest Depthcharge version with stable memory usage and fix to positional encoding for AA
+- Release 2.12 7-27-22: Update tutorial
 
