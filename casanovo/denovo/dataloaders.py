@@ -32,13 +32,13 @@ class DeNovoDataModule(pl.LightningDataModule):
         The minimum m/z to include. The default is 140 m/z, in order to
         exclude TMT and iTRAQ reporter ions.
     max_mz : float, optional
-        The maximum m/z to include. 
+        The maximum m/z to include.
     min_intensity : float, optional
         Remove peaks whose intensity is below `min_intensity` percentage
         of the intensity of the most intense peak
     fragment_tol_mass : float, optional
         Fragment mass tolerance around the precursor mass in Da to remove the
-        precursor peak.       
+        precursor peak.
     num_workers : int, optional
         The number of workers to use for data loading. By default, the number
         of available CPU cores on the current machine is used.
@@ -57,10 +57,10 @@ class DeNovoDataModule(pl.LightningDataModule):
         min_mz=140,
         max_mz=2500,
         min_intensity=0.01,
-        fragment_tol_mass=2,        
+        fragment_tol_mass=2,
         num_workers=None,
         random_state=None,
-        preprocess_spec=False
+        preprocess_spec=False,
     ):
         """Initialize the PairedSpectrumDataModule."""
         super().__init__()
@@ -72,7 +72,7 @@ class DeNovoDataModule(pl.LightningDataModule):
         self.min_mz = min_mz
         self.max_mz = max_mz
         self.min_intensity = min_intensity
-        self.fragment_tol_mass = fragment_tol_mass       
+        self.fragment_tol_mass = fragment_tol_mass
         self.num_workers = num_workers
         self.rng = np.random.default_rng(random_state)
         self.preprocess_spec = preprocess_spec
@@ -102,7 +102,7 @@ class DeNovoDataModule(pl.LightningDataModule):
                 min_mz=self.min_mz,
                 max_mz=self.max_mz,
                 min_intensity=self.min_intensity,
-                fragment_tol_mass=self.fragment_tol_mass,                
+                fragment_tol_mass=self.fragment_tol_mass,
                 preprocess_spec=self.preprocess_spec,
             )
             if self.train_index is not None:
@@ -114,29 +114,29 @@ class DeNovoDataModule(pl.LightningDataModule):
                 self.valid_dataset = make_dataset(self.valid_index)
 
         if stage in (None, "test"):
-            if annotated == True:             
+            if annotated == True:
                 make_dataset = partial(
                     AnnotatedSpectrumDataset,
                     n_peaks=self.n_peaks,
                     min_mz=self.min_mz,
                     max_mz=self.max_mz,
                     min_intensity=self.min_intensity,
-                    fragment_tol_mass=self.fragment_tol_mass,                   
-                    preprocess_spec=self.preprocess_spec
-                )        
-            else:    
+                    fragment_tol_mass=self.fragment_tol_mass,
+                    preprocess_spec=self.preprocess_spec,
+                )
+            else:
                 make_dataset = partial(
                     SpectrumDataset,
                     n_peaks=self.n_peaks,
                     min_mz=self.min_mz,
                     max_mz=self.max_mz,
                     min_intensity=self.min_intensity,
-                    fragment_tol_mass=self.fragment_tol_mass,                      
-                    preprocess_spec=self.preprocess_spec
-                )                
+                    fragment_tol_mass=self.fragment_tol_mass,
+                    preprocess_spec=self.preprocess_spec,
+                )
             if self.test_index is not None:
                 self.test_dataset = make_dataset(self.test_index)
-                
+
     def _make_loader(self, dataset):
         """Create a PyTorch DataLoader.
 
@@ -190,7 +190,7 @@ def prepare_batch(batch):
     precursors : torch.Tensor of shape (batch_size, 2)
         The precursor mass and charge state.
     sequence_or_ids : list of str
-        The peptide sequence annotations in training, the spectrum identifier in de novo sequencing  
+        The peptide sequence annotations in training, the spectrum identifier in de novo sequencing
     """
     spec, mz, charge, sequence_or_ids = list(zip(*batch))
     charge = torch.tensor(charge)

@@ -7,6 +7,7 @@ from depthcharge.components.transformers import (
 )
 from depthcharge.masses import PeptideMass
 
+
 def test_spectrum_encoder():
     spectra = torch.tensor(
         [
@@ -15,24 +16,24 @@ def test_spectrum_encoder():
         ]
     )
     model = SpectrumEncoder(
-        dim_model=128, 
-        n_head=8, 
+        dim_model=128,
+        n_head=8,
         dim_feedforward=1024,
-        n_layers=1, 
-        dropout=0, 
-        dim_intensity=None
+        n_layers=1,
+        dropout=0,
+        dim_intensity=None,
     )
     emb, mask = model(spectra)
     assert emb.shape == (2, 4, 128)
     assert mask.sum() == 1
 
     model = SpectrumEncoder(
-        dim_model=128, 
-        n_head=8, 
+        dim_model=128,
+        n_head=8,
         dim_feedforward=1024,
-        n_layers=1, 
-        dropout=0, 
-        dim_intensity=4
+        n_layers=1,
+        dropout=0,
+        dim_intensity=4,
     )
     emb, mask = model(spectra)
     assert emb.shape == (2, 4, 128)
@@ -47,6 +48,7 @@ def test_spectrum_encoder():
     emb, mask = model(spectra)
     assert emb.shape == (2, 4, 8)
     assert mask.sum() == 1
+
 
 def test_peptide_decoder():
     spectra = torch.tensor(
@@ -67,12 +69,12 @@ def test_peptide_decoder():
         max_charge=5,
     )
     enc_model = SpectrumEncoder(
-        dim_model=128, 
-        n_head=8, 
+        dim_model=128,
+        n_head=8,
         dim_feedforward=1024,
-        n_layers=1, 
-        dropout=0, 
-        dim_intensity=None
+        n_layers=1,
+        dropout=0,
+        dim_intensity=None,
     )
     memory, mem_mask = enc_model(spectra)
     scores, tokens = dec_model(peptides, precursors, memory, mem_mask)

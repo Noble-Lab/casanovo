@@ -20,6 +20,7 @@ import numpy as np
 
 # Pytest fixtures added here can be used as parameters for testing methods
 
+
 @pytest.fixture
 def mgf_small(tmp_path):
     """An MGF file with 2 annotated spectra."""
@@ -27,7 +28,8 @@ def mgf_small(tmp_path):
     mgf_file = tmp_path / "small.mgf"
     return _create_mgf(peptides, mgf_file)
 
-#Utility Funcs
+
+# Utility Funcs
 def _create_mgf(peptides, mgf_file, random_state=42):
     """Create a fake MGF file from one or more peptides.
     Parameters
@@ -48,6 +50,7 @@ def _create_mgf(peptides, mgf_file, random_state=42):
         mgf_ref.write("\n".join(entries))
 
     return mgf_file
+
 
 def _create_mgf_entry(peptide, charge=2):
     """Create a MassIVE-KB style MGF entry for a single PSM.
@@ -87,6 +90,7 @@ def _create_mgf_entry(peptide, charge=2):
         "END IONS",
     ]
     return "\n".join(mgf)
+
 
 # Set the PPX_DATA_DIRECTORY --------------------------------------------------
 @pytest.fixture(autouse=True)
