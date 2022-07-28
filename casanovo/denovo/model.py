@@ -446,7 +446,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         This is a pytorch-lightning hook.
         """
         with open(
-            os.path.join(str(self.output_path), "casanovo_output.csv"), "w"
+            os.path.join(self.output_path, "casanovo_output.csv"), "w"
         ) as f:
             writer = csv.writer(f)
             writer.writerow(
