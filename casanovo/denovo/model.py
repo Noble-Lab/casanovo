@@ -134,7 +134,9 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
 
         # Store de novo sequences to be saved
         self.denovo_seqs = []
-        self.output_path = output_path
+        self.output_path = output_path if output_path is not None else "."
+        if not os.path.exists(self.output_path):
+            os.makedirs(self.output_path, exist_ok=True)
 
     def forward(self, spectra, precursors):
         """Sequence a batch of mass spectra.
@@ -444,7 +446,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         This is a pytorch-lightning hook.
         """
         with open(
-            os.path.join(str(self.output_path), "casanovo_output.csv"), "w"
+            os.path.join(self.output_path, "casanovo_output.csv"), "w"
         ) as f:
             writer = csv.writer(f)
             writer.writerow(
