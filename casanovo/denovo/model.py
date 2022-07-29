@@ -407,10 +407,9 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
             (index 2)
 
         """
-        # De novo sequence the batch
-        pred_seqs, scores = self.predict_step(batch)
-        spectrum_order_id = batch[-1]
-        self.denovo_seqs += [(spectrum_order_id, pred_seqs, scores)]
+        peptide, aa_scores = self.predict_step(batch)
+        # Spectrum ID, precursor mass and charge, predicted peptide sequence, AA scores.
+        self.denovo_seqs.append((batch[2], batch[1], peptide, aa_scores))
 
     def on_train_epoch_end(self):
         """Log the training loss.
@@ -454,17 +453,17 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
             )
 
             for batch in self.denovo_seqs:
-                scores = batch[2].cpu()  # transfer to cpu in case in gpu
+                scores = batch[-1].cpu()  # transfer to cpu in case in gpu
 
                 for i in range(len(batch[0])):
                     peptide_seq = batch[1][i][1:]
                     # TODO: Compute the predicted mass from the peptide sequence.
                     predicted_mass = 0
-                    # TODO: Get the actual mass from the precursor m/z and charge.
-                    actual_mass = 0
+                    # Precursor neutral mass.
+                    precursor_mass = batch[1][i, 0]
                     delta_mass_ppm = (
-                        abs(predicted_mass - actual_mass)
-                        / actual_mass
+                        abs(predicted_mass - precursor_mass)
+                        / precursor_mass
                         * 10**6
                     )
                     # take the score of most probable AA
