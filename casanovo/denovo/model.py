@@ -81,7 +81,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         tb_summarywriter=None,
         warmup_iters=100000,
         max_iters=600000,
-        output_path="",
+        output_path=None,
         **kwargs,
     ):
         """Initialize a Spec2Pep model"""
