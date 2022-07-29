@@ -56,6 +56,8 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         collection of amino acids and masses.
     max_charge : int, optional
         The maximum charge state to consider.
+    precursor_tol_mass : float, optional
+        The maximum allowable precursor mass tolerance for correct predictions.
     n_log : int, optional
         The number of epochs to wait between logging messages.
     tb_summarywriter: torch.utils.tensorboard.SummaryWriter object or None, optional
@@ -82,6 +84,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         max_length=100,
         residues="canonical",
         max_charge=5,
+        precursor_tol_mass=50,
         n_log=10,
         tb_summarywriter=None,
         warmup_iters=100000,
@@ -138,6 +141,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         self.max_iters = max_iters
 
         # Store de novo sequences to be saved
+        self.precursor_tol_mass = precursor_tol_mass
         self.denovo_seqs = []
         self.output_path = output_path if output_path is not None else "."
         if not os.path.exists(self.output_path):
@@ -488,8 +492,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
                             peptide_score = np.mean(top_scores_list)
                             # Subtract one if the precursor m/z tolerance is
                             # violated.
-                            # FIXME: Configurable mass tolerance?
-                            if delta_mass_ppm > 50:
+                            if delta_mass_ppm > self.precursor_tol_mass:
                                 peptide_score -= 1
                             aa_scores = list(reversed(top_scores_list))
                         else:
