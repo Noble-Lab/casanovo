@@ -457,39 +457,44 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
                 scores = batch[2].cpu()  # transfer to cpu in case in gpu
 
                 for i in range(len(batch[0])):
-                    top_scores = torch.max(scores[i], axis=1)[
-                        0
-                    ]  # take the score of most probable AA
-                    empty_index = torch.where(top_scores == 0.04)[
-                        0
-                    ]  # find the indices of positions after stop token
-
-                    if len(empty_index) > 0:  # check if decoding was stopped
-                        last_index = (
-                            empty_index[0] - 1
-                        )  # select index of the last AA
-
-                        if (
-                            last_index >= 1
-                        ):  # check if peptide is at least one AA long
-                            top_scores_list = top_scores[
-                                :last_index
-                            ].tolist()  # omit the stop token
+                    peptide_seq = batch[1][i][1:]
+                    # TODO: Compute the predicted mass from the peptide sequence.
+                    predicted_mass = 0
+                    # TODO: Get the actual mass from the precursor m/z and charge.
+                    actual_mass = 0
+                    delta_mass_ppm = (
+                        abs(predicted_mass - actual_mass)
+                        / actual_mass
+                        * 10**6
+                    )
+                    # take the score of most probable AA
+                    top_scores = torch.max(scores[i], axis=1)[0]
+                    # find the indices of positions after stop token
+                    empty_index = torch.where(top_scores == 0.04)[0]
+                    # check if decoding was stopped
+                    if len(empty_index) > 0:
+                        # select index of the last AA
+                        last_index = empty_index[0] - 1
+                        # check if peptide is at least one AA long
+                        if last_index >= 1:
+                            # omit the stop token
+                            top_scores_list = top_scores[:last_index].tolist()
                             peptide_score = np.mean(top_scores_list)
+                            # Subtract one if the precursor m/z tolerance is
+                            # violated.
+                            # FIXME: Configurable mass tolerance?
+                            if delta_mass_ppm > 50:
+                                peptide_score -= 1
                             aa_scores = list(reversed(top_scores_list))
-
                         else:
-                            peptide_score = None
-                            aa_scores = None
-
+                            peptide_score, aa_scores = None, None
                     else:
-                        peptide_score = None
-                        aa_scores = None
+                        peptide_score, aa_scores = None, None
 
                     writer.writerow(
                         [
                             batch[0][i],
-                            batch[1][i][1:],
+                            peptide_seq,
                             peptide_score,
                             aa_scores,
                         ]
