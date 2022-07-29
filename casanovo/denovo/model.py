@@ -1,16 +1,21 @@
 """A de novo peptide sequencing model"""
 import logging, time, random, os, csv
+import re
 
 import torch
 import numpy as np
 import pytorch_lightning as pl
 from torch.utils.tensorboard import SummaryWriter
 
+import depthcharge.masses
 from depthcharge.components import SpectrumEncoder, PeptideDecoder, ModelMixin
 from depthcharge.models.embed.model import PairedSpectrumEncoder
 from .evaluate import batch_aa_match, calc_eval_metrics
 
 LOGGER = logging.getLogger(__name__)
+
+
+peptide_mass_calculator = depthcharge.masses.PeptideMass("massivekb")
 
 
 class Spec2Pep(pl.LightningModule, ModelMixin):
@@ -456,9 +461,11 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
                 scores = batch[-1].cpu()  # transfer to cpu in case in gpu
 
                 for i in range(len(batch[0])):
-                    peptide_seq = batch[1][i][1:]
-                    # TODO: Compute the predicted mass from the peptide sequence.
-                    predicted_mass = 0
+                    peptide_seq = batch[2][i][1:]
+                    # Mass of the predicted peptide.
+                    predicted_mass = peptide_mass_calculator.mass(
+                        re.findall(r"[A-Z](?:\+\d+\.\d+)?", peptide_seq)
+                    )
                     # Precursor neutral mass.
                     precursor_mass = batch[1][i, 0]
                     delta_mass_ppm = (
