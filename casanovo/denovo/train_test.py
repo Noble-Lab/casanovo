@@ -1,11 +1,15 @@
 """Training and testing functionality for the de novo peptide sequencing model"""
-import pytest
-import logging, importlib, os
-from pathlib import Path
+import logging
+import os
+from typing import Any, Dict
+
 import pytorch_lightning as pl
 from depthcharge.data import AnnotatedSpectrumIndex, SpectrumIndex
+
 from casanovo.denovo import DeNovoDataModule, Spec2Pep
-import yaml
+
+
+logger = logging.getLogger("casanovo")
 
 
 def train(train_data_path, val_data_path, model_path, config):
@@ -226,17 +230,31 @@ def evaluate(test_data_path, model_path, config):
     trainer.validate(model_trained, loaders.test_dataloader())
 
 
-def denovo(test_data_path, model_path, config, output_path):
-    """Run inference with a pre-trained Casanovo model without evaluation and using options specified in config.py."""
+def denovo(
+        denovo_dir: str, model_filename: str, out_filename: str, config: Dict[str, Any]
+) -> None:
+    """
+    Predict peptide sequences with a trained Casanovo model.
 
-    # Initialize the pre-trained model
-    model_path = Path(model_path)
-    if model_path.is_dir():
-        raise FileNotFoundError(
-            f"model_path expects file path but directory path was provided instead"
+    Parameters
+    ----------
+    denovo_dir : str
+        The directory with peak files for predicting peptide sequences.
+    model_filename : str
+        The file name of the model weights (.ckpt file).
+    out_filename : str
+        The output file name for the prediction results (format: .csv).
+    config : Dict[str, Any]
+        The configuration options.
+    """
+    # Load the trained model.
+    if not os.path.isfile(model_filename):
+        logger.error(
+            "Could not find the trained model weights at file %s", model_filename
         )
-    model_trained = Spec2Pep().load_from_checkpoint(
-        model_path,
+        raise FileNotFoundError("Could not find the trained model weights")
+    model = Spec2Pep().load_from_checkpoint(
+        model_filename,
         dim_model=config["dim_model"],
         n_head=config["n_head"],
         dim_feedforward=config["dim_feedforward"],
@@ -248,26 +266,26 @@ def denovo(test_data_path, model_path, config, output_path):
         residues=config["residues"],
         max_charge=config["max_charge"],
         n_log=config["n_log"],
-        output_path=output_path,
+        warmup_iters=config["warmup_iters"],
+        max_iters=config["max_iters"],
+        out_filename=out_filename,
     )
-    # Index test data
-    test_data_path = Path(test_data_path)
-    if test_data_path.is_file():
-        raise FileNotFoundError(
-            f"test_data_path expects directory path but file path was provided instead"
+    # Read the MS/MS spectra for which to predict peptide sequences.
+    if not os.path.isdir(denovo_dir):
+        logger.error(
+            "Could not find directory %s from which to read peak files", denovo_dir
         )
-    mgf_files = [
-        test_data_path / f
-        for f in os.listdir(test_data_path)
-        if (test_data_path / f).suffix.lower() == ".mgf"
+        raise FileNotFoundError("Could not find the directory to read peak files")
+    peak_filenames = [
+        os.path.join(denovo_dir, f)
+        for f in os.listdir(denovo_dir)
+        if f.lower().endswith(".mgf")
     ]
+    idx_filename = os.path.join(os.getcwd(), config["test_annot_spec_idx_path"])
     index = SpectrumIndex(
-        os.path.join(os.getcwd(), config["test_annot_spec_idx_path"]),
-        mgf_files,
-        overwrite=config["test_spec_idx_overwrite"],
+        idx_filename, peak_filenames, overwrite=config["test_spec_idx_overwrite"]
     )
-
-    # Initialize the data loader
+    # Initialize the data loader.
     loaders = DeNovoDataModule(
         test_index=index,
         n_peaks=config["n_peaks"],
@@ -279,10 +297,8 @@ def denovo(test_data_path, model_path, config, output_path):
         num_workers=config["num_workers"],
         batch_size=config["test_batch_size"],
     )
-
     loaders.setup(stage="test", annotated=False)
-
-    # Create Trainer object
+    # Create the Trainer object.
     trainer = pl.Trainer(
         accelerator=config["accelerator"],
         logger=config["logger"],
@@ -290,6 +306,5 @@ def denovo(test_data_path, model_path, config, output_path):
         max_epochs=config["max_epochs"],
         num_sanity_val_steps=config["num_sanity_val_steps"],
     )
-
-    # Run model without evaluation
-    trainer.test(model_trained, loaders.test_dataloader())
+    # Run the model without evaluation.
+    trainer.test(model, loaders.test_dataloader())

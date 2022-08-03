@@ -74,12 +74,12 @@ logger = logging.getLogger("casanovo")
 )
 def main(
     mode: str,
-    model: click.Path,
-    denovo_dir: click.Path,
-    train_dir: click.Path,
-    val_dir: click.Path,
-    config: click.Path,
-    output: click.Path,
+    model: str,
+    denovo_dir: str,
+    train_dir: str,
+    val_dir: str,
+    config: str,
+    output: str,
     num_workers: int,
     gpu: List[int],
 ):
@@ -136,7 +136,7 @@ def main(
     # Run Casanovo in the specified mode.
     if mode == "denovo":
         logger.info("Predict peptide sequences with Casanovo.")
-        denovo(denovo_dir, model, config, output)
+        denovo(denovo_dir, model, output, config)
     elif mode == "train":
         logger.info("Train the Casanovo model.")
         train(train_dir, val_dir, model, config)

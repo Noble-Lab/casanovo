@@ -61,7 +61,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         The number of warm up iterations for the learning rate scheduler.
     max_iters: int
         The total number of iterations for the learning rate scheduler.
-    filename_out: Optional[str]
+    out_filename: Optional[str]
         The output file name for the prediction results.
     **kwargs : Dict
         Additional keyword arguments passed to the Adam optimizer.
@@ -87,7 +87,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         ] = None,
         warmup_iters: int = 100_000,
         max_iters: int = 600_000,
-        filename_out: Optional[str] = None,
+        out_filename: Optional[str] = None,
         **kwargs: Dict,
     ):
         super().__init__()
@@ -136,10 +136,10 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
 
         # Record the de novo predicted sequences.
         self.predictions = []
-        if filename_out is not None:
-            self.filename_out = filename_out
+        if out_filename is not None:
+            self.out_filename = out_filename
         else:
-            self.filename_out = f"casanovo_{uuid.uuid4().hex}.csv"
+            self.out_filename = f"casanovo_{uuid.uuid4().hex}.csv"
 
     def forward(
         self, spectra: torch.Tensor, precursors: torch.Tensor
@@ -423,7 +423,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         This is a pytorch-lightning hook.
         """
         empty_token_score = torch.tensor(0.04)
-        with open(self.filename_out, "w") as f_out:
+        with open(self.out_filename, "w") as f_out:
             writer = csv.writer(f_out, delimiter="\t")
             writer.writerow(["spectrum_id", "sequence", "score", "aa_scores"])
 
