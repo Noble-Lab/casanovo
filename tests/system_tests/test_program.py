@@ -40,7 +40,7 @@ def test_denovo_casanovo(mgf_small):
         max_iters=config["max_iters"],
         lr=config["learning_rate"],
         weight_decay=config["weight_decay"],
-        output_path=output_path,
+        filename_out=output_path,
     )
     from pathlib import Path
 

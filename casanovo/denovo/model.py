@@ -1,6 +1,7 @@
 import csv
 import logging
-import os
+import uuid
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 import pytorch_lightning as pl
@@ -15,86 +16,88 @@ logger = logging.getLogger("casanovo")
 
 
 class Spec2Pep(pl.LightningModule, ModelMixin):
-    """A Transformer model for de novo peptide sequencing.
+    """
+    A Transformer model for de novo peptide sequencing.
 
     Use this model in conjunction with a pytorch-lightning Trainer.
 
     Parameters
     ----------
-    dim_model : int, optional
-        The latent dimensionality used by the Transformer model.
-    n_head : int, optional
-        The number of attention heads in each layer. ``dim_model`` must be
-        divisible by ``n_head``.
-    dim_feedforward : int, optional
-        The dimensionality of the fully connected layers in the Transformer
-        model.
-    n_layers : int, optional
-        The number of Transformer layers.
-    dropout : float, optional
+    dim_model : int
+        The latent dimensionality used by the transformer model.
+    n_head : int
+        The number of attention heads in each layer. ``dim_model`` must be divisible by
+        ``n_head``.
+    dim_feedforward : int
+        The dimensionality of the fully connected layers in the transformer model.
+    n_layers : int
+        The number of transformer layers.
+    dropout : float
         The dropout probability for all layers.
-    dim_intensity : int or None, optional
-        The number of features to use for encoding peak intensity.
-        The remaining (``dim_model - dim_intensity``) are reserved for
-        encoding the m/z value. If ``None``, the intensity will be projected
-        up to ``dim_model`` using a linear layer, then summed with the m/z
-        emcoding for each peak.
-    custom_encoder : SpectrumEncoder or PairedSpectrumEncoder, optional
-        A pretrained encoder to use. The ``dim_model`` of the encoder must
-        be the same as that specified by the ``dim_model`` parameter here.
-    max_length : int, optional
+    dim_intensity : Optional[int]
+        The number of features to use for encoding peak intensity. The remaining
+        (``dim_model - dim_intensity``) are reserved for encoding the m/z value. If
+        ``None``, the intensity will be projected up to ``dim_model`` using a linear
+        layer, then summed with the m/z encoding for each peak.
+    custom_encoder : Optional[Union[SpectrumEncoder, PairedSpectrumEncoder]]
+        A pretrained encoder to use. The ``dim_model`` of the encoder must be the same
+        as that specified by the ``dim_model`` parameter here.
+    max_length : int
         The maximum peptide length to decode.
-    residues: Dict or str {"massivekb", "canonical"}, optional
-        The amino acid dictionary and their masses. By default this is only
-        the 20 canonical amino acids, with cysteine carbamidomethylated. If
-        "massivekb", this dictionary will include the modifications found in
-        MassIVE-KB. Additionally, a dictionary can be used to specify a custom
-        collection of amino acids and masses.
-    max_charge : int, optional
-        The maximum charge state to consider.
-    n_log : int, optional
+    residues: Union[Dict[str, float], str]
+        The amino acid dictionary and their masses. By default ("canonical) this is only
+        the 20 canonical amino acids, with cysteine carbamidomethylated. If "massivekb",
+        this dictionary will include the modifications found in MassIVE-KB.
+        Additionally, a dictionary can be used to specify a custom collection of amino
+        acids and masses.
+    max_charge : int
+        The maximum precursor charge to consider.
+    n_log : int
         The number of epochs to wait between logging messages.
-    tb_summarywriter: torch.utils.tensorboard.SummaryWriter object or None, optional
-        Object to record performance metrics during training. If ``None``, don't use a SummarWriter
-    warmup_iters: int, optional
-        Number of warm up iterations for learning rate scheduler
-    max_iters: int, optional
-        Total number of iterations for learning rate scheduler
-    output_path: str, optional
-        Path to write csv file with denovo peptide sequences
+    tb_summarywriter: Optional[torch.utils.tensorboard.SummaryWriter]
+        Object to record performance metrics during training. If ``None``, don't use a
+        ``SummarWriter``.
+    warmup_iters: int
+        The number of warm up iterations for the learning rate scheduler.
+    max_iters: int
+        The total number of iterations for the learning rate scheduler.
+    filename_out: Optional[str]
+        The output file name for the prediction results.
     **kwargs : Dict
-        Keyword arguments passed to the Adam optimizer
+        Additional keyword arguments passed to the Adam optimizer.
     """
 
     def __init__(
         self,
-        dim_model=128,
-        n_head=8,
-        dim_feedforward=1024,
-        n_layers=1,
-        dropout=0,
-        dim_intensity=None,
-        custom_encoder=None,
-        max_length=100,
-        residues="canonical",
-        max_charge=5,
-        n_log=10,
-        tb_summarywriter=None,
-        warmup_iters=100000,
-        max_iters=600000,
-        output_path=None,
-        **kwargs,
+        dim_model: int = 128,
+        n_head: int = 8,
+        dim_feedforward: int = 1024,
+        n_layers: int = 1,
+        dropout: float = 0.0,
+        dim_intensity: Optional[int] = None,
+        custom_encoder: Optional[
+            Union[SpectrumEncoder, PairedSpectrumEncoder]
+        ] = None,
+        max_length: int = 100,
+        residues: Union[Dict[str, float], str] = "canonical",
+        max_charge: int = 5,
+        n_log: int = 10,
+        tb_summarywriter: Optional[
+            torch.utils.tensorboard.SummaryWriter
+        ] = None,
+        warmup_iters: int = 100_000,
+        max_iters: int = 600_000,
+        filename_out: Optional[str] = None,
+        **kwargs: Dict,
     ):
-        """Initialize a Spec2Pep model"""
         super().__init__()
 
-        # Writable
         self.max_length = max_length
         self.n_log = n_log
 
         self.residues = residues
 
-        # Build the model
+        # Build the model.
         if custom_encoder is not None:
             if isinstance(custom_encoder, PairedSpectrumEncoder):
                 self.encoder = custom_encoder.encoder
@@ -109,7 +112,6 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
                 dropout=dropout,
                 dim_intensity=dim_intensity,
             )
-
         self.decoder = PeptideDecoder(
             dim_model=dim_model,
             n_head=n_head,
@@ -119,11 +121,10 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
             residues=residues,
             max_charge=max_charge,
         )
-
         self.softmax = torch.nn.Softmax(2)
         self.celoss = torch.nn.CrossEntropyLoss(ignore_index=0)
 
-        # Things for training
+        # Things for training.
         self._history = []
         self.opt_kwargs = kwargs
         self.stop_token = self.decoder._aa2idx["$"]
@@ -133,42 +134,50 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         self.warmup_iters = warmup_iters
         self.max_iters = max_iters
 
-        # Store de novo sequences to be saved
-        self.denovo_seqs = []
-        self.output_path = output_path if output_path is not None else "."
-        if not os.path.exists(self.output_path):
-            os.makedirs(self.output_path, exist_ok=True)
+        # Record the de novo predicted sequences.
+        self.predictions = []
+        if filename_out is not None:
+            self.filename_out = filename_out
+        else:
+            self.filename_out = f"casanovo_{uuid.uuid4().hex}.csv"
 
-    def forward(self, spectra, precursors):
-        """Sequence a batch of mass spectra.
+    def forward(
+        self, spectra: torch.Tensor, precursors: torch.Tensor
+    ) -> Tuple[List[str], torch.Tensor]:
+        """
+        Predict peptide sequences for a batch of MS/MS spectra.
 
         Parameters
         ----------
-        spectrum : torch.Tensor of shape (n_spectra, n_peaks, 2)
-            The spectra to embed. Axis 0 represents a mass spectrum, axis 1
-            contains the peaks in the mass spectrum, and axis 2 is essentially
-            a 2-tuple specifying the m/z-intensity pair for each peak. These
-            should be zero-padded, such that all of the spectra in the batch
-            are the same length.
+        spectra : torch.Tensor of shape (n_spectra, n_peaks, 2)
+            The spectra for which to predict peptide sequences.
+            Axis 0 represents an MS/MS spectrum, axis 1 contains the peaks in the MS/MS
+            spectrum, and axis 2 is essentially a 2-tuple specifying the m/z-intensity
+            pair for each peak. These should be zero-padded, such that all of the
+            spectra in the batch are the same length.
         precursors : torch.Tensor of size (n_spectra, 2)
-            The measured precursor mass (axis 0) and charge (axis 1) of each
-            tandem mass spectrum.
+            The measured precursor mass (axis 0) and charge (axis 1) of each MS/MS
+            spectrum.
 
         Returns
         -------
-        sequences : list or str
-            The sequence for each spectrum.
-        scores : torch.Tensor of shape (n_spectra, length, n_amino_acids)
-            The score for each amino acid.
+        peptides : List[str]
+            The peptide sequences for each spectrum.
+        aa_scores : torch.Tensor of shape (n_spectra, length, n_amino_acids)
+            The individual amino acid scores for each prediction.
         """
-        spectra = spectra.to(self.encoder.device)
-        precursors = precursors.to(self.decoder.device)
-        scores, tokens = self.greedy_decode(spectra, precursors)
-        sequences = [self.decoder.detokenize(t) for t in tokens]
-        return sequences, scores
+        aa_scores, tokens = self.greedy_decode(
+            spectra.to(self.encoder.device),
+            precursors.to(self.decoder.device),
+        )
+        peptides = [self.decoder.detokenize(t) for t in tokens]
+        return peptides, aa_scores
 
     def predict_step(self, batch, *args):
-        """Sequence a batch of mass spectra.
+        """
+        Sequence a batch of mass spectra.
+
+        TODO: Can this be omitted?
 
         Note that this is used within the context of a pytorch-lightning
         Trainer to generate a prediction.
@@ -180,7 +189,6 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
             precursor mass and charge (index 1). It may have more indices,
             but these will be ignored.
 
-
         Returns
         -------
         sequences : list or str
@@ -190,57 +198,49 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         """
         return self(batch[0], batch[1])
 
-    def greedy_decode(self, spectra, precursors):
-        """Greedy decode the spectra.
+    def greedy_decode(
+        self, spectra: torch.Tensor, precursors: torch.Tensor
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        """
+        Greedy decoding of the spectrum predictions.
 
         Parameters
         ----------
-        spectrum : torch.Tensor of shape (n_spectra, n_peaks, 2)
-            The spectra to embed. Axis 0 represents a mass spectrum, axis 1
-            contains the peaks in the mass spectrum, and axis 2 is essentially
-            a 2-tuple specifying the m/z-intensity pair for each peak. These
-            should be zero-padded, such that all of the spectra in the batch
-            are the same length.
+        spectra : torch.Tensor of shape (n_spectra, n_peaks, 2)
+            The spectra for which to predict peptide sequences.
+            Axis 0 represents an MS/MS spectrum, axis 1 contains the peaks in the MS/MS
+            spectrum, and axis 2 is essentially a 2-tuple specifying the m/z-intensity
+            pair for each peak. These should be zero-padded, such that all of the
+            spectra in the batch are the same length.
         precursors : torch.Tensor of size (n_spectra, 2)
-            The measured precursor mass (axis 0) and charge (axis 1) of each
-            tandem mass spectrum.
+            The measured precursor mass (axis 0) and charge (axis 1) of each MS/MS
+            spectrum.
 
         Returns
         -------
-        tokens : torch.Tensor of shape (n_spectra, max_length, n_amino_acids)
-            The token sequence for each spectrum.
         scores : torch.Tensor of shape (n_spectra, max_length, n_amino_acids)
-            The score for each amino acid.
+            The individual amino acid scores for each prediction.
+        tokens : torch.Tensor of shape (n_spectra, max_length, n_amino_acids)
+            The predicted tokens for each spectrum.
         """
         memories, mem_masks = self.encoder(spectra)
-
-        # initialize scores:
+        # Initialize the scores.
         scores = torch.zeros(
-            spectra.shape[0],
-            self.max_length + 1,
-            self.decoder.vocab_size + 1,
-        )
-        scores = scores.type_as(spectra)
-
-        # The first prediction:
+            spectra.shape[0], self.max_length + 1, self.decoder.vocab_size + 1
+        ).type_as(spectra)
+        # Start with the first prediction.
         scores[:, :1, :], _ = self.decoder(
-            None,
-            precursors,
-            memories,
-            mem_masks,
+            None, precursors, memories, mem_masks
         )
-
         tokens = torch.argmax(scores, axis=2)
-
-        # Keep predicting until all have a stop token or max_length is reached.
-        # Don't count the stop token toward max_length though.
-        for idx in range(2, self.max_length + 2):
+        # Keep predicting until a stop token is predicted or max_length is reached.
+        # The stop token does not count towards max_length.
+        for i in range(2, self.max_length + 2):
             decoded = (tokens == self.stop_token).any(axis=1)
             if decoded.all():
                 break
-
-            scores[~decoded, :idx, :], _ = self.decoder(
-                tokens[~decoded, : (idx - 1)],
+            scores[~decoded, :i, :], _ = self.decoder(
+                tokens[~decoded, : (i - 1)],
                 precursors[~decoded, :],
                 memories[~decoded, :, :],
                 mem_masks[~decoded, :],
@@ -249,56 +249,60 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
 
         return self.softmax(scores), tokens
 
-    def _step(self, spectra, precursors, sequences):
-        """The forward learning step.
+    def _step(
+        self,
+        spectra: torch.Tensor,
+        precursors: torch.Tensor,
+        sequences: List[str],
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        """
+        The forward learning step.
 
         Parameters
         ----------
         spectra : torch.Tensor of shape (n_spectra, n_peaks, 2)
-            The spectra to embed. Axis 0 represents a mass spectrum, axis 1
-            contains the peaks in the mass spectrum, and axis 2 is essentially
-            a 2-tuple specifying the m/z-intensity pair for each peak. These
-            should be zero-padded, such that all of the spectra in the batch
-            are the same length.
+            The spectra for which to predict peptide sequences.
+            Axis 0 represents an MS/MS spectrum, axis 1 contains the peaks in the MS/MS
+            spectrum, and axis 2 is essentially a 2-tuple specifying the m/z-intensity
+            pair for each peak. These should be zero-padded, such that all of the
+            spectra in the batch are the same length.
         precursors : torch.Tensor of size (n_spectra, 2)
-            The measured precursor mass (axis 0) and charge (axis 1) of each
-            tandem mass spectrum.
-        sequences : list or str of length n_spectra
+            The measured precursor mass (axis 0) and charge (axis 1) of each MS/MS
+            spectrum.
+        sequences : List[str] of length n_spectra
             The partial peptide sequences to predict.
 
         Returns
         -------
         scores : torch.Tensor of shape (n_spectra, length, n_amino_acids)
-            The raw scores for each amino acid at each position.
+            The individual amino acid scores for each prediction.
         tokens : torch.Tensor of shape (n_spectra, length)
-            The best token at each sequence position
+            The predicted tokens for each spectrum.
         """
         memory, mem_mask = self.encoder(spectra)
-        scores, tokens = self.decoder(sequences, precursors, memory, mem_mask)
-        return scores, tokens
+        return self.decoder(sequences, precursors, memory, mem_mask)
 
-    def training_step(self, batch, *args):
-        """A single training step
+    def training_step(
+        self, batch: Tuple[torch.Tensor, torch.Tensor, torch.Tensor], *args
+    ) -> torch.Tensor:
+        """
+        A single training step.
 
-        Note that this is used within the context of a pytorch-lightning
-        Trainer to generate a prediction.
+        Note that this is used within the context of a pytorch-lightning Trainer to
+        generate a prediction.
 
         Parameters
         ----------
-        batch : tuple of torch.Tensor
-            A batch is expected to contain mass spectra (index 0), the
-            precursor mass and charge (index 1), and the peptide sequence
-            (index 2)
+        batch : Tuple[torch.Tensor, torch.Tensor, torch.Tensor]
+            A batch of (i) MS/MS spectra, (ii) precursor information, (iii) peptide
+            sequences as torch Tensors.
 
         Returns
         -------
         torch.Tensor
-            The loss.
+            The loss of the training step.
         """
-
-        spectra, precursors, sequences = batch
-        pred, truth = self._step(spectra, precursors, sequences)
-
+        pred, truth = self._step(*batch)
         pred = pred[:, :-1, :].reshape(-1, self.decoder.vocab_size + 1)
         loss = self.celoss(pred, truth.flatten())
         self.log(
@@ -310,213 +314,161 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         )
         return loss
 
-    def validation_step(self, batch, *args):
-        """A single validation step
+    def validation_step(
+        self, batch: Tuple[torch.Tensor, torch.Tensor, torch.Tensor], *args
+    ) -> torch.Tensor:
+        """
+        A single validation step.
 
-        Note that this is used within the context of a pytorch-lightning
-        Trainer to generate a prediction.
+        Note that this is used within the context of a pytorch-lightning Trainer to
+        generate a prediction.
 
         Parameters
         ----------
-        batch : tuple of torch.Tensor
-            A batch is expected to contain mass spectra (index 0), the
-            precursor mass and charge (index 1), and the peptide sequence
-            (index 2)
+        batch : Tuple[torch.Tensor, torch.Tensor, torch.Tensor]
+            A batch of (i) MS/MS spectra, (ii) precursor information, (iii) peptide
+            sequences as torch Tensors.
 
         Returns
         -------
         torch.Tensor
-            The loss.
+            The loss of the validation step.
         """
-        spectra, precursors, sequences = batch
-        pred, truth = self._step(spectra, precursors, sequences)
+        log_args = dict(on_step=False, on_epoch=True, sync_dist=True)
+
+        spectra, precursors, peptides = batch
+        pred, truth = self._step(spectra, precursors, peptides)
         pred = pred[:, :-1, :].reshape(-1, self.decoder.vocab_size + 1)
         loss = self.celoss(pred, truth.flatten())
-        self.log(
-            "CELoss",
-            {"valid": loss.item()},
-            on_step=False,
-            on_epoch=True,
-            sync_dist=True,
-        )
+        self.log("CELoss", {"valid": loss.item()}, **log_args)
 
-        # De novo sequence the batch
-        pred_seqs, scores = self.predict_step(batch)
-
-        # Temporary solution to predictions with multiple stop token '$', filter them out
-        filtered_pred_seqs = []
-        filtered_sequences = []
-        for i in range(len(pred_seqs)):
-            if len(pred_seqs[i]) > 0:
-                ps = pred_seqs[i]
-                if pred_seqs[i][0] == "$":
-                    ps = pred_seqs[i][1:]  # Remove stop token
-                if "$" not in ps and len(ps) > 0:
-                    filtered_pred_seqs += [ps]
-                    filtered_sequences += [sequences[i]]
-
-        # Find AA and peptide matches
-        all_aa_match, orig_total_num_aa, pred_total_num_aa = batch_aa_match(
-            filtered_pred_seqs,
-            filtered_sequences,
+        # Get the predicted peptides.
+        peptides_pred_raw, _ = self.predict_step(batch)
+        # FIXME: Temporary fix to skip predictions with multiple stop tokens.
+        peptides_pred, peptides_true = [], []
+        for peptide_pred, peptide_true in zip(peptides_pred_raw, peptides):
+            if len(peptide_pred) > 0:
+                if peptide_pred[0] == "$":
+                    peptide_pred = peptide_pred[1:]  # Remove stop token.
+                if "$" not in peptide_pred and len(peptide_pred) > 0:
+                    peptides_pred.append(peptide_pred)
+                    peptides_true.append(peptide_true)
+        # Evaluate amino acid and peptide matches.
+        all_aa_match, n_aa_true, n_aa_pred = batch_aa_match(
+            peptides_pred,
+            peptides_true,
             self.decoder._peptide_mass.masses,
             "best",
         )
-
-        # Calculate evaluation metrics based on matches
+        # Calculate and log evaluation metrics.
         aa_precision, aa_recall, pep_recall = calc_eval_metrics(
-            all_aa_match, orig_total_num_aa, pred_total_num_aa
+            all_aa_match, n_aa_true, n_aa_pred
         )
-
-        self.log(
-            "aa_precision",
-            {"valid": aa_precision},
-            on_step=False,
-            on_epoch=True,
-            sync_dist=True,
-        )
-
-        self.log(
-            "aa_recall",
-            {"valid": aa_recall},
-            on_step=False,
-            on_epoch=True,
-            sync_dist=True,
-        )
-
-        self.log(
-            "pep_recall",
-            {"valid": pep_recall},
-            on_step=False,
-            on_epoch=True,
-            sync_dist=True,
-        )
+        self.log("aa_precision", {"valid": aa_precision}, **log_args)
+        self.log("aa_recall", {"valid": aa_recall}, **log_args)
+        self.log("pep_recall", {"valid": pep_recall}, **log_args)
 
         return loss
 
-    def test_step(self, batch, *args):
-        """A single test step
+    def test_step(
+        self, batch: Tuple[torch.Tensor, torch.Tensor, torch.Tensor], *args
+    ) -> None:
+        """
+        A single test step.
 
-        Note that this is used within the context of a pytorch-lightning
-        Trainer to generate a prediction.
+        Note that this is used within the context of a pytorch-lightning Trainer to
+        generate a prediction.
 
         Parameters
         ----------
-        batch : tuple of torch.Tensor
-            A batch is expected to contain mass spectra (index 0), the
-            precursor mass and charge (index 1), and the spectrum identifier
-            (index 2)
-
+        batch : Tuple[torch.Tensor, torch.Tensor, torch.Tensor]
+            A batch of (i) MS/MS spectra, (ii) precursor information, (iii) spetrum
+            identifiers as torch Tensors.
         """
-        # De novo sequence the batch
-        pred_seqs, scores = self.predict_step(batch)
-        spectrum_order_id = batch[-1]
-        self.denovo_seqs += [(spectrum_order_id, pred_seqs, scores)]
+        spectrum_idx = batch[-1]
+        peptides_pred, aa_scores = self.predict_step(batch)
+        self.predictions.append((spectrum_idx, peptides_pred, aa_scores))
 
-    def on_train_epoch_end(self):
-        """Log the training loss.
+    def on_train_epoch_end(self) -> None:
+        """
+        Log the training loss at the end of each epoch.
 
         This is a pytorch-lightning hook.
         """
         train_loss = self.trainer.callback_metrics["CELoss"]["train"].item()
         self._history[-1]["train"] = train_loss
 
-    def on_validation_epoch_end(self):
-        """Log the epoch metrics to self.history.
+    def on_validation_epoch_end(self) -> None:
+        """
+        Log the validation metrics at the end of each epoch.
 
         This is a pytorch-lightning hook.
         """
+        callback_metrics = self.trainer.callback_metrics
         metrics = {
             "epoch": self.trainer.current_epoch,
-            "valid": self.trainer.callback_metrics["CELoss"]["valid"].item(),
-            "valid_aa_precision": self.trainer.callback_metrics[
-                "aa_precision"
-            ]["valid"].item(),
-            "valid_aa_recall": self.trainer.callback_metrics["aa_recall"][
+            "valid": callback_metrics["CELoss"]["valid"].item(),
+            "valid_aa_precision": callback_metrics["aa_precision"][
                 "valid"
             ].item(),
-            "valid_pep_recall": self.trainer.callback_metrics["pep_recall"][
-                "valid"
-            ].item(),
+            "valid_aa_recall": callback_metrics["aa_recall"]["valid"].item(),
+            "valid_pep_recall": callback_metrics["pep_recall"]["valid"].item(),
         }
         self._history.append(metrics)
 
-    def on_test_epoch_end(self):
-        """Write de novo sequences and confidence scores to csv file.
+    def on_test_epoch_end(self) -> None:
+        """
+        Write the predicted peptide sequences and amino acid scores to the output file.
 
         This is a pytorch-lightning hook.
         """
-        with open(
-            os.path.join(self.output_path, "casanovo_output.csv"), "w"
-        ) as f:
-            writer = csv.writer(f)
-            writer.writerow(
-                ["spectrum_id", "denovo_seq", "peptide_score", "aa_scores"]
-            )
+        empty_token_score = 0.04
+        with open(self.filename_out, "w") as f_out:
+            writer = csv.writer(f_out)
+            writer.writerow(["spectrum_id", "sequence", "score", "aa_scores"])
 
-            for batch in self.denovo_seqs:
-                scores = batch[2].cpu()  # transfer to cpu in case in gpu
-
-                for i in range(len(batch[0])):
-                    top_scores = torch.max(scores[i], axis=1)[
-                        0
-                    ]  # take the score of most probable AA
-                    empty_index = torch.where(top_scores == 0.04)[
-                        0
-                    ]  # find the indices of positions after stop token
-
-                    if len(empty_index) > 0:  # check if decoding was stopped
-                        last_index = (
-                            empty_index[0] - 1
-                        )  # select index of the last AA
-
-                        if (
-                            last_index >= 1
-                        ):  # check if peptide is at least one AA long
-                            top_scores_list = top_scores[
-                                :last_index
-                            ].tolist()  # omit the stop token
-                            peptide_score = np.mean(top_scores_list)
-                            aa_scores = list(reversed(top_scores_list))
-
+            for batch in self.predictions:
+                for spectrum_i, peptide, aa_scores in zip(*batch):
+                    # Take the scores of the most probable amino acids.
+                    top_aa_scores = torch.max(aa_scores, axis=1)[0]
+                    # Find the indices of positions after stop token.
+                    empty_index = torch.where(
+                        top_aa_scores == empty_token_score
+                    )[0]
+                    # Check if decoding was stopped.
+                    if len(empty_index) > 0:
+                        last_index = empty_index[0] - 1
+                        if last_index >= 1:
+                            # Omit the stop token.
+                            top_aa_scores = top_aa_scores[:last_index]
+                            peptide_score = torch.mean(top_aa_scores).item()
+                            aa_scores = ",".join(
+                                map(str, top_aa_scores.cpu().numpy()[::-1])
+                            )
                         else:
-                            peptide_score = None
-                            aa_scores = None
-
+                            peptide_score, aa_scores = None, None
                     else:
-                        peptide_score = None
-                        aa_scores = None
-
+                        peptide_score, aa_scores = None, None
                     writer.writerow(
-                        [
-                            batch[0][i],
-                            batch[1][i][1:],
-                            peptide_score,
-                            aa_scores,
-                        ]
+                        [spectrum_i, peptide[1:], peptide_score, aa_scores]
                     )
 
-    def on_epoch_end(self):
-        """Print log to console, if requested."""
-
+    def on_epoch_end(self) -> None:
+        """
+        Write log to console, if requested.
+        """
         if len(self._history) > 0:
-            # Print only if all output for the current epoch is recorded
+            # Log only if all output for the current epoch is recorded.
             if len(self._history[-1]) == 6:
                 if len(self._history) == 1:
                     logger.info(
-                        "---------------------------------------------------------------------------------------------------------"
+                        "Epoch\tTrain loss\tValid loss\tValid AA precision\t"
+                        "Valid AA recall\tValid peptide recall"
                     )
-                    logger.info(
-                        "  Epoch |   Train Loss  |  Valid Loss | Valid AA precision | Valid AA recall | Valid Peptide recall "
-                    )
-                    logger.info(
-                        "---------------------------------------------------------------------------------------------------------"
-                    )
-
                 metrics = self._history[-1]
                 if not metrics["epoch"] % self.n_log:
                     logger.info(
-                        "  %5i | %13.6f | %13.6f | %13.6f | %13.6f | %13.6f ",
+                        "%i\t%.6f\t%.6f\t%.6f\t%.6f\t%.6f",
                         metrics["epoch"],
                         metrics.get("train", np.nan),
                         metrics.get("valid", np.nan),
@@ -524,71 +476,59 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
                         metrics.get("valid_aa_recall", np.nan),
                         metrics.get("valid_pep_recall", np.nan),
                     )
-                    # Add metrics to SummaryWriter object if provided
                     if self.tb_summarywriter is not None:
-                        self.tb_summarywriter.add_scalar(
-                            "loss/train_crossentropy_loss",
-                            metrics.get("train", np.nan),
-                            metrics["epoch"] + 1,
-                        )
-                        self.tb_summarywriter.add_scalar(
-                            "loss/dev_crossentropy_loss",
-                            metrics.get("valid", np.nan),
-                            metrics["epoch"] + 1,
-                        )
+                        for descr, key in [
+                            ("loss/train_crossentropy_loss", "train"),
+                            ("loss/dev_crossentropy_loss", "valid"),
+                            ("eval/dev_aa_precision", "valid_aa_precision"),
+                            ("eval/dev_aa_recall", "valid_aa_recall"),
+                            ("eval/dev_pep_recall", "valid_pep_recall"),
+                        ]:
+                            self.tb_summarywriter.add_scalar(
+                                descr,
+                                metrics.get(key, np.nan),
+                                metrics["epoch"] + 1,
+                            )
 
-                        self.tb_summarywriter.add_scalar(
-                            "eval/dev_aa_precision",
-                            metrics.get("valid_aa_precision", np.nan),
-                            metrics["epoch"] + 1,
-                        )
-                        self.tb_summarywriter.add_scalar(
-                            "eval/dev_aa_recall",
-                            metrics.get("valid_aa_recall", np.nan),
-                            metrics["epoch"] + 1,
-                        )
-                        self.tb_summarywriter.add_scalar(
-                            "eval/dev_pep_recall",
-                            metrics.get("valid_pep_recall", np.nan),
-                            metrics["epoch"] + 1,
-                        )
+    def configure_optimizers(
+        self,
+    ) -> Tuple[torch.optim.Optimizer, Dict[str, Any]]:
+        """
+        Initialize the optimizer.
 
-    def configure_optimizers(self):
-        """Initialize the optimizer.
-
-        This is used by pytorch-lightning when preparing the model for
-        training.
+        This is used by pytorch-lightning when preparing the model for training.
 
         Returns
         -------
-        torch.optim.Adam
-            The intialized Adam optimizer.
+        Tuple[torch.optim.Optimizer, Dict[str, Any]]
+            The initialized Adam optimizer and its learning rate scheduler.
         """
         optimizer = torch.optim.Adam(self.parameters(), **self.opt_kwargs)
-
-        # Apply lr scheduler per step
+        # Apply learning rate scheduler per step.
         lr_scheduler = CosineWarmupScheduler(
             optimizer, warmup=self.warmup_iters, max_iters=self.max_iters
         )
-
-        return [optimizer], [{"scheduler": lr_scheduler, "interval": "step"}]
+        return optimizer, {"scheduler": lr_scheduler, "interval": "step"}
 
 
 class CosineWarmupScheduler(torch.optim.lr_scheduler._LRScheduler):
-    """Learning rate scheduler with linear warm up followed by cosine shaped decay.
+    """
+    Learning rate scheduler with linear warm up followed by cosine shaped decay.
+
     Parameters
     ----------
-    optimizer :  torch.optim
-        Optimizier object
-    warmup :  int
-        Number of warm up iterations
-    max_iters :  torch.optim
-        Total number of iterations
+    optimizer : torch.optim.Optimizer
+        Optimizer object.
+    warmup : int
+        The number of warm up iterations.
+    max_iters : torch.optim
+        The total number of iterations.
     """
 
-    def __init__(self, optimizer, warmup, max_iters):
-        self.warmup = warmup
-        self.max_num_iters = max_iters
+    def __init__(
+        self, optimizer: torch.optim.Optimizer, warmup: int, max_n_iters: int
+    ):
+        self.warmup, self.max_n_iters = warmup, max_n_iters
         super().__init__(optimizer)
 
     def get_lr(self):
@@ -596,7 +536,7 @@ class CosineWarmupScheduler(torch.optim.lr_scheduler._LRScheduler):
         return [base_lr * lr_factor for base_lr in self.base_lrs]
 
     def get_lr_factor(self, epoch):
-        lr_factor = 0.5 * (1 + np.cos(np.pi * epoch / self.max_num_iters))
+        lr_factor = 0.5 * (1 + np.cos(np.pi * epoch / self.max_n_iters))
         if epoch <= self.warmup:
-            lr_factor *= epoch * 1.0 / self.warmup
+            lr_factor *= epoch / self.warmup
         return lr_factor
