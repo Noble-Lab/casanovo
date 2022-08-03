@@ -109,6 +109,10 @@ def main(
         )
     )
     root.addHandler(handler)
+    # Disable dependency non-critical log messages.
+    logging.getLogger("depthcharge").setLevel(logging.WARNING)
+    logging.getLogger("h5py").setLevel(logging.WARNING)
+    logging.getLogger("torch").setLevel(logging.WARNING)
 
     # Read parameters from the config file.
     if config is None:
