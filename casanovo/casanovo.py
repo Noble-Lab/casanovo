@@ -34,18 +34,15 @@ logger = logging.getLogger("casanovo")
     type=click.Path(exists=True, dir_okay=False),
 )
 @click.option(
-    "--denovo_dir",
-    help="The directory with peak files for predicting peptide sequences.",
+    "--peak_dir",
+    required=True,
+    help="The directory with peak files for predicting peptide sequences or training "
+         "Casanovo.",
     type=click.Path(exists=True, file_okay=False),
 )
 @click.option(
-    "--train_dir",
-    help="The directory with peak files to be used as training data.",
-    type=click.Path(exists=True, file_okay=False),
-)
-@click.option(
-    "--val_dir",
-    help="The directory with peak files to be used as validation data.",
+    "--peak_dir_val",
+    help="The directory with peak files to be used as validation data during training.",
     type=click.Path(exists=True, file_okay=False),
 )
 @click.option(
@@ -76,9 +73,8 @@ logger = logging.getLogger("casanovo")
 def main(
     mode: str,
     model: str,
-    denovo_dir: str,
-    train_dir: str,
-    val_dir: str,
+    peak_dir: str,
+    peak_dir_val: str,
     config: str,
     output: str,
     num_workers: int,
@@ -140,13 +136,13 @@ def main(
     # Run Casanovo in the specified mode.
     if mode == "denovo":
         logger.info("Predict peptide sequences with Casanovo.")
-        denovo(denovo_dir, model, output, config)
-    elif mode == "train":
-        logger.info("Train the Casanovo model.")
-        train(train_dir, val_dir, model, config)
+        denovo(peak_dir, model, output, config)
     elif mode == "eval":
         logger.info("Evaluate a trained Casanovo model.")
-        evaluate(denovo_dir, model, config)
+        evaluate(peak_dir, model, config)
+    elif mode == "train":
+        logger.info("Train the Casanovo model.")
+        train(peak_dir, peak_dir_val, model, config)
 
 
 if __name__ == "__main__":

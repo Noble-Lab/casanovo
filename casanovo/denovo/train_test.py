@@ -13,7 +13,7 @@ logger = logging.getLogger("casanovo")
 
 
 def denovo(
-    denovo_dir: str,
+    peak_dir: str,
     model_filename: str,
     out_filename: str,
     config: Dict[str, Any],
@@ -23,7 +23,7 @@ def denovo(
 
     Parameters
     ----------
-    denovo_dir : str
+    peak_dir : str
         The directory with peak files for predicting peptide sequences.
     model_filename : str
         The file name of the model weights (.ckpt file).
@@ -32,25 +32,25 @@ def denovo(
     config : Dict[str, Any]
         The configuration options.
     """
-    _execute_existing(denovo_dir, model_filename, config, False, out_filename)
+    _execute_existing(peak_dir, model_filename, config, False, out_filename)
 
 
 def evaluate(
-    test_dir: str, model_filename: str, config: Dict[str, Any]
+    peak_dir: str, model_filename: str, config: Dict[str, Any]
 ) -> None:
     """
     Evaluate peptide sequence predictions from a trained Casanovo model.
 
     Parameters
     ----------
-    test_dir : str
+    peak_dir : str
         The directory with peak files for predicting peptide sequences.
     model_filename : str
         The file name of the model weights (.ckpt file).
     config : Dict[str, Any]
         The configuration options.
     """
-    _execute_existing(test_dir, model_filename, config, True)
+    _execute_existing(peak_dir, model_filename, config, True)
 
 
 def _execute_existing(
@@ -153,7 +153,7 @@ def _execute_existing(
 
 
 def train(
-    train_dir: str, val_dir: str, model_filename: str, config: Dict[str, Any]
+    peak_dir: str, peak_dir_val: str, model_filename: str, config: Dict[str, Any]
 ) -> None:
     """
     Train a Casanovo model.
@@ -162,9 +162,9 @@ def train(
 
     Parameters
     ----------
-    train_dir : str
+    peak_dir : str
         The directory with peak files to be used as training data.
-    val_dir : str
+    peak_dir_val : str
         The directory with peak files to be used as validation data.
     model_filename : str
         The file name of the model weights (.ckpt file).
@@ -172,24 +172,24 @@ def train(
         The configuration options.
     """
     # Read the MS/MS spectra to use for training and validation.
-    if not os.path.isdir(train_dir):
+    if not os.path.isdir(peak_dir):
         logger.error(
             "Could not find directory %s from which to read peak files",
-            train_dir,
+            peak_dir,
         )
         raise FileNotFoundError(
             "Could not find the directory to read peak files"
         )
-    train_filenames = _get_peak_filenames(train_dir)
-    if not os.path.isdir(val_dir):
+    train_filenames = _get_peak_filenames(peak_dir)
+    if not os.path.isdir(peak_dir_val):
         logger.error(
             "Could not find directory %s from which to read peak files",
-            val_dir,
+            peak_dir_val,
         )
         raise FileNotFoundError(
             "Could not find the directory to read peak files"
         )
-    val_filenames = _get_peak_filenames(val_dir)
+    val_filenames = _get_peak_filenames(peak_dir_val)
     train_idx_filename = os.path.join(
         os.getcwd(), config["train_annot_spec_idx_path"]
     )
