@@ -6,12 +6,6 @@
 # Random seed to ensure reproducible results.
 random_seed: 454
 
-# Data caching options.
-idx_filename_pred: casanovo_pred.hdf5
-idx_filename_train: casanovo_train.hdf5
-idx_filename_val: casanovo_val.hdf5
-idx_overwrite: True
-
 # Spectrum processing options.
 n_peaks: 150
 min_mz: 50.52564895  # 1.0005079 * 50.5

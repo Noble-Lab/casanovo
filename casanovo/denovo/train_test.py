@@ -1,6 +1,8 @@
 """Training and testing functionality for the de novo peptide sequencing model."""
 import logging
 import os
+import tempfile
+import uuid
 from typing import Any, Dict, List, Optional
 
 import pytorch_lightning as pl
@@ -109,21 +111,12 @@ def _execute_existing(
             "Could not find the directory to read peak files"
         )
     peak_filenames = _get_peak_filenames(peak_dir)
-    idx_filename = os.path.join(
-        os.getcwd(), config["test_annot_spec_idx_path"]
-    )
+    tmp_dir = tempfile.TemporaryDirectory()
+    idx_filename = os.path.join(tmp_dir.name, f"{uuid.uuid4().hex}.hdf5")
     if annotated:
-        index = AnnotatedSpectrumIndex(
-            idx_filename,
-            peak_filenames,
-            overwrite=config["test_spec_idx_overwrite"],
-        )
+        index = AnnotatedSpectrumIndex(idx_filename, peak_filenames)
     else:
-        index = SpectrumIndex(
-            idx_filename,
-            peak_filenames,
-            overwrite=config["test_spec_idx_overwrite"],
-        )
+        index = SpectrumIndex(idx_filename, peak_filenames)
     # Initialize the data loader.
     loaders = DeNovoDataModule(
         test_index=index,
@@ -150,6 +143,8 @@ def _execute_existing(
         trainer.validate(model, loaders.test_dataloader())
     else:
         trainer.test(model, loaders.test_dataloader())
+    # Clean up temporary files.
+    tmp_dir.cleanup()
 
 
 def train(
@@ -190,22 +185,11 @@ def train(
             "Could not find the directory to read peak files"
         )
     val_filenames = _get_peak_filenames(peak_dir_val)
-    train_idx_filename = os.path.join(
-        os.getcwd(), config["train_annot_spec_idx_path"]
-    )
-    train_index = AnnotatedSpectrumIndex(
-        train_idx_filename,
-        train_filenames,
-        overwrite=config["train_spec_idx_overwrite"],
-    )
-    val_idx_filename = os.path.join(
-        os.getcwd(), config["val_annot_spec_idx_path"]
-    )
-    val_index = AnnotatedSpectrumIndex(
-        val_idx_filename,
-        val_filenames,
-        overwrite=config["val_spec_idx_overwrite"],
-    )
+    tmp_dir = tempfile.TemporaryDirectory()
+    train_idx_filename = os.path.join(tmp_dir.name, f"{uuid.uuid4().hex}.hdf5")
+    val_idx_filename = os.path.join(tmp_dir.name, f"{uuid.uuid4().hex}.hdf5")
+    train_index = AnnotatedSpectrumIndex(train_idx_filename, train_filenames)
+    val_index = AnnotatedSpectrumIndex(val_idx_filename, val_filenames)
     # Initialize the data loaders.
     dataloader_params = dict(
         n_peaks=config["n_peaks"],
@@ -280,6 +264,8 @@ def train(
     trainer.fit(
         model, train_loader.train_dataloader(), val_loader.val_dataloader()
     )
+    # Clean up temporary files.
+    tmp_dir.cleanup()
 
 
 def _get_peak_filenames(peak_dir: str) -> List[str]:
