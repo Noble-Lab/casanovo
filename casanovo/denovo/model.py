@@ -424,7 +424,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         """
         empty_token_score = torch.tensor(0.04)
         with open(self.filename_out, "w") as f_out:
-            writer = csv.writer(f_out)
+            writer = csv.writer(f_out, delimiter="\t")
             writer.writerow(["spectrum_id", "sequence", "score", "aa_scores"])
 
             for batch in self.predictions:
