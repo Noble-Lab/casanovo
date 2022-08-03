@@ -6,6 +6,7 @@ from typing import List
 import click
 import yaml
 
+from . import __version__
 from casanovo.denovo import denovo, evaluate, train
 
 
@@ -136,6 +137,11 @@ def main(
         config["num_workers"] = num_workers
     if len(gpu) > 0:
         config["gpus"] = gpu
+
+    # Log the active configuration.
+    logger.info('Casanovo version %s', str(__version__))
+    for key, value in config.items():
+        logger.debug("%s = %s", str(key), str(value))
 
     # Run Casanovo in the specified mode.
     if mode == "denovo":
