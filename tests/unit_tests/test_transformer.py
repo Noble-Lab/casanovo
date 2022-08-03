@@ -58,7 +58,7 @@ def test_peptide_decoder():
         ]
     )
     peptides = ["LESLIEK", "PEPTIDER"]
-    precursors = torch.tensor([[100.0, 2], [200.0, 3]])
+    precursors = torch.tensor([[100.0, 2, 51.007276], [200.0, 3, 67.6739427]])
     dec_model = PeptideDecoder(
         dim_model=128,
         n_head=8,

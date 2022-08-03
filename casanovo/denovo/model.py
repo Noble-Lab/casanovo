@@ -158,9 +158,9 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
             a 2-tuple specifying the m/z-intensity pair for each peak. These
             should be zero-padded, such that all of the spectra in the batch
             are the same length.
-        precursors : torch.Tensor of size (n_spectra, 2)
-            The measured precursor mass (axis 0) and charge (axis 1) of each
-            tandem mass spectrum.
+        precursors : torch.Tensor of size (n_spectra, 3)
+            The measured precursor mass (axis 0), precursor charge (axis 1),
+             and precursor m/z (axis 3) of each MS/MS spectrum.
 
         Returns
         -------
@@ -209,9 +209,9 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
             a 2-tuple specifying the m/z-intensity pair for each peak. These
             should be zero-padded, such that all of the spectra in the batch
             are the same length.
-        precursors : torch.Tensor of size (n_spectra, 2)
-            The measured precursor mass (axis 0) and charge (axis 1) of each
-            tandem mass spectrum.
+        precursors : torch.Tensor of size (n_spectra, 3)
+            The measured precursor mass (axis 0), precursor charge (axis 1),
+             and precursor m/z (axis 3) of each MS/MS spectrum.
 
         Returns
         -------
@@ -268,9 +268,9 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
             a 2-tuple specifying the m/z-intensity pair for each peak. These
             should be zero-padded, such that all of the spectra in the batch
             are the same length.
-        precursors : torch.Tensor of size (n_spectra, 2)
-            The measured precursor mass (axis 0) and charge (axis 1) of each
-            tandem mass spectrum.
+        precursors : torch.Tensor of size (n_spectra, 3)
+            The measured precursor mass (axis 0), precursor charge (axis 1),
+             and precursor m/z (axis 3) of each MS/MS spectrum.
         sequences : list or str of length n_spectra
             The partial peptide sequences to predict.
 
@@ -466,16 +466,13 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
 
                 for i in range(len(batch[0])):
                     peptide_seq = batch[2][i][1:]
-                    # Mass of the predicted peptide.
+                    precursor_mass, precursor_charge, precursor_mz = batch[1][i]
                     predicted_mass = peptide_mass_calculator.mass(
                         re.findall(r"[A-Z](?:\+\d+\.\d+)?", peptide_seq)
                     )
-                    # Precursor neutral mass.
-                    precursor_mass = batch[1][i, 0]
+                    predicted_mz = predicted_mass / precursor_charge + 1.007276
                     delta_mass_ppm = (
-                        abs(predicted_mass - precursor_mass)
-                        / precursor_mass
-                        * 10**6
+                        abs(predicted_mz - precursor_mz) / precursor_mz * 10**6
                     )
                     # take the score of most probable AA
                     top_scores = torch.max(scores[i], axis=1)[0]
