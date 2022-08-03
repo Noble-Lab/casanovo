@@ -1,13 +1,13 @@
-"""A de novo peptide sequencing model"""
-import logging, time, random, os, csv
+import csv
+import logging
+import os
 
-import torch
 import numpy as np
 import pytorch_lightning as pl
-from torch.utils.tensorboard import SummaryWriter
-
-from depthcharge.components import SpectrumEncoder, PeptideDecoder, ModelMixin
+import torch
+from depthcharge.components import ModelMixin, PeptideDecoder, SpectrumEncoder
 from depthcharge.models.embed.model import PairedSpectrumEncoder
+
 from .evaluate import batch_aa_match, calc_eval_metrics
 
 
