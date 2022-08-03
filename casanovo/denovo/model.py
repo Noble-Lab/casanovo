@@ -466,13 +466,15 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
 
                 for i in range(len(batch[0])):
                     peptide_seq = batch[2][i][1:]
-                    precursor_mass, precursor_charge, precursor_mz = batch[1][i]
+                    _, precursor_charge, precursor_mz = batch[1][i]
                     predicted_mass = peptide_mass_calculator.mass(
                         re.findall(r"[A-Z](?:\+\d+\.\d+)?", peptide_seq)
                     )
                     predicted_mz = predicted_mass / precursor_charge + 1.007276
                     delta_mass_ppm = (
-                        abs(predicted_mz - precursor_mz) / precursor_mz * 10**6
+                        abs(predicted_mz - precursor_mz)
+                        / precursor_mz
+                        * 10**6
                     )
                     # take the score of most probable AA
                     top_scores = torch.max(scores[i], axis=1)[0]
