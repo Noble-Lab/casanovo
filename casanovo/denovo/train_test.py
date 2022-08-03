@@ -300,7 +300,7 @@ def denovo(
     loaders.setup(stage="test", annotated=False)
     # Create the Trainer object.
     trainer = pl.Trainer(
-        accelerator=config["accelerator"],
+        strategy=config["accelerator"],
         logger=config["logger"],
         gpus=config["gpus"],
         max_epochs=config["max_epochs"],
