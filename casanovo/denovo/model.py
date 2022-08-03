@@ -422,7 +422,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
 
         This is a pytorch-lightning hook.
         """
-        empty_token_score = 0.04
+        empty_token_score = torch.tensor(0.04)
         with open(self.filename_out, "w") as f_out:
             writer = csv.writer(f_out)
             writer.writerow(["spectrum_id", "sequence", "score", "aa_scores"])
@@ -431,22 +431,20 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
                 for spectrum_i, peptide, aa_scores in zip(*batch):
                     # Take the scores of the most probable amino acids.
                     top_aa_scores = torch.max(aa_scores, axis=1)[0]
-                    # Find the indices of positions after stop token.
-                    empty_index = torch.where(
-                        top_aa_scores == empty_token_score
-                    )[0]
-                    # Check if decoding was stopped.
-                    if len(empty_index) > 0:
-                        last_index = empty_index[0] - 1
-                        if last_index >= 1:
-                            # Omit the stop token.
-                            top_aa_scores = top_aa_scores[:last_index]
-                            peptide_score = torch.mean(top_aa_scores).item()
-                            aa_scores = ",".join(
-                                map(str, top_aa_scores.cpu().numpy()[::-1])
-                            )
-                        else:
-                            peptide_score, aa_scores = None, None
+                    # Find the index after the first stop token to check if decoding
+                    # was stopped.
+                    empty_index = torch.argmax(
+                        torch.isclose(
+                            top_aa_scores, empty_token_score
+                        ).double()
+                    )
+                    if empty_index > 0:
+                        # Omit the stop token.
+                        top_aa_scores = top_aa_scores[: empty_index - 1]
+                        peptide_score = torch.mean(top_aa_scores).item()
+                        aa_scores = ",".join(
+                            map(str, top_aa_scores.cpu().numpy()[::-1])
+                        )
                     else:
                         peptide_score, aa_scores = None, None
                     writer.writerow(
