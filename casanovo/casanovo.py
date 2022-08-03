@@ -18,45 +18,45 @@ logger = logging.getLogger("casanovo")
     "--mode",
     required=True,
     default="denovo",
-    help='The mode in which to run Casanovo:\n'
-         '- "denovo" will predict peptide sequence for unknown MS/MS spectra.\n'
-         '- "train" will train a model (from scratch or by continuing training a '
+    help='\b\nThe mode in which to run Casanovo:\n'
+         '- "denovo" will predict peptide sequences for\nunknown MS/MS spectra.\n'
+         '- "train" will train a model (from scratch or by\ncontinuing training a '
          'previously trained model).\n'
-         '- "eval" will evaluate the performance of a trained model using previously '
-         'acquired spectrum annotations.',
+         '- "eval" will evaluate the performance of a\ntrained model using previously '
+         'acquired spectrum\nannotations.',
     type=click.Choice(["denovo", "train", "eval"]),
 )
 @click.option(
     "--model",
     required=True,
     help="The file name of the model weights (.ckpt file).",
-    type=click.Path(exists=True, file_okay=True, dir_okay=False),
+    type=click.Path(exists=True, dir_okay=False),
 )
 @click.option(
     "--denovo_dir",
     help="The directory with peak files for predicting peptide sequences.",
-    type=click.Path(exists=True, file_okay=False, dir_okay=True),
+    type=click.Path(exists=True, file_okay=False),
 )
 @click.option(
     "--train_dir",
     help="The directory with peak files to be used as training data.",
-    type=click.Path(exists=True, file_okay=False, dir_okay=True),
+    type=click.Path(exists=True, file_okay=False),
 )
 @click.option(
     "--val_dir",
     help="The directory with peak files to be used as validation data.",
-    type=click.Path(exists=True, file_okay=False, dir_okay=True),
+    type=click.Path(exists=True, file_okay=False),
 )
 @click.option(
     "--config",
     help="The file name of the configuration file with custom options. If not "
          "specified, a default configuration will be used.",
-    type=click.Path(exists=True, file_okay=True, dir_okay=False),
+    type=click.Path(exists=True, dir_okay=False),
 )
 @click.option(
     "--output",
     help="The output file name for the prediction results (format: .csv).",
-    type=click.Path(exists=True, file_okay=True, dir_okay=False),
+    type=click.Path(dir_okay=False),
 )
 @click.option(
     "--num_workers",
@@ -84,30 +84,16 @@ def main(
     gpu: List[int],
 ):
     """
-    Command-line interface for the Casanovo de novo peptide sequencer.
+    \b
+    Casanovo: De novo mass spectrometry peptide sequencing with a transformer model.
+    ================================================================================
 
-    Parameters
-    ----------
-    mode : str
-        Whether to run Casanovo in prediction ("denovo"), training ("train"), or
-        evaluation ("eval") mode.
-    model : click.Path
-        The file name of the model weights (.ckpt file).
-    denovo_dir : click.Path
-        The directory with peak files for predicting peptide sequences.
-    train_dir : click.Path
-        The directory with peak files to be used as training data.
-    val_dir : click.Path
-        The directory with peak files to be used as validation data.
-    config : click.Path
-        The file name of the configuration file with custom options. If not specified, a
-        default configuration will be used.
-    output : click.Path
-        The output file name for the prediction results (format: .csv).
-    num_workers : int
-        The number of worker threads to use.
-    gpu : List[int]
-        The identifiers of the GPUs to use.
+    Yilmaz, M., Fondrie, W. E., Bittremieux, W., Oh, S. & Noble, W. S. De novo mass
+    spectrometry peptide sequencing with a transformer model. Proceedings of the 39th
+    International Conference on Machine Learning - ICML '22 (2022)
+    doi:10.1101/2022.02.07.479481.
+
+    Official code website: https://github.com/Noble-Lab/casanovo
     """
     # Configure logging.
     logging.captureWarnings(True)
