@@ -1,11 +1,14 @@
-"""The command line entry point for casanovo"""
-from email.policy import default
-import click, logging
-import yaml
+import logging
 import os
-from casanovo.denovo import train, evaluate, denovo
+import sys
+from typing import List
 
-# Required options
+import click
+import yaml
+
+from casanovo.denovo import denovo, evaluate, train
+
+
 logger = logging.getLogger("casanovo")
 
 
