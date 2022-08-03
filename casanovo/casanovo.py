@@ -4,6 +4,7 @@ import sys
 from typing import List
 
 import click
+import pytorch_lightning as pl
 import yaml
 
 from . import __version__
@@ -128,6 +129,8 @@ def main(
         config["num_workers"] = num_workers
     if len(gpu) > 0:
         config["gpus"] = gpu
+
+    pl.utilities.seed.seed_everything(seed=config["random_seed"], workers=True)
 
     # Log the active configuration.
     logger.info('Casanovo version %s', str(__version__))

@@ -1,4 +1,4 @@
-"""Training and testing functionality for the de novo peptide sequencing model"""
+"""Training and testing functionality for the de novo peptide sequencing model."""
 import logging
 import os
 from typing import Any, Dict
@@ -14,10 +14,6 @@ logger = logging.getLogger("casanovo")
 
 def train(train_data_path, val_data_path, model_path, config):
     """Train a Casanovo model with options specified in config.py."""
-
-    # Set random seed across PyTorch, numpy and python.random
-    pl.utilities.seed.seed_everything(seed=config["random_seed"], workers=True)
-
     # Index training and validation data
     train_data_path = Path(train_data_path)
     if train_data_path.is_file():
