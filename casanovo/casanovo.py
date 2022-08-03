@@ -99,16 +99,17 @@ def main(
     logging.captureWarnings(True)
     root = logging.getLogger()
     root.setLevel(logging.DEBUG)
-    handler = logging.StreamHandler(sys.stderr)
-    handler.setLevel(logging.DEBUG)
-    handler.setFormatter(
-        logging.Formatter(
-            "{asctime} {levelname} [{name}/{processName}] {module}.{funcName} : "
-            "{message}",
-            style="{"
-        )
+    log_formatter = logging.Formatter(
+        "{asctime} {levelname} [{name}/{processName}] {module}.{funcName} : {message}",
+        style="{"
     )
-    root.addHandler(handler)
+    console_handler = logging.StreamHandler(sys.stderr)
+    console_handler.setLevel(logging.DEBUG)
+    console_handler.setFormatter(log_formatter)
+    root.addHandler(console_handler)
+    file_handler = logging.FileHandler(f"{os.path.splitext(output)[0]}.log")
+    file_handler.setFormatter(log_formatter)
+    root.addHandler(file_handler)
     # Disable dependency non-critical log messages.
     logging.getLogger("depthcharge").setLevel(logging.WARNING)
     logging.getLogger("h5py").setLevel(logging.WARNING)
