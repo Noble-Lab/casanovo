@@ -98,11 +98,21 @@ def main(
     De Novo option requirements:
     mode, model_path, test_data_path, config_path, output_path
     """
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(levelname)s: %(message)s",
-    )
+    # Configure logging.
+    logging.captureWarnings(True)
+    root = logging.getLogger()
+    root.setLevel(logging.DEBUG)
+    handler = logging.StreamHandler(sys.stderr)
+    handler.setLevel(logging.DEBUG)
+    handler.setFormatter(
+        logging.Formatter(
+            "{asctime} {levelname} [{name}/{processName}] {module}.{funcName} : "
+            "{message}",
+            style="{"
+        )
     if config_path == None:
+    root.addHandler(handler)
+
         abs_path = os.path.join(
             os.path.dirname(os.path.abspath(__file__)), "config.yaml"
         )
