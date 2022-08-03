@@ -6,6 +6,9 @@ import os
 from casanovo.denovo import train, evaluate, denovo
 
 # Required options
+logger = logging.getLogger("casanovo")
+
+
 @click.command()
 @click.option(
     "--mode",
@@ -117,17 +120,15 @@ def main(
         config["gpus"] = gpus
     if mode == "train":
 
-        logging.info("Training Casanovo...")
         train(train_data_path, val_data_path, model_path, config)
 
     elif mode == "eval":
 
-        logging.info("Evaluating Casanovo...")
+        evaluate(test_dir, model, config)
         evaluate(test_data_path, model_path, config)
 
     elif mode == "denovo":
 
-        logging.info("De novo sequencing with Casanovo...")
         denovo(test_data_path, model_path, config, output_path)
 
     pass

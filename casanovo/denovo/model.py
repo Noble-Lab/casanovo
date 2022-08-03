@@ -10,7 +10,8 @@ from depthcharge.components import SpectrumEncoder, PeptideDecoder, ModelMixin
 from depthcharge.models.embed.model import PairedSpectrumEncoder
 from .evaluate import batch_aa_match, calc_eval_metrics
 
-LOGGER = logging.getLogger(__name__)
+
+logger = logging.getLogger("casanovo")
 
 
 class Spec2Pep(pl.LightningModule, ModelMixin):
@@ -502,19 +503,19 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
             # Print only if all output for the current epoch is recorded
             if len(self._history[-1]) == 6:
                 if len(self._history) == 1:
-                    LOGGER.info(
+                    logger.info(
                         "---------------------------------------------------------------------------------------------------------"
                     )
-                    LOGGER.info(
+                    logger.info(
                         "  Epoch |   Train Loss  |  Valid Loss | Valid AA precision | Valid AA recall | Valid Peptide recall "
                     )
-                    LOGGER.info(
+                    logger.info(
                         "---------------------------------------------------------------------------------------------------------"
                     )
 
                 metrics = self._history[-1]
                 if not metrics["epoch"] % self.n_log:
-                    LOGGER.info(
+                    logger.info(
                         "  %5i | %13.6f | %13.6f | %13.6f | %13.6f | %13.6f ",
                         metrics["epoch"],
                         metrics.get("train", np.nan),
