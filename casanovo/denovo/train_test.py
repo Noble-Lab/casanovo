@@ -147,7 +147,10 @@ def _execute_existing(
 
 
 def train(
-    peak_dir: str, peak_dir_val: str, model_filename: str, config: Dict[str, Any]
+    peak_dir: str,
+    peak_dir_val: str,
+    model_filename: str,
+    config: Dict[str, Any],
 ) -> None:
     """
     Train a Casanovo model.
