@@ -39,11 +39,11 @@ class DeNovoDataModule(pl.LightningDataModule):
         Remove peaks within the given mass tolerance in Dalton around the precursor
         mass.
     n_workers : int, optional
-        The number of workers to use for data loading. By default, the number
-        of available CPU cores on the current machine is used.
-    random_state : int or Generator, optional.
-        The numpy random state. ``None`` leaves mass spectra in the order
-        they were parsed.
+        The number of workers to use for data loading. By default, the number of
+        available CPU cores on the current machine is used.
+    random_state : Optional[int]
+        The NumPy random state. ``None`` leaves mass spectra in the order they were
+        parsed.
     """
 
     def __init__(
