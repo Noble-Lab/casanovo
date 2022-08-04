@@ -1,3 +1,4 @@
+"""The command line entry point for Casanovo."""
 import logging
 import os
 import sys

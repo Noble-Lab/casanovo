@@ -1,3 +1,4 @@
+"""Methods to evaluate peptide-spectrum predictions."""
 import re
 from typing import Dict, List, Tuple
 

@@ -1,3 +1,4 @@
+"""A de novo peptide sequencing model."""
 import csv
 import logging
 import os
