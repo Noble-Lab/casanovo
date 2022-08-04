@@ -1,107 +1,83 @@
 import re
-from spectrum_utils.utils import mass_diff
+from typing import Dict, List, Tuple
+
 import numpy as np
+from spectrum_utils.utils import mass_diff
 
-from depthcharge.masses import PeptideMass
 
-
-def best_aa_match(orig_seq, pred_seq, aa_dict):
+def best_aa_match(
+    peptide1: List[str],
+    peptide2: List[str],
+    aa_dict: Dict[str, float],
+    cum_mass_threshold: float = 0.5,
+    ind_mass_threshold: float = 0.1,
+) -> Tuple[np.ndarray, bool]:
     """
-    Find the matching amino acids of an original and predicted peptide sequence if either their prefix or suffix match
+    Find the matching prefix and suffix amino acids between two peptide sequences.
 
     Parameters
     ----------
-    orig_seq : list
-        List of amino acids in the original peptide
-    pred_seq : list
-        List of amino acids in the predicted peptide
-    aa_dict: dict
-        Dictionary of amino acid masses
+    peptide1 : List[str]
+        The first tokenized peptide sequence to be compared.
+    peptide2 : List[str]
+        The second tokenized peptide sequence to be compared.
+    aa_dict : Dict[str, float]
+        Mapping of amino acid tokens to their mass values.
+    cum_mass_threshold : float
+        Mass threshold in Dalton to accept cumulative mass-matching amino acid
+        sequences.
+    ind_mass_threshold : float
+        Mass threshold in Dalton to accept individual mass-matching amino acids.
 
     Returns
     -------
-    aa_match: list
-        Binary list of matches over predicted peptide
-    pep_match: int
-        1 if all amino acid in two sequences match
-
+    aa_match : np.ndarray of length max(len(peptide1), len(peptide2))
+        Boolean flag indicating whether each paired-up amino acid matches across both
+        peptide sequences.
+    pep_match : bool
+        Boolean flag to indicate whether the two peptide sequences fully match.
     """
-
-    cum_aa_threshold = 0.5
-    single_aa_threshold = 0.1
-
-    aa_match = []
-    pep_match = 0
-
-    cnt_pred = 0
-    cnt_orig = 0
-
-    orig_aa_mass_list = [aa_dict[aa] for aa in orig_seq]
-    pred_aa_mass_list = [aa_dict[aa] for aa in pred_seq]
-
-    orig_prefix_mass_list = [0] + list(np.cumsum(orig_aa_mass_list))[:-1]
-    orig_suffix_mass_list = list(
-        reversed(np.cumsum(list(reversed(orig_aa_mass_list)))[:-1])
-    ) + [0]
-
-    pred_prefix_mass_list = [0] + list(np.cumsum(pred_aa_mass_list))[:-1]
-    pred_suffix_mass_list = list(
-        reversed(np.cumsum(list(reversed(pred_aa_mass_list)))[:-1])
-    ) + [0]
-
-    while cnt_pred < len(pred_seq) and cnt_orig < len(orig_seq):
-
-        pred_aa_mass = aa_dict[pred_seq[cnt_pred]]
-        orig_aa_mass = aa_dict[orig_seq[cnt_orig]]
-
+    aa_match = np.zeros(max(len(peptide1), len(peptide2)), np.bool_)
+    # Find longest mass-matching prefix.
+    i1, i2, cum_mass1, cum_mass2 = 0, 0, 0.0, 0.0
+    while i1 < len(peptide1) and i2 < len(peptide2):
+        aa_mass1, aa_mass2 = aa_dict[peptide1[i1]], aa_dict[peptide2[i2]]
         if (
-            abs(
-                mass_diff(
-                    pred_prefix_mass_list[cnt_pred],
-                    orig_prefix_mass_list[cnt_orig],
-                    mode_is_da=True,
-                )
-            )
-            < cum_aa_threshold
-            or abs(
-                mass_diff(
-                    pred_suffix_mass_list[cnt_pred],
-                    orig_suffix_mass_list[cnt_orig],
-                    mode_is_da=True,
-                )
-            )
-            < cum_aa_threshold
+            abs(mass_diff(cum_mass1 + aa_mass1, cum_mass2 + aa_mass2, True))
+            < cum_mass_threshold
         ):
-
-            if (
-                abs(mass_diff(pred_aa_mass, orig_aa_mass, mode_is_da=True))
-                < single_aa_threshold
-            ):
-                aa_match += [1]
-            else:
-                aa_match += [0]
-
-            cnt_pred += 1
-            cnt_orig += 1
-
-        elif (
-            mass_diff(
-                pred_prefix_mass_list[cnt_pred],
-                orig_prefix_mass_list[cnt_orig],
-                mode_is_da=True,
+            aa_match[max(i1, i2)] = (
+                abs(mass_diff(aa_mass1, aa_mass2, True)) < ind_mass_threshold
             )
-            > 0
-        ):
-            cnt_orig += 1
-
+            i1, i2 = i1 + 1, i2 + 1
+            cum_mass1, cum_mass2 = cum_mass1 + aa_mass1, cum_mass2 + aa_mass2
+        elif cum_mass2 + aa_mass2 > cum_mass1 + aa_mass1:
+            i1, cum_mass1 = i1 + 1, cum_mass1 + aa_mass1
         else:
-            cnt_pred += 1
-            aa_match += [0]
-
-    if sum(aa_match) == len(orig_seq) and len(pred_seq) == len(orig_seq):
-        pep_match = 1
-
-    return aa_match, pep_match
+            i2, cum_mass2 = i2 + 1, cum_mass2 + aa_mass2
+    # No need to evaluate the suffixes if the sequences already fully match.
+    if aa_match.all():
+        return aa_match, True
+    # Find longest mass-matching suffix.
+    i1, i2 = len(peptide1) - 1, len(peptide2) - 1
+    i_stop = np.argwhere(~aa_match)[0]
+    cum_mass1, cum_mass2 = 0.0, 0.0
+    while i1 >= i_stop and i2 >= i_stop:
+        aa_mass1, aa_mass2 = aa_dict[peptide1[i1]], aa_dict[peptide2[i2]]
+        if (
+            abs(mass_diff(cum_mass1 + aa_mass1, cum_mass2 + aa_mass2, True))
+            < cum_mass_threshold
+        ):
+            aa_match[max(i1, i2)] = (
+                abs(mass_diff(aa_mass1, aa_mass2, True)) < ind_mass_threshold
+            )
+            i1, i2 = i1 - 1, i2 - 1
+            cum_mass1, cum_mass2 = cum_mass1 + aa_mass1, cum_mass2 + aa_mass2
+        elif cum_mass2 + aa_mass2 > cum_mass1 + aa_mass1:
+            i1, cum_mass1 = i1 - 1, cum_mass1 + aa_mass1
+        else:
+            i2, cum_mass2 = i2 - 1, cum_mass2 + aa_mass2
+    return aa_match, aa_match.all()
 
 
 def find_aa_match_single_pep(orig_seq, pred_seq, aa_dict):
