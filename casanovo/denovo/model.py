@@ -14,9 +14,6 @@ from .evaluate import batch_aa_match, calc_eval_metrics
 LOGGER = logging.getLogger(__name__)
 
 
-peptide_mass_calculator = depthcharge.masses.PeptideMass("massivekb")
-
-
 class Spec2Pep(pl.LightningModule, ModelMixin):
     """A Transformer model for de novo peptide sequencing.
 
@@ -99,6 +96,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         self.n_log = n_log
 
         self.residues = residues
+        self.peptide_mass_calculator = depthcharge.masses.PeptideMass(self.residues)
 
         # Build the model
         if custom_encoder is not None:
@@ -466,7 +464,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
                 for i in range(len(batch[0])):
                     peptide_seq = batch[2][i][1:]
                     _, precursor_charge, precursor_mz = batch[1][i]
-                    predicted_mz = peptide_mass_calculator.mass(
+                    predicted_mz = self.peptide_mass_calculator.mass(
                         peptide_seq, precursor_charge
                     )
                     delta_mass_ppm = (
