@@ -173,28 +173,27 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         peptides = [self.decoder.detokenize(t) for t in tokens]
         return peptides, aa_scores
 
-    def predict_step(self, batch, *args):
+    def predict_step(
+        self, batch: Tuple[torch.Tensor, torch.Tensor], *args
+    ) -> Tuple[List[str], torch.Tensor]:
         """
-        Sequence a batch of mass spectra.
+        Format batch data for a single prediction step.
 
-        TODO: Can this be omitted?
-
-        Note that this is used within the context of a pytorch-lightning
-        Trainer to generate a prediction.
+        Note that this is used within the context of a pytorch-lightning Trainer to
+        generate a prediction.
 
         Parameters
         ----------
         batch : tuple of torch.Tensor
-            A batch is expected to contain mass spectra (index 0) and the
-            precursor mass and charge (index 1). It may have more indices,
-            but these will be ignored.
+            A batch consisting of (i) mass spectra, and (ii) precursor information. In
+            case additional elements are present these will be ignored.
 
         Returns
         -------
-        sequences : list or str
-            The sequence for each spectrum.
-        scores : torch.Tensor of shape (n_spectra, length, n_amino_acids)
-            The score for each amino acid.
+        peptides : List[str]
+            The peptide sequences for each spectrum.
+        aa_scores : torch.Tensor of shape (n_spectra, length, n_amino_acids)
+            The individual amino acid scores for each prediction.
         """
         return self(batch[0], batch[1])
 
@@ -382,7 +381,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         Parameters
         ----------
         batch : Tuple[torch.Tensor, torch.Tensor, torch.Tensor]
-            A batch of (i) MS/MS spectra, (ii) precursor information, (iii) spetrum
+            A batch of (i) MS/MS spectra, (ii) precursor information, (iii) spectrum
             identifiers as torch Tensors.
         """
         spectrum_idx = batch[-1]
@@ -524,9 +523,9 @@ class CosineWarmupScheduler(torch.optim.lr_scheduler._LRScheduler):
     """
 
     def __init__(
-        self, optimizer: torch.optim.Optimizer, warmup: int, max_n_iters: int
+        self, optimizer: torch.optim.Optimizer, warmup: int, max_iters: int
     ):
-        self.warmup, self.max_n_iters = warmup, max_n_iters
+        self.warmup, self.max_iters = warmup, max_iters
         super().__init__(optimizer)
 
     def get_lr(self):
@@ -534,7 +533,7 @@ class CosineWarmupScheduler(torch.optim.lr_scheduler._LRScheduler):
         return [base_lr * lr_factor for base_lr in self.base_lrs]
 
     def get_lr_factor(self, epoch):
-        lr_factor = 0.5 * (1 + np.cos(np.pi * epoch / self.max_n_iters))
+        lr_factor = 0.5 * (1 + np.cos(np.pi * epoch / self.max_iters))
         if epoch <= self.warmup:
             lr_factor *= epoch / self.warmup
         return lr_factor
