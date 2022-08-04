@@ -53,7 +53,8 @@ logger = logging.getLogger("casanovo")
 )
 @click.option(
     "--output",
-    help="The output file name for the prediction results (format: .csv).",
+    help="The base output file name to store logging (extension: .log) and "
+         "(optionally) prediction results (extension: .csv).",
     type=click.Path(dir_okay=False),
 )
 @click.option(

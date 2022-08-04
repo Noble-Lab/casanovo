@@ -1,6 +1,6 @@
 import csv
 import logging
-import uuid
+import os
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 import numpy as np
@@ -137,9 +137,9 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         # Record the de novo predicted sequences.
         self.predictions = []
         if out_filename is not None:
-            self.out_filename = out_filename
+            self.out_filename = f"{os.path.splitext(out_filename)[0]}.csv"
         else:
-            self.out_filename = f"casanovo_{uuid.uuid4().hex}.csv"
+            self.out_filename = None
 
     def forward(
         self, spectra: torch.Tensor, precursors: torch.Tensor
