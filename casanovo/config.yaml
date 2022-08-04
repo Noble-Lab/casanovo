@@ -9,13 +9,12 @@ random_seed: 454
 # Spectrum processing options.
 n_peaks: 150
 min_mz: 50.52564895  # 1.0005079 * 50.5
-max_mz: 2500
+max_mz: 2500.0
 min_intensity: 0.01
-# FIXME: This is the tolerance to remove the precursor peak. Rename accordingly.
-remove_precursor_tol: 2  # Da
+remove_precursor_tol: 2.0  # Da
 
 # Hardware options.
-num_workers: 1
+num_workers:
 # [] (empty list) to run on CPU, list with integer identifiers (e.g. [0, 1]) to run
 # on the corresponding GPUs.
 gpus: []
