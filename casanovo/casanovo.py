@@ -110,7 +110,7 @@ def main(
     file_handler.setFormatter(log_formatter)
     root.addHandler(file_handler)
     # Disable dependency non-critical log messages.
-    logging.getLogger("depthcharge").setLevel(logging.WARNING)
+    logging.getLogger("depthcharge").setLevel(logging.INFO)
     logging.getLogger("h5py").setLevel(logging.WARNING)
     logging.getLogger("numba").setLevel(logging.WARNING)
     logging.getLogger("torch").setLevel(logging.WARNING)
