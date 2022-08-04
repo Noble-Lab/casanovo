@@ -112,6 +112,7 @@ def main(
     # Disable dependency non-critical log messages.
     logging.getLogger("depthcharge").setLevel(logging.WARNING)
     logging.getLogger("h5py").setLevel(logging.WARNING)
+    logging.getLogger("numba").setLevel(logging.WARNING)
     logging.getLogger("torch").setLevel(logging.WARNING)
 
     # Read parameters from the config file.
