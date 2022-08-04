@@ -135,8 +135,6 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         self.warmup_iters = warmup_iters
         self.max_iters = max_iters
 
-        # Record the de novo predicted sequences.
-        self.predictions = []
         if out_filename is not None:
             self.out_filename = f"{os.path.splitext(out_filename)[0]}.csv"
         else:
@@ -163,7 +161,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         Returns
         -------
         peptides : List[str]
-            The peptide sequences for each spectrum.
+            The predicted peptide sequences for each spectrum.
         aa_scores : torch.Tensor of shape (n_spectra, length, n_amino_acids)
             The individual amino acid scores for each prediction.
         """
@@ -171,32 +169,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
             spectra.to(self.encoder.device),
             precursors.to(self.decoder.device),
         )
-        peptides = [self.decoder.detokenize(t) for t in tokens]
-        return peptides, aa_scores
-
-    def predict_step(
-        self, batch: Tuple[torch.Tensor, torch.Tensor], *args
-    ) -> Tuple[List[str], torch.Tensor]:
-        """
-        Format batch data for a single prediction step.
-
-        Note that this is used within the context of a pytorch-lightning Trainer to
-        generate a prediction.
-
-        Parameters
-        ----------
-        batch : tuple of torch.Tensor
-            A batch consisting of (i) mass spectra, and (ii) precursor information. In
-            case additional elements are present these will be ignored.
-
-        Returns
-        -------
-        peptides : List[str]
-            The peptide sequences for each spectrum.
-        aa_scores : torch.Tensor of shape (n_spectra, length, n_amino_acids)
-            The individual amino acid scores for each prediction.
-        """
-        return self(batch[0], batch[1])
+        return [self.decoder.detokenize(t) for t in tokens], aa_scores
 
     def greedy_decode(
         self, spectra: torch.Tensor, precursors: torch.Tensor
@@ -228,7 +201,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         scores = torch.zeros(
             spectra.shape[0], self.max_length + 1, self.decoder.vocab_size + 1
         ).type_as(spectra)
-        # Start with the first prediction.
+        # Start with the first amino acid predictions.
         scores[:, :1, :], _ = self.decoder(
             None, precursors, memories, mem_masks
         )
@@ -249,7 +222,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
 
         return self.softmax(scores), tokens
 
-    def _step(
+    def _forward_step(
         self,
         spectra: torch.Tensor,
         precursors: torch.Tensor,
@@ -279,21 +252,17 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         tokens : torch.Tensor of shape (n_spectra, length)
             The predicted tokens for each spectrum.
         """
-        memory, mem_mask = self.encoder(spectra)
-        return self.decoder(sequences, precursors, memory, mem_mask)
+        return self.decoder(sequences, precursors, *self.encoder(spectra))
 
     def training_step(
-        self, batch: Tuple[torch.Tensor, torch.Tensor, torch.Tensor], *args
+        self, batch: Tuple[torch.Tensor, torch.Tensor, List[str]], *args
     ) -> torch.Tensor:
         """
         A single training step.
 
-        Note that this is used within the context of a pytorch-lightning Trainer to
-        generate a prediction.
-
         Parameters
         ----------
-        batch : Tuple[torch.Tensor, torch.Tensor, torch.Tensor]
+        batch : Tuple[torch.Tensor, torch.Tensor, List[str]]
             A batch of (i) MS/MS spectra, (ii) precursor information, (iii) peptide
             sequences as torch Tensors.
 
@@ -302,7 +271,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         torch.Tensor
             The loss of the training step.
         """
-        pred, truth = self._step(*batch)
+        pred, truth = self._forward_step(*batch)
         pred = pred[:, :-1, :].reshape(-1, self.decoder.vocab_size + 1)
         loss = self.celoss(pred, truth.flatten())
         self.log(
@@ -315,19 +284,16 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         return loss
 
     def validation_step(
-        self, batch: Tuple[torch.Tensor, torch.Tensor, torch.Tensor], *args
+        self, batch: Tuple[torch.Tensor, torch.Tensor, List[str]], *args
     ) -> torch.Tensor:
         """
         A single validation step.
 
-        Note that this is used within the context of a pytorch-lightning Trainer to
-        generate a prediction.
-
         Parameters
         ----------
-        batch : Tuple[torch.Tensor, torch.Tensor, torch.Tensor]
+        batch : Tuple[torch.Tensor, torch.Tensor, List[str]]
             A batch of (i) MS/MS spectra, (ii) precursor information, (iii) peptide
-            sequences as torch Tensors.
+            sequences.
 
         Returns
         -------
@@ -336,14 +302,16 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         """
         log_args = dict(on_step=False, on_epoch=True, sync_dist=True)
 
+        # Record the loss.
         spectra, precursors, peptides = batch
-        pred, truth = self._step(spectra, precursors, peptides)
+        pred, truth = self._forward_step(spectra, precursors, peptides)
         pred = pred[:, :-1, :].reshape(-1, self.decoder.vocab_size + 1)
         loss = self.celoss(pred, truth.flatten())
         self.log("CELoss", {"valid": loss.item()}, **log_args)
 
-        # Get the predicted peptides.
-        peptides_pred_raw, _ = self.predict_step(batch)
+        # Calculate and log amino acid and peptide match evaluation metrics from the
+        # predicted peptides.
+        peptides_pred_raw, _ = self.forward(batch[0], batch[1])
         # FIXME: Temporary fix to skip predictions with multiple stop tokens.
         peptides_pred, peptides_true = [], []
         for peptide_pred, peptide_true in zip(peptides_pred_raw, peptides):
@@ -353,9 +321,8 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
                 if "$" not in peptide_pred and len(peptide_pred) > 0:
                     peptides_pred.append(peptide_pred)
                     peptides_true.append(peptide_true)
-        # Calculate and log amino acid and peptide match evaluation metrics.
         aa_precision, aa_recall, pep_recall = evaluate.aa_match_metrics(
-            evaluate.aa_match_batch(
+            *evaluate.aa_match_batch(
                 peptides_pred, peptides_true, self.decoder._peptide_mass.masses
             )
         )
@@ -365,30 +332,33 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
 
         return loss
 
-    def test_step(
+    def predict_step(
         self, batch: Tuple[torch.Tensor, torch.Tensor, torch.Tensor], *args
-    ) -> None:
+    ) -> Tuple[torch.Tensor, List[str], torch.Tensor]:
         """
-        A single test step.
-
-        Note that this is used within the context of a pytorch-lightning Trainer to
-        generate a prediction.
+        A single prediction step.
 
         Parameters
         ----------
         batch : Tuple[torch.Tensor, torch.Tensor, torch.Tensor]
             A batch of (i) MS/MS spectra, (ii) precursor information, (iii) spectrum
             identifiers as torch Tensors.
+
+        Returns
+        -------
+        spectrum_idx : torch.Tensor
+            The spectrum identifiers.
+        peptides : List[str]
+            The predicted peptide sequences for each spectrum.
+        aa_scores : torch.Tensor of shape (n_spectra, length, n_amino_acids)
+            The individual amino acid scores for each prediction.
         """
-        spectrum_idx = batch[-1]
-        peptides_pred, aa_scores = self.predict_step(batch)
-        self.predictions.append((spectrum_idx, peptides_pred, aa_scores))
+        peptides, aa_scores = self.forward(batch[0], batch[1])
+        return batch[2], peptides, aa_scores
 
     def on_train_epoch_end(self) -> None:
         """
         Log the training loss at the end of each epoch.
-
-        This is a pytorch-lightning hook.
         """
         train_loss = self.trainer.callback_metrics["CELoss"]["train"].item()
         self._history[-1]["train"] = train_loss
@@ -396,8 +366,6 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
     def on_validation_epoch_end(self) -> None:
         """
         Log the validation metrics at the end of each epoch.
-
-        This is a pytorch-lightning hook.
         """
         callback_metrics = self.trainer.callback_metrics
         metrics = {
@@ -411,44 +379,46 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         }
         self._history.append(metrics)
 
-    def on_test_epoch_end(self) -> None:
+    def on_predict_epoch_end(
+        self, results: List[List[Tuple[np.ndarray, List[str], torch.Tensor]]]
+    ) -> None:
         """
         Write the predicted peptide sequences and amino acid scores to the output file.
-
-        This is a pytorch-lightning hook.
         """
         empty_token_score = torch.tensor(0.04)
         with open(self.out_filename, "w") as f_out:
             writer = csv.writer(f_out, delimiter="\t")
             writer.writerow(["spectrum_id", "sequence", "score", "aa_scores"])
-
-            for batch in self.predictions:
-                for spectrum_i, peptide, aa_scores in zip(*batch):
-                    # Take the scores of the most probable amino acids.
-                    top_aa_scores = torch.max(aa_scores, axis=1)[0]
-                    # Find the index after the first stop token to check if decoding
-                    # was stopped.
-                    empty_index = torch.argmax(
-                        torch.isclose(
-                            top_aa_scores, empty_token_score
-                        ).double()
-                    )
-                    if empty_index > 0:
-                        # Omit the stop token.
-                        top_aa_scores = top_aa_scores[: empty_index - 1]
-                        peptide_score = torch.mean(top_aa_scores).item()
-                        aa_scores = ",".join(
-                            map(str, top_aa_scores.cpu().numpy()[::-1])
+            for batch in results:
+                for step in batch:
+                    for spectrum_i, peptide, aa_scores in zip(*step):
+                        # Take the scores of the most probable amino acids.
+                        top_aa_scores = torch.max(aa_scores, axis=1)[0]
+                        # Find the index after the first stop token to check if decoding
+                        # was stopped.
+                        empty_index = torch.argmax(
+                            torch.isclose(
+                                top_aa_scores, empty_token_score
+                            ).double()
                         )
-                    else:
-                        peptide_score, aa_scores = None, None
-                    writer.writerow(
-                        [spectrum_i, peptide[1:], peptide_score, aa_scores]
-                    )
+                        if empty_index > 0:
+                            # Omit the stop token.
+                            top_aa_scores = top_aa_scores[: empty_index - 1]
+                            peptide_score = torch.mean(top_aa_scores).item()
+                            aa_scores = ",".join(
+                                map(str, top_aa_scores.cpu().numpy()[::-1])
+                            )
+                        else:
+                            peptide_score, aa_scores = None, None
+                        writer.writerow(
+                            [spectrum_i, peptide[1:], peptide_score, aa_scores]
+                        )
 
     def on_epoch_end(self) -> None:
         """
         Write log to console, if requested.
+
+        FIXME: This is deprecated.
         """
         if len(self._history) > 0:
             # Log only if all output for the current epoch is recorded.

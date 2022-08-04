@@ -140,7 +140,7 @@ def main(
     # Run Casanovo in the specified mode.
     if mode == "denovo":
         logger.info("Predict peptide sequences with Casanovo.")
-        model_runner.denovo(peak_dir, model, output, config)
+        model_runner.predict(peak_dir, model, output, config)
     elif mode == "eval":
         logger.info("Evaluate a trained Casanovo model.")
         model_runner.evaluate(peak_dir, model, config)

@@ -15,7 +15,7 @@ from casanovo.denovo.model import Spec2Pep
 logger = logging.getLogger("casanovo")
 
 
-def denovo(
+def predict(
     peak_dir: str,
     model_filename: str,
     out_filename: str,
@@ -142,7 +142,7 @@ def _execute_existing(
     if annotated:
         trainer.validate(model, loaders.test_dataloader())
     else:
-        trainer.test(model, loaders.test_dataloader())
+        trainer.predict(model, loaders.test_dataloader())
     # Clean up temporary files.
     tmp_dir.cleanup()
 
