@@ -12,7 +12,7 @@ min_mz: 50.52564895  # 1.0005079 * 50.5
 max_mz: 2500
 min_intensity: 0.01
 # FIXME: This is the tolerance to remove the precursor peak. Rename accordingly.
-fragment_tol_mass: 2  # Da
+remove_precursor_tol: 2  # Da
 
 # Hardware options.
 num_workers: 1

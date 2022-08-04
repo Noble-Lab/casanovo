@@ -125,8 +125,8 @@ def _execute_existing(
         min_mz=config["min_mz"],
         max_mz=config["max_mz"],
         min_intensity=config["min_intensity"],
-        fragment_tol_mass=config["fragment_tol_mass"],
-        num_workers=config["num_workers"],
+        remove_precursor_tol=config["remove_precursor_tol"],
+        n_workers=config["num_workers"],
         batch_size=config["test_batch_size"],
     )
     loaders.setup(stage="test", annotated=annotated)
@@ -199,7 +199,7 @@ def train(
         min_mz=config["min_mz"],
         max_mz=config["max_mz"],
         min_intensity=config["min_intensity"],
-        fragment_tol_mass=config["fragment_tol_mass"],
+        remove_precursor_tol=config["remove_precursor_tol"],
         num_workers=config["num_workers"],
         batch_size=config["train_batch_size"],
     )
