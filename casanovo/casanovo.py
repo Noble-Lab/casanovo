@@ -8,7 +8,7 @@ import pytorch_lightning as pl
 import yaml
 
 from . import __version__
-from casanovo.denovo import denovo, evaluate, train
+from casanovo.denovo import model_runner
 
 
 logger = logging.getLogger("casanovo")
@@ -136,13 +136,13 @@ def main(
     # Run Casanovo in the specified mode.
     if mode == "denovo":
         logger.info("Predict peptide sequences with Casanovo.")
-        denovo(peak_dir, model, output, config)
+        model_runner.denovo(peak_dir, model, output, config)
     elif mode == "eval":
         logger.info("Evaluate a trained Casanovo model.")
-        evaluate(peak_dir, model, config)
+        model_runner.evaluate(peak_dir, model, config)
     elif mode == "train":
         logger.info("Train the Casanovo model.")
-        train(peak_dir, peak_dir_val, model, config)
+        model_runner.train(peak_dir, peak_dir_val, model, config)
 
 
 if __name__ == "__main__":
