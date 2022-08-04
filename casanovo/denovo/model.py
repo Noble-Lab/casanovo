@@ -96,7 +96,9 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         self.n_log = n_log
 
         self.residues = residues
-        self.peptide_mass_calculator = depthcharge.masses.PeptideMass(self.residues)
+        self.peptide_mass_calculator = depthcharge.masses.PeptideMass(
+            self.residues
+        )
 
         # Build the model
         if custom_encoder is not None:
