@@ -117,7 +117,11 @@ class SpectrumDataset(Dataset):
             A tensor of the spectrum with the m/z and intensity peak values.
         """
         spectrum = sus.MsmsSpectrum(
-            "", precursor_mz, precursor_charge, mz_array, int_array
+            "",
+            precursor_mz,
+            precursor_charge,
+            mz_array.astype(np.float64),
+            int_array.astype(np.float32),
         )
         spectrum.set_mz_range(self.min_mz, self.max_mz)
         spectrum.remove_precursor_peak(self.remove_precursor_tol, "Da")
