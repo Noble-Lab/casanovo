@@ -1,6 +1,5 @@
 """A de novo peptide sequencing model"""
 import logging, time, random, os, csv
-import re
 
 import torch
 import numpy as np
@@ -467,10 +466,9 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
                 for i in range(len(batch[0])):
                     peptide_seq = batch[2][i][1:]
                     _, precursor_charge, precursor_mz = batch[1][i]
-                    predicted_mass = peptide_mass_calculator.mass(
-                        re.findall(r"[A-Z](?:\+\d+\.\d+)?", peptide_seq)
+                    predicted_mz = peptide_mass_calculator.mass(
+                        peptide_seq, precursor_charge
                     )
-                    predicted_mz = predicted_mass / precursor_charge + 1.007276
                     delta_mass_ppm = (
                         abs(predicted_mz - precursor_mz)
                         / precursor_mz
