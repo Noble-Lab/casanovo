@@ -17,6 +17,7 @@ def _get_version() -> Optional[str]:
     try:
         # Fast, but only works in Python 3.8+.
         from importlib.metadata import version, PackageNotFoundError
+
         try:
             return version("casanovo")
         except PackageNotFoundError:
@@ -24,6 +25,7 @@ def _get_version() -> Optional[str]:
     except ImportError:
         # Slow, but works for all Python 3+.
         from pkg_resources import get_distribution, DistributionNotFound
+
         try:
             return get_distribution("casanovo").version
         except DistributionNotFound:

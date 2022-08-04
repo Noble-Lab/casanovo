@@ -19,12 +19,12 @@ logger = logging.getLogger("casanovo")
     "--mode",
     required=True,
     default="denovo",
-    help='\b\nThe mode in which to run Casanovo:\n'
-         '- "denovo" will predict peptide sequences for\nunknown MS/MS spectra.\n'
-         '- "train" will train a model (from scratch or by\ncontinuing training a '
-         'previously trained model).\n'
-         '- "eval" will evaluate the performance of a\ntrained model using previously '
-         'acquired spectrum\nannotations.',
+    help="\b\nThe mode in which to run Casanovo:\n"
+    '- "denovo" will predict peptide sequences for\nunknown MS/MS spectra.\n'
+    '- "train" will train a model (from scratch or by\ncontinuing training a '
+    "previously trained model).\n"
+    '- "eval" will evaluate the performance of a\ntrained model using previously '
+    "acquired spectrum\nannotations.",
     type=click.Choice(["denovo", "train", "eval"]),
 )
 @click.option(
@@ -37,7 +37,7 @@ logger = logging.getLogger("casanovo")
     "--peak_dir",
     required=True,
     help="The directory with peak files for predicting peptide sequences or training "
-         "Casanovo.",
+    "Casanovo.",
     type=click.Path(exists=True, file_okay=False),
 )
 @click.option(
@@ -48,13 +48,13 @@ logger = logging.getLogger("casanovo")
 @click.option(
     "--config",
     help="The file name of the configuration file with custom options. If not "
-         "specified, a default configuration will be used.",
+    "specified, a default configuration will be used.",
     type=click.Path(exists=True, dir_okay=False),
 )
 @click.option(
     "--output",
     help="The base output file name to store logging (extension: .log) and "
-         "(optionally) prediction results (extension: .csv).",
+    "(optionally) prediction results (extension: .csv).",
     type=click.Path(dir_okay=False),
 )
 @click.option(
@@ -67,7 +67,7 @@ logger = logging.getLogger("casanovo")
     "--gpu",
     default=(),
     help="The identifier of the GPU to use. Multiple GPUs can be requested using the "
-         "following format: --gpus=0 --gpus=1 --gpus=2 ...",
+    "following format: --gpus=0 --gpus=1 --gpus=2 ...",
     type=click.INT,
     multiple=True,
 )
@@ -99,7 +99,7 @@ def main(
     root.setLevel(logging.DEBUG)
     log_formatter = logging.Formatter(
         "{asctime} {levelname} [{name}/{processName}] {module}.{funcName} : {message}",
-        style="{"
+        style="{",
     )
     console_handler = logging.StreamHandler(sys.stderr)
     console_handler.setLevel(logging.DEBUG)
@@ -130,7 +130,7 @@ def main(
     pl.utilities.seed.seed_everything(seed=config["random_seed"], workers=True)
 
     # Log the active configuration.
-    logger.info('Casanovo version %s', str(__version__))
+    logger.info("Casanovo version %s", str(__version__))
     for key, value in config.items():
         logger.debug("%s = %s", str(key), str(value))
 
