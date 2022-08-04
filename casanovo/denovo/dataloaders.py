@@ -139,16 +139,20 @@ class DeNovoDataModule(pl.LightningDataModule):
             num_workers=self.n_workers,
         )
 
-    def train_dataloader(self):
+    def train_dataloader(self) -> torch.utils.data.DataLoader:
         """Get the training DataLoader."""
         return self._make_loader(self.train_dataset)
 
-    def val_dataloader(self):
+    def val_dataloader(self) -> torch.utils.data.DataLoader:
         """Get the validation DataLoader."""
         return self._make_loader(self.valid_dataset)
 
-    def test_dataloader(self):
+    def test_dataloader(self) -> torch.utils.data.DataLoader:
         """Get the test DataLoader."""
+        return self._make_loader(self.test_dataset)
+
+    def predict_dataloader(self) -> torch.utils.data.DataLoader:
+        """Get the predict DataLoader."""
         return self._make_loader(self.test_dataset)
 
 
