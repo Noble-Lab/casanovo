@@ -60,7 +60,6 @@ class DeNovoDataModule(pl.LightningDataModule):
         fragment_tol_mass=2,
         num_workers=None,
         random_state=None,
-        preprocess_spec=False,
     ):
         """Initialize the PairedSpectrumDataModule."""
         super().__init__()
@@ -75,7 +74,6 @@ class DeNovoDataModule(pl.LightningDataModule):
         self.fragment_tol_mass = fragment_tol_mass
         self.num_workers = num_workers
         self.rng = np.random.default_rng(random_state)
-        self.preprocess_spec = preprocess_spec
         self.train_dataset = None
         self.valid_dataset = None
         self.test_dataset = None
@@ -103,7 +101,6 @@ class DeNovoDataModule(pl.LightningDataModule):
                 max_mz=self.max_mz,
                 min_intensity=self.min_intensity,
                 fragment_tol_mass=self.fragment_tol_mass,
-                preprocess_spec=self.preprocess_spec,
             )
             if self.train_index is not None:
                 self.train_dataset = make_dataset(
@@ -122,7 +119,6 @@ class DeNovoDataModule(pl.LightningDataModule):
                     max_mz=self.max_mz,
                     min_intensity=self.min_intensity,
                     fragment_tol_mass=self.fragment_tol_mass,
-                    preprocess_spec=self.preprocess_spec,
                 )
             else:
                 make_dataset = partial(
@@ -132,7 +128,6 @@ class DeNovoDataModule(pl.LightningDataModule):
                     max_mz=self.max_mz,
                     min_intensity=self.min_intensity,
                     fragment_tol_mass=self.fragment_tol_mass,
-                    preprocess_spec=self.preprocess_spec,
                 )
             if self.test_index is not None:
                 self.test_dataset = make_dataset(self.test_index)

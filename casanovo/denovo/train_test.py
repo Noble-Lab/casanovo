@@ -125,7 +125,6 @@ def _execute_existing(
         max_mz=config["max_mz"],
         min_intensity=config["min_intensity"],
         fragment_tol_mass=config["fragment_tol_mass"],
-        preprocess_spec=config["preprocess_spec"],
         num_workers=config["num_workers"],
         batch_size=config["test_batch_size"],
     )
@@ -197,7 +196,6 @@ def train(
         max_mz=config["max_mz"],
         min_intensity=config["min_intensity"],
         fragment_tol_mass=config["fragment_tol_mass"],
-        preprocess_spec=config["preprocess_spec"],
         num_workers=config["num_workers"],
         batch_size=config["train_batch_size"],
     )

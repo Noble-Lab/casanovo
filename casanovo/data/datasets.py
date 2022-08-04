@@ -30,8 +30,6 @@ class SpectrumDataset(Dataset):
     random_state : int or RandomState, optional.
         The numpy random state. ``None`` leaves mass spectra in the order
         they were parsed.
-    preprocess_spec : bool, optional
-        Preprocess the provided spectra
 
     Attributes
     ----------
@@ -50,7 +48,6 @@ class SpectrumDataset(Dataset):
     n_spectra : int
     index : depthcharge.data.SpectrumIndex
     rng : numpy.random.Generator
-    preprocess_spec : bool
     """
 
     def __init__(
@@ -62,7 +59,6 @@ class SpectrumDataset(Dataset):
         min_intensity=0.01,
         fragment_tol_mass=2,
         random_state=None,
-        preprocess_spec=False,
     ):
         """Initialize a SpectrumDataset"""
         super().__init__()
@@ -73,7 +69,6 @@ class SpectrumDataset(Dataset):
         self.fragment_tol_mass = fragment_tol_mass
         self.rng = np.random.default_rng(random_state)
         self._index = spectrum_index
-        self.preprocess_spec = preprocess_spec
 
     def __len__(self):
         """The number of spectra."""
@@ -101,12 +96,7 @@ class SpectrumDataset(Dataset):
         """
         mz_array, int_array, prec_mz, prec_charge = self.index[idx]
 
-        if self.preprocess_spec == True:
-            spec = self._process_peaks(
-                mz_array, int_array, prec_mz, prec_charge
-            )
-        else:
-            spec = torch.tensor(np.array([mz_array, int_array])).T.float()
+        spec = self._process_peaks(mz_array, int_array, prec_mz, prec_charge)
 
         if not spec.sum():
             spec = torch.tensor([[0, 1]]).float()
@@ -297,8 +287,6 @@ class AnnotatedSpectrumDataset(SpectrumDataset):
     random_state : int or RandomState, optional.
         The numpy random state. ``None`` leaves mass spectra in the order
         they were parsed.
-    preprocess_spec : bool, optional
-        Preprocess the provided spectra
 
     Attributes
     ----------
@@ -317,7 +305,6 @@ class AnnotatedSpectrumDataset(SpectrumDataset):
     n_spectra : int
     index : depthcharge.data.SpectrumIndex
     rng : numpy.random.Generator
-    preprocess_spec : bool
     """
 
     def __init__(
@@ -329,7 +316,6 @@ class AnnotatedSpectrumDataset(SpectrumDataset):
         min_intensity=0.01,
         fragment_tol_mass=2,
         random_state=None,
-        preprocess_spec=False,
     ):
         """Initialize an AnnotatedSpectrumDataset"""
         super().__init__(
@@ -340,7 +326,6 @@ class AnnotatedSpectrumDataset(SpectrumDataset):
             min_intensity=min_intensity,
             fragment_tol_mass=fragment_tol_mass,
             random_state=random_state,
-            preprocess_spec=preprocess_spec,
         )
 
     def __getitem__(self, idx):
@@ -364,10 +349,5 @@ class AnnotatedSpectrumDataset(SpectrumDataset):
             The annotation for the mass spectrum.
         """
         mz_array, int_array, prec_mz, prec_charge, pep = self.index[idx]
-        if self.preprocess_spec == True:
-            spec = self._process_peaks(
-                mz_array, int_array, prec_mz, prec_charge
-            )
-        else:
-            spec = torch.tensor(np.array([mz_array, int_array])).T.float()
+        spec = self._process_peaks(mz_array, int_array, prec_mz, prec_charge)
         return spec, prec_mz, prec_charge, pep
