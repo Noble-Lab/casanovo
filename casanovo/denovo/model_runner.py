@@ -8,7 +8,8 @@ from typing import Any, Dict, List, Optional
 import pytorch_lightning as pl
 from depthcharge.data import AnnotatedSpectrumIndex, SpectrumIndex
 
-from casanovo.denovo import DeNovoDataModule, Spec2Pep
+from casanovo.denovo.dataloaders import DeNovoDataModule
+from casanovo.denovo.model import Spec2Pep
 
 
 logger = logging.getLogger("casanovo")
