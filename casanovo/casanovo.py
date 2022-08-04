@@ -113,6 +113,7 @@ def main(
     logging.getLogger("depthcharge").setLevel(logging.INFO)
     logging.getLogger("h5py").setLevel(logging.WARNING)
     logging.getLogger("numba").setLevel(logging.WARNING)
+    logging.getLogger("pytorch_lightning").setLevel(logging.WARNING)
     logging.getLogger("torch").setLevel(logging.WARNING)
 
     # Read parameters from the config file.
