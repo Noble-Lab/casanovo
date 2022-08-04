@@ -125,7 +125,9 @@ class SpectrumDataset(Dataset):
             spectrum.remove_precursor_peak(self.remove_precursor_tol, "Da")
             spectrum.filter_intensity(self.min_intensity, self.n_peaks)
             spectrum.scale_intensity("root", 1)
-            intensities = spectrum.intensity / np.linalg.norm(spectrum.intensity)
+            intensities = spectrum.intensity / np.linalg.norm(
+                spectrum.intensity
+            )
             return torch.tensor(np.array([spectrum.mz, intensities])).T.float()
         except ValueError:
             # Replace invalid spectra by a dummy spectrum.
