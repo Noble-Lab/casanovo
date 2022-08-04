@@ -84,9 +84,6 @@ class SpectrumDataset(Dataset):
         spectrum = self._process_peaks(
             mz_array, int_array, precursor_mz, precursor_charge
         )
-        # Replace invalid spectra by a dummy spectrum.
-        if not spectrum.sum():
-            spectrum = torch.tensor([[0, 1]]).float()
         return spectrum, precursor_mz, precursor_charge, str(idx)
 
     def _process_peaks(
@@ -123,12 +120,16 @@ class SpectrumDataset(Dataset):
             mz_array.astype(np.float64),
             int_array.astype(np.float32),
         )
-        spectrum.set_mz_range(self.min_mz, self.max_mz)
-        spectrum.remove_precursor_peak(self.remove_precursor_tol, "Da")
-        spectrum.filter_intensity(self.min_intensity, self.n_peaks)
-        spectrum.scale_intensity("root", 1)
-        intensities = spectrum.intensity / np.linalg.norm(spectrum.intensity)
-        return torch.tensor(np.array([spectrum.mz, intensities])).T.float()
+        try:
+            spectrum.set_mz_range(self.min_mz, self.max_mz)
+            spectrum.remove_precursor_peak(self.remove_precursor_tol, "Da")
+            spectrum.filter_intensity(self.min_intensity, self.n_peaks)
+            spectrum.scale_intensity("root", 1)
+            intensities = spectrum.intensity / np.linalg.norm(spectrum.intensity)
+            return torch.tensor(np.array([spectrum.mz, intensities])).T.float()
+        except ValueError:
+            # Replace invalid spectra by a dummy spectrum.
+            return torch.tensor([[0, 1]]).float()
 
     @property
     def n_spectra(self) -> int:
