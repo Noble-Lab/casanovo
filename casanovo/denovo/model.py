@@ -9,7 +9,7 @@ import torch
 from depthcharge.components import ModelMixin, PeptideDecoder, SpectrumEncoder
 from depthcharge.models.embed.model import PairedSpectrumEncoder
 
-from .evaluate import aa_match_batch, calc_eval_metrics
+from . import evaluate
 
 
 logger = logging.getLogger("casanovo")
@@ -352,13 +352,11 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
                 if "$" not in peptide_pred and len(peptide_pred) > 0:
                     peptides_pred.append(peptide_pred)
                     peptides_true.append(peptide_true)
-        # Evaluate amino acid and peptide matches.
-        aa_matches_batch, n_aa_true, n_aa_pred = aa_match_batch(
-            peptides_pred, peptides_true, self.decoder._peptide_mass.masses
-        )
-        # Calculate and log evaluation metrics.
-        aa_precision, aa_recall, pep_recall = calc_eval_metrics(
-            aa_matches_batch, n_aa_true, n_aa_pred
+        # Calculate and log amino acid and peptide match evaluation metrics.
+        aa_precision, aa_recall, pep_recall = evaluate.aa_match_metrics(
+            evaluate.aa_match_batch(
+                peptides_pred, peptides_true, self.decoder._peptide_mass.masses
+            )
         )
         self.log("aa_precision", {"valid": aa_precision}, **log_args)
         self.log("aa_recall", {"valid": aa_recall}, **log_args)

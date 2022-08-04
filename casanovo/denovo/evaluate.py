@@ -233,71 +233,74 @@ def aa_match_batch(
     return aa_matches_batch, n_aa1, n_aa2
 
 
-def calc_eval_metrics(
-    aa_match_binary_list, orig_total_num_aa, pred_total_num_aa
-):
+def aa_match_metrics(
+    aa_matches_batch: List[Tuple[np.ndarray, bool]],
+    n_aa_true: int,
+    n_aa_pred: int,
+) -> Tuple[float, float, float]:
     """
-    Calculate evaluation metrics using amino acid matches
+    Calculate amino acid and peptide-level evaluation metrics.
 
     Parameters
     ----------
-    aa_match_binary_list : list of lists
-        List of amino acid matches in each predicted peptide
-    orig_total_num_aa : int
-        Number of amino acids in the original peptide sequences
-    pred_total_num_aa : int
-        Number of amino acids in the predicted peptide sequences
+    aa_matches_batch : List[Tuple[np.ndarray, bool]]
+        For each pair of peptide sequences: (i) boolean flags indicating whether each
+        paired-up amino acid matches across both peptide sequences, (ii) boolean flag to
+        indicate whether the two peptide sequences fully match.
+    n_aa_true: int
+        Total number of amino acids in the true peptide sequences.
+    n_aa_pred: int
+        Total number of amino acids in the predicted peptide sequences.
+
     Returns
     -------
     aa_precision: float
-        Number of correct aa predictions divided by all predicted aa
+        The number of correct AA predictions divided by the number of predicted AAs.
     aa_recall: float
-        Number of correct aa predictions divided by all original aa
+        The number of correct AA predictions divided by the number of true AAs.
     pep_recall: float
-        Number of correct peptide predictions divided by all original peptide
+        The number of correct peptide predictions divided by the number of peptides.
     """
-
-    correct_aa_count = sum(
-        [sum(pred_tuple[0]) for pred_tuple in aa_match_binary_list]
+    n_aa_correct = sum(
+        [aa_matches[0].sum() for aa_matches in aa_matches_batch]
     )
-    aa_recall = correct_aa_count / (orig_total_num_aa + 1e-8)
-    aa_precision = correct_aa_count / (pred_total_num_aa + 1e-8)
-    pep_recall = sum(
-        [pred_tuple[1] for pred_tuple in aa_match_binary_list]
-    ) / (len(aa_match_binary_list) + 1e-8)
-
+    aa_precision = n_aa_correct / (n_aa_pred + 1e-8)
+    aa_recall = n_aa_correct / (n_aa_true + 1e-8)
+    pep_recall = sum([aa_matches[1] for aa_matches in aa_matches_batch]) / (
+        len(aa_matches_batch) + 1e-8
+    )
     return aa_precision, aa_recall, pep_recall
 
 
-def aa_precision_recall_with_threshold(
-    correct_aa_confidences, all_aa_confidences, num_original_aa, threshold
-):
+def aa_precision_recall(
+    aa_scores_correct: List[float],
+    aa_scores_all: List[float],
+    n_aa_total: int,
+    threshold: float,
+) -> Tuple[float, float]:
     """
-    Calculate precision and recall for the given amino acid confidence score threshold
+    Calculate amino acid level precision and recall at a given score threshold.
 
     Parameters
     ----------
-    correct_aa_confidences : list
-        List of confidence scores for correct amino acids predictions
-    all_aa_confidences : int
-        List of confidence scores for all amino acids prediction
-    num_original_aa : int
-        Number of amino acids in the predicted peptide sequences
+    aa_scores_correct : List[float]
+        Amino acids scores for the correct amino acids predictions.
+    aa_scores_all : List[float]
+        Amino acid scores for all amino acids predictions.
+    n_aa_total : int
+        The total number of amino acids in the predicted peptide sequences.
     threshold : float
-        Amino acid confidence score threshold
+        The amino acid score threshold.
 
     Returns
     -------
     aa_precision: float
-        Number of correct aa predictions divided by all predicted aa
+        The number of correct amino acid predictions divided by the number of predicted
+        amino acids.
     aa_recall: float
-        Number of correct aa predictions divided by all original aa
+        The number of correct amino acid predictions divided by the total number of
+        amino acids.
     """
-
-    correct_aa = sum([conf >= threshold for conf in correct_aa_confidences])
-    predicted_aa = sum([conf >= threshold for conf in all_aa_confidences])
-
-    aa_precision = correct_aa / predicted_aa
-    aa_recall = correct_aa / num_original_aa
-
-    return aa_precision, aa_recall
+    n_aa_correct = sum([score > threshold for score in aa_scores_correct])
+    n_aa_predicted = sum([score > threshold for score in aa_scores_all])
+    return n_aa_correct / n_aa_predicted, n_aa_correct / n_aa_total
