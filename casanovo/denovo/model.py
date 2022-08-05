@@ -429,8 +429,8 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         if len(self._history) > 0 and len(self._history[-1]) == 6:
             if len(self._history) == 1:
                 logger.info(
-                    "Epoch\tTrain loss\tValid loss\tValid AA precision\t"
-                    "Valid AA recall\tValid peptide recall"
+                    "Epoch\tTrain loss\tValid loss\tAA precision\tAA recall\t"
+                    "Peptide recall"
                 )
             metrics = self._history[-1]
             if metrics["epoch"] % self.n_log == 0:
