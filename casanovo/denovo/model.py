@@ -475,7 +475,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         lr_scheduler = CosineWarmupScheduler(
             optimizer, warmup=self.warmup_iters, max_iters=self.max_iters
         )
-        return optimizer, {"scheduler": lr_scheduler, "interval": "step"}
+        return [optimizer], {"scheduler": lr_scheduler, "interval": "step"}
 
 
 class CosineWarmupScheduler(torch.optim.lr_scheduler._LRScheduler):
