@@ -69,8 +69,8 @@ n_log: 1
 tb_summarywriter: 
 warmup_iters: 100000
 max_iters: 600000
-learning_rate: 5e-4
-weight_decay: 1e-5
+learning_rate: 5.0e-4
+weight_decay: 1.0e-5
 
 #Training/inference options
 train_batch_size: 32
