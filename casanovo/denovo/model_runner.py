@@ -138,7 +138,7 @@ def _execute_existing(
         logger=config["logger"],
         max_epochs=config["max_epochs"],
         num_sanity_val_steps=config["num_sanity_val_steps"],
-        strategy=config["accelerator"],
+        strategy=config["strategy"],
     )
     # Run the model with/without validation.
     if annotated:
@@ -264,7 +264,7 @@ def train(
         logger=config["logger"],
         max_epochs=config["max_epochs"],
         num_sanity_val_steps=config["num_sanity_val_steps"],
-        strategy=config["accelerator"],
+        strategy=config["strategy"],
     )
     # Train the model.
     trainer.fit(

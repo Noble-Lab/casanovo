@@ -76,7 +76,7 @@ def test_denovo_casanovo(mgf_small):
         logger=config["logger"],
         max_epochs=config["max_epochs"],
         num_sanity_val_steps=config["num_sanity_val_steps"],
-        strategy=config["accelerator"],
+        strategy=config["strategy"],
     )
 
     trainer.test(tabula_rasa_model, loaders.test_dataloader())
