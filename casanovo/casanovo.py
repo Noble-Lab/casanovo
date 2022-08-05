@@ -1,9 +1,11 @@
 """The command line entry point for Casanovo."""
+import collections
 import csv
 import datetime
 import logging
 import os
 import pathlib
+import re
 import sys
 
 import click
@@ -138,6 +140,22 @@ def main(
     # Run Casanovo in the specified mode.
     if mode == "denovo":
         logger.info("Predict peptide sequences with Casanovo.")
+        # Derive the fixed and variable modifications from the residue alphabet.
+        residues = collections.defaultdict(set)
+        for aa, mass in config["residues"].items():
+            aa_mod = re.match(r"([A-Z]?)([+-]?(?:[0-9]*[.])?[0-9]+)", aa)
+            if aa_mod is None:
+                residues[aa].add(None)
+            else:
+                residues[aa_mod[1]].add(aa_mod[2])
+        fixed_mods, variable_mods = [], []
+        for aa, mods in residues.items():
+            if len(mods) > 1:
+                for mod in mods:
+                    if mod is not None:
+                        variable_mods.append((aa, mod))
+            elif None not in mods:
+                fixed_mods.append((aa, mods.pop()))
         # Write the mzTab output file header.
         stub_name = os.path.splitext(os.path.basename(output))[0]
         metadata = [
@@ -151,20 +169,40 @@ def main(
             ),
             (
                 "psm_search_engine_score[1]",
-                "[MS, MS:1001143, search engine specific score for PSMs,]",
+                "[MS, MS:1001143, search engine specific score for PSMs, ]",
             ),
-            # FIXME: This is not entirely correct and depends on the AA
-            #  alphabet.
-            (
-                "fixed_mod[1]",
-                "[MS, MS:1002453, No fixed modifications searched,]",
-            ),
-            (
-                "variable_mod[1]",
-                "[MS, MS:1002454, No variable modifications searched,]",
-            ),
-            ("software[1]", f"[MS, MS:1001456, Casanovo, {__version__},]"),
+            ("software[1]", f"[MS, MS:1001456, Casanovo, {__version__}, ]"),
         ]
+        if len(fixed_mods) == 0:
+            metadata.append(
+                (
+                    "fixed_mod[1]",
+                    "[MS, MS:1002453, No fixed modifications searched, ]",
+                )
+            )
+        else:
+            for i, (aa, mod) in enumerate(fixed_mods):
+                metadata.append(
+                    (f"fixed_mod[{i}]", f"[CHEMMOD, CHEMMOD:{mod}, , ]")
+                )
+                metadata.append(
+                    (f"fixed_mod[{i}]-site", aa if aa else "N-term")
+                )
+        if len(variable_mods) == 0:
+            metadata.append(
+                (
+                    "variable_mod[1]",
+                    "[MS, MS:1002454, No variable modifications searched,]",
+                )
+            )
+        else:
+            for i, (aa, mod) in enumerate(variable_mods):
+                metadata.append(
+                    (f"variable_mod[{i}]", f"[CHEMMOD, CHEMMOD:{mod}, , ]")
+                )
+                metadata.append(
+                    (f"variable_mod[{i}]-site", aa if aa else "N-term")
+                )
         for i, (key, value) in enumerate(config.items()):
             if key not in ("residues",):
                 metadata.append(
