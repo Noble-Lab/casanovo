@@ -257,7 +257,9 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         return self.decoder(sequences, precursors, *self.encoder(spectra))
 
     def training_step(
-        self, batch: Tuple[torch.Tensor, torch.Tensor, List[str]], *args
+        self, batch: Tuple[torch.Tensor, torch.Tensor, List[str]],
+            mode: str = "train",
+            *args
     ) -> torch.Tensor:
         """
         A single training step.
@@ -267,6 +269,8 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         batch : Tuple[torch.Tensor, torch.Tensor, List[str]]
             A batch of (i) MS/MS spectra, (ii) precursor information, (iii)
             peptide sequences as torch Tensors.
+        mode : str
+            Logging key to describe the current stage.
 
         Returns
         -------
@@ -278,7 +282,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         loss = self.celoss(pred, truth.flatten())
         self.log(
             "CELoss",
-            {"train": loss.item()},
+            {mode: loss.item()},
             on_step=False,
             on_epoch=True,
             sync_dist=True,
@@ -302,21 +306,15 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         torch.Tensor
             The loss of the validation step.
         """
-        log_args = dict(on_step=False, on_epoch=True, sync_dist=True)
-
         # Record the loss.
-        spectra, precursors, peptides = batch
-        pred, truth = self._forward_step(spectra, precursors, peptides)
-        pred = pred[:, :-1, :].reshape(-1, self.decoder.vocab_size + 1)
-        loss = self.celoss(pred, truth.flatten())
-        self.log("CELoss", {"valid": loss.item()}, **log_args)
+        loss = self.training_step(batch, mode="valid")
 
         # Calculate and log amino acid and peptide match evaluation metrics from
         # the predicted peptides.
         peptides_pred_raw, _ = self.forward(batch[0], batch[1])
         # FIXME: Temporary fix to skip predictions with multiple stop tokens.
         peptides_pred, peptides_true = [], []
-        for peptide_pred, peptide_true in zip(peptides_pred_raw, peptides):
+        for peptide_pred, peptide_true in zip(peptides_pred_raw, batch[2]):
             if len(peptide_pred) > 0:
                 if peptide_pred[0] == "$":
                     peptide_pred = peptide_pred[1:]  # Remove stop token.
@@ -328,6 +326,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
                 peptides_pred, peptides_true, self.decoder._peptide_mass.masses
             )
         )
+        log_args = dict(on_step=False, on_epoch=True, sync_dist=True)
         self.log("aa_precision", {"valid": aa_precision}, **log_args)
         self.log("aa_recall", {"valid": aa_recall}, **log_args)
         self.log("pep_recall", {"valid": pep_recall}, **log_args)
