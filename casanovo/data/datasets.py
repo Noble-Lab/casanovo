@@ -122,8 +122,14 @@ class SpectrumDataset(Dataset):
         )
         try:
             spectrum.set_mz_range(self.min_mz, self.max_mz)
+            if len(spectrum.mz) == 0:
+                raise ValueError
             spectrum.remove_precursor_peak(self.remove_precursor_tol, "Da")
+            if len(spectrum.mz) == 0:
+                raise ValueError
             spectrum.filter_intensity(self.min_intensity, self.n_peaks)
+            if len(spectrum.mz) == 0:
+                raise ValueError
             spectrum.scale_intensity("root", 1)
             intensities = spectrum.intensity / np.linalg.norm(
                 spectrum.intensity
