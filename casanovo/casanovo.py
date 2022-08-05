@@ -7,6 +7,7 @@ import os
 import pathlib
 import re
 import sys
+from typing import Any, Dict
 
 import click
 import pytorch_lightning as pl
@@ -140,79 +141,7 @@ def main(
     # Run Casanovo in the specified mode.
     if mode == "denovo":
         logger.info("Predict peptide sequences with Casanovo.")
-        # Derive the fixed and variable modifications from the residue alphabet.
-        residues = collections.defaultdict(set)
-        for aa, mass in config["residues"].items():
-            aa_mod = re.match(r"([A-Z]?)([+-]?(?:[0-9]*[.])?[0-9]+)", aa)
-            if aa_mod is None:
-                residues[aa].add(None)
-            else:
-                residues[aa_mod[1]].add(aa_mod[2])
-        fixed_mods, variable_mods = [], []
-        for aa, mods in residues.items():
-            if len(mods) > 1:
-                for mod in mods:
-                    if mod is not None:
-                        variable_mods.append((aa, mod))
-            elif None not in mods:
-                fixed_mods.append((aa, mods.pop()))
-        # Write the mzTab output file header.
-        stub_name = os.path.splitext(os.path.basename(output))[0]
-        metadata = [
-            ("mzTab-version", "1.0.0"),
-            ("mzTab-mode", "Summary"),
-            ("mzTab-type", "Identification"),
-            ("description", f"Casanovo identification file {stub_name}"),
-            (
-                "ms_run[1]-location",
-                pathlib.Path(os.path.abspath(peak_dir)).as_uri(),
-            ),
-            (
-                "psm_search_engine_score[1]",
-                "[MS, MS:1001143, search engine specific score for PSMs, ]",
-            ),
-            ("software[1]", f"[MS, MS:1001456, Casanovo, {__version__}, ]"),
-        ]
-        if len(fixed_mods) == 0:
-            metadata.append(
-                (
-                    "fixed_mod[1]",
-                    "[MS, MS:1002453, No fixed modifications searched, ]",
-                )
-            )
-        else:
-            for i, (aa, mod) in enumerate(fixed_mods):
-                metadata.append(
-                    (f"fixed_mod[{i}]", f"[CHEMMOD, CHEMMOD:{mod}, , ]")
-                )
-                metadata.append(
-                    (f"fixed_mod[{i}]-site", aa if aa else "N-term")
-                )
-        if len(variable_mods) == 0:
-            metadata.append(
-                (
-                    "variable_mod[1]",
-                    "[MS, MS:1002454, No variable modifications searched,]",
-                )
-            )
-        else:
-            for i, (aa, mod) in enumerate(variable_mods):
-                metadata.append(
-                    (f"variable_mod[{i}]", f"[CHEMMOD, CHEMMOD:{mod}, , ]")
-                )
-                metadata.append(
-                    (f"variable_mod[{i}]-site", aa if aa else "N-term")
-                )
-        for i, (key, value) in enumerate(config.items()):
-            if key not in ("residues",):
-                metadata.append(
-                    (f"software[1]-setting[{i}]", f"{key} = {value}")
-                )
-        with open(f"{os.path.splitext(output)[0]}.mztab", "w") as f_out:
-            writer = csv.writer(f_out, delimiter="\t")
-            for row in metadata:
-                writer.writerow(row)
-        # Get the peptide predictions.
+        _write_mztab_header(output, peak_dir, config)
         model_runner.predict(peak_dir, model, output, config)
     elif mode == "eval":
         logger.info("Evaluate a trained Casanovo model.")
@@ -220,6 +149,92 @@ def main(
     elif mode == "train":
         logger.info("Train the Casanovo model.")
         model_runner.train(peak_dir, peak_dir_val, model, config)
+
+
+def _write_mztab_header(
+    filename_out: str, filename_in: str, config: Dict[str, Any]
+) -> None:
+    """
+    Write metadata information to an mzTab file header.
+
+    Parameters
+    ----------
+    filename_out : str
+        The name of the mzTab file.
+    filename_in : str
+        The name or directory of the input file(s).
+    config : Dict[str, Any]
+        The active configuration options.
+    """
+    # Derive the fixed and variable modifications from the residue alphabet.
+    residues = collections.defaultdict(set)
+    for aa, mass in config["residues"].items():
+        aa_mod = re.match(r"([A-Z]?)([+-]?(?:[0-9]*[.])?[0-9]+)", aa)
+        if aa_mod is None:
+            residues[aa].add(None)
+        else:
+            residues[aa_mod[1]].add(aa_mod[2])
+    fixed_mods, variable_mods = [], []
+    for aa, mods in residues.items():
+        if len(mods) > 1:
+            for mod in mods:
+                if mod is not None:
+                    variable_mods.append((aa, mod))
+        elif None not in mods:
+            fixed_mods.append((aa, mods.pop()))
+
+    # Write the mzTab output file header.
+    stub_name = os.path.splitext(os.path.basename(filename_out))[0]
+    metadata = [
+        ("mzTab-version", "1.0.0"),
+        ("mzTab-mode", "Summary"),
+        ("mzTab-type", "Identification"),
+        ("description", f"Casanovo identification file {stub_name}"),
+        (
+            "ms_run[1]-location",
+            pathlib.Path(os.path.abspath(filename_in)).as_uri(),
+        ),
+        (
+            "psm_search_engine_score[1]",
+            "[MS, MS:1001143, search engine specific score for PSMs, ]",
+        ),
+        ("software[1]", f"[MS, MS:1001456, Casanovo, {__version__}, ]"),
+    ]
+    if len(fixed_mods) == 0:
+        metadata.append(
+            (
+                "fixed_mod[1]",
+                "[MS, MS:1002453, No fixed modifications searched, ]",
+            )
+        )
+    else:
+        for i, (aa, mod) in enumerate(fixed_mods):
+            metadata.append(
+                (f"fixed_mod[{i}]", f"[CHEMMOD, CHEMMOD:{mod}, , ]")
+            )
+            metadata.append((f"fixed_mod[{i}]-site", aa if aa else "N-term"))
+    if len(variable_mods) == 0:
+        metadata.append(
+            (
+                "variable_mod[1]",
+                "[MS, MS:1002454, No variable modifications searched,]",
+            )
+        )
+    else:
+        for i, (aa, mod) in enumerate(variable_mods):
+            metadata.append(
+                (f"variable_mod[{i}]", f"[CHEMMOD, CHEMMOD:{mod}, , ]")
+            )
+            metadata.append(
+                (f"variable_mod[{i}]-site", aa if aa else "N-term")
+            )
+    for i, (key, value) in enumerate(config.items()):
+        if key not in ("residues",):
+            metadata.append((f"software[1]-setting[{i}]", f"{key} = {value}"))
+    with open(f"{os.path.splitext(filename_out)[0]}.mztab", "w") as f_out:
+        writer = csv.writer(f_out, delimiter="\t")
+        for row in metadata:
+            writer.writerow(row)
 
 
 if __name__ == "__main__":
