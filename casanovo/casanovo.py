@@ -1,8 +1,8 @@
 """The command line entry point for Casanovo."""
+import datetime
 import logging
 import os
 import sys
-from typing import List
 
 import click
 import pytorch_lightning as pl
@@ -86,6 +86,12 @@ def main(
 
     Official code website: https://github.com/Noble-Lab/casanovo
     """
+    if output is None:
+        output = os.path.join(
+            os.getcwd(),
+            f"casanovo_{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}",
+        )
+
     # Configure logging.
     logging.captureWarnings(True)
     root = logging.getLogger()

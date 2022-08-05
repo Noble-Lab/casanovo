@@ -390,6 +390,8 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         Write the predicted peptide sequences and amino acid scores to the
         output file.
         """
+        if self.out_filename is None:
+            return
         empty_token_score = torch.tensor(0.04)
         with open(self.out_filename, "w") as f_out:
             writer = csv.writer(f_out, delimiter="\t")
