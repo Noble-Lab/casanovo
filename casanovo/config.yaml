@@ -15,9 +15,6 @@ remove_precursor_tol: 2.0  # Da
 
 # Hardware options.
 num_workers:
-# [] (empty list) to run on CPU, list with integer identifiers (e.g. [0, 1]) to run
-# on the corresponding GPUs.
-gpus: []
 
 # Model architecture options.
 dim_model: 512

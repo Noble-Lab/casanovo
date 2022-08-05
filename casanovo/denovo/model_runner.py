@@ -132,11 +132,13 @@ def _execute_existing(
     loaders.setup(stage="test", annotated=annotated)
     # Create the Trainer object.
     trainer = pl.Trainer(
-        strategy=config["accelerator"],
+        accelerator="auto",
+        auto_select_gpus=True,
+        devices=-1,
         logger=config["logger"],
-        gpus=config["gpus"],
         max_epochs=config["max_epochs"],
         num_sanity_val_steps=config["num_sanity_val_steps"],
+        strategy=config["accelerator"],
     )
     # Run the model with/without validation.
     if annotated:
@@ -255,12 +257,14 @@ def train(
     else:
         callbacks = None
     trainer = pl.Trainer(
-        strategy=config["accelerator"],
+        accelerator="auto",
+        auto_select_gpus=True,
+        callbacks=callbacks,
+        devices=-1,
         logger=config["logger"],
-        gpus=config["gpus"],
         max_epochs=config["max_epochs"],
         num_sanity_val_steps=config["num_sanity_val_steps"],
-        callbacks=callbacks,
+        strategy=config["accelerator"],
     )
     # Train the model.
     trainer.fit(

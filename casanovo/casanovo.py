@@ -64,14 +64,6 @@ logger = logging.getLogger("casanovo")
     help="The number of worker threads to use.",
     type=click.INT,
 )
-@click.option(
-    "--gpu",
-    default=(),
-    help="The identifier of the GPU to use. Multiple GPUs can be requested using the "
-    "following format: --gpus=0 --gpus=1 --gpus=2 ...",
-    type=click.INT,
-    multiple=True,
-)
 def main(
     mode: str,
     model: str,
@@ -80,7 +72,6 @@ def main(
     config: str,
     output: str,
     num_workers: int,
-    gpu: List[int],
 ):
     """
     \b
@@ -127,8 +118,6 @@ def main(
     # Overwrite any parameters that were provided as command-line arguments.
     if num_workers is not None:
         config["num_workers"] = num_workers
-    if len(gpu) > 0:
-        config["gpus"] = gpu
 
     pl.utilities.seed.seed_everything(seed=config["random_seed"], workers=True)
 

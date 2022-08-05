@@ -18,7 +18,6 @@ def test_denovo_casanovo(mgf_small):
         config = yaml.safe_load(f)
 
     """Ensure that the test doesn't raise any system overdraw issues in terms of resources"""
-    config["gpus"] = []
     config["num_workers"] = 0
     output_path = os.path.dirname(os.path.abspath(__file__))
 
@@ -71,11 +70,13 @@ def test_denovo_casanovo(mgf_small):
 
     # Create Trainer object
     trainer = pl.Trainer(
-        accelerator=config["accelerator"],
+        accelerator="auto",
+        auto_select_gpus=True,
+        devices=-1,
         logger=config["logger"],
-        gpus=config["gpus"],
         max_epochs=config["max_epochs"],
         num_sanity_val_steps=config["num_sanity_val_steps"],
+        strategy=config["accelerator"],
     )
 
     trainer.test(tabula_rasa_model, loaders.test_dataloader())
