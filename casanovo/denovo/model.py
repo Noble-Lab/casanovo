@@ -426,7 +426,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         Write log to console, if requested.
         """
         # Log only if all output for the current epoch is recorded.
-        if len(self._history) > 0 and len(self._history[-1] == 6):
+        if len(self._history) > 0 and len(self._history[-1]) == 6:
             if len(self._history) == 1:
                 logger.info(
                     "Epoch\tTrain loss\tValid loss\tValid AA precision\t"
