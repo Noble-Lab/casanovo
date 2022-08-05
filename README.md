@@ -58,7 +58,7 @@ casanovo --mode=denovo --model_path='path/to/pretrained' --test_data_path='path/
 
 - To train a model from scratch or continue training a pre-trained model:
 ```
-casanovo train --mode=train --model_path='path/to/pretrained' --train_data_path='path/to/train/mgf/files/dir'  --val_data_path='path/to/validation/mgf/files/dir' --config_path='path/to/config'
+casanovo --mode=train --model_path='path/to/pretrained' --train_data_path='path/to/train/mgf/files/dir'  --val_data_path='path/to/validation/mgf/files/dir' --config_path='path/to/config'
 ```
 # Example Job:
 ## A small walkthrough on how to use casanovo with a very small spectra (~100) set
