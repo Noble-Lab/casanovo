@@ -159,7 +159,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
             are the same length.
         precursors : torch.Tensor of size (n_spectra, 3)
             The measured precursor mass (axis 0), precursor charge (axis 1),
-             and precursor m/z (axis 3) of each MS/MS spectrum.
+             and precursor m/z (axis 2) of each MS/MS spectrum.
 
         Returns
         -------
@@ -210,7 +210,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
             are the same length.
         precursors : torch.Tensor of size (n_spectra, 3)
             The measured precursor mass (axis 0), precursor charge (axis 1),
-             and precursor m/z (axis 3) of each MS/MS spectrum.
+             and precursor m/z (axis 2) of each MS/MS spectrum.
 
         Returns
         -------
