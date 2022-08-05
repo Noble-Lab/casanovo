@@ -180,17 +180,19 @@ def prepare_batch(
     spectra : torch.Tensor of shape (batch_size, n_peaks, 2)
         The padded mass spectra tensor with the m/z and intensity peak values
         for each spectrum.
-    precursors : torch.Tensor of shape (batch_size, 2)
-        A tensor with the precursor neutral mass and precursor charge.
+    precursors : torch.Tensor of shape (batch_size, 3)
+        A tensor with the precursor neutral mass, precursor charge, and
+        precursor m/z.
     spectrum_ids : np.ndarray
         The spectrum identifiers (during de novo sequencing) or peptide
         sequences (during training).
     """
     spectra, precursor_mzs, precursor_charges, spectrum_ids = list(zip(*batch))
     spectra = torch.nn.utils.rnn.pad_sequence(spectra, batch_first=True)
+    precursor_mzs = torch.tensor(precursor_mzs)
     precursor_charges = torch.tensor(precursor_charges)
-    precursor_masses = (
-        torch.tensor(precursor_mzs) - 1.007276
-    ) * precursor_charges
-    precursors = torch.vstack([precursor_masses, precursor_charges]).T.float()
+    precursor_masses = (precursor_mzs - 1.007276) * precursor_charges
+    precursors = torch.vstack(
+        [precursor_masses, precursor_charges, precursor_mzs]
+    ).T.float()
     return spectra, precursors, np.asarray(spectrum_ids)

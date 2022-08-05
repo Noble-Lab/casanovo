@@ -81,7 +81,7 @@ Note that to evaluate the peptide predictions, ground truth peptide labels in an
 - To train a model from scratch:
 
 ```
-casanovo --mode=train --peak_dir='path/to/train/mgf/files/dir'  --peak_dir_val='path/to/validation/mgf/files/dir' --config='path/to/config.yaml'
+casanovo --mode=train --peak_dir='path/to/train/mgf/files/dir' --peak_dir_val='path/to/validation/mgf/files/dir' --config='path/to/config.yaml'
 ```
 
 If a training is continued for a previously trained model, specify the starting model weights using `--model`.
