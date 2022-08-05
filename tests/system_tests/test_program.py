@@ -63,7 +63,7 @@ def test_denovo_casanovo(mgf_small):
         min_intensity=config["min_intensity"],
         remove_precursor_tol=config["remove_precursor_tol"],
         n_workers=config["num_workers"],
-        batch_size=config["test_batch_size"],
+        batch_size=config["predict_batch_size"],
     )
 
     loaders.setup(stage="test", annotated=False)
