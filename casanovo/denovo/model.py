@@ -6,6 +6,7 @@ import numpy as np
 import pytorch_lightning as pl
 from torch.utils.tensorboard import SummaryWriter
 
+import depthcharge.masses
 from depthcharge.components import SpectrumEncoder, PeptideDecoder, ModelMixin
 from depthcharge.models.embed.model import PairedSpectrumEncoder
 from .evaluate import batch_aa_match, calc_eval_metrics
@@ -51,6 +52,8 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         collection of amino acids and masses.
     max_charge : int, optional
         The maximum charge state to consider.
+    precursor_mass_tol : float, optional
+        The maximum allowable precursor mass tolerance (in ppm) for correct predictions.
     n_log : int, optional
         The number of epochs to wait between logging messages.
     tb_summarywriter: torch.utils.tensorboard.SummaryWriter object or None, optional
@@ -77,6 +80,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         max_length=100,
         residues="canonical",
         max_charge=5,
+        precursor_mass_tol=50,
         n_log=10,
         tb_summarywriter=None,
         warmup_iters=100000,
@@ -92,6 +96,9 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         self.n_log = n_log
 
         self.residues = residues
+        self.peptide_mass_calculator = depthcharge.masses.PeptideMass(
+            self.residues
+        )
 
         # Build the model
         if custom_encoder is not None:
@@ -133,6 +140,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         self.max_iters = max_iters
 
         # Store de novo sequences to be saved
+        self.precursor_mass_tol = precursor_mass_tol
         self.denovo_seqs = []
         self.output_path = output_path if output_path is not None else "."
         if not os.path.exists(self.output_path):
@@ -149,9 +157,9 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
             a 2-tuple specifying the m/z-intensity pair for each peak. These
             should be zero-padded, such that all of the spectra in the batch
             are the same length.
-        precursors : torch.Tensor of size (n_spectra, 2)
-            The measured precursor mass (axis 0) and charge (axis 1) of each
-            tandem mass spectrum.
+        precursors : torch.Tensor of size (n_spectra, 3)
+            The measured precursor mass (axis 0), precursor charge (axis 1),
+             and precursor m/z (axis 2) of each MS/MS spectrum.
 
         Returns
         -------
@@ -200,9 +208,9 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
             a 2-tuple specifying the m/z-intensity pair for each peak. These
             should be zero-padded, such that all of the spectra in the batch
             are the same length.
-        precursors : torch.Tensor of size (n_spectra, 2)
-            The measured precursor mass (axis 0) and charge (axis 1) of each
-            tandem mass spectrum.
+        precursors : torch.Tensor of size (n_spectra, 3)
+            The measured precursor mass (axis 0), precursor charge (axis 1),
+             and precursor m/z (axis 2) of each MS/MS spectrum.
 
         Returns
         -------
@@ -259,9 +267,9 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
             a 2-tuple specifying the m/z-intensity pair for each peak. These
             should be zero-padded, such that all of the spectra in the batch
             are the same length.
-        precursors : torch.Tensor of size (n_spectra, 2)
-            The measured precursor mass (axis 0) and charge (axis 1) of each
-            tandem mass spectrum.
+        precursors : torch.Tensor of size (n_spectra, 3)
+            The measured precursor mass (axis 0), precursor charge (axis 1),
+             and precursor m/z (axis 3) of each MS/MS spectrum.
         sequences : list or str of length n_spectra
             The partial peptide sequences to predict.
 
@@ -407,10 +415,9 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
             (index 2)
 
         """
-        # De novo sequence the batch
-        pred_seqs, scores = self.predict_step(batch)
-        spectrum_order_id = batch[-1]
-        self.denovo_seqs += [(spectrum_order_id, pred_seqs, scores)]
+        peptide, aa_scores = self.predict_step(batch)
+        # Spectrum ID, precursor mass and charge, predicted peptide sequence, AA scores.
+        self.denovo_seqs.append((batch[2], batch[1], peptide, aa_scores))
 
     def on_train_epoch_end(self):
         """Log the training loss.
@@ -454,42 +461,46 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
             )
 
             for batch in self.denovo_seqs:
-                scores = batch[2].cpu()  # transfer to cpu in case in gpu
+                scores = batch[-1].cpu()  # transfer to cpu in case in gpu
 
                 for i in range(len(batch[0])):
-                    top_scores = torch.max(scores[i], axis=1)[
-                        0
-                    ]  # take the score of most probable AA
-                    empty_index = torch.where(top_scores == 0.04)[
-                        0
-                    ]  # find the indices of positions after stop token
-
-                    if len(empty_index) > 0:  # check if decoding was stopped
-                        last_index = (
-                            empty_index[0] - 1
-                        )  # select index of the last AA
-
-                        if (
-                            last_index >= 1
-                        ):  # check if peptide is at least one AA long
-                            top_scores_list = top_scores[
-                                :last_index
-                            ].tolist()  # omit the stop token
+                    peptide_seq = batch[2][i][1:]
+                    _, precursor_charge, precursor_mz = batch[1][i]
+                    predicted_mz = self.peptide_mass_calculator.mass(
+                        peptide_seq, precursor_charge
+                    )
+                    delta_mass_ppm = (
+                        abs(predicted_mz - precursor_mz)
+                        / precursor_mz
+                        * 10**6
+                    )
+                    # take the score of most probable AA
+                    top_scores = torch.max(scores[i], axis=1)[0]
+                    # find the indices of positions after stop token
+                    empty_index = torch.where(top_scores == 0.04)[0]
+                    # check if decoding was stopped
+                    if len(empty_index) > 0:
+                        # select index of the last AA
+                        last_index = empty_index[0] - 1
+                        # check if peptide is at least one AA long
+                        if last_index >= 1:
+                            # omit the stop token
+                            top_scores_list = top_scores[:last_index].tolist()
                             peptide_score = np.mean(top_scores_list)
+                            # Subtract one if the precursor m/z tolerance is
+                            # violated.
+                            if delta_mass_ppm > self.precursor_mass_tol:
+                                peptide_score -= 1
                             aa_scores = list(reversed(top_scores_list))
-
                         else:
-                            peptide_score = None
-                            aa_scores = None
-
+                            peptide_score, aa_scores = None, None
                     else:
-                        peptide_score = None
-                        aa_scores = None
+                        peptide_score, aa_scores = None, None
 
                     writer.writerow(
                         [
                             batch[0][i],
-                            batch[1][i][1:],
+                            peptide_seq,
                             peptide_score,
                             aa_scores,
                         ]

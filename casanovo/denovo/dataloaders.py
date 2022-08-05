@@ -187,14 +187,15 @@ def prepare_batch(batch):
     spectra : torch.Tensor of shape (batch_size, n_peaks, 2)
         The mass spectra to sequence, where ``X[:, :, 0]`` are the m/z values
         and ``X[:, :, 1]`` are their associated intensities.
-    precursors : torch.Tensor of shape (batch_size, 2)
-        The precursor mass and charge state.
+    precursors : torch.Tensor of shape (batch_size, 3)
+        The precursor mass, precursor charge, and precursor m/z.
     sequence_or_ids : list of str
         The peptide sequence annotations in training, the spectrum identifier in de novo sequencing
     """
     spec, mz, charge, sequence_or_ids = list(zip(*batch))
     charge = torch.tensor(charge)
-    mass = (torch.tensor(mz) - 1.007276) * charge
-    precursors = torch.vstack([mass, charge]).T.float()
+    mz = torch.tensor(mz)
+    mass = (mz - 1.007276) * charge
+    precursors = torch.vstack([mass, charge, mz]).T.float()
     spec = torch.nn.utils.rnn.pad_sequence(spec, batch_first=True)
     return spec, precursors, np.array(sequence_or_ids)

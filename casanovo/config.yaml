@@ -25,6 +25,7 @@ min_mz: 50.52564895 #1.0005079 * 50.5
 max_mz: 2500
 min_intensity: 0.01
 fragment_tol_mass: 2  # Da
+precursor_mass_tol: 50  # ppm
 
 #Hardware options
 num_workers: 1
