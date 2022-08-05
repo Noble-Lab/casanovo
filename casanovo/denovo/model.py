@@ -146,7 +146,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
 
         # Output file during predicting.
         if out_filename is not None:
-            self.out_filename = f"{os.path.splitext(out_filename)[0]}.csv"
+            self.out_filename = f"{os.path.splitext(out_filename)[0]}.mztab"
         else:
             self.out_filename = None
 
@@ -404,9 +404,32 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         if self.out_filename is None:
             return
         empty_token_score = torch.tensor(0.04)
-        with open(self.out_filename, "w") as f_out:
+        with open(self.out_filename, "a") as f_out:
             writer = csv.writer(f_out, delimiter="\t")
-            writer.writerow(["spectrum_id", "sequence", "score", "aa_scores"])
+            writer.writerow(
+                [
+                    "PSH",
+                    "sequence",
+                    "PSM_ID",
+                    "accession",
+                    "unique",
+                    "database",
+                    "database_version",
+                    "search_engine",
+                    "search_engine_score[1]",
+                    "modifications",
+                    "retention_time",
+                    "charge",
+                    "exp_mass_to_charge",
+                    "calc_mass_to_charge",
+                    "spectra_ref",
+                    "pre",
+                    "post",
+                    "start",
+                    "end",
+                    "opt_ms_run[1]_aa_scores",
+                ]
+            )
             for batch in results:
                 for step in batch:
                     for spectrum_i, precursor, peptide, aa_scores in zip(
@@ -415,6 +438,8 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
                         peptide = peptide[1:]
                         # Compare the experimental vs calculated precursor m/z.
                         _, precursor_charge, precursor_mz = precursor
+                        precursor_charge = precursor_charge.item()
+                        precursor_mz = precursor_mz.item()
                         calc_mz = self.peptide_mass_calculator.mass(
                             peptide, precursor_charge
                         )
@@ -446,7 +471,28 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
                         else:
                             peptide_score, aa_scores = None, None
                         writer.writerow(
-                            [spectrum_i, peptide, peptide_score, aa_scores]
+                            [
+                                "PSM",
+                                peptide[1:],
+                                spectrum_i,
+                                "null",
+                                "null",
+                                "null",
+                                "null",
+                                "[MS, MS:1001456, Casanovo,]",
+                                peptide_score,
+                                "null",
+                                "null",
+                                precursor_charge,
+                                precursor_mz,
+                                calc_mz,
+                                f"ms_run[1]:index={spectrum_i}",
+                                "null",
+                                "null",
+                                "null",
+                                "null",
+                                aa_scores,
+                            ]
                         )
 
     def _log_history(self) -> None:

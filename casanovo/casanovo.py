@@ -1,7 +1,9 @@
 """The command line entry point for Casanovo."""
+import csv
 import datetime
 import logging
 import os
+import pathlib
 import sys
 
 import click
@@ -136,6 +138,43 @@ def main(
     # Run Casanovo in the specified mode.
     if mode == "denovo":
         logger.info("Predict peptide sequences with Casanovo.")
+        # Write the mzTab output file header.
+        stub_name = os.path.splitext(os.path.basename(output))[0]
+        metadata = [
+            ("mzTab-version", "1.0.0"),
+            ("mzTab-mode", "Summary"),
+            ("mzTab-type", "Identification"),
+            ("description", f"Casanovo identification file {stub_name}"),
+            (
+                "ms_run[1]-location",
+                pathlib.Path(os.path.abspath(peak_dir)).as_uri(),
+            ),
+            (
+                "psm_search_engine_score[1]",
+                "[MS, MS:1001143, search engine specific score for PSMs,]",
+            ),
+            # FIXME: This is not entirely correct and depends on the AA
+            #  alphabet.
+            (
+                "fixed_mod[1]",
+                "[MS, MS:1002453, No fixed modifications searched,]",
+            ),
+            (
+                "variable_mod[1]",
+                "[MS, MS:1002454, No variable modifications searched,]",
+            ),
+            ("software[1]", f"[MS, MS:1001456, Casanovo, {__version__},]"),
+        ]
+        for i, (key, value) in enumerate(config.items()):
+            if key not in ("residues",):
+                metadata.append(
+                    (f"software[1]-setting[{i}]", f"{key} = {value}")
+                )
+        with open(f"{os.path.splitext(output)[0]}.mztab", "w") as f_out:
+            writer = csv.writer(f_out, delimiter="\t")
+            for row in metadata:
+                writer.writerow(row)
+        # Get the peptide predictions.
         model_runner.predict(peak_dir, model, output, config)
     elif mode == "eval":
         logger.info("Evaluate a trained Casanovo model.")
