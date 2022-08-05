@@ -32,7 +32,7 @@ logger = logging.getLogger("casanovo")
     "--model",
     required=True,
     help="The file name of the model weights (.ckpt file).",
-    type=click.Path(exists=True, dir_okay=False),
+    type=click.Path(dir_okay=False),
 )
 @click.option(
     "--peak_dir",

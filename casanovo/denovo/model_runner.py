@@ -184,13 +184,14 @@ def train(
             "Could not find the directory to read peak files"
         )
     train_filenames = _get_peak_filenames(peak_dir)
-    if not os.path.isdir(peak_dir_val):
+    if peak_dir_val is None or not os.path.isdir(peak_dir_val):
         logger.error(
-            "Could not find directory %s from which to read peak files",
+            "Could not find directory %s from which to read validation peak "
+            "files",
             peak_dir_val,
         )
         raise FileNotFoundError(
-            "Could not find the directory to read peak files"
+            "Could not find the directory to read validation peak files"
         )
     val_filenames = _get_peak_filenames(peak_dir_val)
     tmp_dir = tempfile.TemporaryDirectory()
@@ -205,7 +206,6 @@ def train(
         max_mz=config["max_mz"],
         min_intensity=config["min_intensity"],
         remove_precursor_tol=config["remove_precursor_tol"],
-        num_workers=config["num_workers"],
         batch_size=config["train_batch_size"],
     )
     train_loader = DeNovoDataModule(
