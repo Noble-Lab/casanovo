@@ -78,11 +78,13 @@ casanovo --mode=eval --model='path/to/pretrained.ckpt' --peak_dir='path/to/test/
 
 Note that to evaluate the peptide predictions, ground truth peptide labels in an annotated MGF file need to be present.
 
-- To train a model from scratch or continue training a pretrained model:
+- To train a model from scratch:
 
 ```
-casanovo --mode=train --model='path/to/trained.ckpt' --peak_dir='path/to/train/mgf/files/dir'  --peak_dir_val='path/to/validation/mgf/files/dir' --config='path/to/config.yaml'
+casanovo --mode=train --peak_dir='path/to/train/mgf/files/dir'  --peak_dir_val='path/to/validation/mgf/files/dir' --config='path/to/config.yaml'
 ```
+
+If a training is continued for a previously trained model, specify the starting model weights using `--model`.
 
 ### Example job
 
