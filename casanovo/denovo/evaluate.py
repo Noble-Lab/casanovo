@@ -35,8 +35,8 @@ def aa_match_prefix(
     Returns
     -------
     aa_matches : np.ndarray of length max(len(peptide1), len(peptide2))
-        Boolean flag indicating whether each paired-up amino acid matches across both
-        peptide sequences.
+        Boolean flag indicating whether each paired-up amino acid matches across
+        both peptide sequences.
     pep_match : bool
         Boolean flag to indicate whether the two peptide sequences fully match.
     """
@@ -69,7 +69,8 @@ def aa_match_prefix_suffix(
     ind_mass_threshold: float = 0.1,
 ) -> Tuple[np.ndarray, bool]:
     """
-    Find the matching prefix and suffix amino acids between two peptide sequences.
+    Find the matching prefix and suffix amino acids between two peptide
+    sequences.
 
     Parameters
     ----------
@@ -88,8 +89,8 @@ def aa_match_prefix_suffix(
     Returns
     -------
     aa_matches : np.ndarray of length max(len(peptide1), len(peptide2))
-        Boolean flag indicating whether each paired-up amino acid matches across both
-        peptide sequences.
+        Boolean flag indicating whether each paired-up amino acid matches across
+        both peptide sequences.
     pep_match : bool
         Boolean flag to indicate whether the two peptide sequences fully match.
     """
@@ -152,8 +153,8 @@ def aa_match(
     Returns
     -------
     aa_matches : np.ndarray of length max(len(peptide1), len(peptide2))
-        Boolean flag indicating whether each paired-up amino acid matches across both
-        peptide sequences.
+        Boolean flag indicating whether each paired-up amino acid matches across
+        both peptide sequences.
     pep_match : bool
         Boolean flag to indicate whether the two peptide sequences fully match.
     """
@@ -208,9 +209,9 @@ def aa_match_batch(
     Returns
     -------
     aa_matches_batch : List[Tuple[np.ndarray, bool]]
-        For each pair of peptide sequences: (i) boolean flags indicating whether each
-        paired-up amino acid matches across both peptide sequences, (ii) boolean flag to
-        indicate whether the two peptide sequences fully match.
+        For each pair of peptide sequences: (i) boolean flags indicating whether
+        each paired-up amino acid matches across both peptide sequences, (ii)
+        boolean flag to indicate whether the two peptide sequences fully match.
     n_aa1: int
         Total number of amino acids in the first list of peptide sequences.
     n_aa2: int
@@ -245,9 +246,9 @@ def aa_match_metrics(
     Parameters
     ----------
     aa_matches_batch : List[Tuple[np.ndarray, bool]]
-        For each pair of peptide sequences: (i) boolean flags indicating whether each
-        paired-up amino acid matches across both peptide sequences, (ii) boolean flag to
-        indicate whether the two peptide sequences fully match.
+        For each pair of peptide sequences: (i) boolean flags indicating whether
+        each paired-up amino acid matches across both peptide sequences, (ii)
+        boolean flag to indicate whether the two peptide sequences fully match.
     n_aa_true: int
         Total number of amino acids in the true peptide sequences.
     n_aa_pred: int
@@ -256,11 +257,13 @@ def aa_match_metrics(
     Returns
     -------
     aa_precision: float
-        The number of correct AA predictions divided by the number of predicted AAs.
+        The number of correct AA predictions divided by the number of predicted
+        AAs.
     aa_recall: float
         The number of correct AA predictions divided by the number of true AAs.
     pep_recall: float
-        The number of correct peptide predictions divided by the number of peptides.
+        The number of correct peptide predictions divided by the number of
+        peptides.
     """
     n_aa_correct = sum(
         [aa_matches[0].sum() for aa_matches in aa_matches_batch]
@@ -296,11 +299,11 @@ def aa_precision_recall(
     Returns
     -------
     aa_precision: float
-        The number of correct amino acid predictions divided by the number of predicted
-        amino acids.
+        The number of correct amino acid predictions divided by the number of
+        predicted amino acids.
     aa_recall: float
-        The number of correct amino acid predictions divided by the total number of
-        amino acids.
+        The number of correct amino acid predictions divided by the total number
+        of amino acids.
     """
     n_aa_correct = sum([score > threshold for score in aa_scores_correct])
     n_aa_predicted = sum([score > threshold for score in aa_scores_all])

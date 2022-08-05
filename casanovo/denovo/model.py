@@ -27,37 +27,38 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
     dim_model : int
         The latent dimensionality used by the transformer model.
     n_head : int
-        The number of attention heads in each layer. ``dim_model`` must be divisible by
-        ``n_head``.
+        The number of attention heads in each layer. ``dim_model`` must be
+        divisible by ``n_head``.
     dim_feedforward : int
-        The dimensionality of the fully connected layers in the transformer model.
+        The dimensionality of the fully connected layers in the transformer
+        model.
     n_layers : int
         The number of transformer layers.
     dropout : float
         The dropout probability for all layers.
     dim_intensity : Optional[int]
         The number of features to use for encoding peak intensity. The remaining
-        (``dim_model - dim_intensity``) are reserved for encoding the m/z value. If
-        ``None``, the intensity will be projected up to ``dim_model`` using a linear
-        layer, then summed with the m/z encoding for each peak.
+        (``dim_model - dim_intensity``) are reserved for encoding the m/z value.
+        If ``None``, the intensity will be projected up to ``dim_model`` using a
+        linear layer, then summed with the m/z encoding for each peak.
     custom_encoder : Optional[Union[SpectrumEncoder, PairedSpectrumEncoder]]
-        A pretrained encoder to use. The ``dim_model`` of the encoder must be the same
-        as that specified by the ``dim_model`` parameter here.
+        A pretrained encoder to use. The ``dim_model`` of the encoder must be
+        the same as that specified by the ``dim_model`` parameter here.
     max_length : int
         The maximum peptide length to decode.
     residues: Union[Dict[str, float], str]
-        The amino acid dictionary and their masses. By default ("canonical) this is only
-        the 20 canonical amino acids, with cysteine carbamidomethylated. If "massivekb",
-        this dictionary will include the modifications found in MassIVE-KB.
-        Additionally, a dictionary can be used to specify a custom collection of amino
-        acids and masses.
+        The amino acid dictionary and their masses. By default ("canonical) this
+        is only the 20 canonical amino acids, with cysteine carbamidomethylated.
+        If "massivekb", this dictionary will include the modifications found in
+        MassIVE-KB. Additionally, a dictionary can be used to specify a custom
+        collection of amino acids and masses.
     max_charge : int
         The maximum precursor charge to consider.
     n_log : int
         The number of epochs to wait between logging messages.
     tb_summarywriter: Optional[torch.utils.tensorboard.SummaryWriter]
-        Object to record performance metrics during training. If ``None``, don't use a
-        ``SummarWriter``.
+        Object to record performance metrics during training. If ``None``, don't
+        use a ``SummarWriter``.
     warmup_iters: int
         The number of warm up iterations for the learning rate scheduler.
     max_iters: int
@@ -150,13 +151,13 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         ----------
         spectra : torch.Tensor of shape (n_spectra, n_peaks, 2)
             The spectra for which to predict peptide sequences.
-            Axis 0 represents an MS/MS spectrum, axis 1 contains the peaks in the MS/MS
-            spectrum, and axis 2 is essentially a 2-tuple specifying the m/z-intensity
-            pair for each peak. These should be zero-padded, such that all of the
-            spectra in the batch are the same length.
+            Axis 0 represents an MS/MS spectrum, axis 1 contains the peaks in
+            the MS/MS spectrum, and axis 2 is essentially a 2-tuple specifying
+            the m/z-intensity pair for each peak. These should be zero-padded,
+            such that all of the spectra in the batch are the same length.
         precursors : torch.Tensor of size (n_spectra, 2)
-            The measured precursor mass (axis 0) and charge (axis 1) of each MS/MS
-            spectrum.
+            The measured precursor mass (axis 0) and charge (axis 1) of each
+            MS/MS spectrum.
 
         Returns
         -------
@@ -181,13 +182,13 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         ----------
         spectra : torch.Tensor of shape (n_spectra, n_peaks, 2)
             The spectra for which to predict peptide sequences.
-            Axis 0 represents an MS/MS spectrum, axis 1 contains the peaks in the MS/MS
-            spectrum, and axis 2 is essentially a 2-tuple specifying the m/z-intensity
-            pair for each peak. These should be zero-padded, such that all of the
-            spectra in the batch are the same length.
+            Axis 0 represents an MS/MS spectrum, axis 1 contains the peaks in
+            the MS/MS spectrum, and axis 2 is essentially a 2-tuple specifying
+            the m/z-intensity pair for each peak. These should be zero-padded,
+            such that all of the spectra in the batch are the same length.
         precursors : torch.Tensor of size (n_spectra, 2)
-            The measured precursor mass (axis 0) and charge (axis 1) of each MS/MS
-            spectrum.
+            The measured precursor mass (axis 0) and charge (axis 1) of each
+            MS/MS spectrum.
 
         Returns
         -------
@@ -206,7 +207,8 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
             None, precursors, memories, mem_masks
         )
         tokens = torch.argmax(scores, axis=2)
-        # Keep predicting until a stop token is predicted or max_length is reached.
+        # Keep predicting until a stop token is predicted or max_length is
+        # reached.
         # The stop token does not count towards max_length.
         for i in range(2, self.max_length + 2):
             decoded = (tokens == self.stop_token).any(axis=1)
@@ -235,13 +237,13 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         ----------
         spectra : torch.Tensor of shape (n_spectra, n_peaks, 2)
             The spectra for which to predict peptide sequences.
-            Axis 0 represents an MS/MS spectrum, axis 1 contains the peaks in the MS/MS
-            spectrum, and axis 2 is essentially a 2-tuple specifying the m/z-intensity
-            pair for each peak. These should be zero-padded, such that all of the
-            spectra in the batch are the same length.
+            Axis 0 represents an MS/MS spectrum, axis 1 contains the peaks in
+            the MS/MS spectrum, and axis 2 is essentially a 2-tuple specifying
+            the m/z-intensity pair for each peak. These should be zero-padded,
+            such that all of the spectra in the batch are the same length.
         precursors : torch.Tensor of size (n_spectra, 2)
-            The measured precursor mass (axis 0) and charge (axis 1) of each MS/MS
-            spectrum.
+            The measured precursor mass (axis 0) and charge (axis 1) of each
+            MS/MS spectrum.
         sequences : List[str] of length n_spectra
             The partial peptide sequences to predict.
 
@@ -263,8 +265,8 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         Parameters
         ----------
         batch : Tuple[torch.Tensor, torch.Tensor, List[str]]
-            A batch of (i) MS/MS spectra, (ii) precursor information, (iii) peptide
-            sequences as torch Tensors.
+            A batch of (i) MS/MS spectra, (ii) precursor information, (iii)
+            peptide sequences as torch Tensors.
 
         Returns
         -------
@@ -292,8 +294,8 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         Parameters
         ----------
         batch : Tuple[torch.Tensor, torch.Tensor, List[str]]
-            A batch of (i) MS/MS spectra, (ii) precursor information, (iii) peptide
-            sequences.
+            A batch of (i) MS/MS spectra, (ii) precursor information, (iii)
+            peptide sequences.
 
         Returns
         -------
@@ -309,8 +311,8 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         loss = self.celoss(pred, truth.flatten())
         self.log("CELoss", {"valid": loss.item()}, **log_args)
 
-        # Calculate and log amino acid and peptide match evaluation metrics from the
-        # predicted peptides.
+        # Calculate and log amino acid and peptide match evaluation metrics from
+        # the predicted peptides.
         peptides_pred_raw, _ = self.forward(batch[0], batch[1])
         # FIXME: Temporary fix to skip predictions with multiple stop tokens.
         peptides_pred, peptides_true = [], []
@@ -341,8 +343,8 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         Parameters
         ----------
         batch : Tuple[torch.Tensor, torch.Tensor, torch.Tensor]
-            A batch of (i) MS/MS spectra, (ii) precursor information, (iii) spectrum
-            identifiers as torch Tensors.
+            A batch of (i) MS/MS spectra, (ii) precursor information, (iii)
+            spectrum identifiers as torch Tensors.
 
         Returns
         -------
@@ -385,7 +387,8 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         self, results: List[List[Tuple[np.ndarray, List[str], torch.Tensor]]]
     ) -> None:
         """
-        Write the predicted peptide sequences and amino acid scores to the output file.
+        Write the predicted peptide sequences and amino acid scores to the
+        output file.
         """
         empty_token_score = torch.tensor(0.04)
         with open(self.out_filename, "w") as f_out:
@@ -396,8 +399,8 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
                     for spectrum_i, peptide, aa_scores in zip(*step):
                         # Take the scores of the most probable amino acids.
                         top_aa_scores = torch.max(aa_scores, axis=1)[0]
-                        # Find the index after the first stop token to check if decoding
-                        # was stopped.
+                        # Find the index after the first stop token to check if
+                        # decoding was stopped.
                         empty_index = torch.argmax(
                             torch.isclose(
                                 top_aa_scores, empty_token_score

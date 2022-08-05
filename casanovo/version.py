@@ -6,9 +6,9 @@ def _get_version() -> Optional[str]:
     """
     Retrieve the package version.
 
-    Using setuptools-scm dynamically sets the package version depending on the latest
-    git release and commits since that point. This function returns the current version
-    number.
+    Using setuptools-scm dynamically sets the package version depending on the
+    latest git release and commits since that point. This function returns the
+    current version number.
 
     Returns
     -------

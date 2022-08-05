@@ -17,22 +17,22 @@ class SpectrumDataset(Dataset):
     spectrum_index : depthcharge.data.SpectrumIndex
         The MS/MS spectra to use as a dataset.
     n_peaks : Optional[int]
-        The number of top-n most intense peaks to keep in each spectrum. `None` retains
-        all peaks.
+        The number of top-n most intense peaks to keep in each spectrum. `None`
+        retains all peaks.
     min_mz : float
-        The minimum m/z to include. The default is 140 m/z, in order to exclude TMT and
-        iTRAQ reporter ions.
+        The minimum m/z to include. The default is 140 m/z, in order to exclude
+        TMT and iTRAQ reporter ions.
     max_mz : float
         The maximum m/z to include.
     min_intensity : float
-        Remove peaks whose intensity is below `min_intensity` percentage of the base
-        peak intensity.
+        Remove peaks whose intensity is below `min_intensity` percentage of the
+        base peak intensity.
     remove_precursor_tol : float
-        Remove peaks within the given mass tolerance in Dalton around the precursor
-        mass.
+        Remove peaks within the given mass tolerance in Dalton around the
+        precursor mass.
     random_state : Optional[int]
-        The NumPy random state. ``None`` leaves mass spectra in the order they were
-        parsed.
+        The NumPy random state. ``None`` leaves mass spectra in the order they
+        were parsed.
     """
 
     def __init__(
@@ -77,8 +77,8 @@ class SpectrumDataset(Dataset):
         precursor_charge : int
             The precursor charge.
         spectrum_id: str
-            The unique spectrum identifier, as determined by its index in the original
-            peak file.
+            The unique spectrum identifier, as determined by its index in the
+            original peak file.
         """
         mz_array, int_array, precursor_mz, precursor_charge = self.index[idx]
         spectrum = self._process_peaks(
@@ -169,22 +169,22 @@ class AnnotatedSpectrumDataset(SpectrumDataset):
     annotated_spectrum_index : depthcharge.data.SpectrumIndex
         The MS/MS spectra to use as a dataset.
     n_peaks : Optional[int]
-        The number of top-n most intense peaks to keep in each spectrum. `None` retains
-        all peaks.
+        The number of top-n most intense peaks to keep in each spectrum. `None`
+        retains all peaks.
     min_mz : float
-        The minimum m/z to include. The default is 140 m/z, in order to exclude TMT and
-        iTRAQ reporter ions.
+        The minimum m/z to include. The default is 140 m/z, in order to exclude
+        TMT and iTRAQ reporter ions.
     max_mz : float
         The maximum m/z to include.
     min_intensity : float
-        Remove peaks whose intensity is below `min_intensity` percentage of the base
-        peak intensity.
+        Remove peaks whose intensity is below `min_intensity` percentage of the
+        base peak intensity.
     remove_precursor_tol : float
-        Remove peaks within the given mass tolerance in Dalton around the precursor
-        mass.
+        Remove peaks within the given mass tolerance in Dalton around the
+        precursor mass.
     random_state : Optional[int]
-        The NumPy random state. ``None`` leaves mass spectra in the order they were
-        parsed.
+        The NumPy random state. ``None`` leaves mass spectra in the order they
+        were parsed.
     """
 
     def __init__(

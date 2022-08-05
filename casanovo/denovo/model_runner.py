@@ -1,4 +1,5 @@
-"""Training and testing functionality for the de novo peptide sequencing model."""
+"""Training and testing functionality for the de novo peptide sequencing
+model."""
 import logging
 import os
 import tempfile
@@ -64,7 +65,8 @@ def _execute_existing(
     out_filename: Optional[str] = None,
 ) -> None:
     """
-    Predict peptide sequences with a trained Casanovo model with/without evaluation.
+    Predict peptide sequences with a trained Casanovo model with/without
+    evaluation.
 
     Parameters
     ----------
@@ -75,8 +77,8 @@ def _execute_existing(
     config : Dict[str, Any]
         The configuration options.
     annotated : bool
-        Whether the input peak files are annotated (execute in evaluation mode) or not
-        (execute in prediction mode only).
+        Whether the input peak files are annotated (execute in evaluation mode)
+        or not (execute in prediction mode only).
     out_filename : str
         The output file name for the prediction results (format: .csv).
     """
@@ -158,7 +160,8 @@ def train(
     """
     Train a Casanovo model.
 
-    The model can be trained from scratch or by continuing training an existing model.
+    The model can be trained from scratch or by continuing training an existing
+    model.
 
     Parameters
     ----------
@@ -235,15 +238,16 @@ def train(
     else:
         if not os.path.isfile(model_filename):
             logger.error(
-                "Could not find the model weights at file %s to continue training",
+                "Could not find the model weights at file %s to continue "
+                "training",
                 model_filename,
             )
             raise FileNotFoundError(
                 "Could not find the model weights to continue training"
             )
         model = Spec2Pep().load_from_checkpoint(model_filename, **model_params)
-    # Create the Trainer object and (optionally) a checkpoint callback to periodically
-    # save the model.
+    # Create the Trainer object and (optionally) a checkpoint callback to
+    # periodically save the model.
     if config["save_model"]:
         callbacks = [
             pl.callbacks.ModelCheckpoint(

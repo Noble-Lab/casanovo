@@ -24,8 +24,8 @@ logger = logging.getLogger("casanovo")
     '- "denovo" will predict peptide sequences for\nunknown MS/MS spectra.\n'
     '- "train" will train a model (from scratch or by\ncontinuing training a '
     "previously trained model).\n"
-    '- "eval" will evaluate the performance of a\ntrained model using previously '
-    "acquired spectrum\nannotations.",
+    '- "eval" will evaluate the performance of a\ntrained model using '
+    "previously acquired spectrum\nannotations.",
     type=click.Choice(["denovo", "train", "eval"]),
 )
 @click.option(
@@ -37,13 +37,14 @@ logger = logging.getLogger("casanovo")
 @click.option(
     "--peak_dir",
     required=True,
-    help="The directory with peak files for predicting peptide sequences or training "
-    "Casanovo.",
+    help="The directory with peak files for predicting peptide sequences or "
+    "training Casanovo.",
     type=click.Path(exists=True, file_okay=False),
 )
 @click.option(
     "--peak_dir_val",
-    help="The directory with peak files to be used as validation data during training.",
+    help="The directory with peak files to be used as validation data during "
+    "training.",
     type=click.Path(exists=True, file_okay=False),
 )
 @click.option(
@@ -78,9 +79,9 @@ def main(
     Casanovo: De novo mass spectrometry peptide sequencing with a transformer model.
     ================================================================================
 
-    Yilmaz, M., Fondrie, W. E., Bittremieux, W., Oh, S. & Noble, W. S. De novo mass
-    spectrometry peptide sequencing with a transformer model. Proceedings of the 39th
-    International Conference on Machine Learning - ICML '22 (2022)
+    Yilmaz, M., Fondrie, W. E., Bittremieux, W., Oh, S. & Noble, W. S. De novo
+    mass spectrometry peptide sequencing with a transformer model. Proceedings
+    of the 39th International Conference on Machine Learning - ICML '22 (2022)
     doi:10.1101/2022.02.07.479481.
 
     Official code website: https://github.com/Noble-Lab/casanovo
@@ -90,7 +91,8 @@ def main(
     root = logging.getLogger()
     root.setLevel(logging.DEBUG)
     log_formatter = logging.Formatter(
-        "{asctime} {levelname} [{name}/{processName}] {module}.{funcName} : {message}",
+        "{asctime} {levelname} [{name}/{processName}] {module}.{funcName} : "
+        "{message}",
         style="{",
     )
     console_handler = logging.StreamHandler(sys.stderr)
