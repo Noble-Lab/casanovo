@@ -50,6 +50,11 @@ residues:
   "M+15.995": 147.035399645 # Met oxidation: 131.040484645 + 15.994915
   "N+0.984": 115.02694347   # Asn deamidation: 114.042927470 + 0.984016
   "Q+0.984": 129.04259354   # Gln deamidation: 128.058577540 + 0.984016
+  # N-terminal modifications.
+  "+42.011": 42.010565      # Acetylation
+  "+43.006": 43.005814      # Carbamylation
+  "-17.027": -17.026549     # NH3 loss
+  "+43.006-17.027": 25.980265
 max_charge: 10
 n_log: 1
 tb_summarywriter:
