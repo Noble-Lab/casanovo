@@ -4,7 +4,7 @@ import logging
 import os
 import tempfile
 import uuid
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Iterable, List, Optional
 
 import click
 import pytorch_lightning as pl
@@ -106,7 +106,8 @@ def _execute_existing(
         out_filename=out_filename,
     )
     # Read the MS/MS spectra for which to predict peptide sequences.
-    if len(peak_filenames := _get_peak_filenames(peak_path)) == 0:
+    peak_ext = (".mgf",) if annotated else (".mgf", ".mzml", ".mzxml")
+    if len(peak_filenames := _get_peak_filenames(peak_path, peak_ext)) == 0:
         logger.error("Could not find peak files from %s", peak_path)
         raise FileNotFoundError("Could not find peak files")
     tmp_dir = tempfile.TemporaryDirectory()
@@ -265,7 +266,9 @@ def train(
     tmp_dir.cleanup()
 
 
-def _get_peak_filenames(path: str) -> List[str]:
+def _get_peak_filenames(
+        path: str, supported_ext: Iterable[str] = (".mgf",)
+) -> List[str]:
     """
     Get all matching peak file names from the path pattern.
 
@@ -276,6 +279,8 @@ def _get_peak_filenames(path: str) -> List[str]:
     ----------
     path : str
         The path pattern.
+    supported_ext : Iterable[str]
+        Extensions of supported peak file formats. Default: MGF.
 
     Returns
     -------
@@ -285,5 +290,5 @@ def _get_peak_filenames(path: str) -> List[str]:
     return [
         fn
         for fn in click.utils._expand_args([path])
-        if os.path.splitext(fn.lower())[1] == ".mgf"
+        if os.path.splitext(fn.lower())[1] in supported_ext
     ]
