@@ -65,7 +65,7 @@ See [`casanovo/config.yaml`](https://github.com/Noble-Lab/casanovo/blob/main/cas
 - To run _de novo_ sequencing:
 
 ```
-casanovo --mode=denovo --model='path/to/pretrained.ckpt' --peak_dir='path/to/predict/mgf/files/dir' --config='path/to/config.yaml' --output='path/to/output'
+casanovo --mode=denovo --model=path/to/pretrained.ckpt --peak_path=path/to/predict/spectra.mgf --config=path/to/config.yaml --output=path/to/output
 ```
 
 This will write peptide predictions for the given MS/MS spectra to the specified output file in a tab-separated format (extension: .csv).
@@ -73,7 +73,7 @@ This will write peptide predictions for the given MS/MS spectra to the specified
 - To evaluate _de novo_ sequencing performance based on known spectrum annotations:
 
 ```
-casanovo --mode=eval --model='path/to/pretrained.ckpt' --peak_dir='path/to/test/predict/files/dir' --config='path/to/config.yaml'
+casanovo --mode=eval --model=path/to/pretrained.ckpt --peak_path=path/to/test/annotated_spectra.mgf --config=path/to/config.yaml
 ```
 
 Note that to evaluate the peptide predictions, ground truth peptide labels in an annotated MGF file need to be present.
@@ -81,7 +81,7 @@ Note that to evaluate the peptide predictions, ground truth peptide labels in an
 - To train a model from scratch:
 
 ```
-casanovo --mode=train --peak_dir='path/to/train/mgf/files/dir' --peak_dir_val='path/to/validation/mgf/files/dir' --config='path/to/config.yaml'
+casanovo --mode=train --peak_path=path/to/train/annotated_spectra.mgf --peak_path_val=path/to/validation/annotated_spectra.mgf --config=path/to/config.yaml
 ```
 
 If a training is continued for a previously trained model, specify the starting model weights using `--model`.
@@ -98,7 +98,7 @@ The example MGF file is available at [`sample_data/sample_preprocessed_spectra.m
 4. Ensure you are in the proper anaconda environment by typing `conda activate casanovo_env`. (If you named your environment differently, type in that name instead.)
 5. Run this command:
 ```
-casanovo --mode=denovo --model='[PATH_TO]/pretrained_excl_mouse.ckpt' --peak_dir='sample_data' --config='path/to/config.yaml'
+casanovo --mode=denovo --model=[PATH_TO]/pretrained_excl_mouse.ckpt --peak_path=[PATH_TO]/sample_preprocessed_spectra.mgf --config=[PATH_TO]/config.yaml
 ```
 Make sure you use the proper filepath to the `pretrained_excl_mouse.ckpt` file.
     - Note: If you want to get the ouput CSV file in different location than the working directory, specify an alternative output location using the `--output` parameter.
