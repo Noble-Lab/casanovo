@@ -167,6 +167,14 @@ def _write_mztab_header(
         The active configuration options.
     """
     # Derive the fixed and variable modifications from the residue alphabet.
+    known_mods = {
+        "+57.021": "[UNIMOD, UNIMOD:4, Carbamidomethyl, ]",
+        "+15.995": "[UNIMOD, UNIMOD:35, Oxidation, ]",
+        "+0.984": "[UNIMOD, UNIMOD:7, Deamidated, ]",
+        "+42.011": "[UNIMOD, UNIMOD:1, Acetyl, ]",
+        "+43.006": "[UNIMOD, UNIMOD:5, Carbamyl, ]",
+        "-17.027": "[UNIMOD, UNIMOD:385, Ammonia-loss, ]",
+    }
     residues = collections.defaultdict(set)
     for aa, mass in config["residues"].items():
         aa_mod = re.match(r"([A-Z]?)([+-]?(?:[0-9]*[.])?[0-9]+)", aa)
@@ -210,7 +218,10 @@ def _write_mztab_header(
     else:
         for i, (aa, mod) in enumerate(fixed_mods):
             metadata.append(
-                (f"fixed_mod[{i}]", f"[CHEMMOD, CHEMMOD:{mod}, , ]")
+                (
+                    f"fixed_mod[{i}]",
+                    known_mods.get(mod, f"[CHEMMOD, CHEMMOD:{mod}, , ]"),
+                )
             )
             metadata.append((f"fixed_mod[{i}]-site", aa if aa else "N-term"))
     if len(variable_mods) == 0:
@@ -223,7 +234,10 @@ def _write_mztab_header(
     else:
         for i, (aa, mod) in enumerate(variable_mods):
             metadata.append(
-                (f"variable_mod[{i}]", f"[CHEMMOD, CHEMMOD:{mod}, , ]")
+                (
+                    f"variable_mod[{i}]",
+                    known_mods.get(mod, f"[CHEMMOD, CHEMMOD:{mod}, , ]"),
+                )
             )
             metadata.append(
                 (f"variable_mod[{i}]-site", aa if aa else "N-term")
