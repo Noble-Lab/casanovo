@@ -216,7 +216,7 @@ def _write_mztab_header(
             )
         )
     else:
-        for i, (aa, mod) in enumerate(fixed_mods):
+        for i, (aa, mod) in enumerate(fixed_mods, 1):
             metadata.append(
                 (
                     f"fixed_mod[{i}]",
@@ -232,7 +232,7 @@ def _write_mztab_header(
             )
         )
     else:
-        for i, (aa, mod) in enumerate(variable_mods):
+        for i, (aa, mod) in enumerate(variable_mods, 1):
             metadata.append(
                 (
                     f"variable_mod[{i}]",
@@ -242,7 +242,7 @@ def _write_mztab_header(
             metadata.append(
                 (f"variable_mod[{i}]-site", aa if aa else "N-term")
             )
-    for i, (key, value) in enumerate(config.items()):
+    for i, (key, value) in enumerate(config.items(), 1):
         if key not in ("residues",):
             metadata.append((f"software[1]-setting[{i}]", f"{key} = {value}"))
     with open(f"{os.path.splitext(filename_out)[0]}.mztab", "w") as f_out:
