@@ -124,6 +124,7 @@ def main(
         config = os.path.join(
             os.path.dirname(os.path.realpath(__file__)), "config.yaml"
         )
+    config_fn = config
     with open(config) as f_in:
         config = yaml.safe_load(f_in)
 
@@ -135,13 +136,21 @@ def main(
 
     # Log the active configuration.
     logger.info("Casanovo version %s", str(__version__))
+    logger.debug("mode = %s", mode)
+    logger.debug("model = %s", model)
+    logger.debug("peak_dir = %s", peak_dir)
+    logger.debug("peak_dir_val = %s", peak_dir_val)
+    logger.debug("config = %s", config_fn)
+    logger.debug("output = %s", output)
     for key, value in config.items():
         logger.debug("%s = %s", str(key), str(value))
 
     # Run Casanovo in the specified mode.
     if mode == "denovo":
         logger.info("Predict peptide sequences with Casanovo.")
-        _write_mztab_header(output, peak_dir, config)
+        _write_mztab_header(
+            output, peak_dir, config, model=model, config_filename=config_fn
+        )
         model_runner.predict(peak_dir, model, output, config)
     elif mode == "eval":
         logger.info("Evaluate a trained Casanovo model.")
@@ -152,7 +161,7 @@ def main(
 
 
 def _write_mztab_header(
-    filename_out: str, filename_in: str, config: Dict[str, Any]
+    filename_out: str, filename_in: str, config: Dict[str, Any], **kwargs
 ) -> None:
     """
     Write metadata information to an mzTab file header.
@@ -165,6 +174,8 @@ def _write_mztab_header(
         The name or directory of the input file(s).
     config : Dict[str, Any]
         The active configuration options.
+    kwargs
+        Additional configuration options (i.e. from command-line arguments).
     """
     # Derive the fixed and variable modifications from the residue alphabet.
     known_mods = {
@@ -242,7 +253,9 @@ def _write_mztab_header(
             metadata.append(
                 (f"variable_mod[{i}]-site", aa if aa else "N-term")
             )
-    for i, (key, value) in enumerate(config.items(), 1):
+    for i, (key, value) in enumerate(kwargs.items(), 1):
+        metadata.append((f"software[1]-setting[{i}]", f"{key} = {value}"))
+    for i, (key, value) in enumerate(config.items(), len(kwargs) + 1):
         if key not in ("residues",):
             metadata.append((f"software[1]-setting[{i}]", f"{key} = {value}"))
     with open(f"{os.path.splitext(filename_out)[0]}.mztab", "w") as f_out:
