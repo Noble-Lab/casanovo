@@ -267,7 +267,7 @@ def train(
 
 
 def _get_peak_filenames(
-        path: str, supported_ext: Iterable[str] = (".mgf",)
+    path: str, supported_ext: Iterable[str] = (".mgf",)
 ) -> List[str]:
     """
     Get all matching peak file names from the path pattern.
