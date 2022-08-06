@@ -12,6 +12,7 @@ from depthcharge.components import ModelMixin, PeptideDecoder, SpectrumEncoder
 from depthcharge.models.embed.model import PairedSpectrumEncoder
 
 from . import evaluate
+from .. import __version__
 
 
 logger = logging.getLogger("casanovo")
@@ -479,9 +480,13 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
                                 "null",
                                 "null",
                                 "null",
-                                "[MS, MS:1001456, Casanovo,]",
+                                f"[MS, MS:1001456, Casanovo, {__version__}]",
                                 peptide_score,
+                                # FIXME: Modifications should be specified as
+                                #  controlled vocabulary terms.
                                 "null",
+                                # FIXME: Can we get the retention time from the
+                                #  data loader?
                                 "null",
                                 precursor_charge,
                                 precursor_mz,
