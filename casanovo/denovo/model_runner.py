@@ -6,6 +6,7 @@ import tempfile
 import uuid
 from typing import Any, Dict, List, Optional
 
+import click
 import pytorch_lightning as pl
 from depthcharge.data import AnnotatedSpectrumIndex, SpectrumIndex
 
@@ -17,7 +18,7 @@ logger = logging.getLogger("casanovo")
 
 
 def predict(
-    peak_dir: str,
+    peak_path: str,
     model_filename: str,
     out_filename: str,
     config: Dict[str, Any],
@@ -27,8 +28,8 @@ def predict(
 
     Parameters
     ----------
-    peak_dir : str
-        The directory with peak files for predicting peptide sequences.
+    peak_path : str
+        The path with peak files for predicting peptide sequences.
     model_filename : str
         The file name of the model weights (.ckpt file).
     out_filename : str
@@ -36,29 +37,29 @@ def predict(
     config : Dict[str, Any]
         The configuration options.
     """
-    _execute_existing(peak_dir, model_filename, config, False, out_filename)
+    _execute_existing(peak_path, model_filename, config, False, out_filename)
 
 
 def evaluate(
-    peak_dir: str, model_filename: str, config: Dict[str, Any]
+    peak_path: str, model_filename: str, config: Dict[str, Any]
 ) -> None:
     """
     Evaluate peptide sequence predictions from a trained Casanovo model.
 
     Parameters
     ----------
-    peak_dir : str
-        The directory with peak files for predicting peptide sequences.
+    peak_path : str
+        The path with peak files for predicting peptide sequences.
     model_filename : str
         The file name of the model weights (.ckpt file).
     config : Dict[str, Any]
         The configuration options.
     """
-    _execute_existing(peak_dir, model_filename, config, True)
+    _execute_existing(peak_path, model_filename, config, True)
 
 
 def _execute_existing(
-    peak_dir: str,
+    peak_path: str,
     model_filename: str,
     config: Dict[str, Any],
     annotated: bool,
@@ -70,8 +71,8 @@ def _execute_existing(
 
     Parameters
     ----------
-    peak_dir : str
-        The directory with peak files for predicting peptide sequences.
+    peak_path : str
+        The path with peak files for predicting peptide sequences.
     model_filename : str
         The file name of the model weights (.ckpt file).
     config : Dict[str, Any]
@@ -105,15 +106,9 @@ def _execute_existing(
         out_filename=out_filename,
     )
     # Read the MS/MS spectra for which to predict peptide sequences.
-    if not os.path.isdir(peak_dir):
-        logger.error(
-            "Could not find directory %s from which to read peak files",
-            peak_dir,
-        )
-        raise FileNotFoundError(
-            "Could not find the directory to read peak files"
-        )
-    peak_filenames = _get_peak_filenames(peak_dir)
+    if len(peak_filenames := _get_peak_filenames(peak_path)) == 0:
+        logger.error("Could not find peak files from %s", peak_path)
+        raise FileNotFoundError("Could not find peak files")
     tmp_dir = tempfile.TemporaryDirectory()
     idx_filename = os.path.join(tmp_dir.name, f"{uuid.uuid4().hex}.hdf5")
     if annotated:
@@ -152,8 +147,8 @@ def _execute_existing(
 
 
 def train(
-    peak_dir: str,
-    peak_dir_val: str,
+    peak_path: str,
+    peak_path_val: str,
     model_filename: str,
     config: Dict[str, Any],
 ) -> None:
@@ -165,35 +160,27 @@ def train(
 
     Parameters
     ----------
-    peak_dir : str
-        The directory with peak files to be used as training data.
-    peak_dir_val : str
-        The directory with peak files to be used as validation data.
+    peak_path : str
+        The path with peak files to be used as training data.
+    peak_path_val : str
+        The path with peak files to be used as validation data.
     model_filename : str
         The file name of the model weights (.ckpt file).
     config : Dict[str, Any]
         The configuration options.
     """
     # Read the MS/MS spectra to use for training and validation.
-    if not os.path.isdir(peak_dir):
+    if len(train_filenames := _get_peak_filenames(peak_path)) == 0:
+        logger.error("Could not find training peak files from %s", peak_path)
+        raise FileNotFoundError("Could not find training peak files")
+    if (
+        peak_path_val is None
+        or len(val_filenames := _get_peak_filenames(peak_path_val)) == 0
+    ):
         logger.error(
-            "Could not find directory %s from which to read peak files",
-            peak_dir,
+            "Could not find validation peak files from %s", peak_path_val
         )
-        raise FileNotFoundError(
-            "Could not find the directory to read peak files"
-        )
-    train_filenames = _get_peak_filenames(peak_dir)
-    if peak_dir_val is None or not os.path.isdir(peak_dir_val):
-        logger.error(
-            "Could not find directory %s from which to read validation peak "
-            "files",
-            peak_dir_val,
-        )
-        raise FileNotFoundError(
-            "Could not find the directory to read validation peak files"
-        )
-    val_filenames = _get_peak_filenames(peak_dir_val)
+        raise FileNotFoundError("Could not find validation peak files")
     tmp_dir = tempfile.TemporaryDirectory()
     train_idx_filename = os.path.join(tmp_dir.name, f"{uuid.uuid4().hex}.hdf5")
     val_idx_filename = os.path.join(tmp_dir.name, f"{uuid.uuid4().hex}.hdf5")
@@ -278,22 +265,25 @@ def train(
     tmp_dir.cleanup()
 
 
-def _get_peak_filenames(peak_dir: str) -> List[str]:
+def _get_peak_filenames(path: str) -> List[str]:
     """
-    Get the peak file names in the given directory.
+    Get all matching peak file names from the path pattern.
+
+    Performs cross-platform path expansion akin to the Unix shell (glob, expand
+    user, expand vars).
 
     Parameters
     ----------
-    peak_dir : str
-        The directory in which to find peak files.
+    path : str
+        The path pattern.
 
     Returns
     -------
     List[str]
-        The peak file names from the given directory.
+        The peak file names matching the path pattern.
     """
     return [
-        os.path.join(peak_dir, f)
-        for f in os.listdir(peak_dir)
-        if f.lower().endswith(".mgf")
+        fn
+        for fn in click.utils._expand_args([path])
+        if os.path.splitext(fn.lower())[1] == ".mgf"
     ]

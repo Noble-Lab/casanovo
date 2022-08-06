@@ -36,15 +36,13 @@ logger = logging.getLogger("casanovo")
 @click.option(
     "--peak_dir",
     required=True,
-    help="The directory with peak files for predicting peptide sequences or "
+    help="The file path with peak files for predicting peptide sequences or "
     "training Casanovo.",
-    type=click.Path(exists=True, file_okay=False),
 )
 @click.option(
     "--peak_dir_val",
-    help="The directory with peak files to be used as validation data during "
+    help="The file path with peak files to be used as validation data during "
     "training.",
-    type=click.Path(exists=True, file_okay=False),
 )
 @click.option(
     "--config",
