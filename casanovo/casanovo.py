@@ -95,6 +95,8 @@ def main(
             os.getcwd(),
             f"casanovo_{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}",
         )
+    else:
+        output = os.path.splitext(os.path.abspath(output))[0]
 
     # Configure logging.
     logging.captureWarnings(True)
@@ -109,7 +111,7 @@ def main(
     console_handler.setLevel(logging.DEBUG)
     console_handler.setFormatter(log_formatter)
     root.addHandler(console_handler)
-    file_handler = logging.FileHandler(f"{os.path.splitext(output)[0]}.log")
+    file_handler = logging.FileHandler(f"{output}.log")
     file_handler.setFormatter(log_formatter)
     root.addHandler(file_handler)
     # Disable dependency non-critical log messages.
@@ -149,9 +151,13 @@ def main(
     if mode == "denovo":
         logger.info("Predict peptide sequences with Casanovo.")
         _write_mztab_header(
-            output, peak_dir, config, model=model, config_filename=config_fn
+            f"{output}.mztab",
+            peak_dir,
+            config,
+            model=model,
+            config_filename=config_fn,
         )
-        model_runner.predict(peak_dir, model, output, config)
+        model_runner.predict(peak_dir, model, f"{output}.mztab", config)
     elif mode == "eval":
         logger.info("Evaluate a trained Casanovo model.")
         model_runner.evaluate(peak_dir, model, config)
@@ -203,12 +209,15 @@ def _write_mztab_header(
             fixed_mods.append((aa, mods.pop()))
 
     # Write the mzTab output file header.
-    stub_name = os.path.splitext(os.path.basename(filename_out))[0]
     metadata = [
         ("mzTab-version", "1.0.0"),
         ("mzTab-mode", "Summary"),
         ("mzTab-type", "Identification"),
-        ("description", f"Casanovo identification file {stub_name}"),
+        (
+            "description",
+            f"Casanovo identification file "
+            f"{os.path.splitext(os.path.basename(filename_out))[0]}",
+        ),
         (
             "ms_run[1]-location",
             pathlib.Path(os.path.abspath(filename_in)).as_uri(),
@@ -258,7 +267,7 @@ def _write_mztab_header(
     for i, (key, value) in enumerate(config.items(), len(kwargs) + 1):
         if key not in ("residues",):
             metadata.append((f"software[1]-setting[{i}]", f"{key} = {value}"))
-    with open(f"{os.path.splitext(filename_out)[0]}.mztab", "w") as f_out:
+    with open(filename_out, "w") as f_out:
         writer = csv.writer(f_out, delimiter="\t")
         for row in metadata:
             writer.writerow(row)

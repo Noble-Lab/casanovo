@@ -146,10 +146,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         self.tb_summarywriter = tb_summarywriter
 
         # Output file during predicting.
-        if out_filename is not None:
-            self.out_filename = f"{os.path.splitext(out_filename)[0]}.mztab"
-        else:
-            self.out_filename = None
+        self.out_filename = out_filename
 
     def forward(
         self, spectra: torch.Tensor, precursors: torch.Tensor
