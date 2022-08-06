@@ -268,8 +268,8 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
     def training_step(
         self,
         batch: Tuple[torch.Tensor, torch.Tensor, List[str]],
-        mode: str = "train",
         *args,
+        mode: str = "train",
     ) -> torch.Tensor:
         """
         A single training step.
