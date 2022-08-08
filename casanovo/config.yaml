@@ -62,7 +62,6 @@ predict_batch_size: 1024
 logger:
 max_epochs: 30
 num_sanity_val_steps: 0
-strategy: "ddp"
 
 train_from_scratch: True
 

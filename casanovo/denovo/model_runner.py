@@ -8,6 +8,7 @@ from typing import Any, Dict, List, Optional
 
 import pytorch_lightning as pl
 from depthcharge.data import AnnotatedSpectrumIndex, SpectrumIndex
+from pytorch_lightning.strategies import DDPStrategy
 
 from casanovo.denovo.dataloaders import DeNovoDataModule
 from casanovo.denovo.model import Spec2Pep
@@ -140,7 +141,7 @@ def _execute_existing(
         logger=config["logger"],
         max_epochs=config["max_epochs"],
         num_sanity_val_steps=config["num_sanity_val_steps"],
-        strategy=config["strategy"],
+        strategy=DDPStrategy(find_unused_parameters=False),
     )
     # Run the model with/without validation.
     if annotated:
@@ -269,7 +270,7 @@ def train(
         logger=config["logger"],
         max_epochs=config["max_epochs"],
         num_sanity_val_steps=config["num_sanity_val_steps"],
-        strategy=config["strategy"],
+        strategy=DDPStrategy(find_unused_parameters=False),
     )
     # Train the model.
     trainer.fit(
