@@ -292,7 +292,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         loss = self.celoss(pred, truth.flatten())
         self.log(
             "CELoss",
-            {mode: loss.item()},
+            {mode: loss.detach()},
             on_step=False,
             on_epoch=True,
             sync_dist=True,
@@ -373,7 +373,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         """
         Log the training loss at the end of each epoch.
         """
-        train_loss = self.trainer.callback_metrics["CELoss"]["train"].item()
+        train_loss = self.trainer.callback_metrics["CELoss"]["train"].detach()
         self._history[-1]["train"] = train_loss
         self._log_history()
 
@@ -384,12 +384,14 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         callback_metrics = self.trainer.callback_metrics
         metrics = {
             "epoch": self.trainer.current_epoch,
-            "valid": callback_metrics["CELoss"]["valid"].item(),
+            "valid": callback_metrics["CELoss"]["valid"].detach(),
             "valid_aa_precision": callback_metrics["aa_precision"][
                 "valid"
-            ].item(),
-            "valid_aa_recall": callback_metrics["aa_recall"]["valid"].item(),
-            "valid_pep_recall": callback_metrics["pep_recall"]["valid"].item(),
+            ].detach(),
+            "valid_aa_recall": callback_metrics["aa_recall"]["valid"].detach(),
+            "valid_pep_recall": callback_metrics["pep_recall"][
+                "valid"
+            ].detach(),
         }
         self._history.append(metrics)
         self._log_history()
@@ -435,13 +437,17 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
                         if empty_index > 0:
                             # Omit the stop token.
                             top_aa_scores = top_aa_scores[: empty_index - 1]
-                            peptide_score = torch.mean(top_aa_scores).item()
+                            peptide_score = (
+                                torch.mean(top_aa_scores).detach().item()
+                            )
                             # Subtract one if the precursor m/z tolerance is
                             # violated.
                             if delta_mass_ppm > self.precursor_mass_tol:
                                 peptide_score -= 1
                             aa_scores = ",".join(
-                                map(str, top_aa_scores.cpu().numpy()[::-1])
+                                reversed(
+                                    list(map("{:.5f}".format, top_aa_scores))
+                                )
                             )
                         else:
                             peptide_score, aa_scores = None, None
