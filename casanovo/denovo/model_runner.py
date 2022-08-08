@@ -141,7 +141,7 @@ def _execute_existing(
         logger=config["logger"],
         max_epochs=config["max_epochs"],
         num_sanity_val_steps=config["num_sanity_val_steps"],
-        strategy=DDPStrategy(find_unused_parameters=False),
+        strategy=DDPStrategy(find_unused_parameters=False, static_graph=True),
     )
     # Run the model with/without validation.
     if annotated:
@@ -270,7 +270,7 @@ def train(
         logger=config["logger"],
         max_epochs=config["max_epochs"],
         num_sanity_val_steps=config["num_sanity_val_steps"],
-        strategy=DDPStrategy(find_unused_parameters=False),
+        strategy=DDPStrategy(find_unused_parameters=False, static_graph=True),
     )
     # Train the model.
     trainer.fit(
