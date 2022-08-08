@@ -121,10 +121,62 @@ def main(
         )
     with open(config) as f_in:
         config = yaml.safe_load(f_in)
-
     # Overwrite any parameters that were provided as command-line arguments.
     if num_workers is not None:
         config["num_workers"] = num_workers
+    # Ensure that the config values have the correct type.
+    for t, keys in (
+        (
+            int,
+            (
+                "random_seed",
+                "n_peaks",
+                "num_workers",
+                "dim_model",
+                "n_head",
+                "dim_feedforward",
+                "n_layers",
+                "dim_intensity",
+                "max_length",
+                "max_charge",
+                "n_log",
+                "warmup_iters",
+                "max_iters",
+                "train_batch_size",
+                "predict_batch_size",
+                "max_epochs",
+                "num_sanity_val_steps",
+                "every_n_epochs",
+            ),
+        ),
+        (
+            float,
+            (
+                "min_mz",
+                "max_mz",
+                "min_intensity",
+                "remove_precursor_tol",
+                "dropout",
+                "learning_rate",
+                "weight_decay",
+            ),
+        ),
+        (bool, ("train_from_scratch", "save_model", "save_weights_only")),
+    ):
+        for key in keys:
+            try:
+                if config[key] is not None:
+                    config[key] = t(config[key])
+            except (TypeError, ValueError) as e:
+                logger.error(
+                    "Incorrect type for configuration value %s: %s", key, e
+                )
+                raise TypeError(
+                    f"Incorrect type for configuration value {key}: {e}"
+                )
+    config["residues"] = {
+        str(aa): float(mass) for aa, mass in config["residues"].items()
+    }
 
     pl.utilities.seed.seed_everything(seed=config["random_seed"], workers=True)
 
