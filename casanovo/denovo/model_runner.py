@@ -128,7 +128,7 @@ def _execute_existing(
         max_mz=config["max_mz"],
         min_intensity=config["min_intensity"],
         remove_precursor_tol=config["remove_precursor_tol"],
-        n_workers=config["num_workers"],
+        n_workers=config["n_workers"],
         batch_size=config["predict_batch_size"],
     )
     loaders.setup(stage="test", annotated=annotated)
@@ -201,12 +201,13 @@ def train(
     val_index = AnnotatedSpectrumIndex(val_idx_filename, val_filenames)
     # Initialize the data loaders.
     dataloader_params = dict(
+        batch_size=config["train_batch_size"],
         n_peaks=config["n_peaks"],
         min_mz=config["min_mz"],
         max_mz=config["max_mz"],
         min_intensity=config["min_intensity"],
         remove_precursor_tol=config["remove_precursor_tol"],
-        batch_size=config["train_batch_size"],
+        n_workers=config["n_workers"],
     )
     train_loader = DeNovoDataModule(
         train_index=train_index, **dataloader_params

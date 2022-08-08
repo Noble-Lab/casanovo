@@ -5,6 +5,7 @@ import os
 import sys
 
 import click
+import psutil
 import pytorch_lightning as pl
 import yaml
 
@@ -58,12 +59,6 @@ logger = logging.getLogger("casanovo")
     "(optionally) prediction results (extension: .csv).",
     type=click.Path(dir_okay=False),
 )
-@click.option(
-    "--num_workers",
-    default=None,
-    help="The number of worker threads to use.",
-    type=click.INT,
-)
 def main(
     mode: str,
     model: str,
@@ -71,7 +66,6 @@ def main(
     peak_dir_val: str,
     config: str,
     output: str,
-    num_workers: int,
 ):
     """
     \b
@@ -121,9 +115,6 @@ def main(
         )
     with open(config) as f_in:
         config = yaml.safe_load(f_in)
-    # Overwrite any parameters that were provided as command-line arguments.
-    if num_workers is not None:
-        config["num_workers"] = num_workers
     # Ensure that the config values have the correct type.
     for t, keys in (
         (
@@ -131,7 +122,6 @@ def main(
             (
                 "random_seed",
                 "n_peaks",
-                "num_workers",
                 "dim_model",
                 "n_head",
                 "dim_feedforward",
@@ -177,6 +167,8 @@ def main(
     config["residues"] = {
         str(aa): float(mass) for aa, mass in config["residues"].items()
     }
+    # Add extra configuration options.
+    config["n_workers"] = len(psutil.Process().cpu_affinity())
 
     pl.utilities.seed.seed_everything(seed=config["random_seed"], workers=True)
 
