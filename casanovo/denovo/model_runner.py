@@ -171,22 +171,58 @@ def train(
         The configuration options.
     """
     # Read the MS/MS spectra to use for training and validation.
-    if len(train_filenames := _get_peak_filenames(peak_path)) == 0:
+    if (
+        len(
+            train_filenames := _get_peak_filenames(
+                peak_path, (".mgf", ".hdf5")
+            )
+        )
+        == 0
+    ):
         logger.error("Could not find training peak files from %s", peak_path)
         raise FileNotFoundError("Could not find training peak files")
+    train_is_index = any(
+        [os.path.splitext(fn)[1] in (".h5", ".hdf5") for fn in train_filenames]
+    )
+    if train_is_index and len(train_filenames) > 1:
+        logger.error("Multiple training HDF5 spectrum indexes specified")
+        raise ValueError("Multiple training HDF5 spectrum indexes specified")
     if (
         peak_path_val is None
-        or len(val_filenames := _get_peak_filenames(peak_path_val)) == 0
+        or len(
+            val_filenames := _get_peak_filenames(
+                peak_path_val, (".mgf", ".hdf5")
+            )
+        )
+        == 0
     ):
         logger.error(
             "Could not find validation peak files from %s", peak_path_val
         )
         raise FileNotFoundError("Could not find validation peak files")
+    val_is_index = any(
+        [os.path.splitext(fn)[1] in (".h5", ".hdf5") for fn in val_filenames]
+    )
+    if val_is_index and len(val_filenames) > 1:
+        logger.error("Multiple validation HDF5 spectrum indexes specified")
+        raise ValueError("Multiple validation HDF5 spectrum indexes specified")
     tmp_dir = tempfile.TemporaryDirectory()
-    train_idx_filename = os.path.join(tmp_dir.name, f"{uuid.uuid4().hex}.hdf5")
-    val_idx_filename = os.path.join(tmp_dir.name, f"{uuid.uuid4().hex}.hdf5")
-    train_index = AnnotatedSpectrumIndex(train_idx_filename, train_filenames)
-    val_index = AnnotatedSpectrumIndex(val_idx_filename, val_filenames)
+    train_idx_filename = (
+        train_filenames[0]
+        if train_is_index
+        else os.path.join(tmp_dir.name, f"{uuid.uuid4().hex}.hdf5")
+    )
+    train_index = AnnotatedSpectrumIndex(
+        train_idx_filename, None if train_is_index else train_filenames
+    )
+    val_idx_filename = (
+        val_filenames[0]
+        if val_is_index
+        else os.path.join(tmp_dir.name, f"{uuid.uuid4().hex}.hdf5")
+    )
+    val_index = AnnotatedSpectrumIndex(
+        val_idx_filename, None if val_is_index else val_filenames
+    )
     # Initialize the data loaders.
     dataloader_params = dict(
         n_peaks=config["n_peaks"],
