@@ -106,12 +106,23 @@ def _execute_existing(
         out_filename=out_filename,
     )
     # Read the MS/MS spectra for which to predict peptide sequences.
-    peak_ext = (".mgf",) if annotated else (".mgf", ".mzml", ".mzxml")
+    peak_ext = (
+        (".mgf", "hdf5") if annotated else (".mgf", ".mzml", ".mzxml", "hdf5")
+    )
     if len(peak_filenames := _get_peak_filenames(peak_path, peak_ext)) == 0:
         logger.error("Could not find peak files from %s", peak_path)
         raise FileNotFoundError("Could not find peak files")
+    peak_is_index = any(
+        [os.path.splitext(fn)[1] in (".h5", ".hdf5") for fn in peak_filenames]
+    )
+    if peak_is_index and len(peak_filenames) > 1:
+        logger.error("Multiple HDF5 spectrum indexes specified")
+        raise ValueError("Multiple HDF5 spectrum indexes specified")
     tmp_dir = tempfile.TemporaryDirectory()
-    idx_filename = os.path.join(tmp_dir.name, f"{uuid.uuid4().hex}.hdf5")
+    if peak_is_index:
+        idx_filename, peak_filenames = peak_filenames[0], None
+    else:
+        idx_filename = os.path.join(tmp_dir.name, f"{uuid.uuid4().hex}.hdf5")
     if annotated:
         index = AnnotatedSpectrumIndex(idx_filename, peak_filenames)
     else:
