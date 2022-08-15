@@ -18,7 +18,6 @@ def test_denovo_casanovo(mgf_small):
         config = yaml.safe_load(f)
 
     """Ensure that the test doesn't raise any system overdraw issues in terms of resources"""
-    config["gpus"] = []
     config["num_workers"] = 0
     output_path = os.path.dirname(os.path.abspath(__file__))
 
@@ -40,7 +39,7 @@ def test_denovo_casanovo(mgf_small):
         max_iters=config["max_iters"],
         lr=config["learning_rate"],
         weight_decay=config["weight_decay"],
-        output_path=output_path,
+        out_filename=output_path,
     )
     from pathlib import Path
 
@@ -62,21 +61,22 @@ def test_denovo_casanovo(mgf_small):
         min_mz=config["min_mz"],
         max_mz=config["max_mz"],
         min_intensity=config["min_intensity"],
-        fragment_tol_mass=config["fragment_tol_mass"],
-        preprocess_spec=config["preprocess_spec"],
-        num_workers=config["num_workers"],
-        batch_size=config["test_batch_size"],
+        remove_precursor_tol=config["remove_precursor_tol"],
+        n_workers=config["num_workers"],
+        batch_size=config["predict_batch_size"],
     )
 
     loaders.setup(stage="test", annotated=False)
 
     # Create Trainer object
     trainer = pl.Trainer(
-        accelerator=config["accelerator"],
+        accelerator="auto",
+        auto_select_gpus=True,
+        devices=-1,
         logger=config["logger"],
-        gpus=config["gpus"],
         max_epochs=config["max_epochs"],
         num_sanity_val_steps=config["num_sanity_val_steps"],
+        strategy=config["strategy"],
     )
 
     trainer.test(tabula_rasa_model, loaders.test_dataloader())

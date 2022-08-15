@@ -1,117 +1,146 @@
-# casanovo
+# Casanovo
+
 **_De Novo_ Mass Spectrometry Peptide Sequencing with a Transformer Model**
 
 ![image](https://user-images.githubusercontent.com/32707537/152622912-ca87da20-a64c-4e3f-9ca1-721c6b0d9c64.png)
 
-Data and pre-trained model weights are available [here](https://zenodo.org/record/6791263).
+If you use Casanovo in your work, please cite the following publication:
 
-A link to the preprint of the paper where we discuss our methods and tests can be found [here](https://www.biorxiv.org/content/10.1101/2022.02.07.479481v1).
+- Yilmaz, M., Fondrie, W. E., Bittremieux, W., Oh, S. & Noble, W. S. *De novo* mass spectrometry peptide sequencing with a transformer model. in *Proceedings of the 39th International Conference on Machine Learning - ICML '22* vol. 162 25514–25522 (PMLR, 2022). [https://proceedings.mlr.press/v162/yilmaz22a.html](https://proceedings.mlr.press/v162/yilmaz22a.html)
 
-# Documentation:
+Data and pre-trained model weights are available [on Zenodo](https://zenodo.org/record/6791263).
+
+## Documentation
+
 #### https://casanovo.readthedocs.io/en/latest/
 
-# How to get started with Casanovo?
-## Our recommendation:
+## Getting started with Casanovo
 
-Install **Anaconda**! It helps keep your environment for casanovo and its dependencies separate from your other Python environments. **This is especially helpful because casanovo works within a specific range of Python versions (3.7 > Python version > 3.10).**
+We recommend to run Casanovo in a dedicated **Anaconda** environment.
+This helps keep your environment for Casanovo and its dependencies separate from your other Python environments.
+**This is especially helpful because Casanovo works within a specific range of Python versions (3.7 > Python version > 3.10).**
 
 - Check out the [Windows](https://docs.anaconda.com/anaconda/install/windows/#), [MacOS](https://docs.anaconda.com/anaconda/install/mac-os/), and [Linux](https://docs.anaconda.com/anaconda/install/linux/) installation instructions.
 
 Once you have Anaconda installed, you can use this helpful [cheat sheet](https://docs.conda.io/projects/conda/en/4.6.0/_downloads/52a95608c49671267e40c689e0bc00ca/conda-cheatsheet.pdf) to see common commands and what they do.
 
-## Environment creation:
+### Environment creation
 
 Open up the anaconda prompt and run this command:
+
 ```
 conda create --name casanovo_env python=3.7
 ```
-This will create an anaconda environment called `casanovo_env` that has python 3.7 installed (You can check if it was created by typing `conda env list`). 
+
+This will create an anaconda environment called `casanovo_env` that has Python 3.7 installed.
+(You can check if it was created by typing `conda env list`.)
 
 You can activate this environment by typing:
+
 ```
 conda activate casanovo_env
 ```
-To the left of your anaconda prompt line it should now say **(casanovo_env)** instead of **(base)**. If this is the case, then you have set up anaconda and the environment properly.
 
-**Be sure to retype in the activation command into your terminal when you reopen anaconda and want to use casanovo.** The base environment most likely will not work.
+To the left of your anaconda prompt line it should now say **(casanovo_env)** instead of **(base)**.
+If this is the case, then you have set up anaconda and the environment properly.
 
-## Installation:
+**Be sure to retype in the activation command into your terminal when you reopen anaconda and want to use Casanovo.**
+The base environment most likely will not work.
 
-Install `casanovo` as a Python package from this repo (requires 3.7 > [Python version] > 3.10 , dependencies will be installed automatically as needed):
+### Installation
+
+Install Casanovo as a Python package from this repository (requires 3.7 > [Python version] > 3.10 , dependencies will be installed automatically as needed):
+
 ```
 pip install git+https://github.com/Noble-Lab/casanovo.git#egg=casanovo
 ```
 
-Once installed, Casanovo can be used with a simple command line interface. **Run `casanovo --help` for more details.** All auxiliary data, model and training-related variables can be specified in a user created `.yaml` file, see `casanovo/config.yaml` for the default configuration that was used to obtain the reported results.
+Once installed, Casanovo can be used with a simple command line interface.
+**Run `casanovo --help` for more details.**
+All auxiliary data, model, and training-related parameters can be specified in a user created `.yaml` configuration file.
+See [`casanovo/config.yaml`](https://github.com/Noble-Lab/casanovo/blob/main/casanovo/config.yaml) for the default configuration that was used to obtain the reported results.
 
-# Example Commands:
+### Example commands
 
-- To evaluate _de novo_ sequencing performance of a pre-trained model (peptide annotations are needed for spectra):
-```
-casanovo --mode=eval --model_path='path/to/pretrained' --test_data_path='path/to/test/mgf/files/dir' --config_path='path/to/config'
-```
+- To run _de novo_ sequencing:
 
-- To run _de novo_ sequencing without evaluation (specify directory path for output csv file with _de novo_ sequences, see `casanovo_sample_output.csv` for a sample output file):
 ```
-casanovo --mode=denovo --model_path='path/to/pretrained' --test_data_path='path/to/test/mgf/files/dir' --config_path='path/to/config' --output_path='path/to/output'
+casanovo --mode=denovo --model='path/to/pretrained.ckpt' --peak_dir='path/to/predict/mgf/files/dir' --config='path/to/config.yaml' --output='path/to/output'
 ```
 
-- To train a model from scratch or continue training a pre-trained model:
-```
-casanovo --mode=train --model_path='path/to/pretrained' --train_data_path='path/to/train/mgf/files/dir'  --val_data_path='path/to/validation/mgf/files/dir' --config_path='path/to/config'
-```
-# Example Job:
-## A small walkthrough on how to use casanovo with a very small spectra (~100) set
+This will write peptide predictions for the given MS/MS spectra to the specified output file in a tab-separated format (extension: .csv).
 
-### The spectra file (.mgf) that we will be running this job on can be seen in the sample_data folder.
+- To evaluate _de novo_ sequencing performance based on known spectrum annotations:
 
-- Step 1: Install casanovo (see above for details)
-- Step 2: Download the casanovo_pretrained_model_weights.zip from [here](https://zenodo.org/record/6791263). Place these models in a location that you can easily access and know the path of.
-    - We will be using pretrained_excl_mouse.ckpt for this job.
-- Step 3: Copy the example config.yaml file into a location you can easily access. 
-- Step 4: Change the `num_workers` and the `gpus` fields to reflect the number of cores and gpus on the machine you are running the job on.
-    - For example, if you have 4 CPU cores and 0 gpus, then num_workers would be 4, and gpus would be None
-- Step 5: Ensure you are in the proper anaconda environment by typing ```conda activate casanovo_env```. (If you named it differently, type in that name instead)
-- Step 6: Run this command:
 ```
-casanovo --mode=denovo --model_path='[PATH_TO]/pretrained_excl_mouse.ckpt' --test_data_path='sample_data' --config_path='path/to/config.yaml' --preprocess_spec=False
+casanovo --mode=eval --model='path/to/pretrained.ckpt' --peak_dir='path/to/test/predict/files/dir' --config='path/to/config.yaml'
 ```
-Make sure you have the proper filepath to the pretrained_excl_mouse.ckpt file.
- - Note: If you want to get the ouput csv in a place OTHER than where you ran this command, specify where you would like the output to be placed by specifying a directory in the --output_path CLI field
-    - It would look like ```--output_path='path/to/output/location'``` appended onto the end of the above command. Be sure to provide a directory, not a file!
 
-This job should take very little time to run (< 1 minute), and the result should be a file named ```casanovo_output.csv``` wherever you specified.
+Note that to evaluate the peptide predictions, ground truth peptide labels in an annotated MGF file need to be present.
+
+- To train a model from scratch:
+
+```
+casanovo --mode=train --peak_dir='path/to/train/mgf/files/dir' --peak_dir_val='path/to/validation/mgf/files/dir' --config='path/to/config.yaml'
+```
+
+If a training is continued for a previously trained model, specify the starting model weights using `--model`.
+
+### Example job
+
+We will demonstrate how to use Casanovo using a small walkthrough example on a small MGF file (~100 MS/MS spectra).
+The example MGF file is available at [`sample_data/sample_preprocessed_spectra.mgf`](https://github.com/Noble-Lab/casanovo/blob/main/sample_data/sample_preprocessed_spectra.mgf`).
+
+1. Install Casanovo (see above for details).
+2. Download the `casanovo_pretrained_model_weights.zip` from [Zenodo](https://zenodo.org/record/6791263). Place these models in a location that you can easily access and know the path of.
+    - We will be `using pretrained_excl_mouse.ckpt` for this job.
+3. Copy the example `config.yaml` file into a location you can easily access. 
+4. Ensure you are in the proper anaconda environment by typing `conda activate casanovo_env`. (If you named your environment differently, type in that name instead.)
+5. Run this command:
+```
+casanovo --mode=denovo --model='[PATH_TO]/pretrained_excl_mouse.ckpt' --peak_dir='sample_data' --config='path/to/config.yaml'
+```
+Make sure you use the proper filepath to the `pretrained_excl_mouse.ckpt` file.
+    - Note: If you want to get the ouput CSV file in different location than the working directory, specify an alternative output location using the `--output` parameter.
+
+This job will take very little time to run (< 1 minute).
 
 If the first few lines look like:
-```
-spectrum_id,denovo_seq,peptide_score,aa_scores
-0,LAHYNKR,0.9912219984190804,"[1.0, 1.0, 1.0, 0.99948...
-```
-Congratulations! You got casanovo to work!
 
-# Common Troubleshooting/FAQ
+```
+spectrum_id     sequence            score       aa_scores
+0               LAHYNKR             0.98197     1.0,0.999...
+1               VKEDYGQM+15.995PR   0.77206     0.999,0.999...
+```
 
-## Installed casanovo and it worked before, but I reopened Anaconda again and now it says casanovo is not installed
-Make sure you are in the `casanovo_env` environment. You can make sure you are in it by typing
+Congratulations! You got Casanovo to work.
+
+## Common Troubleshooting / FAQ
+
+**I installed Casanovo and it worked before, but I after reopening Anaconda it says that Casanovo is not installed.**
+
+Make sure you are in the `casanovo_env` environment. You can ensure this by typing:
+
 ```
 conda activate casanovo_env
 ```
-## What CLI Prompts can I use?
-Run the following command in your command prompt:
+
+**Which command-line options are available?**
+
+Run the following command in your command prompt to see all possible command-line configuration options:
 ```
 casanovo --help
 ```
-It should give you a comprehensive list of all CLI options you can tag onto a casanovo job and how/why to use them.
 
-# Release Notes
+## Release notes
 
-- Release 1.0 1-28-22: Initial commit
-- Release 1.1 2-4-22: Add data infrastructure, model and training/testing functionality
-- Release 1.11 2-10-22: Add more cli options and specify custom config file
-- Release 1.12 2-20-22: Add support for multiple mgf files in a directory
-- Release 1.2 3-7-22: Add peptide and amino acid confidence scores to output file
-- Release 2.0 6-5-22: Added additional CLI functionality, changed config file format, added pytest functionality, tutorial added, documentation with sphinx/ReadTheDocs added
-- Release 2.01 6-13-22: Release notes added
-- Release 2.11 7-2-22: Import latest Depthcharge version with stable memory usage and fix to positional encoding for AA
-- Release 2.12 7-27-22: Update tutorial
+- Release 2.1.1 (2022-07-27): Update tutorial
+- Release 2.1.0 (2022-07-02): Import latest depthcharge version with stable memory usage and fix to positional encoding for amino acids
+- Release 2.0.1 (2022-06-13): Release notes added
+- Release 2.0.0 (2022-06-05): Added additional CLI functionality, changed config file format, added pytest functionality, tutorial added, documentation with sphinx/ReadTheDocs added
+- Release 1.2.0 (2022-03-07): Add peptide and amino acid confidence scores to output file
+- Release 1.1.2 (2022-02-20): Add support for multiple MGF files in a directory
+- Release 1.1.1 (2022-02-10): Add more CLI options and specify custom config file
+- Release 1.1.0 (2022-02-04): Add data infrastructure, model and training/testing functionality
+- Release 1.0.0 (2022-01-28): Initial commit
 

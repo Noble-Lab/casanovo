@@ -1,44 +1,29 @@
 ###
-# Config file for casanovo. Edit this to change parameters for train, eval, and denovo.
-# Note that blank entries are interpreted as "None"
+# Casanovo configuration.
+# Blank entries are interpreted as "None"
 ###
 
-#Random seed to be used across the pipeline
+# Random seed to ensure reproducible results.
 random_seed: 454
 
-#Train data options
-train_annot_spec_idx_path: casanovo_train.hdf5 #path to write the training data index file, starts at os.getcwd()
-train_spec_idx_overwrite: True
-
-#Validation data options
-val_annot_spec_idx_path: casanovo_val.hdf5 #path to write the validation data index file, starts at os.getcwd()
-val_spec_idx_overwrite: True
-
-#Test data options
-test_annot_spec_idx_path: casanovo_test.hdf5 #path to write the test data index file
-test_spec_idx_overwrite: True
-
-#Preprocessing parameters
-preprocess_spec: True #Should be True when using raw mass spec data. Use False when reproducing Casanovo results with the provided benchmark data set which is pre-processed
+# Spectrum processing options.
 n_peaks: 150
-min_mz: 50.52564895 #1.0005079 * 50.5 
-max_mz: 2500
+min_mz: 50.52564895  # 1.0005079 * 50.5
+max_mz: 2500.0
 min_intensity: 0.01
-fragment_tol_mass: 2  # Da
-precursor_mass_tol: 50  # ppm
+remove_precursor_tol: 2.0  # Da
 
-#Hardware options
-num_workers: 1
-gpus: [] #[] for CPU, int list (ex. [0, 1, ...]) to specify GPUs
+# Hardware options.
+num_workers:
 
-#Model options
+# Model architecture options.
 dim_model: 512
 n_head: 8
 dim_feedforward: 1024
 n_layers: 9
 dropout: 0
-dim_intensity: 
-custom_encoder: 
+dim_intensity:
+custom_encoder:
 max_length: 100
 residues:
   G: 57.021463735
@@ -47,7 +32,7 @@ residues:
   P: 97.052763875
   V: 99.068413945
   T: 101.047678505
-  C+57.021: 160.030644505 #103.009184505 + 57.02146
+  C+57.021: 160.030644505 # 103.009184505 + 57.02146
   L: 113.084064015
   I: 113.084064015
   N: 114.042927470
@@ -61,31 +46,30 @@ residues:
   R: 156.101111050
   Y: 163.063328575
   W: 186.079312980
-  # AA mods:
-  M+15.995: 147.035399645 #131.040484645 + 15.994915  # Met Oxidation
-  N+0.984: 115.02694347 #114.042927470 + 0.984016,  # Asn Deamidation
-  Q+0.984: 129.04259354 #128.058577540 + 0.984016,  # Gln Deamidation
+  # Amino acid modifications.
+  M+15.995: 147.035399645 # Met oxidation: 131.040484645 + 15.994915
+  N+0.984: 115.02694347   # Asn deamidation: 114.042927470 + 0.984016
+  Q+0.984: 129.04259354   # Gln deamidation: 128.058577540 + 0.984016
 max_charge: 10
 n_log: 1
-tb_summarywriter: 
-warmup_iters: 100000
-max_iters: 600000
+tb_summarywriter:
+warmup_iters: 100_000
+max_iters: 600_000
 learning_rate: 5e-4
 weight_decay: 1e-5
 
-#Training/inference options
+# Training/inference options.
 train_batch_size: 32
-val_batch_size: 1024
-test_batch_size: 1024
+predict_batch_size: 1024
 
-accelerator: "ddp"
-logger: 
+logger:
 max_epochs: 30
 num_sanity_val_steps: 0
+strategy: "ddp"
 
 train_from_scratch: True
 
-save_model: False
-model_save_folder_path: ''
+save_model: True
+model_save_folder_path: ""
 save_weights_only: True
-every_n_epochs: 1
+every_n_train_steps: 50_000

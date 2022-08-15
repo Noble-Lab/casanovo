@@ -1,347 +1,310 @@
+"""Methods to evaluate peptide-spectrum predictions."""
 import re
-from spectrum_utils.utils import mass_diff
+from typing import Dict, List, Tuple
+
 import numpy as np
+from spectrum_utils.utils import mass_diff
 
-from depthcharge.masses import PeptideMass
 
-
-def best_aa_match(orig_seq, pred_seq, aa_dict):
+def aa_match_prefix(
+    peptide1: List[str],
+    peptide2: List[str],
+    aa_dict: Dict[str, float],
+    cum_mass_threshold: float = 0.5,
+    ind_mass_threshold: float = 0.1,
+) -> Tuple[np.ndarray, bool]:
     """
-    Find the matching amino acids of an original and predicted peptide sequence if either their prefix or suffix match
+    Find the matching prefix amino acids between two peptide sequences.
+
+    This is a similar evaluation criterion as used by DeepNovo.
 
     Parameters
     ----------
-    orig_seq : list
-        List of amino acids in the original peptide
-    pred_seq : list
-        List of amino acids in the predicted peptide
-    aa_dict: dict
-        Dictionary of amino acid masses
+    peptide1 : List[str]
+        The first tokenized peptide sequence to be compared.
+    peptide2 : List[str]
+        The second tokenized peptide sequence to be compared.
+    aa_dict : Dict[str, float]
+        Mapping of amino acid tokens to their mass values.
+    cum_mass_threshold : float
+        Mass threshold in Dalton to accept cumulative mass-matching amino acid
+        sequences.
+    ind_mass_threshold : float
+        Mass threshold in Dalton to accept individual mass-matching amino acids.
 
     Returns
     -------
-    aa_match: list
-        Binary list of matches over predicted peptide
-    pep_match: int
-        1 if all amino acid in two sequences match
-
+    aa_matches : np.ndarray of length max(len(peptide1), len(peptide2))
+        Boolean flag indicating whether each paired-up amino acid matches across
+        both peptide sequences.
+    pep_match : bool
+        Boolean flag to indicate whether the two peptide sequences fully match.
     """
-
-    cum_aa_threshold = 0.5
-    single_aa_threshold = 0.1
-
-    aa_match = []
-    pep_match = 0
-
-    cnt_pred = 0
-    cnt_orig = 0
-
-    orig_aa_mass_list = [aa_dict[aa] for aa in orig_seq]
-    pred_aa_mass_list = [aa_dict[aa] for aa in pred_seq]
-
-    orig_prefix_mass_list = [0] + list(np.cumsum(orig_aa_mass_list))[:-1]
-    orig_suffix_mass_list = list(
-        reversed(np.cumsum(list(reversed(orig_aa_mass_list)))[:-1])
-    ) + [0]
-
-    pred_prefix_mass_list = [0] + list(np.cumsum(pred_aa_mass_list))[:-1]
-    pred_suffix_mass_list = list(
-        reversed(np.cumsum(list(reversed(pred_aa_mass_list)))[:-1])
-    ) + [0]
-
-    while cnt_pred < len(pred_seq) and cnt_orig < len(orig_seq):
-
-        pred_aa_mass = aa_dict[pred_seq[cnt_pred]]
-        orig_aa_mass = aa_dict[orig_seq[cnt_orig]]
-
+    aa_matches = np.zeros(max(len(peptide1), len(peptide2)), np.bool_)
+    # Find longest mass-matching prefix.
+    i1, i2, cum_mass1, cum_mass2 = 0, 0, 0.0, 0.0
+    while i1 < len(peptide1) and i2 < len(peptide2):
+        aa_mass1, aa_mass2 = aa_dict[peptide1[i1]], aa_dict[peptide2[i2]]
         if (
-            abs(
-                mass_diff(
-                    pred_prefix_mass_list[cnt_pred],
-                    orig_prefix_mass_list[cnt_orig],
-                    mode_is_da=True,
-                )
-            )
-            < cum_aa_threshold
-            or abs(
-                mass_diff(
-                    pred_suffix_mass_list[cnt_pred],
-                    orig_suffix_mass_list[cnt_orig],
-                    mode_is_da=True,
-                )
-            )
-            < cum_aa_threshold
+            abs(mass_diff(cum_mass1 + aa_mass1, cum_mass2 + aa_mass2, True))
+            < cum_mass_threshold
         ):
-
-            if (
-                abs(mass_diff(pred_aa_mass, orig_aa_mass, mode_is_da=True))
-                < single_aa_threshold
-            ):
-                aa_match += [1]
-            else:
-                aa_match += [0]
-
-            cnt_pred += 1
-            cnt_orig += 1
-
-        elif (
-            mass_diff(
-                pred_prefix_mass_list[cnt_pred],
-                orig_prefix_mass_list[cnt_orig],
-                mode_is_da=True,
+            aa_matches[max(i1, i2)] = (
+                abs(mass_diff(aa_mass1, aa_mass2, True)) < ind_mass_threshold
             )
-            > 0
-        ):
-            cnt_orig += 1
-
+            i1, i2 = i1 + 1, i2 + 1
+            cum_mass1, cum_mass2 = cum_mass1 + aa_mass1, cum_mass2 + aa_mass2
+        elif cum_mass2 + aa_mass2 > cum_mass1 + aa_mass1:
+            i1, cum_mass1 = i1 + 1, cum_mass1 + aa_mass1
         else:
-            cnt_pred += 1
-            aa_match += [0]
-
-    if sum(aa_match) == len(orig_seq) and len(pred_seq) == len(orig_seq):
-        pep_match = 1
-
-    return aa_match, pep_match
+            i2, cum_mass2 = i2 + 1, cum_mass2 + aa_mass2
+    return aa_matches, aa_matches.all()
 
 
-def find_aa_match_single_pep(orig_seq, pred_seq, aa_dict):
+def aa_match_prefix_suffix(
+    peptide1: List[str],
+    peptide2: List[str],
+    aa_dict: Dict[str, float],
+    cum_mass_threshold: float = 0.5,
+    ind_mass_threshold: float = 0.1,
+) -> Tuple[np.ndarray, bool]:
     """
-    Find the matching amino acids of an original and predicted peptide sequence as described in DeepNovo.
+    Find the matching prefix and suffix amino acids between two peptide
+    sequences.
 
     Parameters
     ----------
-    orig_seq : list
-        List of amino acids in the original peptide
-    pred_seq : list
-        List of amino acids in the predicted peptide
-    aa_dict: dict
-        Dictionary of amino acid masses
+    peptide1 : List[str]
+        The first tokenized peptide sequence to be compared.
+    peptide2 : List[str]
+        The second tokenized peptide sequence to be compared.
+    aa_dict : Dict[str, float]
+        Mapping of amino acid tokens to their mass values.
+    cum_mass_threshold : float
+        Mass threshold in Dalton to accept cumulative mass-matching amino acid
+        sequences.
+    ind_mass_threshold : float
+        Mass threshold in Dalton to accept individual mass-matching amino acids.
 
     Returns
     -------
-    aa_match: list
-        Binary list of c
-    pep_match: int
-        1 if all amino acid in two sequences match
-
+    aa_matches : np.ndarray of length max(len(peptide1), len(peptide2))
+        Boolean flag indicating whether each paired-up amino acid matches across
+        both peptide sequences.
+    pep_match : bool
+        Boolean flag to indicate whether the two peptide sequences fully match.
     """
-
-    cum_aa_threshold = 0.5
-    single_aa_threshold = 0.1
-
-    pred_cum_aa_mass = 0
-    orig_cum_aa_mass = 0
-
-    aa_match = []
-    pep_match = 0
-
-    cnt_pred = 0
-    cnt_orig = 0
-
-    while cnt_pred < len(pred_seq) and cnt_orig < len(orig_seq):
-
-        pred_aa_mass = aa_dict[pred_seq[cnt_pred]]
-        orig_aa_mass = aa_dict[orig_seq[cnt_orig]]
-
+    # Find longest mass-matching prefix.
+    aa_matches, pep_match = aa_match_prefix(
+        peptide1, peptide2, aa_dict, cum_mass_threshold, ind_mass_threshold
+    )
+    # No need to evaluate the suffixes if the sequences already fully match.
+    if pep_match:
+        return aa_matches, pep_match
+    # Find longest mass-matching suffix.
+    i1, i2 = len(peptide1) - 1, len(peptide2) - 1
+    i_stop = np.argwhere(~aa_matches)[0]
+    cum_mass1, cum_mass2 = 0.0, 0.0
+    while i1 >= i_stop and i2 >= i_stop:
+        aa_mass1, aa_mass2 = aa_dict[peptide1[i1]], aa_dict[peptide2[i2]]
         if (
-            abs(mass_diff(pred_cum_aa_mass, orig_cum_aa_mass, mode_is_da=True))
-            < cum_aa_threshold
+            abs(mass_diff(cum_mass1 + aa_mass1, cum_mass2 + aa_mass2, True))
+            < cum_mass_threshold
         ):
-
-            if (
-                abs(mass_diff(pred_aa_mass, orig_aa_mass, mode_is_da=True))
-                < single_aa_threshold
-            ):
-                aa_match += [1]
-            else:
-                aa_match += [0]
-
-            cnt_pred += 1
-            cnt_orig += 1
-
-            pred_cum_aa_mass += pred_aa_mass
-            orig_cum_aa_mass += orig_aa_mass
-
-        elif (
-            mass_diff(pred_cum_aa_mass, orig_cum_aa_mass, mode_is_da=True) > 0
-        ):
-            cnt_orig += 1
-            orig_cum_aa_mass += orig_aa_mass
-
+            aa_matches[max(i1, i2)] = (
+                abs(mass_diff(aa_mass1, aa_mass2, True)) < ind_mass_threshold
+            )
+            i1, i2 = i1 - 1, i2 - 1
+            cum_mass1, cum_mass2 = cum_mass1 + aa_mass1, cum_mass2 + aa_mass2
+        elif cum_mass2 + aa_mass2 > cum_mass1 + aa_mass1:
+            i1, cum_mass1 = i1 - 1, cum_mass1 + aa_mass1
         else:
-            cnt_pred += 1
-            pred_cum_aa_mass += pred_aa_mass
-            aa_match += [0]
-
-    if sum(aa_match) == len(orig_seq) and len(pred_seq) == len(orig_seq):
-        pep_match = 1
-
-    return aa_match, pep_match
+            i2, cum_mass2 = i2 - 1, cum_mass2 + aa_mass2
+    return aa_matches, aa_matches.all()
 
 
-def match_aa(orig_seq, pred_seq, aa_dict, eval_direction="best"):
+def aa_match(
+    peptide1: List[str],
+    peptide2: List[str],
+    aa_dict: Dict[str, float],
+    cum_mass_threshold: float = 0.5,
+    ind_mass_threshold: float = 0.1,
+    mode: str = "best",
+) -> Tuple[np.ndarray, bool]:
     """
-    Find the matching amino acids of an original and predicted peptide
+    Find the matching amino acids between two peptide sequences.
 
     Parameters
     ----------
-    orig_seq : list
-        List of amino acids in the original peptide
-    pred_seq : list
-        List of amino acids in the predicted peptide
-    aa_dict: dict
-        Dictionary of amino acid masses
-    eval_direction: str, default: 'best'
-        Direction of evaluation while finding amino acid matches, e.g. 'forward', 'backward', 'best'
-
+    peptide1 : List[str]
+        The first tokenized peptide sequence to be compared.
+    peptide2 : List[str]
+        The second tokenized peptide sequence to be compared.
+    aa_dict : Dict[str, float]
+        Mapping of amino acid tokens to their mass values.
+    cum_mass_threshold : float
+        Mass threshold in Dalton to accept cumulative mass-matching amino acid
+        sequences.
+    ind_mass_threshold : float
+        Mass threshold in Dalton to accept individual mass-matching amino acids.
+    mode : {"best", "forward", "backward"}
+        The direction in which to find matching amino acids.
 
     Returns
     -------
-    aa_match: list
-        Binary list of c
-    pep_match: int
-        1 if all amino acid in two sequences match
-
+    aa_matches : np.ndarray of length max(len(peptide1), len(peptide2))
+        Boolean flag indicating whether each paired-up amino acid matches across
+        both peptide sequences.
+    pep_match : bool
+        Boolean flag to indicate whether the two peptide sequences fully match.
     """
-
-    if eval_direction == "best":
-        aa_match, pep_match = best_aa_match(orig_seq, pred_seq, aa_dict)
-        n_mismatch_aa = len(pred_seq) - len(aa_match)
-        aa_match += n_mismatch_aa * [0]
-
-    elif eval_direction == "forward":
-        aa_match, pep_match = find_aa_match_single_pep(
-            orig_seq, pred_seq, aa_dict
+    if mode == "best":
+        return aa_match_prefix_suffix(
+            peptide1, peptide2, aa_dict, cum_mass_threshold, ind_mass_threshold
         )
-
-        n_mismatch_aa = len(pred_seq) - len(aa_match)
-        aa_match += n_mismatch_aa * [0]
-
-    elif eval_direction == "backward":
-        reverse_aa_match, pep_match = find_aa_match_single_pep(
-            list(reversed(orig_seq)), list(reversed(pred_seq)), aa_dict
+    elif mode == "forward":
+        return aa_match_prefix(
+            peptide1, peptide2, aa_dict, cum_mass_threshold, ind_mass_threshold
         )
+    elif mode == "backward":
+        aa_matches, pep_match = aa_match_prefix(
+            list(reversed(peptide1)),
+            list(reversed(peptide2)),
+            aa_dict,
+            cum_mass_threshold,
+            ind_mass_threshold,
+        )
+        return aa_matches[::-1], pep_match
+    else:
+        raise ValueError("Unknown evaluation mode")
 
-        aa_match = list(reversed(reverse_aa_match))
-        n_mismatch_aa = len(pred_seq) - len(aa_match)
-        aa_match = n_mismatch_aa * [0] + aa_match
 
-    return aa_match, pep_match
-
-
-def batch_aa_match(
-    pred_pep_seqs, true_pep_seqs, aa_dict, eval_direction="best"
-):
+def aa_match_batch(
+    peptides1: List[str],
+    peptides2: List[str],
+    aa_dict: Dict[str, float],
+    cum_mass_threshold: float = 0.5,
+    ind_mass_threshold: float = 0.1,
+    mode: str = "best",
+) -> Tuple[List[Tuple[np.ndarray, bool]], int, int]:
     """
-    Find the matching amino acids of an original and predicted peptide
+    Find the matching amino acids between multiple pairs of peptide sequences.
 
     Parameters
     ----------
-    pred_pep_seqs : list
-        List of predicted peptides, i.e. list of amino acid sequences
-    true_pep_seqs : list
-        List of ground truth peptide labels
-    aa_dict: dict
-        Dictionary of amino acid masses
-    eval_direction: str, default: 'best'
-        Direction of evaluation while finding amino acid matches, e.g. 'forward', 'backward', 'best'
-
+    peptides1 : List[str]
+        The first list of (untokenized) peptide sequences to be compared.
+    peptides2 : List[str]
+        The second list of (untokenized) peptide sequences to be compared.
+    aa_dict : Dict[str, float]
+        Mapping of amino acid tokens to their mass values.
+    cum_mass_threshold : float
+        Mass threshold in Dalton to accept cumulative mass-matching amino acid
+        sequences.
+    ind_mass_threshold : float
+        Mass threshold in Dalton to accept individual mass-matching amino acids.
+    mode : {"best", "forward", "backward"}
+        The direction in which to find matching amino acids.
 
     Returns
     -------
-    all_aa_match: list
-        Binary list of lists corresponding to amino acid matches for all predicted peptides
-    orig_total_num_aa: int
-        Total number of amino acids in the ground truth peptide labels
-    pred_total_num_aa: int
-        Total number of amino acids in the predicted peptide labels
-
+    aa_matches_batch : List[Tuple[np.ndarray, bool]]
+        For each pair of peptide sequences: (i) boolean flags indicating whether
+        each paired-up amino acid matches across both peptide sequences, (ii)
+        boolean flag to indicate whether the two peptide sequences fully match.
+    n_aa1: int
+        Total number of amino acids in the first list of peptide sequences.
+    n_aa2: int
+        Total number of amino acids in the second list of peptide sequences.
     """
-
-    orig_total_num_aa = 0
-    pred_total_num_aa = 0
-    all_aa_match = []
-
-    for pred_ind in range(len(pred_pep_seqs)):
-
-        pred = re.split(r"(?<=.)(?=[A-Z])", pred_pep_seqs[pred_ind])
-        orig = re.split(r"(?<=.)(?=[A-Z])", true_pep_seqs[pred_ind])
-        orig_total_num_aa += len(orig)
-        pred_total_num_aa += len(pred)
-
-        aa_match, pep_match = match_aa(
-            orig, pred, aa_dict, eval_direction=eval_direction
+    aa_matches_batch, n_aa1, n_aa2 = [], 0, 0
+    for peptide1, peptide2 in zip(peptides1, peptides2):
+        tokens1 = re.split(r"(?<=.)(?=[A-Z])", peptide1)
+        tokens2 = re.split(r"(?<=.)(?=[A-Z])", peptide2)
+        n_aa1, n_aa2 = n_aa1 + len(tokens1), n_aa2 + len(tokens2)
+        aa_matches_batch.append(
+            aa_match(
+                tokens1,
+                tokens2,
+                aa_dict,
+                cum_mass_threshold,
+                ind_mass_threshold,
+                mode,
+            )
         )
-        all_aa_match += [(aa_match, pep_match)]
-
-    return all_aa_match, orig_total_num_aa, pred_total_num_aa
+    return aa_matches_batch, n_aa1, n_aa2
 
 
-def calc_eval_metrics(
-    aa_match_binary_list, orig_total_num_aa, pred_total_num_aa
-):
+def aa_match_metrics(
+    aa_matches_batch: List[Tuple[np.ndarray, bool]],
+    n_aa_true: int,
+    n_aa_pred: int,
+) -> Tuple[float, float, float]:
     """
-    Calculate evaluation metrics using amino acid matches
+    Calculate amino acid and peptide-level evaluation metrics.
 
     Parameters
     ----------
-    aa_match_binary_list : list of lists
-        List of amino acid matches in each predicted peptide
-    orig_total_num_aa : int
-        Number of amino acids in the original peptide sequences
-    pred_total_num_aa : int
-        Number of amino acids in the predicted peptide sequences
+    aa_matches_batch : List[Tuple[np.ndarray, bool]]
+        For each pair of peptide sequences: (i) boolean flags indicating whether
+        each paired-up amino acid matches across both peptide sequences, (ii)
+        boolean flag to indicate whether the two peptide sequences fully match.
+    n_aa_true: int
+        Total number of amino acids in the true peptide sequences.
+    n_aa_pred: int
+        Total number of amino acids in the predicted peptide sequences.
+
     Returns
     -------
     aa_precision: float
-        Number of correct aa predictions divided by all predicted aa
+        The number of correct AA predictions divided by the number of predicted
+        AAs.
     aa_recall: float
-        Number of correct aa predictions divided by all original aa
+        The number of correct AA predictions divided by the number of true AAs.
     pep_recall: float
-        Number of correct peptide predictions divided by all original peptide
+        The number of correct peptide predictions divided by the number of
+        peptides.
     """
-
-    correct_aa_count = sum(
-        [sum(pred_tuple[0]) for pred_tuple in aa_match_binary_list]
+    n_aa_correct = sum(
+        [aa_matches[0].sum() for aa_matches in aa_matches_batch]
     )
-    aa_recall = correct_aa_count / (orig_total_num_aa + 1e-8)
-    aa_precision = correct_aa_count / (pred_total_num_aa + 1e-8)
-    pep_recall = sum(
-        [pred_tuple[1] for pred_tuple in aa_match_binary_list]
-    ) / (len(aa_match_binary_list) + 1e-8)
-
+    aa_precision = n_aa_correct / (n_aa_pred + 1e-8)
+    aa_recall = n_aa_correct / (n_aa_true + 1e-8)
+    pep_recall = sum([aa_matches[1] for aa_matches in aa_matches_batch]) / (
+        len(aa_matches_batch) + 1e-8
+    )
     return aa_precision, aa_recall, pep_recall
 
 
-def aa_precision_recall_with_threshold(
-    correct_aa_confidences, all_aa_confidences, num_original_aa, threshold
-):
+def aa_precision_recall(
+    aa_scores_correct: List[float],
+    aa_scores_all: List[float],
+    n_aa_total: int,
+    threshold: float,
+) -> Tuple[float, float]:
     """
-    Calculate precision and recall for the given amino acid confidence score threshold
+    Calculate amino acid level precision and recall at a given score threshold.
 
     Parameters
     ----------
-    correct_aa_confidences : list
-        List of confidence scores for correct amino acids predictions
-    all_aa_confidences : int
-        List of confidence scores for all amino acids prediction
-    num_original_aa : int
-        Number of amino acids in the predicted peptide sequences
+    aa_scores_correct : List[float]
+        Amino acids scores for the correct amino acids predictions.
+    aa_scores_all : List[float]
+        Amino acid scores for all amino acids predictions.
+    n_aa_total : int
+        The total number of amino acids in the predicted peptide sequences.
     threshold : float
-        Amino acid confidence score threshold
+        The amino acid score threshold.
 
     Returns
     -------
     aa_precision: float
-        Number of correct aa predictions divided by all predicted aa
+        The number of correct amino acid predictions divided by the number of
+        predicted amino acids.
     aa_recall: float
-        Number of correct aa predictions divided by all original aa
+        The number of correct amino acid predictions divided by the total number
+        of amino acids.
     """
-
-    correct_aa = sum([conf >= threshold for conf in correct_aa_confidences])
-    predicted_aa = sum([conf >= threshold for conf in all_aa_confidences])
-
-    aa_precision = correct_aa / predicted_aa
-    aa_recall = correct_aa / num_original_aa
-
-    return aa_precision, aa_recall
+    n_aa_correct = sum([score > threshold for score in aa_scores_correct])
+    n_aa_predicted = sum([score > threshold for score in aa_scores_all])
+    return n_aa_correct / n_aa_predicted, n_aa_correct / n_aa_total

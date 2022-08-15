@@ -1,136 +1,148 @@
-"""The command line entry point for casanovo"""
-from email.policy import default
-import click, logging
-import yaml
+"""The command line entry point for Casanovo."""
+import datetime
+import logging
 import os
-from casanovo.denovo import train, evaluate, denovo
+import sys
 
-# Required options
+import click
+import pytorch_lightning as pl
+import yaml
+
+from . import __version__
+from casanovo.denovo import model_runner
+
+
+logger = logging.getLogger("casanovo")
+
+
 @click.command()
 @click.option(
     "--mode",
     required=True,
-    default="eval",
-    help='Choose on a high level what the program will do. "train" will train a model from scratch or continue training a pre-trained model. "eval" will evaluate de novo sequencing performance of a pre-trained model (peptide annotations are needed for spectra). "denovo" will run de novo sequencing without evaluation (specificy directory path for output csv file with de novo sequences).',
-    type=click.Choice(["train", "eval", "denovo"]),
+    default="denovo",
+    help="\b\nThe mode in which to run Casanovo:\n"
+    '- "denovo" will predict peptide sequences for\nunknown MS/MS spectra.\n'
+    '- "train" will train a model (from scratch or by\ncontinuing training a '
+    "previously trained model).\n"
+    '- "eval" will evaluate the performance of a\ntrained model using '
+    "previously acquired spectrum\nannotations.",
+    type=click.Choice(["denovo", "train", "eval"]),
 )
 @click.option(
-    "--model_path",
+    "--model",
+    help="The file name of the model weights (.ckpt file).",
+    type=click.Path(exists=True, dir_okay=False),
+)
+@click.option(
+    "--peak_dir",
     required=True,
-    help="Specify path to pre-trained model weights (.ckpt file) for testing or to continue to train.",
-    type=click.Path(exists=True, dir_okay=False, file_okay=True),
-)
-# Base options
-@click.option(
-    "--train_data_path",
-    help="Specify path to .mgf files to be used as training data",
-    type=click.Path(exists=True, dir_okay=True, file_okay=False),
+    help="The directory with peak files for predicting peptide sequences or "
+    "training Casanovo.",
+    type=click.Path(exists=True, file_okay=False),
 )
 @click.option(
-    "--val_data_path",
-    help="Specify path to .mgf files to be used as validation data",
-    type=click.Path(exists=True, dir_okay=True, file_okay=False),
+    "--peak_dir_val",
+    help="The directory with peak files to be used as validation data during "
+    "training.",
+    type=click.Path(exists=True, file_okay=False),
 )
 @click.option(
-    "--test_data_path",
-    help="Specify path to .mgf files to be used as test data",
-    type=click.Path(exists=True, dir_okay=True, file_okay=False),
+    "--config",
+    help="The file name of the configuration file with custom options. If not "
+    "specified, a default configuration will be used.",
+    type=click.Path(exists=True, dir_okay=False),
 )
 @click.option(
-    "--config_path",
-    help="Specify path to custom config file which includes data and model related options. If not included, the default config.yaml will be used.",
-    type=click.Path(exists=True, dir_okay=False, file_okay=True),
-)
-@click.option(
-    "--output_path",
-    help="Specify path to output de novo sequences. Output format is .csv",
-    type=click.Path(exists=True, dir_okay=True, file_okay=False),
-)
-# De Novo sequencing options
-@click.option(
-    "--preprocess_spec",
-    default=None,
-    help="True if spectra data should be preprocessed, False if using preprocessed data.",
-    type=click.BOOL,
+    "--output",
+    help="The base output file name to store logging (extension: .log) and "
+    "(optionally) prediction results (extension: .csv).",
+    type=click.Path(dir_okay=False),
 )
 @click.option(
     "--num_workers",
     default=None,
-    help="Number of workers to use for spectra reading.",
+    help="The number of worker threads to use.",
     type=click.INT,
-)
-@click.option(
-    "--gpus",
-    default=(),
-    help="Specify gpus for usage. For multiple gpus, use format: --gpus=0 --gpus=1 --gpus=2... etc. etc.",
-    type=click.INT,
-    multiple=True,
 )
 def main(
-    # Req + base vars
-    mode,
-    model_path,
-    train_data_path,
-    val_data_path,
-    test_data_path,
-    config_path,
-    output_path,
-    # De Novo vars
-    preprocess_spec,
-    num_workers,
-    gpus,
+    mode: str,
+    model: str,
+    peak_dir: str,
+    peak_dir_val: str,
+    config: str,
+    output: str,
+    num_workers: int,
 ):
     """
-    The command line function for casanovo. De Novo Mass Spectrometry Peptide Sequencing with a Transformer Model.
-
     \b
-    Training option requirements:
-    mode, model_path, train_data_path, val_data_path, config_path
+    Casanovo: De novo mass spectrometry peptide sequencing with a transformer model.
+    ================================================================================
 
-    \b
-    Evaluation option requirements:
-    mode, model_path, test_data_path, config_path
+    Yilmaz, M., Fondrie, W. E., Bittremieux, W., Oh, S. & Noble, W. S. De novo
+    mass spectrometry peptide sequencing with a transformer model. Proceedings
+    of the 39th International Conference on Machine Learning - ICML '22 (2022)
+    doi:10.1101/2022.02.07.479481.
 
-    \b
-    De Novo option requirements:
-    mode, model_path, test_data_path, config_path, output_path
+    Official code website: https://github.com/Noble-Lab/casanovo
     """
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(levelname)s: %(message)s",
-    )
-    if config_path == None:
-        abs_path = os.path.join(
-            os.path.dirname(os.path.abspath(__file__)), "config.yaml"
+    if output is None:
+        output = os.path.join(
+            os.getcwd(),
+            f"casanovo_{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}",
         )
-        with open(abs_path) as f:
-            config = yaml.safe_load(f)
-    else:
-        with open(config_path) as f:
-            config = yaml.safe_load(f)
 
-    if preprocess_spec != None:
-        config["preprocess_spec"] = preprocess_spec
-    if num_workers != None:
+    # Configure logging.
+    logging.captureWarnings(True)
+    root = logging.getLogger()
+    root.setLevel(logging.DEBUG)
+    log_formatter = logging.Formatter(
+        "{asctime} {levelname} [{name}/{processName}] {module}.{funcName} : "
+        "{message}",
+        style="{",
+    )
+    console_handler = logging.StreamHandler(sys.stderr)
+    console_handler.setLevel(logging.DEBUG)
+    console_handler.setFormatter(log_formatter)
+    root.addHandler(console_handler)
+    file_handler = logging.FileHandler(f"{os.path.splitext(output)[0]}.log")
+    file_handler.setFormatter(log_formatter)
+    root.addHandler(file_handler)
+    # Disable dependency non-critical log messages.
+    logging.getLogger("depthcharge").setLevel(logging.INFO)
+    logging.getLogger("h5py").setLevel(logging.WARNING)
+    logging.getLogger("numba").setLevel(logging.WARNING)
+    logging.getLogger("pytorch_lightning").setLevel(logging.WARNING)
+    logging.getLogger("torch").setLevel(logging.WARNING)
+
+    # Read parameters from the config file.
+    if config is None:
+        config = os.path.join(
+            os.path.dirname(os.path.realpath(__file__)), "config.yaml"
+        )
+    with open(config) as f_in:
+        config = yaml.safe_load(f_in)
+
+    # Overwrite any parameters that were provided as command-line arguments.
+    if num_workers is not None:
         config["num_workers"] = num_workers
-    if gpus != ():
-        config["gpus"] = gpus
-    if mode == "train":
 
-        logging.info("Training Casanovo...")
-        train(train_data_path, val_data_path, model_path, config)
+    pl.utilities.seed.seed_everything(seed=config["random_seed"], workers=True)
 
+    # Log the active configuration.
+    logger.info("Casanovo version %s", str(__version__))
+    for key, value in config.items():
+        logger.debug("%s = %s", str(key), str(value))
+
+    # Run Casanovo in the specified mode.
+    if mode == "denovo":
+        logger.info("Predict peptide sequences with Casanovo.")
+        model_runner.predict(peak_dir, model, output, config)
     elif mode == "eval":
-
-        logging.info("Evaluating Casanovo...")
-        evaluate(test_data_path, model_path, config)
-
-    elif mode == "denovo":
-
-        logging.info("De novo sequencing with Casanovo...")
-        denovo(test_data_path, model_path, config, output_path)
-
-    pass
+        logger.info("Evaluate a trained Casanovo model.")
+        model_runner.evaluate(peak_dir, model, config)
+    elif mode == "train":
+        logger.info("Train the Casanovo model.")
+        model_runner.train(peak_dir, peak_dir_val, model, config)
 
 
 if __name__ == "__main__":
