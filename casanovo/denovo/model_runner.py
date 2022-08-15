@@ -208,22 +208,16 @@ def train(
         logger.error("Multiple validation HDF5 spectrum indexes specified")
         raise ValueError("Multiple validation HDF5 spectrum indexes specified")
     tmp_dir = tempfile.TemporaryDirectory()
-    train_idx_filename = (
-        train_filenames[0]
-        if train_is_index
-        else os.path.join(tmp_dir.name, f"{uuid.uuid4().hex}.hdf5")
-    )
-    train_index = AnnotatedSpectrumIndex(
-        train_idx_filename, None if train_is_index else train_filenames
-    )
-    val_idx_filename = (
-        val_filenames[0]
-        if val_is_index
-        else os.path.join(tmp_dir.name, f"{uuid.uuid4().hex}.hdf5")
-    )
-    val_index = AnnotatedSpectrumIndex(
-        val_idx_filename, None if val_is_index else val_filenames
-    )
+    if train_is_index:
+        train_idx_fn, train_filenames = train_filenames[0], None
+    else:
+        train_idx_fn = os.path.join(tmp_dir.name, f"{uuid.uuid4().hex}.hdf5")
+    train_index = AnnotatedSpectrumIndex(train_idx_fn, train_filenames)
+    if val_is_index:
+        val_idx_fn, val_filenames = val_filenames[0], None
+    else:
+        val_idx_fn = os.path.join(tmp_dir.name, f"{uuid.uuid4().hex}.hdf5")
+    val_index = AnnotatedSpectrumIndex(val_idx_fn, val_filenames)
     # Initialize the data loaders.
     dataloader_params = dict(
         n_peaks=config["n_peaks"],
