@@ -106,9 +106,10 @@ def _execute_existing(
         out_filename=out_filename,
     )
     # Read the MS/MS spectra for which to predict peptide sequences.
-    peak_ext = (
-        (".mgf", "hdf5") if annotated else (".mgf", ".mzml", ".mzxml", "hdf5")
-    )
+    if annotated:
+        peak_ext = (".mgf", ".h5", "hdf5")
+    else:
+        peak_ext = (".mgf", ".mzml", ".mzxml", ".h5", "hdf5")
     if len(peak_filenames := _get_peak_filenames(peak_path, peak_ext)) == 0:
         logger.error("Could not find peak files from %s", peak_path)
         raise FileNotFoundError("Could not find peak files")
@@ -182,14 +183,8 @@ def train(
         The configuration options.
     """
     # Read the MS/MS spectra to use for training and validation.
-    if (
-        len(
-            train_filenames := _get_peak_filenames(
-                peak_path, (".mgf", ".hdf5")
-            )
-        )
-        == 0
-    ):
+    ext = (".mgf", ".h5", ".hdf5")
+    if len(train_filenames := _get_peak_filenames(peak_path, ext)) == 0:
         logger.error("Could not find training peak files from %s", peak_path)
         raise FileNotFoundError("Could not find training peak files")
     train_is_index = any(
@@ -200,12 +195,7 @@ def train(
         raise ValueError("Multiple training HDF5 spectrum indexes specified")
     if (
         peak_path_val is None
-        or len(
-            val_filenames := _get_peak_filenames(
-                peak_path_val, (".mgf", ".hdf5")
-            )
-        )
-        == 0
+        or len(val_filenames := _get_peak_filenames(peak_path_val, ext)) == 0
     ):
         logger.error(
             "Could not find validation peak files from %s", peak_path_val
