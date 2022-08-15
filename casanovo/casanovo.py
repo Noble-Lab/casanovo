@@ -226,7 +226,7 @@ def _write_mztab_header(
             "psm_search_engine_score[1]",
             "[MS, MS:1001143, search engine specific score for PSMs, ]",
         ),
-        ("software[1]", f"[MS, MS:1001456, Casanovo, {__version__}]"),
+        ("software[1]", f"[MS, MS:1003281, Casanovo, {__version__}]"),
     ]
     if len(fixed_mods) == 0:
         metadata.append(

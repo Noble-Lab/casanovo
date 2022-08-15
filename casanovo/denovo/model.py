@@ -477,7 +477,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
                                 "null",
                                 "null",
                                 "null",
-                                f"[MS, MS:1001456, Casanovo, {__version__}]",
+                                f"[MS, MS:1003281, Casanovo, {__version__}]",
                                 peptide_score,
                                 # FIXME: Modifications should be specified as
                                 #  controlled vocabulary terms.
