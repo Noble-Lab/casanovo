@@ -1,12 +1,12 @@
 """Training and testing functionality for the de novo peptide sequencing
 model."""
+import glob
 import logging
 import os
 import tempfile
 import uuid
 from typing import Any, Dict, Iterable, List, Optional
 
-import click
 import pytorch_lightning as pl
 from depthcharge.data import AnnotatedSpectrumIndex, SpectrumIndex
 
@@ -271,10 +271,9 @@ def train(
         callbacks = [
             pl.callbacks.ModelCheckpoint(
                 dirpath=config["model_save_folder_path"],
-                save_weights_only=config["save_weights_only"],
-                filename="{epoch}",
-                every_n_epochs=config["every_n_epochs"],
                 save_top_k=-1,
+                save_weights_only=config["save_weights_only"],
+                every_n_train_steps=config["every_n_train_steps"],
             )
         ]
     else:
@@ -318,8 +317,10 @@ def _get_peak_filenames(
     List[str]
         The peak file names matching the path pattern.
     """
+    path = os.path.expanduser(path)
+    path = os.path.expandvars(path)
     return [
         fn
-        for fn in click.utils._expand_args([path])
+        for fn in glob.glob(path, recursive=True)
         if os.path.splitext(fn.lower())[1] in supported_ext
     ]
