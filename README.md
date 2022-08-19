@@ -132,6 +132,12 @@ Run the following command in your command prompt to see all possible command-lin
 casanovo --help
 ```
 
+**I get a "CUDA out of memory" error when trying to run Casanovo. Help!**
+
+This means that there was not enough (free) memory available on your GPU to run Casanovo, which is especially likely to happen when you are using a smaller, consumer-grade GPU.
+We recommend trying to decrease the `train_batch_size` or `predict_batch_size` options in the [config file](https://github.com/Noble-Lab/casanovo/blob/main/casanovo/config.yaml) (depending on whether the error occurred during `train` or `denovo` mode) to reduce the number of spectra that are processed simultaneously.
+Additionally, we recommend shutting down any other processes that may be running on the GPU, so that Casanovo can exclusively use the GPU.
+
 ## Release notes
 
 - Release 2.1.1 (2022-07-27): Update tutorial

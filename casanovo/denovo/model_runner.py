@@ -239,10 +239,9 @@ def train(
         callbacks = [
             pl.callbacks.ModelCheckpoint(
                 dirpath=config["model_save_folder_path"],
-                save_weights_only=config["save_weights_only"],
-                filename="{epoch}",
-                every_n_epochs=config["every_n_epochs"],
                 save_top_k=-1,
+                save_weights_only=config["save_weights_only"],
+                every_n_train_steps=config["every_n_train_steps"],
             )
         ]
     else:
