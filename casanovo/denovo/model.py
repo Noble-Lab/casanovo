@@ -417,9 +417,12 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
                         peptide = peptide[1:]
                         # Compare the experimental vs calculated precursor m/z.
                         _, precursor_charge, precursor_mz = precursor
-                        calc_mz = self.peptide_mass_calculator.mass(
-                            peptide, precursor_charge
-                        )
+                        try:
+                            calc_mz = self.peptide_mass_calculator.mass(
+                                peptide, precursor_charge
+                            )
+                        except KeyError:
+                            calc_mz = np.nan
                         delta_mass_ppm = (
                             abs(calc_mz - precursor_mz)
                             / precursor_mz
@@ -442,7 +445,10 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
                             )
                             # Subtract one if the precursor m/z tolerance is
                             # violated.
-                            if delta_mass_ppm > self.precursor_mass_tol:
+                            if (
+                                np.isnan(delta_mass_ppm)
+                                or delta_mass_ppm > self.precursor_mass_tol
+                            ):
                                 peptide_score -= 1
                             aa_scores = ",".join(
                                 reversed(
