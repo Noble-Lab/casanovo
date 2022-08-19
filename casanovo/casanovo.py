@@ -274,7 +274,7 @@ def _write_mztab_header(
     with open(filename_out, "w") as f_out:
         writer = csv.writer(f_out, delimiter="\t", lineterminator=os.linesep())
         for row in metadata:
-            writer.writerow(row)
+            writer.writerow(["MTD", *row])
 
 
 if __name__ == "__main__":
