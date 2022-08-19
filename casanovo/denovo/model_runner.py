@@ -1,12 +1,12 @@
 """Training and testing functionality for the de novo peptide sequencing
 model."""
+import glob
 import logging
 import os
 import tempfile
 import uuid
 from typing import Any, Dict, List, Optional
 
-import click
 import pytorch_lightning as pl
 from depthcharge.data import AnnotatedSpectrumIndex, SpectrumIndex
 
@@ -282,8 +282,10 @@ def _get_peak_filenames(path: str) -> List[str]:
     List[str]
         The peak file names matching the path pattern.
     """
+    path = os.path.expanduser(path)
+    path = os.path.expandvars(path)
     return [
         fn
-        for fn in click.utils._expand_args([path])
+        for fn in glob.glob(path, recursive=True)
         if os.path.splitext(fn.lower())[1] == ".mgf"
     ]
