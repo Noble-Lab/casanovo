@@ -125,55 +125,45 @@ def main(
     if num_workers is not None:
         config["num_workers"] = num_workers
     # Ensure that the config values have the correct type.
-    for t, keys in (
-        (
-            int,
-            (
-                "random_seed",
-                "n_peaks",
-                "num_workers",
-                "dim_model",
-                "n_head",
-                "dim_feedforward",
-                "n_layers",
-                "dim_intensity",
-                "max_length",
-                "max_charge",
-                "n_log",
-                "warmup_iters",
-                "max_iters",
-                "train_batch_size",
-                "predict_batch_size",
-                "max_epochs",
-                "num_sanity_val_steps",
-                "every_n_epochs",
-            ),
-        ),
-        (
-            float,
-            (
-                "min_mz",
-                "max_mz",
-                "min_intensity",
-                "remove_precursor_tol",
-                "dropout",
-                "learning_rate",
-                "weight_decay",
-            ),
-        ),
-        (bool, ("train_from_scratch", "save_model", "save_weights_only")),
-    ):
-        for key in keys:
-            try:
-                if config[key] is not None:
-                    config[key] = t(config[key])
-            except (TypeError, ValueError) as e:
-                logger.error(
-                    "Incorrect type for configuration value %s: %s", key, e
-                )
-                raise TypeError(
-                    f"Incorrect type for configuration value {key}: {e}"
-                )
+    config_types = dict(
+        random_seed=int,
+        n_peaks=int,
+        min_mz=float,
+        max_mz=float,
+        min_intensity=float,
+        remove_precursor_tol=float,
+        num_workers=int,
+        dim_model=int,
+        n_head=int,
+        dim_feedforward=int,
+        n_layers=int,
+        dropout=float,
+        dim_intensity=int,
+        max_length=int,
+        max_charge=int,
+        n_log=int,
+        warmup_iters=int,
+        max_iters=int,
+        learning_rate=float,
+        weight_decay=float,
+        train_batch_size=int,
+        predict_batch_size=int,
+        max_epochs=int,
+        num_sanity_val_steps=int,
+        strategy=str,
+        train_from_scratch=bool,
+        save_model=bool,
+        model_save_folder_path=str,
+        save_weights_only=bool,
+        every_n_epochs=int,
+    )
+    for k, t in config_types.items():
+        try:
+            if config[k] is not None:
+                config[k] = t(config[k])
+        except (TypeError, ValueError) as e:
+            logger.error("Incorrect type for configuration value %s: %s", k, e)
+            raise TypeError(f"Incorrect type for configuration value {k}: {e}")
     config["residues"] = {
         str(aa): float(mass) for aa, mass in config["residues"].items()
     }
