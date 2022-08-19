@@ -5,7 +5,7 @@ import logging
 import os
 import tempfile
 import uuid
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Iterable, List, Optional
 
 import pytorch_lightning as pl
 from depthcharge.data import AnnotatedSpectrumIndex, SpectrumIndex
@@ -106,11 +106,24 @@ def _execute_existing(
         out_filename=out_filename,
     )
     # Read the MS/MS spectra for which to predict peptide sequences.
-    if len(peak_filenames := _get_peak_filenames(peak_path)) == 0:
+    if annotated:
+        peak_ext = (".mgf", ".h5", "hdf5")
+    else:
+        peak_ext = (".mgf", ".mzml", ".mzxml", ".h5", "hdf5")
+    if len(peak_filenames := _get_peak_filenames(peak_path, peak_ext)) == 0:
         logger.error("Could not find peak files from %s", peak_path)
         raise FileNotFoundError("Could not find peak files")
+    peak_is_index = any(
+        [os.path.splitext(fn)[1] in (".h5", ".hdf5") for fn in peak_filenames]
+    )
+    if peak_is_index and len(peak_filenames) > 1:
+        logger.error("Multiple HDF5 spectrum indexes specified")
+        raise ValueError("Multiple HDF5 spectrum indexes specified")
     tmp_dir = tempfile.TemporaryDirectory()
-    idx_filename = os.path.join(tmp_dir.name, f"{uuid.uuid4().hex}.hdf5")
+    if peak_is_index:
+        idx_filename, peak_filenames = peak_filenames[0], None
+    else:
+        idx_filename = os.path.join(tmp_dir.name, f"{uuid.uuid4().hex}.hdf5")
     if annotated:
         index = AnnotatedSpectrumIndex(idx_filename, peak_filenames)
     else:
@@ -170,22 +183,41 @@ def train(
         The configuration options.
     """
     # Read the MS/MS spectra to use for training and validation.
-    if len(train_filenames := _get_peak_filenames(peak_path)) == 0:
+    ext = (".mgf", ".h5", ".hdf5")
+    if len(train_filenames := _get_peak_filenames(peak_path, ext)) == 0:
         logger.error("Could not find training peak files from %s", peak_path)
         raise FileNotFoundError("Could not find training peak files")
+    train_is_index = any(
+        [os.path.splitext(fn)[1] in (".h5", ".hdf5") for fn in train_filenames]
+    )
+    if train_is_index and len(train_filenames) > 1:
+        logger.error("Multiple training HDF5 spectrum indexes specified")
+        raise ValueError("Multiple training HDF5 spectrum indexes specified")
     if (
         peak_path_val is None
-        or len(val_filenames := _get_peak_filenames(peak_path_val)) == 0
+        or len(val_filenames := _get_peak_filenames(peak_path_val, ext)) == 0
     ):
         logger.error(
             "Could not find validation peak files from %s", peak_path_val
         )
         raise FileNotFoundError("Could not find validation peak files")
+    val_is_index = any(
+        [os.path.splitext(fn)[1] in (".h5", ".hdf5") for fn in val_filenames]
+    )
+    if val_is_index and len(val_filenames) > 1:
+        logger.error("Multiple validation HDF5 spectrum indexes specified")
+        raise ValueError("Multiple validation HDF5 spectrum indexes specified")
     tmp_dir = tempfile.TemporaryDirectory()
-    train_idx_filename = os.path.join(tmp_dir.name, f"{uuid.uuid4().hex}.hdf5")
-    val_idx_filename = os.path.join(tmp_dir.name, f"{uuid.uuid4().hex}.hdf5")
-    train_index = AnnotatedSpectrumIndex(train_idx_filename, train_filenames)
-    val_index = AnnotatedSpectrumIndex(val_idx_filename, val_filenames)
+    if train_is_index:
+        train_idx_fn, train_filenames = train_filenames[0], None
+    else:
+        train_idx_fn = os.path.join(tmp_dir.name, f"{uuid.uuid4().hex}.hdf5")
+    train_index = AnnotatedSpectrumIndex(train_idx_fn, train_filenames)
+    if val_is_index:
+        val_idx_fn, val_filenames = val_filenames[0], None
+    else:
+        val_idx_fn = os.path.join(tmp_dir.name, f"{uuid.uuid4().hex}.hdf5")
+    val_index = AnnotatedSpectrumIndex(val_idx_fn, val_filenames)
     # Initialize the data loaders.
     dataloader_params = dict(
         n_peaks=config["n_peaks"],
@@ -264,7 +296,9 @@ def train(
     tmp_dir.cleanup()
 
 
-def _get_peak_filenames(path: str) -> List[str]:
+def _get_peak_filenames(
+    path: str, supported_ext: Iterable[str] = (".mgf",)
+) -> List[str]:
     """
     Get all matching peak file names from the path pattern.
 
@@ -275,6 +309,8 @@ def _get_peak_filenames(path: str) -> List[str]:
     ----------
     path : str
         The path pattern.
+    supported_ext : Iterable[str]
+        Extensions of supported peak file formats. Default: MGF.
 
     Returns
     -------
@@ -286,5 +322,5 @@ def _get_peak_filenames(path: str) -> List[str]:
     return [
         fn
         for fn in glob.glob(path, recursive=True)
-        if os.path.splitext(fn.lower())[1] == ".mgf"
+        if os.path.splitext(fn.lower())[1] in supported_ext
     ]

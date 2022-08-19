@@ -68,6 +68,7 @@ See [`casanovo/config.yaml`](https://github.com/Noble-Lab/casanovo/blob/main/cas
 casanovo --mode=denovo --model=path/to/pretrained.ckpt --peak_path=path/to/predict/spectra.mgf --config=path/to/config.yaml --output=path/to/output
 ```
 
+Casanovo can predict peptide sequences for MS/MS data in mzML, mzXML, and MGF files.
 This will write peptide predictions for the given MS/MS spectra to the specified output file in a tab-separated format (extension: .csv).
 
 - To evaluate _de novo_ sequencing performance based on known spectrum annotations:
@@ -76,13 +77,15 @@ This will write peptide predictions for the given MS/MS spectra to the specified
 casanovo --mode=eval --model=path/to/pretrained.ckpt --peak_path=path/to/test/annotated_spectra.mgf --config=path/to/config.yaml
 ```
 
-Note that to evaluate the peptide predictions, ground truth peptide labels in an annotated MGF file need to be present.
+To evaluate the peptide predictions, ground truth peptide labels need to be provided as an annotated MGF file.
 
 - To train a model from scratch:
 
 ```
 casanovo --mode=train --peak_path=path/to/train/annotated_spectra.mgf --peak_path_val=path/to/validation/annotated_spectra.mgf --config=path/to/config.yaml
 ```
+
+Training and validation MS/MS data need to be provided as annotated MGF files.
 
 If a training is continued for a previously trained model, specify the starting model weights using `--model`.
 
