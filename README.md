@@ -18,7 +18,7 @@ Data and pre-trained model weights are available [on Zenodo](https://zenodo.org/
 
 We recommend to run Casanovo in a dedicated **Anaconda** environment.
 This helps keep your environment for Casanovo and its dependencies separate from your other Python environments.
-**This is especially helpful because Casanovo works within a specific range of Python versions (3.7 > Python version > 3.10).**
+**This is especially helpful because Casanovo works within a specific range of Python versions (3.8 > Python version > 3.10).**
 
 - Check out the [Windows](https://docs.anaconda.com/anaconda/install/windows/#), [MacOS](https://docs.anaconda.com/anaconda/install/mac-os/), and [Linux](https://docs.anaconda.com/anaconda/install/linux/) installation instructions.
 
@@ -29,10 +29,10 @@ Once you have Anaconda installed, you can use this helpful [cheat sheet](https:/
 Open up the anaconda prompt and run this command:
 
 ```
-conda create --name casanovo_env python=3.7
+conda create --name casanovo_env python=3.8
 ```
 
-This will create an anaconda environment called `casanovo_env` that has Python 3.7 installed.
+This will create an anaconda environment called `casanovo_env` that has Python 3.8 installed.
 (You can check if it was created by typing `conda env list`.)
 
 You can activate this environment by typing:
@@ -49,7 +49,7 @@ The base environment most likely will not work.
 
 ### Installation
 
-Install Casanovo as a Python package from this repository (requires 3.7 > [Python version] > 3.10 , dependencies will be installed automatically as needed):
+Install Casanovo as a Python package from this repository (requires 3.8 > [Python version] > 3.10 , dependencies will be installed automatically as needed):
 
 ```
 pip install git+https://github.com/Noble-Lab/casanovo.git#egg=casanovo
@@ -65,7 +65,7 @@ See [`casanovo/config.yaml`](https://github.com/Noble-Lab/casanovo/blob/main/cas
 - To run _de novo_ sequencing:
 
 ```
-casanovo --mode=denovo --model='path/to/pretrained.ckpt' --peak_dir='path/to/predict/mgf/files/dir' --config='path/to/config.yaml' --output='path/to/output'
+casanovo --mode=denovo --model=path/to/pretrained.ckpt --peak_path=path/to/predict/spectra.mgf --config=path/to/config.yaml --output=path/to/output
 ```
 
 This will write peptide predictions for the given MS/MS spectra to the specified output file in a tab-separated format (extension: .csv).
@@ -73,7 +73,7 @@ This will write peptide predictions for the given MS/MS spectra to the specified
 - To evaluate _de novo_ sequencing performance based on known spectrum annotations:
 
 ```
-casanovo --mode=eval --model='path/to/pretrained.ckpt' --peak_dir='path/to/test/predict/files/dir' --config='path/to/config.yaml'
+casanovo --mode=eval --model=path/to/pretrained.ckpt --peak_path=path/to/test/annotated_spectra.mgf --config=path/to/config.yaml
 ```
 
 Note that to evaluate the peptide predictions, ground truth peptide labels in an annotated MGF file need to be present.
@@ -81,7 +81,7 @@ Note that to evaluate the peptide predictions, ground truth peptide labels in an
 - To train a model from scratch:
 
 ```
-casanovo --mode=train --peak_dir='path/to/train/mgf/files/dir' --peak_dir_val='path/to/validation/mgf/files/dir' --config='path/to/config.yaml'
+casanovo --mode=train --peak_path=path/to/train/annotated_spectra.mgf --peak_path_val=path/to/validation/annotated_spectra.mgf --config=path/to/config.yaml
 ```
 
 If a training is continued for a previously trained model, specify the starting model weights using `--model`.
@@ -98,7 +98,7 @@ The example MGF file is available at [`sample_data/sample_preprocessed_spectra.m
 4. Ensure you are in the proper anaconda environment by typing `conda activate casanovo_env`. (If you named your environment differently, type in that name instead.)
 5. Run this command:
 ```
-casanovo --mode=denovo --model='[PATH_TO]/pretrained_excl_mouse.ckpt' --peak_dir='sample_data' --config='path/to/config.yaml'
+casanovo --mode=denovo --model=[PATH_TO]/pretrained_excl_mouse.ckpt --peak_path=[PATH_TO]/sample_preprocessed_spectra.mgf --config=[PATH_TO]/config.yaml
 ```
 Make sure you use the proper filepath to the `pretrained_excl_mouse.ckpt` file.
     - Note: If you want to get the ouput CSV file in different location than the working directory, specify an alternative output location using the `--output` parameter.
