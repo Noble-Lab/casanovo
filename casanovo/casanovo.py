@@ -4,9 +4,9 @@ import csv
 import datetime
 import logging
 import os
-import pathlib
 import re
 import sys
+from pathlib import Path
 from typing import Any, Dict
 
 import click
@@ -220,7 +220,7 @@ def _write_mztab_header(
         ),
         (
             "ms_run[1]-location",
-            pathlib.Path(os.path.abspath(filename_in)).as_uri(),
+            Path(os.path.abspath(filename_in)).as_uri(),
         ),
         (
             "psm_search_engine_score[1]",
