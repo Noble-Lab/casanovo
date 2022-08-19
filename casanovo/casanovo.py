@@ -268,7 +268,7 @@ def _write_mztab_header(
         if key not in ("residues",):
             metadata.append((f"software[1]-setting[{i}]", f"{key} = {value}"))
     with open(filename_out, "w") as f_out:
-        writer = csv.writer(f_out, delimiter="\t")
+        writer = csv.writer(f_out, delimiter="\t", lineterminator=os.linesep())
         for row in metadata:
             writer.writerow(row)
 

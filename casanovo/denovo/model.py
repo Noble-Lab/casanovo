@@ -403,7 +403,9 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
             return
         empty_token_score = torch.tensor(0.04)
         with open(self.out_filename, "a") as f_out:
-            writer = csv.writer(f_out, delimiter="\t")
+            writer = csv.writer(
+                f_out, delimiter="\t", lineterminator=os.linesep()
+            )
             writer.writerow(
                 [
                     "PSH",
