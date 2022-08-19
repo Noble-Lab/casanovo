@@ -2,6 +2,7 @@
 import csv
 import logging
 import os
+import re
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 import depthcharge.masses
@@ -405,7 +406,6 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         """
         if self.out_filename is None:
             return
-        empty_token_score = torch.tensor(0.04)
         with open(self.out_filename, "w") as f_out:
             writer = csv.writer(f_out, delimiter="\t")
             writer.writerow(["spectrum_id", "sequence", "score", "aa_scores"])
@@ -415,11 +415,14 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
                         *step
                     ):
                         peptide = peptide[1:]
+                        peptide_tokens = re.split(r"(?<=.)(?=[A-Z])", peptide)
                         # Compare the experimental vs calculated precursor m/z.
                         _, precursor_charge, precursor_mz = precursor
+                        precursor_charge = int(precursor_charge.item())
+                        precursor_mz = precursor_mz.item()
                         try:
                             calc_mz = self.peptide_mass_calculator.mass(
-                                peptide, precursor_charge
+                                peptide_tokens, precursor_charge
                             )
                         except KeyError:
                             calc_mz = np.nan
@@ -429,34 +432,22 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
                             * 10**6
                         )
                         # Take the scores of the most probable amino acids.
-                        top_aa_scores = torch.max(aa_scores, axis=1)[0]
-                        # Find the index after the first stop token to check if
-                        # decoding was stopped.
-                        empty_index = torch.argmax(
-                            torch.isclose(
-                                top_aa_scores, empty_token_score
-                            ).double()
+                        top_aa_scores = torch.max(
+                            aa_scores[1 : len(peptide_tokens) + 1], axis=1
+                        )[0]
+                        peptide_score = (
+                            torch.mean(top_aa_scores).detach().item()
                         )
-                        if empty_index > 0:
-                            # Omit the stop token.
-                            top_aa_scores = top_aa_scores[: empty_index - 1]
-                            peptide_score = (
-                                torch.mean(top_aa_scores).detach().item()
-                            )
-                            # Subtract one if the precursor m/z tolerance is
-                            # violated.
-                            if (
-                                np.isnan(delta_mass_ppm)
-                                or delta_mass_ppm > self.precursor_mass_tol
-                            ):
-                                peptide_score -= 1
-                            aa_scores = ",".join(
-                                reversed(
-                                    list(map("{:.5f}".format, top_aa_scores))
-                                )
-                            )
-                        else:
-                            peptide_score, aa_scores = None, None
+                        # Subtract one if the precursor m/z tolerance is
+                        # violated.
+                        if (
+                            np.isnan(delta_mass_ppm)
+                            or delta_mass_ppm > self.precursor_mass_tol
+                        ):
+                            peptide_score -= 1
+                        aa_scores = ",".join(
+                            reversed(list(map("{:.5f}".format, top_aa_scores)))
+                        )
                         writer.writerow(
                             [spectrum_i, peptide, peptide_score, aa_scores]
                         )
