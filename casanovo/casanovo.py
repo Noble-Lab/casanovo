@@ -157,7 +157,11 @@ def main(
             model=model,
             config_filename=config_fn,
         )
-        model_runner.predict(peak_dir, model, f"{output}.mztab", config)
+        try:
+            model_runner.predict(peak_dir, model, f"{output}.mztab", config)
+        except:
+            # Delete the mzTab file in case predicting failed somehow.
+            os.remove(f"{output}.mztab")
     elif mode == "eval":
         logger.info("Evaluate a trained Casanovo model.")
         model_runner.evaluate(peak_dir, model, config)
