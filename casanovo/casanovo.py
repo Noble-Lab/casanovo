@@ -36,17 +36,15 @@ logger = logging.getLogger("casanovo")
     type=click.Path(exists=True, dir_okay=False),
 )
 @click.option(
-    "--peak_dir",
+    "--peak_path",
     required=True,
-    help="The directory with peak files for predicting peptide sequences or "
+    help="The file path with peak files for predicting peptide sequences or "
     "training Casanovo.",
-    type=click.Path(exists=True, file_okay=False),
 )
 @click.option(
-    "--peak_dir_val",
-    help="The directory with peak files to be used as validation data during "
+    "--peak_path_val",
+    help="The file path with peak files to be used as validation data during "
     "training.",
-    type=click.Path(exists=True, file_okay=False),
 )
 @click.option(
     "--config",
@@ -63,8 +61,8 @@ logger = logging.getLogger("casanovo")
 def main(
     mode: str,
     model: str,
-    peak_dir: str,
-    peak_dir_val: str,
+    peak_path: str,
+    peak_path_val: str,
     config: str,
     output: str,
 ):
@@ -117,54 +115,44 @@ def main(
     with open(config) as f_in:
         config = yaml.safe_load(f_in)
     # Ensure that the config values have the correct type.
-    for t, keys in (
-        (
-            int,
-            (
-                "random_seed",
-                "n_peaks",
-                "dim_model",
-                "n_head",
-                "dim_feedforward",
-                "n_layers",
-                "dim_intensity",
-                "max_length",
-                "max_charge",
-                "n_log",
-                "warmup_iters",
-                "max_iters",
-                "train_batch_size",
-                "predict_batch_size",
-                "max_epochs",
-                "num_sanity_val_steps",
-                "every_n_epochs",
-            ),
-        ),
-        (
-            float,
-            (
-                "min_mz",
-                "max_mz",
-                "min_intensity",
-                "remove_precursor_tol",
-                "dropout",
-                "learning_rate",
-                "weight_decay",
-            ),
-        ),
-        (bool, ("train_from_scratch", "save_model", "save_weights_only")),
-    ):
-        for key in keys:
-            try:
-                if config[key] is not None:
-                    config[key] = t(config[key])
-            except (TypeError, ValueError) as e:
-                logger.error(
-                    "Incorrect type for configuration value %s: %s", key, e
-                )
-                raise TypeError(
-                    f"Incorrect type for configuration value {key}: {e}"
-                )
+    config_types = dict(
+        random_seed=int,
+        n_peaks=int,
+        min_mz=float,
+        max_mz=float,
+        min_intensity=float,
+        remove_precursor_tol=float,
+        dim_model=int,
+        n_head=int,
+        dim_feedforward=int,
+        n_layers=int,
+        dropout=float,
+        dim_intensity=int,
+        max_length=int,
+        max_charge=int,
+        n_log=int,
+        warmup_iters=int,
+        max_iters=int,
+        learning_rate=float,
+        weight_decay=float,
+        train_batch_size=int,
+        predict_batch_size=int,
+        max_epochs=int,
+        num_sanity_val_steps=int,
+        strategy=str,
+        train_from_scratch=bool,
+        save_model=bool,
+        model_save_folder_path=str,
+        save_weights_only=bool,
+        every_n_epochs=int,
+    )
+    for k, t in config_types.items():
+        try:
+            if config[k] is not None:
+                config[k] = t(config[k])
+        except (TypeError, ValueError) as e:
+            logger.error("Incorrect type for configuration value %s: %s", k, e)
+            raise TypeError(f"Incorrect type for configuration value {k}: {e}")
     config["residues"] = {
         str(aa): float(mass) for aa, mass in config["residues"].items()
     }
@@ -183,13 +171,13 @@ def main(
     # Run Casanovo in the specified mode.
     if mode == "denovo":
         logger.info("Predict peptide sequences with Casanovo.")
-        model_runner.predict(peak_dir, model, output, config)
+        model_runner.predict(peak_path, model, output, config)
     elif mode == "eval":
         logger.info("Evaluate a trained Casanovo model.")
-        model_runner.evaluate(peak_dir, model, config)
+        model_runner.evaluate(peak_path, model, config)
     elif mode == "train":
         logger.info("Train the Casanovo model.")
-        model_runner.train(peak_dir, peak_dir_val, model, config)
+        model_runner.train(peak_path, peak_path_val, model, config)
 
 
 if __name__ == "__main__":

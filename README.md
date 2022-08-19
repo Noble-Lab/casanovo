@@ -18,7 +18,7 @@ Data and pre-trained model weights are available [on Zenodo](https://zenodo.org/
 
 We recommend to run Casanovo in a dedicated **Anaconda** environment.
 This helps keep your environment for Casanovo and its dependencies separate from your other Python environments.
-**This is especially helpful because Casanovo works within a specific range of Python versions (3.7 > Python version > 3.10).**
+**This is especially helpful because Casanovo works within a specific range of Python versions (3.8 > Python version > 3.10).**
 
 - Check out the [Windows](https://docs.anaconda.com/anaconda/install/windows/#), [MacOS](https://docs.anaconda.com/anaconda/install/mac-os/), and [Linux](https://docs.anaconda.com/anaconda/install/linux/) installation instructions.
 
@@ -29,10 +29,10 @@ Once you have Anaconda installed, you can use this helpful [cheat sheet](https:/
 Open up the anaconda prompt and run this command:
 
 ```
-conda create --name casanovo_env python=3.7
+conda create --name casanovo_env python=3.8
 ```
 
-This will create an anaconda environment called `casanovo_env` that has Python 3.7 installed.
+This will create an anaconda environment called `casanovo_env` that has Python 3.8 installed.
 (You can check if it was created by typing `conda env list`.)
 
 You can activate this environment by typing:
@@ -49,7 +49,7 @@ The base environment most likely will not work.
 
 ### Installation
 
-Install Casanovo as a Python package from this repository (requires 3.7 > [Python version] > 3.10 , dependencies will be installed automatically as needed):
+Install Casanovo as a Python package from this repository (requires 3.8 > [Python version] > 3.10 , dependencies will be installed automatically as needed):
 
 ```
 pip install git+https://github.com/Noble-Lab/casanovo.git#egg=casanovo
@@ -65,24 +65,27 @@ See [`casanovo/config.yaml`](https://github.com/Noble-Lab/casanovo/blob/main/cas
 - To run _de novo_ sequencing:
 
 ```
-casanovo --mode=denovo --model='path/to/pretrained.ckpt' --peak_dir='path/to/predict/mgf/files/dir' --config='path/to/config.yaml' --output='path/to/output'
+casanovo --mode=denovo --model=path/to/pretrained.ckpt --peak_path=path/to/predict/spectra.mgf --config=path/to/config.yaml --output=path/to/output
 ```
 
+Casanovo can predict peptide sequences for MS/MS data in mzML, mzXML, and MGF files.
 This will write peptide predictions for the given MS/MS spectra to the specified output file in a tab-separated format (extension: .csv).
 
 - To evaluate _de novo_ sequencing performance based on known spectrum annotations:
 
 ```
-casanovo --mode=eval --model='path/to/pretrained.ckpt' --peak_dir='path/to/test/predict/files/dir' --config='path/to/config.yaml'
+casanovo --mode=eval --model=path/to/pretrained.ckpt --peak_path=path/to/test/annotated_spectra.mgf --config=path/to/config.yaml
 ```
 
-Note that to evaluate the peptide predictions, ground truth peptide labels in an annotated MGF file need to be present.
+To evaluate the peptide predictions, ground truth peptide labels need to be provided as an annotated MGF file.
 
 - To train a model from scratch:
 
 ```
-casanovo --mode=train --peak_dir='path/to/train/mgf/files/dir' --peak_dir_val='path/to/validation/mgf/files/dir' --config='path/to/config.yaml'
+casanovo --mode=train --peak_path=path/to/train/annotated_spectra.mgf --peak_path_val=path/to/validation/annotated_spectra.mgf --config=path/to/config.yaml
 ```
+
+Training and validation MS/MS data need to be provided as annotated MGF files.
 
 If a training is continued for a previously trained model, specify the starting model weights using `--model`.
 
@@ -98,7 +101,7 @@ The example MGF file is available at [`sample_data/sample_preprocessed_spectra.m
 4. Ensure you are in the proper anaconda environment by typing `conda activate casanovo_env`. (If you named your environment differently, type in that name instead.)
 5. Run this command:
 ```
-casanovo --mode=denovo --model='[PATH_TO]/pretrained_excl_mouse.ckpt' --peak_dir='sample_data' --config='path/to/config.yaml'
+casanovo --mode=denovo --model=[PATH_TO]/pretrained_excl_mouse.ckpt --peak_path=[PATH_TO]/sample_preprocessed_spectra.mgf --config=[PATH_TO]/config.yaml
 ```
 Make sure you use the proper filepath to the `pretrained_excl_mouse.ckpt` file.
     - Note: If you want to get the ouput CSV file in different location than the working directory, specify an alternative output location using the `--output` parameter.
@@ -131,6 +134,12 @@ Run the following command in your command prompt to see all possible command-lin
 ```
 casanovo --help
 ```
+
+**I get a "CUDA out of memory" error when trying to run Casanovo. Help!**
+
+This means that there was not enough (free) memory available on your GPU to run Casanovo, which is especially likely to happen when you are using a smaller, consumer-grade GPU.
+We recommend trying to decrease the `train_batch_size` or `predict_batch_size` options in the [config file](https://github.com/Noble-Lab/casanovo/blob/main/casanovo/config.yaml) (depending on whether the error occurred during `train` or `denovo` mode) to reduce the number of spectra that are processed simultaneously.
+Additionally, we recommend shutting down any other processes that may be running on the GPU, so that Casanovo can exclusively use the GPU.
 
 ## Release notes
 
