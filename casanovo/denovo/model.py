@@ -416,6 +416,13 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
                     ):
                         peptide = peptide[1:]
                         peptide_tokens = re.split(r"(?<=.)(?=[A-Z])", peptide)
+                        # Take the scores of the most probable amino acids.
+                        top_aa_scores = torch.max(
+                            aa_scores[1 : len(peptide_tokens) + 1], axis=1
+                        )[0]
+                        peptide_score = (
+                            torch.mean(top_aa_scores).detach().item()
+                        )
                         # Compare the experimental vs calculated precursor m/z.
                         _, precursor_charge, precursor_mz = precursor
                         precursor_charge = int(precursor_charge.item())
@@ -424,26 +431,19 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
                             calc_mz = self.peptide_mass_calculator.mass(
                                 peptide_tokens, precursor_charge
                             )
+                            delta_mass_ppm = (
+                                (calc_mz - precursor_mz)
+                                / precursor_mz
+                                * 10**6
+                            )
+                            is_within_precursor_mz_tol = (
+                                abs(delta_mass_ppm) < self.precursor_mass_tol
+                            )
                         except KeyError:
-                            calc_mz = np.nan
-                        delta_mass_ppm = (
-                            abs(calc_mz - precursor_mz)
-                            / precursor_mz
-                            * 10**6
-                        )
-                        # Take the scores of the most probable amino acids.
-                        top_aa_scores = torch.max(
-                            aa_scores[1 : len(peptide_tokens) + 1], axis=1
-                        )[0]
-                        peptide_score = (
-                            torch.mean(top_aa_scores).detach().item()
-                        )
+                            is_within_precursor_mz_tol = False
                         # Subtract one if the precursor m/z tolerance is
                         # violated.
-                        if (
-                            np.isnan(delta_mass_ppm)
-                            or delta_mass_ppm > self.precursor_mass_tol
-                        ):
+                        if not is_within_precursor_mz_tol:
                             peptide_score -= 1
                         aa_scores = ",".join(
                             reversed(list(map("{:.5f}".format, top_aa_scores)))
