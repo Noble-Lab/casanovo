@@ -9,6 +9,7 @@ from typing import Any, Dict, Iterable, List, Optional
 
 import pytorch_lightning as pl
 from depthcharge.data import AnnotatedSpectrumIndex, SpectrumIndex
+from pytorch_lightning.strategies import DDPStrategy
 
 from casanovo.denovo.dataloaders import DeNovoDataModule
 from casanovo.denovo.model import Spec2Pep
@@ -136,7 +137,7 @@ def _execute_existing(
         max_mz=config["max_mz"],
         min_intensity=config["min_intensity"],
         remove_precursor_tol=config["remove_precursor_tol"],
-        n_workers=config["num_workers"],
+        n_workers=config["n_workers"],
         batch_size=config["predict_batch_size"],
     )
     loaders.setup(stage="test", annotated=annotated)
@@ -148,7 +149,7 @@ def _execute_existing(
         logger=config["logger"],
         max_epochs=config["max_epochs"],
         num_sanity_val_steps=config["num_sanity_val_steps"],
-        strategy=config["strategy"],
+        strategy=DDPStrategy(find_unused_parameters=False, static_graph=True),
     )
     # Run the model with/without validation.
     if annotated:
@@ -220,12 +221,13 @@ def train(
     val_index = AnnotatedSpectrumIndex(val_idx_fn, val_filenames)
     # Initialize the data loaders.
     dataloader_params = dict(
+        batch_size=config["train_batch_size"],
         n_peaks=config["n_peaks"],
         min_mz=config["min_mz"],
         max_mz=config["max_mz"],
         min_intensity=config["min_intensity"],
         remove_precursor_tol=config["remove_precursor_tol"],
-        batch_size=config["train_batch_size"],
+        n_workers=config["n_workers"],
     )
     train_loader = DeNovoDataModule(
         train_index=train_index, **dataloader_params
@@ -286,7 +288,7 @@ def train(
         logger=config["logger"],
         max_epochs=config["max_epochs"],
         num_sanity_val_steps=config["num_sanity_val_steps"],
-        strategy=config["strategy"],
+        strategy=DDPStrategy(find_unused_parameters=False, static_graph=True),
     )
     # Train the model.
     trainer.fit(

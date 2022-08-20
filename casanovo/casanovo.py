@@ -5,7 +5,9 @@ import os
 import sys
 
 import click
+import psutil
 import pytorch_lightning as pl
+import torch
 import yaml
 
 from . import __version__
@@ -56,12 +58,6 @@ logger = logging.getLogger("casanovo")
     "(optionally) prediction results (extension: .csv).",
     type=click.Path(dir_okay=False),
 )
-@click.option(
-    "--num_workers",
-    default=None,
-    help="The number of worker threads to use.",
-    type=click.INT,
-)
 def main(
     mode: str,
     model: str,
@@ -69,7 +65,6 @@ def main(
     peak_path_val: str,
     config: str,
     output: str,
-    num_workers: int,
 ):
     """
     \b
@@ -119,9 +114,6 @@ def main(
         )
     with open(config) as f_in:
         config = yaml.safe_load(f_in)
-    # Overwrite any parameters that were provided as command-line arguments.
-    if num_workers is not None:
-        config["num_workers"] = num_workers
     # Ensure that the config values have the correct type.
     config_types = dict(
         random_seed=int,
@@ -130,7 +122,6 @@ def main(
         max_mz=float,
         min_intensity=float,
         remove_precursor_tol=float,
-        num_workers=int,
         dim_model=int,
         n_head=int,
         dim_feedforward=int,
@@ -165,6 +156,10 @@ def main(
     config["residues"] = {
         str(aa): float(mass) for aa, mass in config["residues"].items()
     }
+    # Add extra configuration options and scale by the number of GPUs.
+    n_gpus = torch.cuda.device_count()
+    config["n_workers"] = len(psutil.Process().cpu_affinity()) // n_gpus
+    config["train_batch_size"] = config["train_batch_size"] // n_gpus
 
     pl.utilities.seed.seed_everything(seed=config["random_seed"], workers=True)
 

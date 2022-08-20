@@ -2,6 +2,7 @@
 import csv
 import logging
 import os
+import re
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 import depthcharge.masses
@@ -292,7 +293,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         loss = self.celoss(pred, truth.flatten())
         self.log(
             "CELoss",
-            {mode: loss.item()},
+            {mode: loss.detach()},
             on_step=False,
             on_epoch=True,
             sync_dist=True,
@@ -373,7 +374,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         """
         Log the training loss at the end of each epoch.
         """
-        train_loss = self.trainer.callback_metrics["CELoss"]["train"].item()
+        train_loss = self.trainer.callback_metrics["CELoss"]["train"].detach()
         self._history[-1]["train"] = train_loss
         self._log_history()
 
@@ -384,12 +385,14 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         callback_metrics = self.trainer.callback_metrics
         metrics = {
             "epoch": self.trainer.current_epoch,
-            "valid": callback_metrics["CELoss"]["valid"].item(),
+            "valid": callback_metrics["CELoss"]["valid"].detach(),
             "valid_aa_precision": callback_metrics["aa_precision"][
                 "valid"
-            ].item(),
-            "valid_aa_recall": callback_metrics["aa_recall"]["valid"].item(),
-            "valid_pep_recall": callback_metrics["pep_recall"]["valid"].item(),
+            ].detach(),
+            "valid_aa_recall": callback_metrics["aa_recall"]["valid"].detach(),
+            "valid_pep_recall": callback_metrics["pep_recall"][
+                "valid"
+            ].detach(),
         }
         self._history.append(metrics)
         self._log_history()
@@ -403,7 +406,6 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         """
         if self.out_filename is None:
             return
-        empty_token_score = torch.tensor(0.04)
         with open(self.out_filename, "w") as f_out:
             writer = csv.writer(f_out, delimiter="\t")
             writer.writerow(["spectrum_id", "sequence", "score", "aa_scores"])
@@ -413,38 +415,39 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
                         *step
                     ):
                         peptide = peptide[1:]
+                        peptide_tokens = re.split(r"(?<=.)(?=[A-Z])", peptide)
+                        # Take the scores of the most probable amino acids.
+                        top_aa_scores = torch.max(
+                            aa_scores[1 : len(peptide_tokens) + 1], axis=1
+                        )[0]
+                        peptide_score = (
+                            torch.mean(top_aa_scores).detach().item()
+                        )
                         # Compare the experimental vs calculated precursor m/z.
                         _, precursor_charge, precursor_mz = precursor
-                        calc_mz = self.peptide_mass_calculator.mass(
-                            peptide, precursor_charge
-                        )
-                        delta_mass_ppm = (
-                            abs(calc_mz - precursor_mz)
-                            / precursor_mz
-                            * 10**6
-                        )
-                        # Take the scores of the most probable amino acids.
-                        top_aa_scores = torch.max(aa_scores, axis=1)[0]
-                        # Find the index after the first stop token to check if
-                        # decoding was stopped.
-                        empty_index = torch.argmax(
-                            torch.isclose(
-                                top_aa_scores, empty_token_score
-                            ).double()
-                        )
-                        if empty_index > 0:
-                            # Omit the stop token.
-                            top_aa_scores = top_aa_scores[: empty_index - 1]
-                            peptide_score = torch.mean(top_aa_scores).item()
-                            # Subtract one if the precursor m/z tolerance is
-                            # violated.
-                            if delta_mass_ppm > self.precursor_mass_tol:
-                                peptide_score -= 1
-                            aa_scores = ",".join(
-                                map(str, top_aa_scores.cpu().numpy()[::-1])
+                        precursor_charge = int(precursor_charge.item())
+                        precursor_mz = precursor_mz.item()
+                        try:
+                            calc_mz = self.peptide_mass_calculator.mass(
+                                peptide_tokens, precursor_charge
                             )
-                        else:
-                            peptide_score, aa_scores = None, None
+                            delta_mass_ppm = (
+                                (calc_mz - precursor_mz)
+                                / precursor_mz
+                                * 10**6
+                            )
+                            is_within_precursor_mz_tol = (
+                                abs(delta_mass_ppm) < self.precursor_mass_tol
+                            )
+                        except KeyError:
+                            is_within_precursor_mz_tol = False
+                        # Subtract one if the precursor m/z tolerance is
+                        # violated.
+                        if not is_within_precursor_mz_tol:
+                            peptide_score -= 1
+                        aa_scores = ",".join(
+                            reversed(list(map("{:.5f}".format, top_aa_scores)))
+                        )
                         writer.writerow(
                             [spectrum_i, peptide, peptide_score, aa_scores]
                         )
