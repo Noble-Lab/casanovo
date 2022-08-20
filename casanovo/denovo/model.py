@@ -473,7 +473,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
                         writer.writerow(
                             [
                                 "PSM",
-                                peptide[1:],
+                                peptide,
                                 spectrum_i,
                                 "null",
                                 "null",
