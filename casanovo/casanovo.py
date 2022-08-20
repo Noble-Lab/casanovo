@@ -10,7 +10,9 @@ from pathlib import Path
 from typing import Any, Dict
 
 import click
+import psutil
 import pytorch_lightning as pl
+import torch
 import yaml
 
 from . import __version__
@@ -39,17 +41,15 @@ logger = logging.getLogger("casanovo")
     type=click.Path(exists=True, dir_okay=False),
 )
 @click.option(
-    "--peak_dir",
+    "--peak_path",
     required=True,
-    help="The directory with peak files for predicting peptide sequences or "
+    help="The file path with peak files for predicting peptide sequences or "
     "training Casanovo.",
-    type=click.Path(exists=True, file_okay=False),
 )
 @click.option(
-    "--peak_dir_val",
-    help="The directory with peak files to be used as validation data during "
+    "--peak_path_val",
+    help="The file path with peak files to be used as validation data during "
     "training.",
-    type=click.Path(exists=True, file_okay=False),
 )
 @click.option(
     "--config",
@@ -63,20 +63,13 @@ logger = logging.getLogger("casanovo")
     "(optionally) prediction results (extension: .csv).",
     type=click.Path(dir_okay=False),
 )
-@click.option(
-    "--num_workers",
-    default=None,
-    help="The number of worker threads to use.",
-    type=click.INT,
-)
 def main(
     mode: str,
     model: str,
-    peak_dir: str,
-    peak_dir_val: str,
+    peak_path: str,
+    peak_path_val: str,
     config: str,
     output: str,
-    num_workers: int,
 ):
     """
     \b
@@ -129,10 +122,52 @@ def main(
     config_fn = config
     with open(config) as f_in:
         config = yaml.safe_load(f_in)
-
-    # Overwrite any parameters that were provided as command-line arguments.
-    if num_workers is not None:
-        config["num_workers"] = num_workers
+    # Ensure that the config values have the correct type.
+    config_types = dict(
+        random_seed=int,
+        n_peaks=int,
+        min_mz=float,
+        max_mz=float,
+        min_intensity=float,
+        remove_precursor_tol=float,
+        dim_model=int,
+        n_head=int,
+        dim_feedforward=int,
+        n_layers=int,
+        dropout=float,
+        dim_intensity=int,
+        max_length=int,
+        max_charge=int,
+        n_log=int,
+        warmup_iters=int,
+        max_iters=int,
+        learning_rate=float,
+        weight_decay=float,
+        train_batch_size=int,
+        predict_batch_size=int,
+        max_epochs=int,
+        num_sanity_val_steps=int,
+        strategy=str,
+        train_from_scratch=bool,
+        save_model=bool,
+        model_save_folder_path=str,
+        save_weights_only=bool,
+        every_n_epochs=int,
+    )
+    for k, t in config_types.items():
+        try:
+            if config[k] is not None:
+                config[k] = t(config[k])
+        except (TypeError, ValueError) as e:
+            logger.error("Incorrect type for configuration value %s: %s", k, e)
+            raise TypeError(f"Incorrect type for configuration value {k}: {e}")
+    config["residues"] = {
+        str(aa): float(mass) for aa, mass in config["residues"].items()
+    }
+    # Add extra configuration options and scale by the number of GPUs.
+    n_gpus = torch.cuda.device_count()
+    config["n_workers"] = len(psutil.Process().cpu_affinity()) // n_gpus
+    config["train_batch_size"] = config["train_batch_size"] // n_gpus
 
     pl.utilities.seed.seed_everything(seed=config["random_seed"], workers=True)
 
@@ -140,8 +175,8 @@ def main(
     logger.info("Casanovo version %s", str(__version__))
     logger.debug("mode = %s", mode)
     logger.debug("model = %s", model)
-    logger.debug("peak_dir = %s", peak_dir)
-    logger.debug("peak_dir_val = %s", peak_dir_val)
+    logger.debug("peak_path = %s", peak_path)
+    logger.debug("peak_path_val = %s", peak_path_val)
     logger.debug("config = %s", config_fn)
     logger.debug("output = %s", output)
     for key, value in config.items():
@@ -152,22 +187,22 @@ def main(
         logger.info("Predict peptide sequences with Casanovo.")
         _write_mztab_header(
             f"{output}.mztab",
-            peak_dir,
+            peak_path,
             config,
             model=model,
             config_filename=config_fn,
         )
         try:
-            model_runner.predict(peak_dir, model, f"{output}.mztab", config)
+            model_runner.predict(peak_path, model, f"{output}.mztab", config)
         except:
             # Delete the mzTab file in case predicting failed somehow.
             os.remove(f"{output}.mztab")
     elif mode == "eval":
         logger.info("Evaluate a trained Casanovo model.")
-        model_runner.evaluate(peak_dir, model, config)
+        model_runner.evaluate(peak_path, model, config)
     elif mode == "train":
         logger.info("Train the Casanovo model.")
-        model_runner.train(peak_dir, peak_dir_val, model, config)
+        model_runner.train(peak_path, peak_path_val, model, config)
 
 
 def _write_mztab_header(
