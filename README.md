@@ -8,8 +8,6 @@ If you use Casanovo in your work, please cite the following publication:
 
 - Yilmaz, M., Fondrie, W. E., Bittremieux, W., Oh, S. & Noble, W. S. *De novo* mass spectrometry peptide sequencing with a transformer model. in *Proceedings of the 39th International Conference on Machine Learning - ICML '22* vol. 162 25514–25522 (PMLR, 2022). [https://proceedings.mlr.press/v162/yilmaz22a.html](https://proceedings.mlr.press/v162/yilmaz22a.html)
 
-Data and pre-trained model weights are available [on Zenodo](https://zenodo.org/record/6791263).
-
 ## Documentation
 
 #### https://casanovo.readthedocs.io/en/latest/
@@ -52,7 +50,7 @@ The base environment most likely will not work.
 Install Casanovo as a Python package from this repository (requires 3.8 > [Python version] > 3.10 , dependencies will be installed automatically as needed):
 
 ```
-pip install git+https://github.com/Noble-Lab/casanovo.git#egg=casanovo
+pip install git+https://github.com/Noble-Lab/casanovo.git
 ```
 
 Once installed, Casanovo can be used with a simple command line interface.
@@ -60,12 +58,24 @@ Once installed, Casanovo can be used with a simple command line interface.
 All auxiliary data, model, and training-related parameters can be specified in a user created `.yaml` configuration file.
 See [`casanovo/config.yaml`](https://github.com/Noble-Lab/casanovo/blob/main/casanovo/config.yaml) for the default configuration that was used to obtain the reported results.
 
+
+### Model weights
+
+When running Casanovo in `denovo` or `eval` mode, Casanovo needs compatible pretrained model weights to make predictions.
+Model weights can be found on the [Releases page](https://github.com/Noble-Lab/casanovo/releases) under the "Assets" for each release (file extension: .ckpt).
+The model file can then be specified using the `--model` command-line parameter when executing Casanovo.
+
+Not all releases might have a model file included under Assets, in which case model weights for alternative releases with the same major version number can be used.
+
+To assist users, Casanovo will try to download compatible model weights if no model file is specified the first time it is executed.
+However, for subsequent Casanovo executions it is recommended to explicitly specify the model file to avoid limitations related to downloading the model file (see "Troubleshooting").
+
 ### Example commands
 
 - To run _de novo_ sequencing:
 
 ```
-casanovo --mode=denovo --model=path/to/pretrained.ckpt --peak_path=path/to/predict/spectra.mgf --config=path/to/config.yaml --output=path/to/output
+casanovo --mode=denovo --model=path/to/model.ckpt --peak_path=path/to/predict/spectra.mgf --config=path/to/config.yaml --output=path/to/output
 ```
 
 Casanovo can predict peptide sequences for MS/MS data in mzML, mzXML, and MGF files.
@@ -74,7 +84,7 @@ This will write peptide predictions for the given MS/MS spectra to the specified
 - To evaluate _de novo_ sequencing performance based on known spectrum annotations:
 
 ```
-casanovo --mode=eval --model=path/to/pretrained.ckpt --peak_path=path/to/test/annotated_spectra.mgf --config=path/to/config.yaml
+casanovo --mode=eval --model=path/to/model.ckpt --peak_path=path/to/test/annotated_spectra.mgf --config=path/to/config.yaml
 ```
 
 To evaluate the peptide predictions, ground truth peptide labels need to be provided as an annotated MGF file.
@@ -95,16 +105,14 @@ We will demonstrate how to use Casanovo using a small walkthrough example on a s
 The example MGF file is available at [`sample_data/sample_preprocessed_spectra.mgf`](https://github.com/Noble-Lab/casanovo/blob/main/sample_data/sample_preprocessed_spectra.mgf`).
 
 1. Install Casanovo (see above for details).
-2. Download the `casanovo_pretrained_model_weights.zip` from [Zenodo](https://zenodo.org/record/6791263). Place these models in a location that you can easily access and know the path of.
-    - We will be `using pretrained_excl_mouse.ckpt` for this job.
-3. Copy the example `config.yaml` file into a location you can easily access. 
+2. Download compatible model weights from the [Releases page](https://github.com/Noble-Lab/casanovo/releases). Place this file in a location that you can easily access.
+    - Here we assume that the model file has file name `casanovo_massivekb.ckpt`.
+3. Copy the example `config.yaml` file to a location you can easily access. 
 4. Ensure you are in the proper anaconda environment by typing `conda activate casanovo_env`. (If you named your environment differently, type in that name instead.)
 5. Run this command:
 ```
-casanovo --mode=denovo --model=[PATH_TO]/pretrained_excl_mouse.ckpt --peak_path=[PATH_TO]/sample_preprocessed_spectra.mgf --config=[PATH_TO]/config.yaml
+casanovo --mode=denovo --model=[PATH_TO]/casanovo_massivekb.ckpt --peak_path=[PATH_TO]/sample_preprocessed_spectra.mgf --config=[PATH_TO]/config.yaml
 ```
-Make sure you use the proper filepath to the `pretrained_excl_mouse.ckpt` file.
-    - Note: If you want to get the ouput CSV file in different location than the working directory, specify an alternative output location using the `--output` parameter.
 
 This job will take very little time to run (< 1 minute).
 
@@ -140,6 +148,15 @@ casanovo --help
 This means that there was not enough (free) memory available on your GPU to run Casanovo, which is especially likely to happen when you are using a smaller, consumer-grade GPU.
 We recommend trying to decrease the `train_batch_size` or `predict_batch_size` options in the [config file](https://github.com/Noble-Lab/casanovo/blob/main/casanovo/config.yaml) (depending on whether the error occurred during `train` or `denovo` mode) to reduce the number of spectra that are processed simultaneously.
 Additionally, we recommend shutting down any other processes that may be running on the GPU, so that Casanovo can exclusively use the GPU.
+
+**How do I solve a "PermissionError: GitHub API rate limit exceeded" error when trying to run Casanovo?**
+
+When running Casanovo in `denovo` or `eval` mode, Casanovo needs compatible pretrained model weights to make predictions.
+If no model weights file is specified using the `--model` command-line parameter, Casanovo will automatically try to download the latest compatible model file from GitHub and save it to the current working directory.
+However, the GitHub API is limited to maximum 60 requests per hour per IP address.
+Consequently, if Casanovo has been executed multiple times already, it might temporarily not be able to communicate with GitHub.
+You can avoid this error by explicitly specifying the model file using the `--model` parameter.
+We recommended to do always include this parameter after Casanovo has downloaded the model weights during its first execution.
 
 ## Release notes
 
