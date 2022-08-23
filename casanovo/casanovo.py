@@ -255,9 +255,9 @@ def _get_model_weights() -> str:
     if major in assets:
         if minor in assets[major]:
             if patch in assets[major][minor]:
-                asset_version, asset_name, asset_url = (
-                    assets[major][minor][patch]
-                )
+                asset_version, asset_name, asset_url = assets[major][minor][
+                    patch
+                ]
                 logger.debug(
                     "Model weights matching release %s found", asset_version
                 )
@@ -318,7 +318,7 @@ def _get_model_weights() -> str:
             response.raw.read, decode_content=True
         )
         with tqdm.tqdm.wrapattr(
-                response.raw, "read", total=file_size, desc=desc
+            response.raw, "read", total=file_size, desc=desc
         ) as r_raw, open(asset_path, "wb") as f:
             shutil.copyfileobj(r_raw, f)
         logger.warning(
@@ -328,7 +328,6 @@ def _get_model_weights() -> str:
             asset_path,
         )
     return asset_path
-
 
 
 if __name__ == "__main__":
