@@ -1,13 +1,8 @@
 """The command line entry point for Casanovo."""
-import collections
-import csv
 import datetime
 import logging
 import os
-import re
 import sys
-from pathlib import Path
-from typing import Any, Dict
 
 import click
 import psutil
@@ -16,7 +11,8 @@ import torch
 import yaml
 
 from . import __version__
-from casanovo.denovo import model_runner
+from .data import ms_io
+from .denovo import model_runner
 
 
 logger = logging.getLogger("casanovo")
@@ -185,131 +181,18 @@ def main(
     # Run Casanovo in the specified mode.
     if mode == "denovo":
         logger.info("Predict peptide sequences with Casanovo.")
-        _write_mztab_header(
-            f"{output}.mztab",
-            peak_path,
-            config,
-            model=model,
-            config_filename=config_fn,
+        writer = ms_io.MztabWriter(f"{output}.mztab")
+        writer.set_metadata(
+            peak_path, config, model=model, config_filename=config_fn
         )
-        try:
-            model_runner.predict(peak_path, model, f"{output}.mztab", config)
-        except:
-            # Delete the mzTab file in case predicting failed somehow.
-            os.remove(f"{output}.mztab")
+        model_runner.predict(peak_path, model, config, writer)
+        writer.save()
     elif mode == "eval":
         logger.info("Evaluate a trained Casanovo model.")
         model_runner.evaluate(peak_path, model, config)
     elif mode == "train":
         logger.info("Train the Casanovo model.")
         model_runner.train(peak_path, peak_path_val, model, config)
-
-
-def _write_mztab_header(
-    filename_out: str, filename_in: str, config: Dict[str, Any], **kwargs
-) -> None:
-    """
-    Write metadata information to an mzTab file header.
-
-    Parameters
-    ----------
-    filename_out : str
-        The name of the mzTab file.
-    filename_in : str
-        The name or directory of the input file(s).
-    config : Dict[str, Any]
-        The active configuration options.
-    kwargs
-        Additional configuration options (i.e. from command-line arguments).
-    """
-    # Derive the fixed and variable modifications from the residue alphabet.
-    known_mods = {
-        "+57.021": "[UNIMOD, UNIMOD:4, Carbamidomethyl, ]",
-        "+15.995": "[UNIMOD, UNIMOD:35, Oxidation, ]",
-        "+0.984": "[UNIMOD, UNIMOD:7, Deamidated, ]",
-        "+42.011": "[UNIMOD, UNIMOD:1, Acetyl, ]",
-        "+43.006": "[UNIMOD, UNIMOD:5, Carbamyl, ]",
-        "-17.027": "[UNIMOD, UNIMOD:385, Ammonia-loss, ]",
-    }
-    residues = collections.defaultdict(set)
-    for aa, mass in config["residues"].items():
-        aa_mod = re.match(r"([A-Z]?)([+-]?(?:[0-9]*[.])?[0-9]+)", aa)
-        if aa_mod is None:
-            residues[aa].add(None)
-        else:
-            residues[aa_mod[1]].add(aa_mod[2])
-    fixed_mods, variable_mods = [], []
-    for aa, mods in residues.items():
-        if len(mods) > 1:
-            for mod in mods:
-                if mod is not None:
-                    variable_mods.append((aa, mod))
-        elif None not in mods:
-            fixed_mods.append((aa, mods.pop()))
-
-    # Write the mzTab output file header.
-    metadata = [
-        ("mzTab-version", "1.0.0"),
-        ("mzTab-mode", "Summary"),
-        ("mzTab-type", "Identification"),
-        (
-            "description",
-            f"Casanovo identification file "
-            f"{os.path.splitext(os.path.basename(filename_out))[0]}",
-        ),
-        (
-            "ms_run[1]-location",
-            Path(os.path.abspath(filename_in)).as_uri(),
-        ),
-        (
-            "psm_search_engine_score[1]",
-            "[MS, MS:1001143, search engine specific score for PSMs, ]",
-        ),
-        ("software[1]", f"[MS, MS:1003281, Casanovo, {__version__}]"),
-    ]
-    if len(fixed_mods) == 0:
-        metadata.append(
-            (
-                "fixed_mod[1]",
-                "[MS, MS:1002453, No fixed modifications searched, ]",
-            )
-        )
-    else:
-        for i, (aa, mod) in enumerate(fixed_mods, 1):
-            metadata.append(
-                (
-                    f"fixed_mod[{i}]",
-                    known_mods.get(mod, f"[CHEMMOD, CHEMMOD:{mod}, , ]"),
-                )
-            )
-            metadata.append((f"fixed_mod[{i}]-site", aa if aa else "N-term"))
-    if len(variable_mods) == 0:
-        metadata.append(
-            (
-                "variable_mod[1]",
-                "[MS, MS:1002454, No variable modifications searched,]",
-            )
-        )
-    else:
-        for i, (aa, mod) in enumerate(variable_mods, 1):
-            metadata.append(
-                (
-                    f"variable_mod[{i}]",
-                    known_mods.get(mod, f"[CHEMMOD, CHEMMOD:{mod}, , ]"),
-                )
-            )
-            metadata.append(
-                (f"variable_mod[{i}]-site", aa if aa else "N-term")
-            )
-    for i, (key, value) in enumerate(kwargs.items(), 1):
-        metadata.append((f"software[1]-setting[{i}]", f"{key} = {value}"))
-    for i, (key, value) in enumerate(config.items(), len(kwargs) + 1):
-        if key not in ("residues",):
-            metadata.append((f"software[1]-setting[{i}]", f"{key} = {value}"))
-    with open(filename_out, "w") as f_out:
-        writer = csv.writer(f_out, delimiter="\t", lineterminator=os.linesep())
-        for row in metadata:
-            writer.writerow(["MTD", *row])
 
 
 if __name__ == "__main__":

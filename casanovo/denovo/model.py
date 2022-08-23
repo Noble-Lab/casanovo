@@ -1,7 +1,5 @@
 """A de novo peptide sequencing model."""
-import csv
 import logging
-import os
 import re
 from typing import Any, Dict, List, Optional, Tuple, Union
 
@@ -13,7 +11,7 @@ from depthcharge.components import ModelMixin, PeptideDecoder, SpectrumEncoder
 from depthcharge.models.embed.model import PairedSpectrumEncoder
 
 from . import evaluate
-from .. import __version__
+from ..data import ms_io
 
 
 logger = logging.getLogger("casanovo")
@@ -96,7 +94,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         ] = None,
         warmup_iters: int = 100_000,
         max_iters: int = 600_000,
-        out_filename: Optional[str] = None,
+        out_writer: Optional[ms_io.MztabWriter] = None,
         **kwargs: Dict,
     ):
         super().__init__()
@@ -146,8 +144,8 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         self._history = []
         self.tb_summarywriter = tb_summarywriter
 
-        # Output file during predicting.
-        self.out_filename = out_filename
+        # Output writer during predicting.
+        self.out_writer = out_writer
 
     def forward(
         self, spectra: torch.Tensor, precursors: torch.Tensor
@@ -402,103 +400,51 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         Write the predicted peptide sequences and amino acid scores to the
         output file.
         """
-        if self.out_filename is None:
+        if self.out_writer is None:
             return
-        with open(self.out_filename, "a") as f_out:
-            writer = csv.writer(
-                f_out, delimiter="\t", lineterminator=os.linesep()
-            )
-            writer.writerow(
-                [
-                    "PSH",
-                    "sequence",
-                    "PSM_ID",
-                    "accession",
-                    "unique",
-                    "database",
-                    "database_version",
-                    "search_engine",
-                    "search_engine_score[1]",
-                    "modifications",
-                    "retention_time",
-                    "charge",
-                    "exp_mass_to_charge",
-                    "calc_mass_to_charge",
-                    "spectra_ref",
-                    "pre",
-                    "post",
-                    "start",
-                    "end",
-                    "opt_ms_run[1]_aa_scores",
-                ]
-            )
-            for batch in results:
-                for step in batch:
-                    for spectrum_i, precursor, peptide, aa_scores in zip(
-                        *step
-                    ):
-                        peptide = peptide[1:]
-                        peptide_tokens = re.split(r"(?<=.)(?=[A-Z])", peptide)
-                        # Take the scores of the most probable amino acids.
-                        top_aa_scores = torch.max(
-                            aa_scores[1 : len(peptide_tokens) + 1], axis=1
-                        )[0]
-                        peptide_score = (
-                            torch.mean(top_aa_scores).detach().item()
+        for batch in results:
+            for step in batch:
+                for spectrum_i, precursor, peptide, aa_scores in zip(*step):
+                    peptide = peptide[1:]
+                    peptide_tokens = re.split(r"(?<=.)(?=[A-Z])", peptide)
+                    # Take the scores of the most probable amino acids.
+                    top_aa_scores = torch.max(
+                        aa_scores[1 : len(peptide_tokens) + 1], axis=1
+                    )[0]
+                    peptide_score = torch.mean(top_aa_scores).detach().item()
+                    # Compare the experimental vs calculated precursor m/z.
+                    _, precursor_charge, precursor_mz = precursor
+                    precursor_charge = int(precursor_charge.item())
+                    precursor_mz = precursor_mz.item()
+                    try:
+                        calc_mz = self.peptide_mass_calculator.mass(
+                            peptide_tokens, precursor_charge
                         )
-                        # Compare the experimental vs calculated precursor m/z.
-                        _, precursor_charge, precursor_mz = precursor
-                        precursor_charge = int(precursor_charge.item())
-                        precursor_mz = precursor_mz.item()
-                        try:
-                            calc_mz = self.peptide_mass_calculator.mass(
-                                peptide_tokens, precursor_charge
-                            )
-                            delta_mass_ppm = (
-                                (calc_mz - precursor_mz)
-                                / precursor_mz
-                                * 10**6
-                            )
-                            is_within_precursor_mz_tol = (
-                                abs(delta_mass_ppm) < self.precursor_mass_tol
-                            )
-                        except KeyError:
-                            is_within_precursor_mz_tol = False
-                        # Subtract one if the precursor m/z tolerance is
-                        # violated.
-                        if not is_within_precursor_mz_tol:
-                            peptide_score -= 1
-                        aa_scores = ",".join(
-                            reversed(list(map("{:.5f}".format, top_aa_scores)))
+                        delta_mass_ppm = (
+                            (calc_mz - precursor_mz) / precursor_mz * 10**6
                         )
-                        writer.writerow(
-                            [
-                                "PSM",
-                                peptide,
-                                spectrum_i,
-                                "null",
-                                "null",
-                                "null",
-                                "null",
-                                f"[MS, MS:1003281, Casanovo, {__version__}]",
-                                peptide_score,
-                                # FIXME: Modifications should be specified as
-                                #  controlled vocabulary terms.
-                                "null",
-                                # FIXME: Can we get the retention time from the
-                                #  data loader?
-                                "null",
-                                precursor_charge,
-                                precursor_mz,
-                                calc_mz,
-                                f"ms_run[1]:index={spectrum_i}",
-                                "null",
-                                "null",
-                                "null",
-                                "null",
-                                aa_scores,
-                            ]
+                        is_within_precursor_mz_tol = (
+                            abs(delta_mass_ppm) < self.precursor_mass_tol
                         )
+                    except KeyError:
+                        calc_mz, is_within_precursor_mz_tol = np.nan, False
+                    # Subtract one if the precursor m/z tolerance is violated.
+                    if not is_within_precursor_mz_tol:
+                        peptide_score -= 1
+                    aa_scores = ",".join(
+                        reversed(list(map("{:.5f}".format, top_aa_scores)))
+                    )
+                    self.out_writer.psms.append(
+                        (
+                            peptide,
+                            spectrum_i,
+                            peptide_score,
+                            precursor_charge,
+                            precursor_mz,
+                            calc_mz,
+                            aa_scores,
+                        ),
+                    )
 
     def _log_history(self) -> None:
         """
