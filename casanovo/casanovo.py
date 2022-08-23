@@ -1,13 +1,20 @@
 """The command line entry point for Casanovo."""
+import collections
 import datetime
+import functools
 import logging
 import os
+import re
+import shutil
 import sys
 
 import click
+import github
 import psutil
 import pytorch_lightning as pl
+import requests
 import torch
+import tqdm
 import yaml
 
 from . import __version__
@@ -102,10 +109,12 @@ def main(
     root.addHandler(file_handler)
     # Disable dependency non-critical log messages.
     logging.getLogger("depthcharge").setLevel(logging.INFO)
+    logging.getLogger("github").setLevel(logging.WARNING)
     logging.getLogger("h5py").setLevel(logging.WARNING)
     logging.getLogger("numba").setLevel(logging.WARNING)
     logging.getLogger("pytorch_lightning").setLevel(logging.WARNING)
     logging.getLogger("torch").setLevel(logging.WARNING)
+    logging.getLogger("urllib3").setLevel(logging.WARNING)
 
     # Read parameters from the config file.
     if config is None:
@@ -162,6 +171,24 @@ def main(
 
     pl.utilities.seed.seed_everything(seed=config["random_seed"], workers=True)
 
+    # Download model weights if these were not specified (except when training).
+    if model is None and mode != "train":
+        try:
+            model = _get_model_weights()
+        except github.RateLimitExceededException:
+            logger.error(
+                "GitHub API rate limit exceeded while trying to download the "
+                "model weights. Please download compatible model weights "
+                "manually from the official Casanovo code website "
+                "(https://github.com/Noble-Lab/casanovo) and specify these "
+                "explicitly using the `--model` parameter when running "
+                "Casanovo."
+            )
+            raise PermissionError(
+                "GitHub API rate limit exceeded while trying to download the "
+                "model weights"
+            ) from None
+
     # Log the active configuration.
     logger.info("Casanovo version %s", str(__version__))
     for key, value in config.items():
@@ -177,6 +204,131 @@ def main(
     elif mode == "train":
         logger.info("Train the Casanovo model.")
         model_runner.train(peak_path, peak_path_val, model, config)
+
+
+def _get_model_weights() -> str:
+    """
+    Download model weights from GitHub.
+
+    Model weights files (extension: .ckpt) should be provided as an asset with
+    their corresponding release on GitHub.
+    Model weights will be retrieved by matching release version. If no model
+    weights for an identical release (major, minor, patch), alternative releases
+    with matching (i) major and minor, or (ii) major versions will be used.
+    If no matching release can be found, no model weights will be downloaded.
+    The model weights will be downloaded to the current working directory.
+
+    Note that the GitHub API is limited to 60 requests from the same IP per
+    hour. A log message provides instructions to explicitly specify the model
+    file for subsequent uses.
+
+    Returns
+    -------
+    str
+        The name of the model weights file.
+    """
+    gh = github.Github()
+    repo = gh.get_repo("Noble-Lab/casanovo")
+    # Collect releases with model weights provided as asset.
+    assets = collections.defaultdict(lambda: collections.defaultdict(dict))
+    for release in repo.get_releases():
+        major, minor, patch = tuple(
+            g
+            for g in re.match(
+                r"v(\d+)\.(\d+)\.(\d+)", release.tag_name
+            ).groups()
+        )
+        for release_asset in release.get_assets():
+            if os.path.splitext(release_asset.name)[1] == ".ckpt":
+                assets[major][minor][patch] = (
+                    release.tag_name,
+                    release_asset.name,
+                    release_asset.browser_download_url,
+                )
+    # Find the release with best matching version number.
+    major, minor, patch = tuple(
+        g
+        for g in re.match(
+            r"(\d+)\.(\d+)\.(\d+)(?:.dev\d+.+)?", __version__
+        ).groups()
+    )
+    if major in assets:
+        if minor in assets[major]:
+            if patch in assets[major][minor]:
+                asset_version, asset_name, asset_url = (
+                    assets[major][minor][patch]
+                )
+                logger.debug(
+                    "Model weights matching release %s found", asset_version
+                )
+            else:
+                asset_version, asset_name, asset_url = next(
+                    iter(assets[major][minor].values())
+                )
+                logger.debug(
+                    "Model weights matching minor release %s found; current "
+                    "release v%s",
+                    asset_version,
+                    __version__,
+                )
+        else:
+            asset_version, asset_name, asset_url = next(
+                iter(next(iter(assets[major].values())).values())
+            )
+            logger.debug(
+                "Model weights matching major release %s found; current "
+                "release v%s",
+                asset_version,
+                __version__,
+            )
+    else:
+        logger.error(
+            "No matching model weights for release v%s found, please specify "
+            "your model weights explicitly using the `--model` parameter",
+            __version__,
+        )
+        raise ValueError(
+            f"No matching model weights for release v{__version__} found, "
+            "please specify your model weights explicitly using the `--model` "
+            "parameter"
+        )
+    # Check whether the model weights file already exists.
+    asset_name, ext = os.path.splitext(asset_name)
+    asset_name = f"{asset_name}_{asset_version.replace('.', '_')}_{ext}"
+    asset_path = os.path.join(os.getcwd(), asset_name)
+    if os.path.isfile(asset_path):
+        logger.warning(
+            "Model weights file found at %s. Please specify this file "
+            "explicitly using the `--model` parameter when running Casanovo "
+            "next time.",
+            asset_path,
+        )
+    else:
+        # Download the model weights.
+        logger.info(
+            "Downloading model weights for release %s from URL %s",
+            asset_version,
+            asset_url,
+        )
+        response = requests.get(asset_url, stream=True, allow_redirects=True)
+        response.raise_for_status()
+        file_size = int(response.headers.get("Content-Length", 0))
+        desc = "(Unknown total file size)" if file_size == 0 else ""
+        response.raw.read = functools.partial(
+            response.raw.read, decode_content=True
+        )
+        with tqdm.tqdm.wrapattr(
+                response.raw, "read", total=file_size, desc=desc
+        ) as r_raw, open(asset_path, "wb") as f:
+            shutil.copyfileobj(r_raw, f)
+        logger.warning(
+            "Model weights file downloaded to %s. Please specify this file "
+            "explicitly using the `--model` parameter when running Casanovo "
+            "next time.",
+            asset_path,
+        )
+    return asset_path
+
 
 
 if __name__ == "__main__":
