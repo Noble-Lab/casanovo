@@ -64,11 +64,9 @@ See [`casanovo/config.yaml`](https://github.com/Noble-Lab/casanovo/blob/main/cas
 When running Casanovo in `denovo` or `eval` mode, Casanovo needs compatible pretrained model weights to make predictions.
 Model weights can be found on the [Releases page](https://github.com/Noble-Lab/casanovo/releases) under the "Assets" for each release (file extension: .ckpt).
 The model file can then be specified using the `--model` command-line parameter when executing Casanovo.
+To assist users, if no model file is specified Casanovo will try to download and use compatible a model file automatically.
 
-Not all releases might have a model file included under Assets, in which case model weights for alternative releases with the same major version number can be used.
-
-To assist users, Casanovo will try to download compatible model weights if no model file is specified the first time it is executed.
-However, for subsequent Casanovo executions it is recommended to explicitly specify the model file to avoid limitations related to downloading the model file (see "Troubleshooting").
+Not all releases might have a model file included on the [Releases page](https://github.com/Noble-Lab/casanovo/releases), in which case model weights for alternative releases with the same major version number can be used.
 
 ### Example commands
 
@@ -152,11 +150,10 @@ Additionally, we recommend shutting down any other processes that may be running
 **How do I solve a "PermissionError: GitHub API rate limit exceeded" error when trying to run Casanovo?**
 
 When running Casanovo in `denovo` or `eval` mode, Casanovo needs compatible pretrained model weights to make predictions.
-If no model weights file is specified using the `--model` command-line parameter, Casanovo will automatically try to download the latest compatible model file from GitHub and save it to the current working directory.
+If no model weights file is specified using the `--model` command-line parameter, Casanovo will automatically try to download the latest compatible model file from GitHub and save it to its cache for subsequent use.
 However, the GitHub API is limited to maximum 60 requests per hour per IP address.
 Consequently, if Casanovo has been executed multiple times already, it might temporarily not be able to communicate with GitHub.
 You can avoid this error by explicitly specifying the model file using the `--model` parameter.
-We recommended to do always include this parameter after Casanovo has downloaded the model weights during its first execution.
 
 ## Release notes
 
