@@ -1,5 +1,4 @@
 """The command line entry point for Casanovo."""
-import collections
 import datetime
 import functools
 import logging
@@ -7,6 +6,7 @@ import os
 import re
 import shutil
 import sys
+from typing import Optional, Tuple
 
 import appdirs
 import click
@@ -209,128 +209,102 @@ def main(
 
 def _get_model_weights() -> str:
     """
-    Download model weights from GitHub.
+    Use cached model weights or download them from GitHub.
 
-    Model weights files (extension: .ckpt) should be provided as an asset with
-    their corresponding release on GitHub.
-    Model weights will be retrieved by matching release version. If no model
-    weights for an identical release (major, minor, patch), alternative releases
-    with matching (i) major and minor, or (ii) major versions will be used.
+    If no weights file (extension: .ckpt) is available in the cache directory,
+    it will be downloaded from a release asset on GitHub.
+    Model weights are retrieved by matching release version. If no model weights
+    for an identical release (major, minor, patch), alternative releases with
+    matching (i) major and minor, or (ii) major versions will be used.
     If no matching release can be found, no model weights will be downloaded.
-    The model weights will be downloaded to the current working directory.
 
     Note that the GitHub API is limited to 60 requests from the same IP per
-    hour. A log message provides instructions to explicitly specify the model
-    file for subsequent uses.
+    hour.
 
     Returns
     -------
     str
         The name of the model weights file.
     """
-    gh = github.Github()
-    repo = gh.get_repo("Noble-Lab/casanovo")
-    # Collect releases with model weights provided as asset.
-    assets = collections.defaultdict(lambda: collections.defaultdict(dict))
-    for release in repo.get_releases():
-        major, minor, patch = tuple(
-            g
-            for g in re.match(
-                r"v(\d+)\.(\d+)\.(\d+)", release.tag_name
-            ).groups()
-        )
-        for release_asset in release.get_assets():
-            if os.path.splitext(release_asset.name)[1] == ".ckpt":
-                assets[major][minor][patch] = (
-                    release.tag_name,
-                    release_asset.name,
-                    release_asset.browser_download_url,
-                )
-    # Find the release with best matching version number.
-    major, minor, patch = tuple(
+    cache_dir = appdirs.user_cache_dir("casanovo", False, opinion=False)
+    os.makedirs(cache_dir, exist_ok=True)
+    version = tuple(
         g
         for g in re.match(
             r"(\d+)\.(\d+)\.(\d+)(?:.dev\d+.+)?", __version__
         ).groups()
     )
-    if major in assets:
-        if minor in assets[major]:
-            if patch in assets[major][minor]:
-                asset_version, asset_name, asset_url = assets[major][minor][
-                    patch
-                ]
-                logger.debug(
-                    "Model weights matching release %s found", asset_version
-                )
-            else:
-                asset_version, asset_name, asset_url = next(
-                    iter(assets[major][minor].values())
-                )
-                logger.debug(
-                    "Model weights matching minor release %s found; current "
-                    "release v%s",
-                    asset_version,
-                    __version__,
-                )
-        else:
-            asset_version, asset_name, asset_url = next(
-                iter(next(iter(assets[major].values())).values())
+    version_match: Tuple[Optional[str], Optional[str], int] = None, None, 0
+    # Try to find suitable model weights in the local cache.
+    for filename in os.listdir(cache_dir):
+        root, ext = os.path.splitext(filename)
+        if ext == ".ckpt":
+            file_version = tuple(
+                g for g in re.match(r".*_v(\d+)_(\d+)_(\d+)", root).groups()
             )
-            logger.debug(
-                "Model weights matching major release %s found; current "
-                "release v%s",
-                asset_version,
+            match = sum([i == j for i, j in zip(version, file_version)])
+            if match > version_match[2]:
+                version_match = os.path.join(cache_dir, filename), None, match
+    # Provide the cached model weights if found.
+    if version_match[2] > 0:
+        logger.info(
+            "Model weights file %s retrieved from local cache",
+            version_match[0],
+        )
+        return version_match[0]
+    # Otherwise try to find compatible model weights on GitHub.
+    else:
+        repo = github.Github().get_repo("Noble-Lab/casanovo")
+        # Find the best matching release with model weights provided as asset.
+        for release in repo.get_releases():
+            rel_version = tuple(
+                g
+                for g in re.match(
+                    r"v(\d+)\.(\d+)\.(\d+)", release.tag_name
+                ).groups()
+            )
+            match = sum([i == j for i, j in zip(version, rel_version)])
+            if match > version_match[2]:
+                for release_asset in release.get_assets():
+                    fn, ext = os.path.splitext(release_asset.name)
+                    if ext == ".ckpt":
+                        version_match = (
+                            os.path.join(
+                                cache_dir,
+                                f"{fn}_v{'_'.join(map(str, rel_version))}{ext}",
+                            ),
+                            release_asset.browser_download_url,
+                            match,
+                        )
+                        break
+        # Download the model weights if a matching release was found.
+        if version_match[2] > 0:
+            filename, url, _ = version_match
+            logger.info(
+                "Downloading model weights file %s from %s", filename, url
+            )
+            r = requests.get(url, stream=True, allow_redirects=True)
+            r.raise_for_status()
+            file_size = int(r.headers.get("Content-Length", 0))
+            desc = "(Unknown total file size)" if file_size == 0 else ""
+            r.raw.read = functools.partial(r.raw.read, decode_content=True)
+            with tqdm.tqdm.wrapattr(
+                r.raw, "read", total=file_size, desc=desc
+            ) as r_raw, open(filename, "wb") as f:
+                shutil.copyfileobj(r_raw, f)
+            return filename
+        else:
+            logger.error(
+                "No matching model weights for release v%s found, please "
+                "specify your model weights explicitly using the `--model` "
+                "parameter",
                 __version__,
             )
-    else:
-        logger.error(
-            "No matching model weights for release v%s found, please specify "
-            "your model weights explicitly using the `--model` parameter",
-            __version__,
-        )
-        raise ValueError(
-            f"No matching model weights for release v{__version__} found, "
-            "please specify your model weights explicitly using the `--model` "
-            "parameter"
-        )
-    # Check whether the model weights file already exists.
-    asset_name, ext = os.path.splitext(asset_name)
-    asset_name = f"{asset_name}_{asset_version.replace('.', '_')}_{ext}"
-    asset_path = os.path.join(
-        appdirs.user_cache_dir("casanovo", False, opinion=False), asset_name
-    )
-    if os.path.isfile(asset_path):
-        logger.warning(
-            "Model weights file found at %s. Please specify this file "
-            "explicitly using the `--model` parameter when running Casanovo "
-            "next time.",
-            asset_path,
-        )
-    else:
-        # Download the model weights.
-        logger.info(
-            "Downloading model weights for release %s from URL %s",
-            asset_version,
-            asset_url,
-        )
-        response = requests.get(asset_url, stream=True, allow_redirects=True)
-        response.raise_for_status()
-        file_size = int(response.headers.get("Content-Length", 0))
-        desc = "(Unknown total file size)" if file_size == 0 else ""
-        response.raw.read = functools.partial(
-            response.raw.read, decode_content=True
-        )
-        with tqdm.tqdm.wrapattr(
-            response.raw, "read", total=file_size, desc=desc
-        ) as r_raw, open(asset_path, "wb") as f:
-            shutil.copyfileobj(r_raw, f)
-        logger.warning(
-            "Model weights file downloaded to %s. Please specify this file "
-            "explicitly using the `--model` parameter when running Casanovo "
-            "next time.",
-            asset_path,
-        )
-    return asset_path
+            raise ValueError(
+                f"No matching model weights for release v{__version__} found, "
+                f"please specify your model weights explicitly using the "
+                f"`--model` parameter"
+            )
 
 
 if __name__ == "__main__":
