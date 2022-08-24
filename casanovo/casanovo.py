@@ -8,6 +8,7 @@ import re
 import shutil
 import sys
 
+import appdirs
 import click
 import github
 import psutil
@@ -295,7 +296,9 @@ def _get_model_weights() -> str:
     # Check whether the model weights file already exists.
     asset_name, ext = os.path.splitext(asset_name)
     asset_name = f"{asset_name}_{asset_version.replace('.', '_')}_{ext}"
-    asset_path = os.path.join(os.getcwd(), asset_name)
+    asset_path = os.path.join(
+        appdirs.user_cache_dir("casanovo", False, opinion=False), asset_name
+    )
     if os.path.isfile(asset_path):
         logger.warning(
             "Model weights file found at %s. Please specify this file "
