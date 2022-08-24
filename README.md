@@ -73,7 +73,7 @@ Not all releases might have a model file included on the [Releases page](https:/
 - To run _de novo_ sequencing:
 
 ```
-casanovo --mode=denovo --model=path/to/model.ckpt --peak_path=path/to/predict/spectra.mgf --config=path/to/config.yaml --output=path/to/output
+casanovo --mode=denovo --peak_path=path/to/predict/spectra.mgf --config=path/to/config.yaml --output=path/to/output
 ```
 
 Casanovo can predict peptide sequences for MS/MS data in mzML, mzXML, and MGF files.
@@ -82,7 +82,7 @@ This will write peptide predictions for the given MS/MS spectra to the specified
 - To evaluate _de novo_ sequencing performance based on known spectrum annotations:
 
 ```
-casanovo --mode=eval --model=path/to/model.ckpt --peak_path=path/to/test/annotated_spectra.mgf --config=path/to/config.yaml
+casanovo --mode=eval --peak_path=path/to/test/annotated_spectra.mgf --config=path/to/config.yaml
 ```
 
 To evaluate the peptide predictions, ground truth peptide labels need to be provided as an annotated MGF file.
@@ -103,13 +103,11 @@ We will demonstrate how to use Casanovo using a small walkthrough example on a s
 The example MGF file is available at [`sample_data/sample_preprocessed_spectra.mgf`](https://github.com/Noble-Lab/casanovo/blob/main/sample_data/sample_preprocessed_spectra.mgf`).
 
 1. Install Casanovo (see above for details).
-2. Download compatible model weights from the [Releases page](https://github.com/Noble-Lab/casanovo/releases). Place this file in a location that you can easily access.
-    - Here we assume that the model file has file name `casanovo_massivekb.ckpt`.
-3. Copy the example `config.yaml` file to a location you can easily access. 
-4. Ensure you are in the proper anaconda environment by typing `conda activate casanovo_env`. (If you named your environment differently, type in that name instead.)
-5. Run this command:
+2. Copy the example `config.yaml` file to a location you can easily access. 
+3. Ensure you are in the proper anaconda environment by typing `conda activate casanovo_env`. (If you named your environment differently, type in that name instead.)
+4. Run this command:
 ```
-casanovo --mode=denovo --model=[PATH_TO]/casanovo_massivekb.ckpt --peak_path=[PATH_TO]/sample_preprocessed_spectra.mgf --config=[PATH_TO]/config.yaml
+casanovo --mode=denovo --peak_path=[PATH_TO]/sample_preprocessed_spectra.mgf --config=[PATH_TO]/config.yaml
 ```
 
 This job will take very little time to run (< 1 minute).
