@@ -143,12 +143,11 @@ def main(
         predict_batch_size=int,
         max_epochs=int,
         num_sanity_val_steps=int,
-        strategy=str,
         train_from_scratch=bool,
         save_model=bool,
         model_save_folder_path=str,
         save_weights_only=bool,
-        every_n_epochs=int,
+        every_n_train_steps=int,
     )
     for k, t in config_types.items():
         try:
