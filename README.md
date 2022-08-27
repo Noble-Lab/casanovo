@@ -69,7 +69,7 @@ casanovo --mode=denovo --model=path/to/pretrained.ckpt --peak_path=path/to/predi
 ```
 
 Casanovo can predict peptide sequences for MS/MS data in mzML, mzXML, and MGF files.
-This will write peptide predictions for the given MS/MS spectra to the specified output file in a tab-separated format (extension: .csv).
+This will write peptide predictions for the given MS/MS spectra to the specified output file in mzTab format.
 
 - To evaluate _de novo_ sequencing performance based on known spectrum annotations:
 
@@ -104,17 +104,9 @@ The example MGF file is available at [`sample_data/sample_preprocessed_spectra.m
 casanovo --mode=denovo --model=[PATH_TO]/pretrained_excl_mouse.ckpt --peak_path=[PATH_TO]/sample_preprocessed_spectra.mgf --config=[PATH_TO]/config.yaml
 ```
 Make sure you use the proper filepath to the `pretrained_excl_mouse.ckpt` file.
-    - Note: If you want to get the ouput CSV file in different location than the working directory, specify an alternative output location using the `--output` parameter.
+    - Note: If you want to get the output mzTab file in different location than the working directory, specify an alternative output location using the `--output` parameter.
 
 This job will take very little time to run (< 1 minute).
-
-If the first few lines look like:
-
-```
-spectrum_id     sequence            score       aa_scores
-0               LAHYNKR             0.98197     1.0,0.999...
-1               VKEDYGQM+15.995PR   0.77206     0.999,0.999...
-```
 
 Congratulations! You got Casanovo to work.
 

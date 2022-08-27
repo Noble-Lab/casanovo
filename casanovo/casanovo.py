@@ -11,7 +11,8 @@ import torch
 import yaml
 
 from . import __version__
-from casanovo.denovo import model_runner
+from .data import ms_io
+from .denovo import model_runner
 
 
 logger = logging.getLogger("casanovo")
@@ -83,6 +84,8 @@ def main(
             os.getcwd(),
             f"casanovo_{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}",
         )
+    else:
+        output = os.path.splitext(os.path.abspath(output))[0]
 
     # Configure logging.
     logging.captureWarnings(True)
@@ -97,7 +100,7 @@ def main(
     console_handler.setLevel(logging.DEBUG)
     console_handler.setFormatter(log_formatter)
     root.addHandler(console_handler)
-    file_handler = logging.FileHandler(f"{os.path.splitext(output)[0]}.log")
+    file_handler = logging.FileHandler(f"{output}.log")
     file_handler.setFormatter(log_formatter)
     root.addHandler(file_handler)
     # Disable dependency non-critical log messages.
@@ -112,6 +115,7 @@ def main(
         config = os.path.join(
             os.path.dirname(os.path.realpath(__file__)), "config.yaml"
         )
+    config_fn = config
     with open(config) as f_in:
         config = yaml.safe_load(f_in)
     # Ensure that the config values have the correct type.
@@ -164,13 +168,24 @@ def main(
 
     # Log the active configuration.
     logger.info("Casanovo version %s", str(__version__))
+    logger.debug("mode = %s", mode)
+    logger.debug("model = %s", model)
+    logger.debug("peak_path = %s", peak_path)
+    logger.debug("peak_path_val = %s", peak_path_val)
+    logger.debug("config = %s", config_fn)
+    logger.debug("output = %s", output)
     for key, value in config.items():
         logger.debug("%s = %s", str(key), str(value))
 
     # Run Casanovo in the specified mode.
     if mode == "denovo":
         logger.info("Predict peptide sequences with Casanovo.")
-        model_runner.predict(peak_path, model, output, config)
+        writer = ms_io.MztabWriter(f"{output}.mztab")
+        writer.set_metadata(
+            peak_path, config, model=model, config_filename=config_fn
+        )
+        model_runner.predict(peak_path, model, config, writer)
+        writer.save()
     elif mode == "eval":
         logger.info("Evaluate a trained Casanovo model.")
         model_runner.evaluate(peak_path, model, config)

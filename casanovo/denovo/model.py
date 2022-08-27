@@ -1,7 +1,5 @@
 """A de novo peptide sequencing model."""
-import csv
 import logging
-import os
 import re
 from typing import Any, Dict, List, Optional, Tuple, Union
 
@@ -13,6 +11,7 @@ from depthcharge.components import ModelMixin, PeptideDecoder, SpectrumEncoder
 from depthcharge.models.embed.model import PairedSpectrumEncoder
 
 from . import evaluate
+from ..data import ms_io
 
 
 logger = logging.getLogger("casanovo")
@@ -95,7 +94,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         ] = None,
         warmup_iters: int = 100_000,
         max_iters: int = 600_000,
-        out_filename: Optional[str] = None,
+        out_writer: Optional[ms_io.MztabWriter] = None,
         **kwargs: Dict,
     ):
         super().__init__()
@@ -145,11 +144,8 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         self._history = []
         self.tb_summarywriter = tb_summarywriter
 
-        # Output file during predicting.
-        if out_filename is not None:
-            self.out_filename = f"{os.path.splitext(out_filename)[0]}.csv"
-        else:
-            self.out_filename = None
+        # Output writer during predicting.
+        self.out_writer = out_writer
 
     def forward(
         self, spectra: torch.Tensor, precursors: torch.Tensor
@@ -404,53 +400,51 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         Write the predicted peptide sequences and amino acid scores to the
         output file.
         """
-        if self.out_filename is None:
+        if self.out_writer is None:
             return
-        with open(self.out_filename, "w") as f_out:
-            writer = csv.writer(f_out, delimiter="\t")
-            writer.writerow(["spectrum_id", "sequence", "score", "aa_scores"])
-            for batch in results:
-                for step in batch:
-                    for spectrum_i, precursor, peptide, aa_scores in zip(
-                        *step
-                    ):
-                        peptide = peptide[1:]
-                        peptide_tokens = re.split(r"(?<=.)(?=[A-Z])", peptide)
-                        # Take the scores of the most probable amino acids.
-                        top_aa_scores = torch.max(
-                            aa_scores[1 : len(peptide_tokens) + 1], axis=1
-                        )[0]
-                        peptide_score = (
-                            torch.mean(top_aa_scores).detach().item()
+        for batch in results:
+            for step in batch:
+                for spectrum_i, precursor, peptide, aa_scores in zip(*step):
+                    peptide = peptide[1:]
+                    peptide_tokens = re.split(r"(?<=.)(?=[A-Z])", peptide)
+                    # Take the scores of the most probable amino acids.
+                    top_aa_scores = torch.max(
+                        aa_scores[1 : len(peptide_tokens) + 1], axis=1
+                    )[0]
+                    peptide_score = torch.mean(top_aa_scores).detach().item()
+                    # Compare the experimental vs calculated precursor m/z.
+                    _, precursor_charge, precursor_mz = precursor
+                    precursor_charge = int(precursor_charge.item())
+                    precursor_mz = precursor_mz.item()
+                    try:
+                        calc_mz = self.peptide_mass_calculator.mass(
+                            peptide_tokens, precursor_charge
                         )
-                        # Compare the experimental vs calculated precursor m/z.
-                        _, precursor_charge, precursor_mz = precursor
-                        precursor_charge = int(precursor_charge.item())
-                        precursor_mz = precursor_mz.item()
-                        try:
-                            calc_mz = self.peptide_mass_calculator.mass(
-                                peptide_tokens, precursor_charge
-                            )
-                            delta_mass_ppm = (
-                                (calc_mz - precursor_mz)
-                                / precursor_mz
-                                * 10**6
-                            )
-                            is_within_precursor_mz_tol = (
-                                abs(delta_mass_ppm) < self.precursor_mass_tol
-                            )
-                        except KeyError:
-                            is_within_precursor_mz_tol = False
-                        # Subtract one if the precursor m/z tolerance is
-                        # violated.
-                        if not is_within_precursor_mz_tol:
-                            peptide_score -= 1
-                        aa_scores = ",".join(
-                            reversed(list(map("{:.5f}".format, top_aa_scores)))
+                        delta_mass_ppm = (
+                            (calc_mz - precursor_mz) / precursor_mz * 10**6
                         )
-                        writer.writerow(
-                            [spectrum_i, peptide, peptide_score, aa_scores]
+                        is_within_precursor_mz_tol = (
+                            abs(delta_mass_ppm) < self.precursor_mass_tol
                         )
+                    except KeyError:
+                        calc_mz, is_within_precursor_mz_tol = np.nan, False
+                    # Subtract one if the precursor m/z tolerance is violated.
+                    if not is_within_precursor_mz_tol:
+                        peptide_score -= 1
+                    aa_scores = ",".join(
+                        reversed(list(map("{:.5f}".format, top_aa_scores)))
+                    )
+                    self.out_writer.psms.append(
+                        (
+                            peptide,
+                            spectrum_i,
+                            peptide_score,
+                            precursor_charge,
+                            precursor_mz,
+                            calc_mz,
+                            aa_scores,
+                        ),
+                    )
 
     def _log_history(self) -> None:
         """
