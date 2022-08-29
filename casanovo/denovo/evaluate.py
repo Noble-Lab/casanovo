@@ -44,7 +44,8 @@ def aa_match_prefix(
     # Find longest mass-matching prefix.
     i1, i2, cum_mass1, cum_mass2 = 0, 0, 0.0, 0.0
     while i1 < len(peptide1) and i2 < len(peptide2):
-        aa_mass1, aa_mass2 = aa_dict[peptide1[i1]], aa_dict[peptide2[i2]]
+        aa_mass1 = aa_dict.get(peptide1[i1], 0)
+        aa_mass2 = aa_dict.get(peptide2[i2], 0)
         if (
             abs(mass_diff(cum_mass1 + aa_mass1, cum_mass2 + aa_mass2, True))
             < cum_mass_threshold
@@ -106,7 +107,8 @@ def aa_match_prefix_suffix(
     i_stop = np.argwhere(~aa_matches)[0]
     cum_mass1, cum_mass2 = 0.0, 0.0
     while i1 >= i_stop and i2 >= i_stop:
-        aa_mass1, aa_mass2 = aa_dict[peptide1[i1]], aa_dict[peptide2[i2]]
+        aa_mass1 = aa_dict.get(peptide1[i1], 0)
+        aa_mass2 = aa_dict.get(peptide2[i2], 0)
         if (
             abs(mass_diff(cum_mass1 + aa_mass1, cum_mass2 + aa_mass2, True))
             < cum_mass_threshold
