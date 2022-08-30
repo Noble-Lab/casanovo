@@ -58,6 +58,10 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
     precursor_mass_tol : float, optional
         The maximum allowable precursor mass tolerance (in ppm) for correct
         predictions.
+    isotope_error_range : Tuple[int, int]
+        Take into account the error introduced by choosing a non-monoisotopic
+        peak for fragmentation by not penalizing predicted precursor m/z's that
+        fit the specified isotope error: `abs(calc_mz - (precursor_mz - isotope * 1.00335 / precursor_charge)) < precursor_mass_tol`
     n_log : int
         The number of epochs to wait between logging messages.
     tb_summarywriter: Optional[torch.utils.tensorboard.SummaryWriter]
@@ -87,7 +91,8 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         max_length: int = 100,
         residues: Union[Dict[str, float], str] = "canonical",
         max_charge: int = 5,
-        precursor_mass_tol=50,
+        precursor_mass_tol: float = 50,
+        isotope_error_range: Tuple[int, int] = (0, 1),
         n_log: int = 10,
         tb_summarywriter: Optional[
             torch.utils.tensorboard.SummaryWriter
@@ -134,6 +139,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         self.max_length = max_length
         self.residues = residues
         self.precursor_mass_tol = precursor_mass_tol
+        self.isotope_error_range = isotope_error_range
         self.peptide_mass_calculator = depthcharge.masses.PeptideMass(
             self.residues
         )
@@ -420,11 +426,24 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
                         calc_mz = self.peptide_mass_calculator.mass(
                             peptide_tokens, precursor_charge
                         )
-                        delta_mass_ppm = (
-                            (calc_mz - precursor_mz) / precursor_mz * 10**6
-                        )
-                        is_within_precursor_mz_tol = (
-                            abs(delta_mass_ppm) < self.precursor_mass_tol
+                        delta_mass_ppm = [
+                            (
+                                calc_mz
+                                - (
+                                    precursor_mz
+                                    - isotope * 1.00335 / precursor_charge
+                                )
+                            )
+                            / precursor_mz
+                            * 10**6
+                            for isotope in range(
+                                self.isotope_error_range[0],
+                                self.isotope_error_range[1] + 1,
+                            )
+                        ]
+                        is_within_precursor_mz_tol = any(
+                            abs(d) < self.precursor_mass_tol
+                            for d in delta_mass_ppm
                         )
                     except KeyError:
                         calc_mz, is_within_precursor_mz_tol = np.nan, False
