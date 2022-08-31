@@ -104,6 +104,8 @@ def _execute_existing(
         max_length=config["max_length"],
         residues=config["residues"],
         max_charge=config["max_charge"],
+        precursor_mass_tol=config["precursor_mass_tol"],
+        isotope_error_range=config["isotope_error_range"],
         n_log=config["n_log"],
         out_writer=out_writer,
     )
@@ -246,6 +248,8 @@ def train(
         max_length=config["max_length"],
         residues=config["residues"],
         max_charge=config["max_charge"],
+        precursor_mass_tol=config["precursor_mass_tol"],
+        isotope_error_range=config["isotope_error_range"],
         n_log=config["n_log"],
         tb_summarywriter=config["tb_summarywriter"],
         warmup_iters=config["warmup_iters"],
