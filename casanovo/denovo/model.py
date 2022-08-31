@@ -427,15 +427,12 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
                             peptide_tokens, precursor_charge
                         )
                         delta_mass_ppm = [
-                            (
-                                calc_mz
-                                - (
-                                    precursor_mz
-                                    - isotope * 1.00335 / precursor_charge
-                                )
+                            _calc_mass_error(
+                                calc_mz,
+                                precursor_mz,
+                                precursor_charge,
+                                isotope,
                             )
-                            / precursor_mz
-                            * 10**6
                             for isotope in range(
                                 self.isotope_error_range[0],
                                 self.isotope_error_range[1] + 1,
@@ -551,3 +548,29 @@ class CosineWarmupScheduler(torch.optim.lr_scheduler._LRScheduler):
         if epoch <= self.warmup:
             lr_factor *= epoch / self.warmup
         return lr_factor
+
+
+def _calc_mass_error(
+    calc_mz: float, obs_mz: float, charge: int, isotope: int = 0
+) -> float:
+    """
+    Calculate the mass error in ppm between the theoretical m/z and the observed
+    m/z, optionally accounting for an isotopologue mismatch.
+
+    Parameters
+    ----------
+    calc_mz : float
+        The theoretical m/z.
+    obs_mz : float
+        The observed m/z.
+    charge : int
+        The charge.
+    isotope : int
+        Correct for the given number of C13 isotopes (default: 0).
+
+    Returns
+    -------
+    float
+        The mass error in ppm.
+    """
+    return (calc_mz - (obs_mz - isotope * 1.00335 / charge)) / obs_mz * 10**6
