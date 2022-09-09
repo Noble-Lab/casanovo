@@ -228,12 +228,8 @@ def _get_model_weights() -> str:
     """
     cache_dir = appdirs.user_cache_dir("casanovo", False, opinion=False)
     os.makedirs(cache_dir, exist_ok=True)
-    version = tuple(
-        g
-        for g in re.match(
-            r"(\d+)\.(\d+)\.(\d+)(?:.dev\d+.+)?", __version__
-        ).groups()
-    )
+    version_regex = re.compile(r"(\d+)\.(\d+)\.(\d+)(?:.dev\d+.+)?")
+    version = tuple(g for g in version_regex.match(__version__).groups())
     version_match: Tuple[Optional[str], Optional[str], int] = None, None, 0
     # Try to find suitable model weights in the local cache.
     for filename in os.listdir(cache_dir):
