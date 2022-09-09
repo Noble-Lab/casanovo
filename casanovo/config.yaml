@@ -12,6 +12,9 @@ min_mz: 50.0
 max_mz: 2500.0
 min_intensity: 0.01
 remove_precursor_tol: 2.0  # Da
+max_charge: 10
+precursor_mass_tol: 50  # ppm
+isotope_error_range: [0, 1]
 
 # Model architecture options.
 dim_model: 512
@@ -52,7 +55,6 @@ residues:
   "+43.006": 43.005814      # Carbamylation
   "-17.027": -17.026549     # NH3 loss
   "+43.006-17.027": 25.980265
-max_charge: 10
 n_log: 1
 tb_summarywriter:
 warmup_iters: 100_000

@@ -16,7 +16,7 @@ If you use Casanovo in your work, please cite the following publication:
 
 We recommend to run Casanovo in a dedicated **Anaconda** environment.
 This helps keep your environment for Casanovo and its dependencies separate from your other Python environments.
-**This is especially helpful because Casanovo works within a specific range of Python versions (3.8 > Python version > 3.10).**
+**This is especially helpful because Casanovo works within a specific range of Python versions (3.8 ≥ Python version > 3.10).**
 
 - Check out the [Windows](https://docs.anaconda.com/anaconda/install/windows/#), [MacOS](https://docs.anaconda.com/anaconda/install/mac-os/), and [Linux](https://docs.anaconda.com/anaconda/install/linux/) installation instructions.
 
@@ -47,7 +47,7 @@ The base environment most likely will not work.
 
 ### Installation
 
-Install Casanovo as a Python package from this repository (requires 3.8 > [Python version] > 3.10 , dependencies will be installed automatically as needed):
+Install Casanovo as a Python package from this repository (requires 3.8 ≥ [Python version] > 3.10 , dependencies will be installed automatically as needed):
 
 ```
 pip install git+https://github.com/Noble-Lab/casanovo.git
@@ -77,7 +77,7 @@ casanovo --mode=denovo --peak_path=path/to/predict/spectra.mgf --output=path/to/
 ```
 
 Casanovo can predict peptide sequences for MS/MS data in mzML, mzXML, and MGF files.
-This will write peptide predictions for the given MS/MS spectra to the specified output file in a tab-separated format (extension: .csv).
+This will write peptide predictions for the given MS/MS spectra to the specified output file in mzTab format.
 
 - To evaluate _de novo_ sequencing performance based on known spectrum annotations:
 
@@ -109,15 +109,9 @@ The example MGF file is available at [`sample_data/sample_preprocessed_spectra.m
 casanovo --mode=denovo --peak_path=[PATH_TO]/sample_preprocessed_spectra.mgf
 ```
 
+Note: If you want to get the output mzTab file in different location than the working directory, specify an alternative output location using the `--output` parameter.
+
 This job will take very little time to run (< 1 minute).
-
-If the first few lines look like:
-
-```
-spectrum_id     sequence            score       aa_scores
-0               LAHYNKR             0.98197     1.0,0.999...
-1               VKEDYGQM+15.995PR   0.77206     0.999,0.999...
-```
 
 Congratulations! You got Casanovo to work.
 

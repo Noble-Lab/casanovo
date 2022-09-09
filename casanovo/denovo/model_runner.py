@@ -11,8 +11,9 @@ import pytorch_lightning as pl
 from depthcharge.data import AnnotatedSpectrumIndex, SpectrumIndex
 from pytorch_lightning.strategies import DDPStrategy
 
-from casanovo.denovo.dataloaders import DeNovoDataModule
-from casanovo.denovo.model import Spec2Pep
+from ..data import ms_io
+from ..denovo.dataloaders import DeNovoDataModule
+from ..denovo.model import Spec2Pep
 
 
 logger = logging.getLogger("casanovo")
@@ -21,8 +22,8 @@ logger = logging.getLogger("casanovo")
 def predict(
     peak_path: str,
     model_filename: str,
-    out_filename: str,
     config: Dict[str, Any],
+    out_writer: ms_io.MztabWriter,
 ) -> None:
     """
     Predict peptide sequences with a trained Casanovo model.
@@ -33,12 +34,12 @@ def predict(
         The path with peak files for predicting peptide sequences.
     model_filename : str
         The file name of the model weights (.ckpt file).
-    out_filename : str
-        The output file name for the prediction results (format: .csv).
     config : Dict[str, Any]
         The configuration options.
+    out_writer : ms_io.MztabWriter
+        The mzTab writer to export the prediction results.
     """
-    _execute_existing(peak_path, model_filename, config, False, out_filename)
+    _execute_existing(peak_path, model_filename, config, False, out_writer)
 
 
 def evaluate(
@@ -64,7 +65,7 @@ def _execute_existing(
     model_filename: str,
     config: Dict[str, Any],
     annotated: bool,
-    out_filename: Optional[str] = None,
+    out_writer: Optional[ms_io.MztabWriter] = None,
 ) -> None:
     """
     Predict peptide sequences with a trained Casanovo model with/without
@@ -81,8 +82,8 @@ def _execute_existing(
     annotated : bool
         Whether the input peak files are annotated (execute in evaluation mode)
         or not (execute in prediction mode only).
-    out_filename : str
-        The output file name for the prediction results (format: .csv).
+    out_writer : Optional[ms_io.MztabWriter]
+        The mzTab writer to export the prediction results.
     """
     # Load the trained model.
     if not os.path.isfile(model_filename):
@@ -103,8 +104,10 @@ def _execute_existing(
         max_length=config["max_length"],
         residues=config["residues"],
         max_charge=config["max_charge"],
+        precursor_mass_tol=config["precursor_mass_tol"],
+        isotope_error_range=config["isotope_error_range"],
         n_log=config["n_log"],
-        out_filename=out_filename,
+        out_writer=out_writer,
     )
     # Read the MS/MS spectra for which to predict peptide sequences.
     if annotated:
@@ -152,10 +155,8 @@ def _execute_existing(
         strategy=DDPStrategy(find_unused_parameters=False, static_graph=True),
     )
     # Run the model with/without validation.
-    if annotated:
-        trainer.validate(model, loaders.test_dataloader())
-    else:
-        trainer.predict(model, loaders.test_dataloader())
+    run_trainer = trainer.validate if annotated else trainer.predict
+    run_trainer(model, loaders.test_dataloader())
     # Clean up temporary files.
     tmp_dir.cleanup()
 
@@ -247,6 +248,8 @@ def train(
         max_length=config["max_length"],
         residues=config["residues"],
         max_charge=config["max_charge"],
+        precursor_mass_tol=config["precursor_mass_tol"],
+        isotope_error_range=config["isotope_error_range"],
         n_log=config["n_log"],
         tb_summarywriter=config["tb_summarywriter"],
         warmup_iters=config["warmup_iters"],

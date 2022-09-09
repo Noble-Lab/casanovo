@@ -1,7 +1,5 @@
 """A de novo peptide sequencing model."""
-import csv
 import logging
-import os
 import re
 from typing import Any, Dict, List, Optional, Tuple, Union
 
@@ -13,6 +11,7 @@ from depthcharge.components import ModelMixin, PeptideDecoder, SpectrumEncoder
 from depthcharge.models.embed.model import PairedSpectrumEncoder
 
 from . import evaluate
+from ..data import ms_io
 
 
 logger = logging.getLogger("casanovo")
@@ -59,6 +58,10 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
     precursor_mass_tol : float, optional
         The maximum allowable precursor mass tolerance (in ppm) for correct
         predictions.
+    isotope_error_range : Tuple[int, int]
+        Take into account the error introduced by choosing a non-monoisotopic
+        peak for fragmentation by not penalizing predicted precursor m/z's that
+        fit the specified isotope error: `abs(calc_mz - (precursor_mz - isotope * 1.00335 / precursor_charge)) < precursor_mass_tol`
     n_log : int
         The number of epochs to wait between logging messages.
     tb_summarywriter: Optional[torch.utils.tensorboard.SummaryWriter]
@@ -87,15 +90,16 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         ] = None,
         max_length: int = 100,
         residues: Union[Dict[str, float], str] = "canonical",
-        max_charge: int = 10,
-        precursor_mass_tol=50,
+        max_charge: int = 5,
+        precursor_mass_tol: float = 50,
+        isotope_error_range: Tuple[int, int] = (0, 1),
         n_log: int = 10,
         tb_summarywriter: Optional[
             torch.utils.tensorboard.SummaryWriter
         ] = None,
         warmup_iters: int = 100_000,
         max_iters: int = 600_000,
-        out_filename: Optional[str] = None,
+        out_writer: Optional[ms_io.MztabWriter] = None,
         **kwargs: Dict,
     ):
         super().__init__()
@@ -135,6 +139,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         self.max_length = max_length
         self.residues = residues
         self.precursor_mass_tol = precursor_mass_tol
+        self.isotope_error_range = isotope_error_range
         self.peptide_mass_calculator = depthcharge.masses.PeptideMass(
             self.residues
         )
@@ -145,11 +150,8 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         self._history = []
         self.tb_summarywriter = tb_summarywriter
 
-        # Output file during predicting.
-        if out_filename is not None:
-            self.out_filename = f"{os.path.splitext(out_filename)[0]}.csv"
-        else:
-            self.out_filename = None
+        # Output writer during predicting.
+        self.out_writer = out_writer
 
     def forward(
         self, spectra: torch.Tensor, precursors: torch.Tensor
@@ -404,53 +406,61 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         Write the predicted peptide sequences and amino acid scores to the
         output file.
         """
-        if self.out_filename is None:
+        if self.out_writer is None:
             return
-        with open(self.out_filename, "w") as f_out:
-            writer = csv.writer(f_out, delimiter="\t")
-            writer.writerow(["spectrum_id", "sequence", "score", "aa_scores"])
-            for batch in results:
-                for step in batch:
-                    for spectrum_i, precursor, peptide, aa_scores in zip(
-                        *step
-                    ):
-                        peptide = peptide[1:]
-                        peptide_tokens = re.split(r"(?<=.)(?=[A-Z])", peptide)
-                        # Take the scores of the most probable amino acids.
-                        top_aa_scores = torch.max(
-                            aa_scores[1 : len(peptide_tokens) + 1], axis=1
-                        )[0]
-                        peptide_score = (
-                            torch.mean(top_aa_scores).detach().item()
+        for batch in results:
+            for step in batch:
+                for spectrum_i, precursor, peptide, aa_scores in zip(*step):
+                    peptide = peptide[1:]
+                    peptide_tokens = re.split(r"(?<=.)(?=[A-Z])", peptide)
+                    # Take the scores of the most probable amino acids.
+                    top_aa_scores = torch.max(
+                        aa_scores[1 : len(peptide_tokens) + 1], axis=1
+                    )[0]
+                    peptide_score = torch.mean(top_aa_scores).detach().item()
+                    # Compare the experimental vs calculated precursor m/z.
+                    _, precursor_charge, precursor_mz = precursor
+                    precursor_charge = int(precursor_charge.item())
+                    precursor_mz = precursor_mz.item()
+                    try:
+                        calc_mz = self.peptide_mass_calculator.mass(
+                            peptide_tokens, precursor_charge
                         )
-                        # Compare the experimental vs calculated precursor m/z.
-                        _, precursor_charge, precursor_mz = precursor
-                        precursor_charge = int(precursor_charge.item())
-                        precursor_mz = precursor_mz.item()
-                        try:
-                            calc_mz = self.peptide_mass_calculator.mass(
-                                peptide_tokens, precursor_charge
+                        delta_mass_ppm = [
+                            _calc_mass_error(
+                                calc_mz,
+                                precursor_mz,
+                                precursor_charge,
+                                isotope,
                             )
-                            delta_mass_ppm = (
-                                (calc_mz - precursor_mz)
-                                / precursor_mz
-                                * 10**6
+                            for isotope in range(
+                                self.isotope_error_range[0],
+                                self.isotope_error_range[1] + 1,
                             )
-                            is_within_precursor_mz_tol = (
-                                abs(delta_mass_ppm) < self.precursor_mass_tol
-                            )
-                        except KeyError:
-                            is_within_precursor_mz_tol = False
-                        # Subtract one if the precursor m/z tolerance is
-                        # violated.
-                        if not is_within_precursor_mz_tol:
-                            peptide_score -= 1
-                        aa_scores = ",".join(
-                            reversed(list(map("{:.5f}".format, top_aa_scores)))
+                        ]
+                        is_within_precursor_mz_tol = any(
+                            abs(d) < self.precursor_mass_tol
+                            for d in delta_mass_ppm
                         )
-                        writer.writerow(
-                            [spectrum_i, peptide, peptide_score, aa_scores]
-                        )
+                    except KeyError:
+                        calc_mz, is_within_precursor_mz_tol = np.nan, False
+                    # Subtract one if the precursor m/z tolerance is violated.
+                    if not is_within_precursor_mz_tol:
+                        peptide_score -= 1
+                    aa_scores = ",".join(
+                        reversed(list(map("{:.5f}".format, top_aa_scores)))
+                    )
+                    self.out_writer.psms.append(
+                        (
+                            peptide,
+                            spectrum_i,
+                            peptide_score,
+                            precursor_charge,
+                            precursor_mz,
+                            calc_mz,
+                            aa_scores,
+                        ),
+                    )
 
     def _log_history(self) -> None:
         """
@@ -538,3 +548,29 @@ class CosineWarmupScheduler(torch.optim.lr_scheduler._LRScheduler):
         if epoch <= self.warmup:
             lr_factor *= epoch / self.warmup
         return lr_factor
+
+
+def _calc_mass_error(
+    calc_mz: float, obs_mz: float, charge: int, isotope: int = 0
+) -> float:
+    """
+    Calculate the mass error in ppm between the theoretical m/z and the observed
+    m/z, optionally accounting for an isotopologue mismatch.
+
+    Parameters
+    ----------
+    calc_mz : float
+        The theoretical m/z.
+    obs_mz : float
+        The observed m/z.
+    charge : int
+        The charge.
+    isotope : int
+        Correct for the given number of C13 isotopes (default: 0).
+
+    Returns
+    -------
+    float
+        The mass error in ppm.
+    """
+    return (calc_mz - (obs_mz - isotope * 1.00335 / charge)) / obs_mz * 10**6
