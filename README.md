@@ -18,7 +18,7 @@ Data and pre-trained model weights are available [on Zenodo](https://zenodo.org/
 
 We recommend to run Casanovo in a dedicated **Anaconda** environment.
 This helps keep your environment for Casanovo and its dependencies separate from your other Python environments.
-**This is especially helpful because Casanovo works within a specific range of Python versions (3.8 > Python version > 3.10).**
+**This is especially helpful because Casanovo works within a specific range of Python versions (3.8 ≥ Python version > 3.10).**
 
 - Check out the [Windows](https://docs.anaconda.com/anaconda/install/windows/#), [MacOS](https://docs.anaconda.com/anaconda/install/mac-os/), and [Linux](https://docs.anaconda.com/anaconda/install/linux/) installation instructions.
 
@@ -49,7 +49,7 @@ The base environment most likely will not work.
 
 ### Installation
 
-Install Casanovo as a Python package from this repository (requires 3.8 > [Python version] > 3.10 , dependencies will be installed automatically as needed):
+Install Casanovo as a Python package from this repository (requires 3.8 ≥ [Python version] > 3.10 , dependencies will be installed automatically as needed):
 
 ```
 pip install git+https://github.com/Noble-Lab/casanovo.git#egg=casanovo
