@@ -69,11 +69,11 @@ logger = logging.getLogger("casanovo")
 )
 def main(
     mode: str,
-    model: str,
+    model: Optional[str],
     peak_path: str,
-    peak_path_val: str,
-    config: str,
-    output: str,
+    peak_path_val: Optional[str],
+    config: Optional[str],
+    output: Optional[str],
 ):
     """
     \b
