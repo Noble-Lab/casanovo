@@ -8,7 +8,6 @@ import numpy as np
 import pytorch_lightning as pl
 import torch
 from depthcharge.components import ModelMixin, PeptideDecoder, SpectrumEncoder
-from depthcharge.models.embed.model import PairedSpectrumEncoder
 
 from . import evaluate
 from ..data import ms_io
@@ -106,10 +105,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
 
         # Build the model.
         if custom_encoder is not None:
-            if isinstance(custom_encoder, PairedSpectrumEncoder):
-                self.encoder = custom_encoder.encoder
-            else:
-                self.encoder = custom_encoder
+            self.encoder = custom_encoder
         else:
             self.encoder = SpectrumEncoder(
                 dim_model=dim_model,
