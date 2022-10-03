@@ -52,7 +52,7 @@ The base environment most likely will not work.
 Install Casanovo as a Python package from this repository (requires 3.8 ≥ [Python version] > 3.10 , dependencies will be installed automatically as needed):
 
 ```
-pip install git+https://github.com/Noble-Lab/casanovo.git#egg=casanovo
+pip install casanovo
 ```
 
 Once installed, Casanovo can be used with a simple command line interface.
@@ -132,16 +132,3 @@ casanovo --help
 This means that there was not enough (free) memory available on your GPU to run Casanovo, which is especially likely to happen when you are using a smaller, consumer-grade GPU.
 We recommend trying to decrease the `train_batch_size` or `predict_batch_size` options in the [config file](https://github.com/Noble-Lab/casanovo/blob/main/casanovo/config.yaml) (depending on whether the error occurred during `train` or `denovo` mode) to reduce the number of spectra that are processed simultaneously.
 Additionally, we recommend shutting down any other processes that may be running on the GPU, so that Casanovo can exclusively use the GPU.
-
-## Release notes
-
-- Release 2.1.1 (2022-07-27): Update tutorial
-- Release 2.1.0 (2022-07-02): Import latest depthcharge version with stable memory usage and fix to positional encoding for amino acids
-- Release 2.0.1 (2022-06-13): Release notes added
-- Release 2.0.0 (2022-06-05): Added additional CLI functionality, changed config file format, added pytest functionality, tutorial added, documentation with sphinx/ReadTheDocs added
-- Release 1.2.0 (2022-03-07): Add peptide and amino acid confidence scores to output file
-- Release 1.1.2 (2022-02-20): Add support for multiple MGF files in a directory
-- Release 1.1.1 (2022-02-10): Add more CLI options and specify custom config file
-- Release 1.1.0 (2022-02-04): Add data infrastructure, model and training/testing functionality
-- Release 1.0.0 (2022-01-28): Initial commit
-
