@@ -84,9 +84,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         n_layers: int = 1,
         dropout: float = 0.0,
         dim_intensity: Optional[int] = None,
-        custom_encoder: Optional[
-            Union[SpectrumEncoder, PairedSpectrumEncoder]
-        ] = None,
+        custom_encoder: Optional[SpectrumEncoder] = None,
         max_length: int = 100,
         residues: Union[Dict[str, float], str] = "canonical",
         max_charge: int = 5,
