@@ -112,9 +112,9 @@ def _execute_existing(
     )
     # Read the MS/MS spectra for which to predict peptide sequences.
     if annotated:
-        peak_ext = (".mgf", ".h5", "hdf5")
+        peak_ext = (".mgf", ".h5", ".hdf5")
     else:
-        peak_ext = (".mgf", ".mzml", ".mzxml", ".h5", "hdf5")
+        peak_ext = (".mgf", ".mzml", ".mzxml", ".h5", ".hdf5")
     if len(peak_filenames := _get_peak_filenames(peak_path, peak_ext)) == 0:
         logger.error("Could not find peak files from %s", peak_path)
         raise FileNotFoundError("Could not find peak files")
