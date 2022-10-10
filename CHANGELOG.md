@@ -5,9 +5,10 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
-
 ### Added
-
+- The first PyPI release! :tada:
+- Tests are run on every PR automatically.
+- Test code coverage must be maintained or improved with each change.
 - Log the active Casanovo configuration.
 - Log to both the console and a log file.
 - Use all available hardware resources (GPU and CPU).

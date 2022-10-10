@@ -52,7 +52,7 @@ The base environment most likely will not work.
 Install Casanovo as a Python package from this repository (requires 3.8 ≥ [Python version] > 3.10 , dependencies will be installed automatically as needed):
 
 ```
-pip install git+https://github.com/Noble-Lab/casanovo.git#egg=casanovo
+pip install casanovo
 ```
 
 Once installed, Casanovo can be used with a simple command line interface.
