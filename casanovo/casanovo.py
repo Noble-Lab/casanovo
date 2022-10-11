@@ -18,6 +18,7 @@ import tqdm
 import yaml
 
 from . import __version__
+from . import utils
 from .data import ms_io
 from .denovo import model_runner
 
@@ -172,9 +173,8 @@ def main(
     }
     # Add extra configuration options and scale by the number of GPUs.
     n_gpus = torch.cuda.device_count()
-    config["n_workers"] = os.cpu_count()
+    config["n_workers"] = utils.n_workers()
     if n_gpus > 1:
-        config["n_workers"] = config["n_workers"] // n_gpus
         config["train_batch_size"] = config["train_batch_size"] // n_gpus
 
     pl.utilities.seed.seed_everything(seed=config["random_seed"], workers=True)

@@ -1,5 +1,7 @@
 """Test that setuptools-scm is working correctly."""
+import pytest
 import casanovo
+from casanovo import utils
 
 
 def test_version():
@@ -7,3 +9,27 @@ def test_version():
     print(casanovo.__version__)
     raise
     assert casanovo.__version__ is not None
+
+
+def test_n_workers(monkeypatch):
+    """Check that n_workers is correct without a GPU"""
+    cpu_fun = lambda x: ["foo"] * 31
+    with monkeypatch.context() as mnk:
+        mnk.setattr("psutil.Process.cpu_affinity", cpu_fun, raising=False)
+        assert utils.n_workers() == 31
+
+    with monkeypatch.context() as mnk:
+        mnk.delattr("psutil.Process.cpu_affinity", raising=False)
+        mnk.setattr("os.cpu_count", lambda: 41)
+        assert utils.n_workers() == 41
+
+    with monkeypatch.context() as mnk:
+        mnk.setattr("torch.cuda.device_count", lambda: 4)
+        mnk.setattr("psutil.Process.cpu_affinity", cpu_fun, raising=False)
+        assert utils.n_workers() == 7
+
+    with monkeypatch.context() as mnk:
+        mnk.delattr("psutil.Process.cpu_affinity", raising=False)
+        mnk.delattr("os.cpu_count")
+        with pytest.raises(AttributeError):
+            utils.n_workers()
