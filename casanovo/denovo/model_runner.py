@@ -5,6 +5,7 @@ import logging
 import os
 import tempfile
 import uuid
+import operator
 from typing import Any, Dict, Iterable, List, Optional, Union
 
 import torch
@@ -13,6 +14,7 @@ import pytorch_lightning as pl
 from depthcharge.data import AnnotatedSpectrumIndex, SpectrumIndex
 from pytorch_lightning.strategies import DDPStrategy
 
+from .. import utils
 from ..data import ms_io
 from ..denovo.dataloaders import DeNovoDataModule
 from ..denovo.model import Spec2Pep
@@ -152,7 +154,7 @@ def _execute_existing(
     trainer = pl.Trainer(
         accelerator="auto",
         auto_select_gpus=True,
-        devices=-1,
+        devices=_get_devices(),
         logger=config["logger"],
         max_epochs=config["max_epochs"],
         num_sanity_val_steps=config["num_sanity_val_steps"],
@@ -297,7 +299,7 @@ def train(
         accelerator="auto",
         auto_select_gpus=True,
         callbacks=callbacks,
-        devices=-1,
+        devices=_get_devices(),
         logger=config["logger"],
         max_epochs=config["max_epochs"],
         num_sanity_val_steps=config["num_sanity_val_steps"],
@@ -357,3 +359,14 @@ def _get_strategy() -> Union[DDPStrategy, None]:
         return DDPStrategy(find_unused_parameters=False, static_graph=True)
     else:
         return None
+
+
+def _get_devices() -> int:
+    """Get the number of GPUs/CPUs for the Trainer to use."""
+    device_types = ["cuda", "backends.mps"]
+    for device in device_types:
+        is_available = operator.attrgetter(device + ".is_available")(torch)
+        if is_available():
+            return -1
+
+    return utils.n_workers()
