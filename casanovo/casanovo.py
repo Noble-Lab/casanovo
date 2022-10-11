@@ -173,8 +173,10 @@ def main(
     }
     # Add extra configuration options and scale by the number of GPUs.
     n_gpus = torch.cuda.device_count()
-    config["n_workers"] = len(psutil.Process().cpu_affinity()) // n_gpus
-    config["train_batch_size"] = config["train_batch_size"] // n_gpus
+    config["n_workers"] = len(psutil.Process().cpu_affinity())
+    if n_gpus > 1:
+        config["n_workers"] = config["n_workers"] // n_gpus
+        config["train_batch_size"] = config["train_batch_size"] // n_gpus
 
     pl.utilities.seed.seed_everything(seed=config["random_seed"], workers=True)
 

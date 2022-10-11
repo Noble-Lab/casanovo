@@ -7,6 +7,7 @@ import tempfile
 import uuid
 from typing import Any, Dict, Iterable, List, Optional
 
+import numpy as np
 import pytorch_lightning as pl
 from depthcharge.data import AnnotatedSpectrumIndex, SpectrumIndex
 from pytorch_lightning.strategies import DDPStrategy
@@ -111,9 +112,9 @@ def _execute_existing(
     )
     # Read the MS/MS spectra for which to predict peptide sequences.
     if annotated:
-        peak_ext = (".mgf", ".h5", "hdf5")
+        peak_ext = (".mgf", ".h5", ".hdf5")
     else:
-        peak_ext = (".mgf", ".mzml", ".mzxml", ".h5", "hdf5")
+        peak_ext = (".mgf", ".mzml", ".mzxml", ".h5", ".hdf5")
     if len(peak_filenames := _get_peak_filenames(peak_path, peak_ext)) == 0:
         logger.error("Could not find peak files from %s", peak_path)
         raise FileNotFoundError("Could not find peak files")
@@ -128,10 +129,11 @@ def _execute_existing(
         idx_filename, peak_filenames = peak_filenames[0], None
     else:
         idx_filename = os.path.join(tmp_dir.name, f"{uuid.uuid4().hex}.hdf5")
-    if annotated:
-        index = AnnotatedSpectrumIndex(idx_filename, peak_filenames)
-    else:
-        index = SpectrumIndex(idx_filename, peak_filenames)
+    SpectrumIdx = AnnotatedSpectrumIndex if annotated else SpectrumIndex
+    valid_charge = np.arange(1, config["max_charge"] + 1)
+    index = SpectrumIdx(
+        idx_filename, peak_filenames, valid_charge=valid_charge
+    )
     # Initialize the data loader.
     loaders = DeNovoDataModule(
         test_index=index,
@@ -214,12 +216,17 @@ def train(
         train_idx_fn, train_filenames = train_filenames[0], None
     else:
         train_idx_fn = os.path.join(tmp_dir.name, f"{uuid.uuid4().hex}.hdf5")
-    train_index = AnnotatedSpectrumIndex(train_idx_fn, train_filenames)
+    valid_charge = np.arange(1, config["max_charge"] + 1)
+    train_index = AnnotatedSpectrumIndex(
+        train_idx_fn, train_filenames, valid_charge=valid_charge
+    )
     if val_is_index:
         val_idx_fn, val_filenames = val_filenames[0], None
     else:
         val_idx_fn = os.path.join(tmp_dir.name, f"{uuid.uuid4().hex}.hdf5")
-    val_index = AnnotatedSpectrumIndex(val_idx_fn, val_filenames)
+    val_index = AnnotatedSpectrumIndex(
+        val_idx_fn, val_filenames, valid_charge=valid_charge
+    )
     # Initialize the data loaders.
     dataloader_params = dict(
         batch_size=config["train_batch_size"],

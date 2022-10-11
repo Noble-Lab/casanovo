@@ -1,0 +1,6 @@
+# Only allow commits that increase or maintain test coverage.
+coverage:
+  status:
+    project:
+      default:
+        target: auto  # auto compares coverage to the previous base commit
