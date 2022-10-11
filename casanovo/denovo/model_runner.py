@@ -5,8 +5,9 @@ import logging
 import os
 import tempfile
 import uuid
-from typing import Any, Dict, Iterable, List, Optional
+from typing import Any, Dict, Iterable, List, Optional, Union
 
+import torch
 import numpy as np
 import pytorch_lightning as pl
 from depthcharge.data import AnnotatedSpectrumIndex, SpectrumIndex
@@ -146,6 +147,7 @@ def _execute_existing(
         batch_size=config["predict_batch_size"],
     )
     loaders.setup(stage="test", annotated=annotated)
+
     # Create the Trainer object.
     trainer = pl.Trainer(
         accelerator="auto",
@@ -154,7 +156,7 @@ def _execute_existing(
         logger=config["logger"],
         max_epochs=config["max_epochs"],
         num_sanity_val_steps=config["num_sanity_val_steps"],
-        strategy=DDPStrategy(find_unused_parameters=False, static_graph=True),
+        strategy=_get_strategy(),
     )
     # Run the model with/without validation.
     run_trainer = trainer.validate if annotated else trainer.predict
@@ -290,6 +292,7 @@ def train(
         ]
     else:
         callbacks = None
+
     trainer = pl.Trainer(
         accelerator="auto",
         auto_select_gpus=True,
@@ -298,7 +301,7 @@ def train(
         logger=config["logger"],
         max_epochs=config["max_epochs"],
         num_sanity_val_steps=config["num_sanity_val_steps"],
-        strategy=DDPStrategy(find_unused_parameters=False, static_graph=True),
+        strategy=_get_strategy(),
     )
     # Train the model.
     trainer.fit(
@@ -336,3 +339,21 @@ def _get_peak_filenames(
         for fn in glob.glob(path, recursive=True)
         if os.path.splitext(fn.lower())[1] in supported_ext
     ]
+
+
+def _get_strategy() -> Union[DDPStrategy, None]:
+    """Get the strategy for the Trainer.
+
+    The DDP strategy works best when multiple GPUs are used.
+    It can work for CPU-only, but definitely fails using
+    MPS (the Apple Silicon chip) due to Gloo.
+
+    Returns
+    -------
+    DPPStrategy or None
+        The strategy parameter for the Trainer.
+    """
+    if torch.cuda.device_count() > 1:
+        return DDPStrategy(find_unused_parameters=False, static_graph=True)
+    else:
+        return None

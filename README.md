@@ -49,12 +49,8 @@ The base environment most likely will not work.
 
 Install Casanovo as a Python package from this repository (requires 3.8 ≥ [Python version] > 3.10 , dependencies will be installed automatically as needed):
 
-```
-<<<<<<< HEAD
-pip install git+https://github.com/Noble-Lab/casanovo.git
-=======
+``` sh
 pip install casanovo
->>>>>>> main
 ```
 
 Once installed, Casanovo can be used with a simple command line interface.
@@ -153,5 +149,14 @@ If no model weights file is specified using the `--model` command-line parameter
 However, the GitHub API is limited to maximum 60 requests per hour per IP address.
 Consequently, if Casanovo has been executed multiple times already, it might temporarily not be able to communicate with GitHub.
 You can avoid this error by explicitly specifying the model file using the `--model` parameter.
-=======
->>>>>>> main
+
+**I see "NotImplementedError: The operator 'aten::index.Tensor'..." when using a Mac with an Apple Silicon chip**
+
+Casanovo can leverage the Apple’s Metal Performance Shaders (MPS) on newer Mac computers, requires that the `PYTORCH_ENABLE_MPS_FALLBACK` be set to `1`:
+
+  ``` sh
+  export PYTORCH_ENABLE_MPS_FALLBACK=1
+  ```
+This will need to be set with each new shell session, or you can add it to your `.bashrc` / `.zshrc` to set this environment variable by default.
+
+  
