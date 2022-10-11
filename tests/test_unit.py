@@ -33,3 +33,12 @@ def test_n_workers(monkeypatch):
         mnk.delattr("os.cpu_count")
         with pytest.raises(AttributeError):
             utils.n_workers()
+
+
+def test_split_version():
+    """Test that splitting the version number works as expected."""
+    version = utils.split_version("0.1.dev1+g39f8c53")
+    assert version == ("0", "1", "")
+
+    version = utils.split_version("3.0.1.dev10282blah")
+    assert version == ("3", "0", "1")

@@ -1,8 +1,12 @@
 """Small utility functions"""
 import os
+import re
+from typing import Tuple
 
 import torch
 import psutil
+
+from casanovo import __version__
 
 
 def n_workers() -> int:
@@ -29,3 +33,24 @@ def n_workers() -> int:
         return n_cpu // torch.cuda.device_count()
 
     return n_cpu
+
+
+def split_version(version: str) -> Tuple[str, str, str, str]:
+    """Split the version into its semantic versioning components.
+
+    Parameters
+    ----------
+    version : str
+        The version number.
+
+    Returns
+    -------
+    major : str
+        The major release.
+    minor : str
+        The minor release.
+    patch : str
+        The patch release.
+    """
+    version_regex = re.compile(r"(\d+)\.(\d+)\.*(\d*)(?:.dev\d+.+)?")
+    return tuple(g for g in version_regex.match(version).groups())
