@@ -380,8 +380,6 @@ def _calc_pc(raw_pc_df):
     )
     coverage = np.arange(1, len(peptide_matches) + 1) / len(peptide_matches)
 
-    # print(f"---\nPeptide precision @ coverage=1 = {precision[-1]:.3f}")
-
     return precision, coverage
 
 
@@ -409,10 +407,6 @@ def _get_preccov_mztab_mgf(
     threshold : int
         The index where, past that point, all predictions do not pass the precursor mass filter
     """
-    if not os.path.isfile(mgf_filename):
-        print("Could not find file " + mgf_filename)
-    if not os.path.isfile(mzt_filename):
-        print("Could not find file " + mzt_filename)
     with open(mzt_filename) as f_in:
         for skiprows, line in enumerate(f_in):
             if line.startswith("PSH"):

@@ -215,7 +215,6 @@ def generate_pc_graph(mgf_file: str, mzt_file: str):
 
     os.remove(f"{output_name}.mztab")
     os.remove(f"{output_name}.log")
-    print("Saved Figure.")
 
 
 def train(
