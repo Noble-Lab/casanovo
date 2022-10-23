@@ -189,10 +189,13 @@ def main(
             peak_path, config, model=model, config_filename=config_fn
         )
         model_runner.predict(peak_path, model, config, writer)
-        writer.save()
     elif mode == "eval":
         logger.info("Evaluate a trained Casanovo model.")
-        model_runner.evaluate(peak_path, model, config)
+        writer = ms_io.MztabWriter(f"{output}.mztab")
+        writer.set_metadata(
+            peak_path, config, model=model, config_filename=config_fn
+        )
+        model_runner.evaluate(peak_path, model, config, writer)
     elif mode == "train":
         logger.info("Train the Casanovo model.")
         model_runner.train(peak_path, peak_path_val, model, config)

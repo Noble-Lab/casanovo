@@ -16,6 +16,11 @@ from ..data import ms_io
 from ..denovo.dataloaders import DeNovoDataModule
 from ..denovo.model import Spec2Pep
 
+from .evaluate import _get_preccov_mztab_mgf
+import seaborn as sns
+import matplotlib.pyplot as plt
+from sklearn.metrics import auc
+
 
 logger = logging.getLogger("casanovo")
 
@@ -44,7 +49,10 @@ def predict(
 
 
 def evaluate(
-    peak_path: str, model_filename: str, config: Dict[str, Any]
+    peak_path: str,
+    model_filename: str,
+    config: Dict[str, Any],
+    out_writer: ms_io.MztabWriter,
 ) -> None:
     """
     Evaluate peptide sequence predictions from a trained Casanovo model.
@@ -57,8 +65,10 @@ def evaluate(
         The file name of the model weights (.ckpt file).
     config : Dict[str, Any]
         The configuration options.
+    out_writer : Optional[ms_io.MztabWriter]
+        The mzTab writer to export the prediction results.
     """
-    _execute_existing(peak_path, model_filename, config, True)
+    _execute_existing(peak_path, model_filename, config, False, out_writer)
 
 
 def _execute_existing(
@@ -161,6 +171,51 @@ def _execute_existing(
     run_trainer(model, loaders.test_dataloader())
     # Clean up temporary files.
     tmp_dir.cleanup()
+    out_writer.save()
+    if not annotated:
+        generate_pc_graph(peak_path, out_writer.filename)
+
+
+def generate_pc_graph(mgf_file: str, mzt_file: str):
+    precision, coverage, threshold = _get_preccov_mztab_mgf(mzt_file, mgf_file)
+    output_name = os.path.splitext(os.path.abspath(mzt_file))[0]
+
+    plt.style.use(["seaborn-white", "seaborn-paper"])
+    sns.set_context("paper", font_scale=0.75)
+    width = 4
+    height = width / 1.618
+    _, ax = plt.subplots(figsize=(width, height))
+
+    ax.set_xlim(0, 1)
+    ax.set_ylim(0, 1)
+
+    ax.set_xlabel("Coverage")
+    ax.set_ylabel("Peptide precision")
+
+    ax.plot(
+        coverage,
+        precision,
+        label=f"Casanovo AUC = {auc(coverage, precision):.3f}",
+    )
+    ax.scatter(
+        coverage[threshold],
+        precision[threshold],
+        s=20,
+        marker="*",
+        c="red",
+        edgecolors="black",
+        zorder=10,
+    )
+
+    ax.legend(loc="lower left")
+    sns.despine()
+    plt.title("Casanovo PC Curve")
+    plt.grid(True)
+    plt.savefig(f"{output_name}.png", dpi=300, bbox_inches="tight")
+
+    os.remove(f"{output_name}.mztab")
+    os.remove(f"{output_name}.log")
+    print("Saved Figure.")
 
 
 def train(
