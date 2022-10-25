@@ -1,8 +1,15 @@
 """Fixtures used for testing."""
-import numpy as np
-import pytest
+import os
+from contextlib import closing
 
+import pytest
+import numpy as np
 from pyteomics.mass import calculate_mass
+from torch.distributed.elastic.agent.server.api import (
+    SimpleElasticAgent,
+    _get_socket_with_port,
+    _get_fq_hostname,
+)
 
 
 @pytest.fixture
@@ -77,3 +84,36 @@ def _create_mgf_entry(peptide, charge=2):
         "END IONS",
     ]
     return "\n".join(mgf)
+
+
+@pytest.fixture(autouse=True)
+def windows_patch(monkeypatch):
+    """Needed for multiprocessing in Windows on the GitHub actions runners.
+
+    See here:
+    https://github.com/pytorch/pytorch/issues/74824
+    """
+    if not os.name == "nt":
+        return
+
+    monkeypatch.setattr(
+        SimpleElasticAgent,
+        "_set_master_addr_port",
+        staticmethod(_hook_set_master_addr_port),
+    )
+
+
+def _hook_set_master_addr_port(store, master_addr, master_port):
+    """From: https://github.com/pytorch/pytorch/issues/74824"""
+    if master_port is None:
+        sock = _get_socket_with_port()
+        with closing(sock):
+            master_port = sock.getsockname()[1]
+
+        if master_addr is None:
+            hostname = _get_fq_hostname()
+            # use IP address as master_addr
+            master_addr = socket.gethostbyname(hostname)
+
+    store.set("MASTER_ADDR", master_addr.encode(encoding="UTF-8"))
+    store.set("MASTER_PORT", str(master_port).encode(encoding="UTF-8"))
