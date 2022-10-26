@@ -369,4 +369,8 @@ def _get_devices() -> int:
         if is_available():
             return -1
 
-    return utils.n_workers()
+    n_workers = utils.n_workers()
+    if not n_workers:
+        return "auto"
+
+    return n_workers
