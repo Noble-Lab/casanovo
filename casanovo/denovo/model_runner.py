@@ -361,7 +361,7 @@ def _get_strategy() -> Union[DDPStrategy, None]:
     return None
 
 
-def _get_devices() -> int:
+def _get_devices() -> Union[int, str]:
     """Get the number of GPUs/CPUs for the Trainer to use."""
     device_types = ["cuda", "backends.mps"]
     for device in device_types:
