@@ -1,8 +1,8 @@
 """Training and testing functionality for the de novo peptide sequencing
 model."""
+import os
 import glob
 import logging
-import os
 import tempfile
 import uuid
 import operator
@@ -357,8 +357,8 @@ def _get_strategy() -> Union[DDPStrategy, None]:
     """
     if torch.cuda.device_count() > 1:
         return DDPStrategy(find_unused_parameters=False, static_graph=True)
-    else:
-        return None
+
+    return None
 
 
 def _get_devices() -> int:

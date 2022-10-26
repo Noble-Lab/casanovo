@@ -1,15 +1,7 @@
 """Fixtures used for testing."""
-import os
-from contextlib import closing
-
 import pytest
 import numpy as np
 from pyteomics.mass import calculate_mass
-from torch.distributed.elastic.agent.server.api import (
-    SimpleElasticAgent,
-    _get_socket_with_port,
-    _get_fq_hostname,
-)
 
 
 @pytest.fixture

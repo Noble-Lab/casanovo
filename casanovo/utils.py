@@ -18,11 +18,17 @@ def n_workers() -> int:
     On MacOS, we need to use all CPUs. See:
     https://stackoverflow.com/a/42658430
 
+    On Windows, we only use the main process. See:
+    https://discuss.pytorch.org/t/errors-when-using-num-workers-0-in-dataloader/97564/4
+
     Returns
     -------
     int
         The number of workers.
     """
+    if os.name == "nt":
+        return 0
+
     try:
         n_cpu = len(psutil.Process().cpu_affinity())
     except AttributeError:
