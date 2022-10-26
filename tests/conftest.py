@@ -113,7 +113,7 @@ def _hook_set_master_addr_port(store, master_addr, master_port):
         if master_addr is None:
             hostname = _get_fq_hostname()
             # use IP address as master_addr
-            master_addr = socket.gethostbyname(hostname)
+            master_addr = sock.gethostbyname(hostname)
 
     store.set("MASTER_ADDR", master_addr.encode(encoding="UTF-8"))
     store.set("MASTER_PORT", str(master_port).encode(encoding="UTF-8"))
