@@ -28,7 +28,7 @@ def test_n_workers(monkeypatch):
         mnk.setattr("torch.cuda.device_count", lambda: 4)
         mnk.setattr("psutil.Process.cpu_affinity", cpu_fun, raising=False)
         expected = 7 if os.name != "nt" else 0
-        assert utils.n_workers() == 7
+        assert utils.n_workers() == expected
 
     with monkeypatch.context() as mnk:
         mnk.delattr("psutil.Process.cpu_affinity", raising=False)
