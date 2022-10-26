@@ -33,7 +33,7 @@ def test_n_workers(monkeypatch):
     with monkeypatch.context() as mnk:
         mnk.delattr("psutil.Process.cpu_affinity", raising=False)
         mnk.delattr("os.cpu_count")
-        if os.name() != "nt":
+        if os.name != "nt":
             with pytest.raises(AttributeError):
                 utils.n_workers()
         else:
