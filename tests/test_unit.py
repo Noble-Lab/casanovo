@@ -2,6 +2,7 @@ import os
 import platform
 import tempfile
 
+import github
 import pytest
 
 from casanovo import casanovo
@@ -77,6 +78,24 @@ def test_get_model_weights(monkeypatch):
             assert casanovo._get_model_weights() == filename
             assert os.path.isfile(filename)
             assert casanovo._get_model_weights() == filename
+
+    # Impossible to find model weights for non-matching version.
+    with monkeypatch.context() as mnk:
+        mnk.setattr(casanovo, "__version__", "999.999.999")
+        with pytest.raises(ValueError):
+            casanovo._get_model_weights()
+
+    # Test GitHub API rate limit.
+    def request(self, *args, **kwargs):
+        raise github.RateLimitExceededException(
+            403, "API rate limit exceeded", None
+        )
+
+    with monkeypatch.context() as mnk, tempfile.TemporaryDirectory() as tmp_dir:
+        mnk.setattr("appdirs.user_cache_dir", lambda n, a, opinion: tmp_dir)
+        mnk.setattr("github.Requester.Requester.requestJsonAndCheck", request)
+        with pytest.raises(github.RateLimitExceededException):
+            casanovo._get_model_weights()
 
 
 def test_tensorboard():
