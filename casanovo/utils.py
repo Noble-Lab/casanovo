@@ -8,13 +8,13 @@ import torch
 
 
 def n_workers() -> int:
-    """Get the number of workers to use for data loading.
+    """
+    Get the number of workers to use for data loading.
 
-    This is the maximum number of CPUs allowed for the process,
-    scaled for the number of GPUs being used.
+    This is the maximum number of CPUs allowed for the process, scaled for the
+    number of GPUs being used.
 
-    On MacOS, we need to use all CPUs. See:
-    https://stackoverflow.com/a/42658430
+    On MacOS, we need to use all CPUs. See: https://stackoverflow.com/a/42658430
 
     On Windows, we only use the main process. See:
     https://discuss.pytorch.org/t/errors-when-using-num-workers-0-in-dataloader/97564/4
@@ -39,8 +39,9 @@ def n_workers() -> int:
     return n_cpu
 
 
-def split_version(version: str) -> Tuple[str, str, str, str]:
-    """Split the version into its semantic versioning components.
+def split_version(version: str) -> Tuple[str, str, str]:
+    """
+    Split the version into its semantic versioning components.
 
     Parameters
     ----------

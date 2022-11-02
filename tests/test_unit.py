@@ -1,6 +1,7 @@
-"""Test that setuptools-scm is working correctly."""
 import os
+
 import pytest
+
 import casanovo
 from casanovo import utils
 
@@ -11,7 +12,7 @@ def test_version():
 
 
 def test_n_workers(monkeypatch):
-    """Check that n_workers is correct without a GPU"""
+    """Check that n_workers is correct without a GPU."""
     cpu_fun = lambda x: ["foo"] * 31
     with monkeypatch.context() as mnk:
         mnk.setattr("psutil.Process.cpu_affinity", cpu_fun, raising=False)
@@ -42,6 +43,9 @@ def test_n_workers(monkeypatch):
 
 def test_split_version():
     """Test that splitting the version number works as expected."""
+    version = utils.split_version("2.0.1")
+    assert version == ("2", "0", "1")
+
     version = utils.split_version("0.1.dev1+g39f8c53")
     assert version == ("0", "1", "")
 
