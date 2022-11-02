@@ -1,16 +1,16 @@
 """Training and testing functionality for the de novo peptide sequencing
 model."""
-import os
 import glob
 import logging
+import operator
+import os
 import tempfile
 import uuid
-import operator
 from typing import Any, Dict, Iterable, List, Optional, Union
 
-import torch
 import numpy as np
 import pytorch_lightning as pl
+import torch
 from depthcharge.data import AnnotatedSpectrumIndex, SpectrumIndex
 from pytorch_lightning.strategies import DDPStrategy
 

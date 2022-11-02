@@ -3,10 +3,8 @@ import os
 import re
 from typing import Tuple
 
-import torch
 import psutil
-
-from casanovo import __version__
+import torch
 
 
 def n_workers() -> int:
