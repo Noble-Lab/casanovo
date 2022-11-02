@@ -1,8 +1,9 @@
 import os
+import tempfile
 
 import pytest
 
-import casanovo
+from casanovo import casanovo
 from casanovo import utils
 
 
@@ -51,3 +52,24 @@ def test_split_version():
 
     version = utils.split_version("3.0.1.dev10282blah")
     assert version == ("3", "0", "1")
+
+
+def test_get_model_weights(monkeypatch):
+    """
+    Test that model weights can be downloaded from GitHub or used from the
+    cache.
+    """
+    # Model weights for fully matching version, minor matching version, major
+    # matching version.
+    for version in ["3.0.0", "3.0.999", "3.999.999"]:
+        with monkeypatch.context() as mnk, tempfile.TemporaryDirectory() as tmp_dir:
+            mnk.setattr(casanovo, "__version__", version)
+            mnk.setattr(
+                "appdirs.user_cache_dir", lambda n, a, opinion: tmp_dir
+            )
+
+            filename = os.path.join(tmp_dir, "casanovo_massivekb_v3_0_0.ckpt")
+            assert not os.path.isfile(filename)
+            assert casanovo._get_model_weights() == filename
+            assert os.path.isfile(filename)
+            assert casanovo._get_model_weights() == filename
