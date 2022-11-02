@@ -15,7 +15,9 @@ def test_version():
 
 def test_n_workers(monkeypatch):
     """Check that n_workers is correct without a GPU."""
+    monkeypatch.setattr("torch.cuda.is_available", lambda: False)
     cpu_fun = lambda x: ["foo"] * 31
+
     with monkeypatch.context() as mnk:
         mnk.setattr("psutil.Process.cpu_affinity", cpu_fun, raising=False)
         expected = 31 if os.name != "nt" else 0

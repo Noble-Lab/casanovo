@@ -373,7 +373,7 @@ def _get_devices() -> Union[int, str]:
         determine the appropriate number of devices.
     """
     if any(
-        operator.attrgetter(device + ".is_available")(torch)
+        operator.attrgetter(device + ".is_available")(torch)()
         for device in ["cuda", "backends.mps"]
     ):
         return -1
