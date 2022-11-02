@@ -109,6 +109,7 @@ def _execute_existing(
         isotope_error_range=config["isotope_error_range"],
         n_log=config["n_log"],
         out_writer=out_writer,
+        n_beams=config["n_beams"],
     )
     # Read the MS/MS spectra for which to predict peptide sequences.
     if annotated:
@@ -263,6 +264,7 @@ def train(
         max_iters=config["max_iters"],
         lr=config["learning_rate"],
         weight_decay=config["weight_decay"],
+        n_beams=config["n_beams"],
     )
     if config["train_from_scratch"]:
         model = Spec2Pep(**model_params)

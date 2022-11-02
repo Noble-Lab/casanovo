@@ -150,6 +150,7 @@ def main(
         model_save_folder_path=str,
         save_weights_only=bool,
         every_n_train_steps=int,
+        n_beams=int,
     )
     for k, t in config_types.items():
         try:
