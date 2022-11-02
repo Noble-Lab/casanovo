@@ -5,6 +5,7 @@ import pytest
 
 from casanovo import casanovo
 from casanovo import utils
+from casanovo.denovo.model import Spec2Pep
 
 
 def test_version():
@@ -73,3 +74,11 @@ def test_get_model_weights(monkeypatch):
             assert casanovo._get_model_weights() == filename
             assert os.path.isfile(filename)
             assert casanovo._get_model_weights() == filename
+
+
+def test_tensorboard():
+    model = Spec2Pep(tb_summarywriter="test_path")
+    assert model.tb_summarywriter is not None
+
+    model = Spec2Pep()
+    assert model.tb_summarywriter is None
