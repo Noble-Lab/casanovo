@@ -451,8 +451,6 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
                     cached_fitting, cached_nonfitting = cache_score_dict[
                         spec_idx
                     ]
-                    print(cache_seq_dict[spec_idx])
-                    print(cache_score_dict[spec_idx])
                     if len(cached_fitting) != 0:
                         _, top_score_idx = max(
                             cached_fitting, key=lambda item: item[0]
