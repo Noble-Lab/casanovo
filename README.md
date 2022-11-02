@@ -64,7 +64,7 @@ See [`casanovo/config.yaml`](https://github.com/Noble-Lab/casanovo/blob/main/cas
 When running Casanovo in `denovo` or `eval` mode, Casanovo needs compatible pretrained model weights to make predictions.
 Model weights can be found on the [Releases page](https://github.com/Noble-Lab/casanovo/releases) under the "Assets" for each release (file extension: .ckpt).
 The model file can then be specified using the `--model` command-line parameter when executing Casanovo.
-To assist users, if no model file is specified Casanovo will try to download and use compatible a model file automatically.
+To assist users, if no model file is specified Casanovo will try to download and use a compatible model file automatically.
 
 Not all releases might have a model file included on the [Releases page](https://github.com/Noble-Lab/casanovo/releases), in which case model weights for alternative releases with the same major version number can be used.
 
@@ -109,7 +109,7 @@ The example MGF file is available at [`sample_data/sample_preprocessed_spectra.m
 casanovo --mode=denovo --peak_path=[PATH_TO]/sample_preprocessed_spectra.mgf
 ```
 
-Note: If you want to get the output mzTab file in different location than the working directory, specify an alternative output location using the `--output` parameter.
+Note: If you want to store the output mzTab file in a different location than the current working directory, specify an alternative output location using the `--output` parameter.
 
 This job will take very little time to run (< 1 minute).
 
@@ -140,7 +140,6 @@ You can find the `config.yaml` configuration file that is used by default [here]
 This means that there was not enough (free) memory available on your GPU to run Casanovo, which is especially likely to happen when you are using a smaller, consumer-grade GPU.
 We recommend trying to decrease the `train_batch_size` or `predict_batch_size` options in the [config file](https://github.com/Noble-Lab/casanovo/blob/main/casanovo/config.yaml) (depending on whether the error occurred during `train` or `denovo` mode) to reduce the number of spectra that are processed simultaneously.
 Additionally, we recommend shutting down any other processes that may be running on the GPU, so that Casanovo can exclusively use the GPU.
-<<<<<<< HEAD
 
 **How do I solve a "PermissionError: GitHub API rate limit exceeded" error when trying to run Casanovo?**
 
@@ -150,13 +149,12 @@ However, the GitHub API is limited to maximum 60 requests per hour per IP addres
 Consequently, if Casanovo has been executed multiple times already, it might temporarily not be able to communicate with GitHub.
 You can avoid this error by explicitly specifying the model file using the `--model` parameter.
 
-**I see "NotImplementedError: The operator 'aten::index.Tensor'..." when using a Mac with an Apple Silicon chip**
+**I see "NotImplementedError: The operator 'aten::index.Tensor'..." when using a Mac with an Apple Silicon chip.**
 
-Casanovo can leverage the Apple’s Metal Performance Shaders (MPS) on newer Mac computers, requires that the `PYTORCH_ENABLE_MPS_FALLBACK` be set to `1`:
+Casanovo can leverage Apple's Metal Performance Shaders (MPS) on newer Mac computers, which requires that the `PYTORCH_ENABLE_MPS_FALLBACK` is set to `1`:
 
-  ``` sh
-  export PYTORCH_ENABLE_MPS_FALLBACK=1
-  ```
+``` sh
+export PYTORCH_ENABLE_MPS_FALLBACK=1
+```
+
 This will need to be set with each new shell session, or you can add it to your `.bashrc` / `.zshrc` to set this environment variable by default.
-
-  
