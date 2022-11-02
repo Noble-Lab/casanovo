@@ -6,6 +6,7 @@ import os
 import re
 import shutil
 import sys
+import warnings
 from typing import Optional, Tuple
 
 import appdirs
@@ -23,6 +24,11 @@ from .data import ms_io
 from .denovo import model_runner
 
 
+warnings.filterwarnings(
+    action="ignore",
+    category=DeprecationWarning,
+    module="tensorboard",
+)
 logger = logging.getLogger("casanovo")
 
 
