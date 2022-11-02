@@ -1,5 +1,6 @@
 """Small utility functions"""
 import os
+import platform
 import re
 from typing import Tuple
 
@@ -14,29 +15,26 @@ def n_workers() -> int:
     This is the maximum number of CPUs allowed for the process, scaled for the
     number of GPUs being used.
 
-    On MacOS, we need to use all CPUs. See: https://stackoverflow.com/a/42658430
-
-    On Windows, we only use the main process. See:
+    On Windows and MacOS, we only use the main process. See:
     https://discuss.pytorch.org/t/errors-when-using-num-workers-0-in-dataloader/97564/4
+    https://github.com/pytorch/pytorch/issues/70344
 
     Returns
     -------
     int
         The number of workers.
     """
-    if os.name == "nt":
+    # Windows or MacOS: no multiprocessing.
+    if platform.system() in ["Windows", "Darwin"]:
         return 0
-
+    # Linux: scale the number of workers by the number of GPUs (if present).
     try:
         n_cpu = len(psutil.Process().cpu_affinity())
     except AttributeError:
         n_cpu = os.cpu_count()
-
-    n_gpu = torch.cuda.device_count()
-    if n_gpu > 1:
-        return n_cpu // torch.cuda.device_count()
-
-    return n_cpu
+    return (
+        n_cpu // n_gpu if (n_gpu := torch.cuda.device_count()) > 1 else n_cpu
+    )
 
 
 def split_version(version: str) -> Tuple[str, str, str]:

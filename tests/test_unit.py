@@ -1,4 +1,5 @@
 import os
+import platform
 import tempfile
 
 import pytest
@@ -20,25 +21,25 @@ def test_n_workers(monkeypatch):
 
     with monkeypatch.context() as mnk:
         mnk.setattr("psutil.Process.cpu_affinity", cpu_fun, raising=False)
-        expected = 31 if os.name != "nt" else 0
+        expected = 0 if platform.system() in ["Windows", "Darwin"] else 31
         assert utils.n_workers() == expected
 
     with monkeypatch.context() as mnk:
         mnk.delattr("psutil.Process.cpu_affinity", raising=False)
         mnk.setattr("os.cpu_count", lambda: 41)
-        expected = 41 if os.name != "nt" else 0
+        expected = 0 if platform.system() in ["Windows", "Darwin"] else 41
         assert utils.n_workers() == expected
 
     with monkeypatch.context() as mnk:
         mnk.setattr("torch.cuda.device_count", lambda: 4)
         mnk.setattr("psutil.Process.cpu_affinity", cpu_fun, raising=False)
-        expected = 7 if os.name != "nt" else 0
+        expected = 0 if platform.system() in ["Windows", "Darwin"] else 7
         assert utils.n_workers() == expected
 
     with monkeypatch.context() as mnk:
         mnk.delattr("psutil.Process.cpu_affinity", raising=False)
         mnk.delattr("os.cpu_count")
-        if os.name != "nt":
+        if platform.system() not in ["Windows", "Darwin"]:
             with pytest.raises(AttributeError):
                 utils.n_workers()
         else:
