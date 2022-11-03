@@ -2,16 +2,19 @@
 model."""
 import glob
 import logging
+import operator
 import os
 import tempfile
 import uuid
-from typing import Any, Dict, Iterable, List, Optional
+from typing import Any, Dict, Iterable, List, Optional, Union
 
 import numpy as np
 import pytorch_lightning as pl
+import torch
 from depthcharge.data import AnnotatedSpectrumIndex, SpectrumIndex
 from pytorch_lightning.strategies import DDPStrategy
 
+from .. import utils
 from ..data import ms_io
 from ..denovo.dataloaders import DeNovoDataModule
 from ..denovo.model import Spec2Pep
@@ -147,15 +150,16 @@ def _execute_existing(
         batch_size=config["predict_batch_size"],
     )
     loaders.setup(stage="test", annotated=annotated)
+
     # Create the Trainer object.
     trainer = pl.Trainer(
         accelerator="auto",
         auto_select_gpus=True,
-        devices=-1,
+        devices=_get_devices(),
         logger=config["logger"],
         max_epochs=config["max_epochs"],
         num_sanity_val_steps=config["num_sanity_val_steps"],
-        strategy=DDPStrategy(find_unused_parameters=False, static_graph=True),
+        strategy=_get_strategy(),
     )
     # Run the model with/without validation.
     run_trainer = trainer.validate if annotated else trainer.predict
@@ -292,15 +296,16 @@ def train(
         ]
     else:
         callbacks = None
+
     trainer = pl.Trainer(
         accelerator="auto",
         auto_select_gpus=True,
         callbacks=callbacks,
-        devices=-1,
+        devices=_get_devices(),
         logger=config["logger"],
         max_epochs=config["max_epochs"],
         num_sanity_val_steps=config["num_sanity_val_steps"],
-        strategy=DDPStrategy(find_unused_parameters=False, static_graph=True),
+        strategy=_get_strategy(),
     )
     # Train the model.
     trainer.fit(
@@ -338,3 +343,43 @@ def _get_peak_filenames(
         for fn in glob.glob(path, recursive=True)
         if os.path.splitext(fn.lower())[1] in supported_ext
     ]
+
+
+def _get_strategy() -> Optional[DDPStrategy]:
+    """
+    Get the strategy for the Trainer.
+
+    The DDP strategy works best when multiple GPUs are used. It can work for
+    CPU-only, but definitely fails using MPS (the Apple Silicon chip) due to
+    Gloo.
+
+    Returns
+    -------
+    Optional[DDPStrategy]
+        The strategy parameter for the Trainer.
+    """
+    if torch.cuda.device_count() > 1:
+        return DDPStrategy(find_unused_parameters=False, static_graph=True)
+
+    return None
+
+
+def _get_devices() -> Union[int, str]:
+    """
+    Get the number of GPUs/CPUs for the Trainer to use.
+
+    Returns
+    -------
+    Union[int, str]
+        The number of GPUs/CPUs to use, or "auto" to let PyTorch Lightning
+        determine the appropriate number of devices.
+    """
+    if any(
+        operator.attrgetter(device + ".is_available")(torch)()
+        for device in ["cuda", "backends.mps"]
+    ):
+        return -1
+    elif not (n_workers := utils.n_workers()):
+        return "auto"
+    else:
+        return n_workers

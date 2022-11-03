@@ -84,10 +84,10 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
 
     def __init__(
         self,
-        dim_model: int = 128,
+        dim_model: int = 512,
         n_head: int = 8,
         dim_feedforward: int = 1024,
-        n_layers: int = 1,
+        n_layers: int = 9,
         dropout: float = 0.0,
         dim_intensity: Optional[int] = None,
         custom_encoder: Optional[SpectrumEncoder] = None,
