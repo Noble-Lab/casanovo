@@ -54,7 +54,7 @@ class DeNovoDataModule(pl.LightningDataModule):
         test_index: Optional[AnnotatedSpectrumIndex] = None,
         batch_size: int = 128,
         n_peaks: Optional[int] = 150,
-        min_mz: float = 140.0,
+        min_mz: float = 50.0,
         max_mz: float = 2500.0,
         min_intensity: float = 0.01,
         remove_precursor_tol: float = 2.0,
