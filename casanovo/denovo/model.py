@@ -301,26 +301,27 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
 
         return self.softmax(output_scores), output_tokens
 
-    def _terminate_finished_beams(self, tokens, precursors, idx):
-
-        # Terminate beams which exceed the precursor mass
+    def _terminate_finished_beams(self, tokens, precursors, idx) -> List[int]:
+        print("tokens", tokens.shape, tokens)
+        print("precursors", precursors.shape, precursors)
+        # Terminate beams which exceed the precursor m/z
         for beam_i in range(len(tokens)):
             # Check only non-terminated beams
             if self.stop_token not in tokens[beam_i]:
                 # Finish if dummy predicted at the previous step
                 if tokens[beam_i][idx - 1] == 0:
                     tokens[beam_i][idx - 1] = self.stop_token
-                # Check delta mass and terminate the beam if exceeds the threshold
+                # Check delta m/z and terminate the beam if exceeds the threshold
                 else:
-                    prec_mass = precursors[beam_i, 0].item()
+                    prec_mz = precursors[beam_i, 2].item()
                     aa_list = [
                         self.decoder._idx2aa.get(idx_aa.item(), "")
                         for idx_aa in tokens[beam_i][:idx]
                     ]
-                    pred_mass = self.peptide_mass_calculator.mass(aa_list)
-                    delta_mass_ppm = (
-                        (pred_mass - prec_mass) / prec_mass * 10**6
+                    pred_mz = self.peptide_mass_calculator.mass(
+                        aa_list, charge=precursors[beam_i, 1].item()
                     )
+                    delta_mass_ppm = (pred_mz - prec_mz) / prec_mz * 10**6
                     if delta_mass_ppm > -self.precursor_mass_tol:
                         tokens[beam_i][idx] = self.stop_token
 
@@ -329,7 +330,9 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         finished_beams_idx = torch.where(finished_beams_bool == True)[
             0
         ].tolist()
-
+        print(
+            "finished_beams_idx", len(finished_beams_idx), finished_beams_idx
+        )
         return finished_beams_idx
 
     def _cache_finished_beams(
@@ -354,7 +357,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
                 insert_idx = cache_idx_dict[spec_idx]
 
                 # Only add beams with matching mass to the cache
-                prec_mass = precursors[i, 0].item()
+                prec_mz = precursors[i, 2].item()
                 aa_list = [
                     self.decoder._idx2aa.get(idx_aa.item(), "")
                     for idx_aa in tokens[i][:idx]
@@ -367,10 +370,10 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
                         aa_list.remove("$")
 
                     pep_str = "".join(aa_list)
-                    pred_mass = self.peptide_mass_calculator.mass(aa_list)
-                    delta_mass_ppm = (
-                        (pred_mass - prec_mass) / prec_mass * 10**6
+                    pred_mz = self.peptide_mass_calculator.mass(
+                        aa_list, charge=precursors[i, 1].item()
                     )
+                    delta_mass_ppm = (pred_mz - prec_mz) / prec_mz * 10**6
                     isPrecursorFit = (
                         abs(delta_mass_ppm) <= self.precursor_mass_tol
                     )
