@@ -212,9 +212,11 @@ def generate_pc_graph(mgf_file: str, mzt_file: str):
     plt.title("Casanovo PC Curve")
     plt.grid(True)
     plt.savefig(f"{output_name}.png", dpi=300, bbox_inches="tight")
-
-    os.remove(f"{output_name}.mztab")
-    os.remove(f"{output_name}.log")
+    try:
+        os.remove(f"{output_name}.mztab")
+        os.remove(f"{output_name}.log")
+    except FileNotFoundError:
+        print("Could not find .log || .mztab file to delete.")
 
 
 def train(
