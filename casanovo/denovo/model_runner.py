@@ -216,7 +216,8 @@ def generate_pc_graph(mgf_file: str, mzt_file: str):
         os.remove(f"{output_name}.mztab")
         os.remove(f"{output_name}.log")
     except FileNotFoundError:
-        print("Could not find .log || .mztab file to delete.")
+        # Do nothing
+        pass
 
 
 def train(
