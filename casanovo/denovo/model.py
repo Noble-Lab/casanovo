@@ -1,7 +1,15 @@
 """A de novo peptide sequencing model."""
 import logging
 import re
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import (
+    Any,
+    Dict,
+    List,
+    Optional,
+    Set,
+    Tuple,
+    Union,
+)
 from heapq import heappop, heappush
 
 import depthcharge.masses
@@ -191,12 +199,15 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         )
         return [self.decoder.detokenize(t) for t in tokens], aa_scores
 
-    def beam_search_decode(self, spectra, precursors):
-        """Beam search decode the spectra.
+    def beam_search_decode(
+        self, spectra: torch.Tensor, precursors: torch.Tensor
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        """
+        Beam search decode the spectra. Return the highest scoring peptide, within the precursor m/z tolerance whenever possible
 
         Parameters
         ----------
-        spectrum : torch.Tensor of shape (n_spectra, n_peaks, 2)
+        spectra : torch.Tensor of shape (n_spectra, n_peaks, 2)
             The spectra to embed. Axis 0 represents a mass spectrum, axis 1
             contains the peaks in the mass spectrum, and axis 2 is essentially
             a 2-tuple specifying the m/z-intensity pair for each peak. These
@@ -230,20 +241,14 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         tokens = torch.zeros(batch, length, beam)
         tokens = tokens.type_as(spectra).long()
 
-        # Cache terminated beams and their scores
-        cache_scores = einops.rearrange(scores.clone(), "B L V S -> (B S) L V")
-        cache_tokens = einops.rearrange(tokens.clone(), "B L S -> (B S) L")
-
-        # Keep pointer to free rows in the cache and already cached predictions
-        cache_idx_dict = {
-            spec_idx: spec_idx * beam for spec_idx in range(batch)
-        }
-        # Keep already decoded peptides to avoid duplicates in cache
-        cache_seq_dict = {spec_idx: set() for spec_idx in range(batch)}
-        # Store peptide scores to replace lower score peptides in cache
-        # with higher score peptides during decoding.
-        cache_score_dict = {spec_idx: [[], []] for spec_idx in range(batch)}
-
+        # Create cache for decoded beams
+        (
+            cache_scores,
+            cache_tokens,
+            cache_idx_dict,
+            cache_seq_dict,
+            cache_score_dict,
+        ) = self._create_beamsearch_cache(scores, tokens)
         # Create the first prediction:
         pred, _ = self.decoder(None, precursors, memories, mem_masks)
         _, idx = torch.topk(pred[:, 0, :], beam, dim=1)
@@ -260,9 +265,12 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
             scores = einops.rearrange(scores, "B L V S -> (B S) L V")
             tokens = einops.rearrange(tokens, "B L S -> (B S) L")
 
-            finished_beams_idx = self._terminate_finished_beams(
+            # Terminate beams exceeding precursor m/z tolerance and track all terminated beams
+            finished_beams_idx, tokens = self._terminate_finished_beams(
                 tokens, precursors, idx
             )
+
+            # Cache terminated beams, group and order by fitting precursor m/z and confidence score
             (
                 cache_idx_dict,
                 cache_seq_dict,
@@ -280,9 +288,10 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
                 idx,
             )
 
-            # Terminate when all current beams are terminated
+            # Stop decoding when all current beams are terminated
             decoded = (tokens == self.stop_token).any(axis=1)
             if decoded.all():
+                # Return the peptide with highest confidence score (fitting precursor m/z if possible)
                 output_tokens, output_scores = self._get_top_peptide(
                     cache_score_dict, cache_tokens, cache_scores, batch
                 )
@@ -297,13 +306,96 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
                 mem_masks[~decoded, :],
             )
 
+            # Find top-k beams with highest confidence scores and continue decoding from those
             scores, tokens = self._get_topk_beams(scores, tokens, batch, idx)
 
         return self.softmax(output_scores), output_tokens
 
-    def _terminate_finished_beams(self, tokens, precursors, idx) -> List[int]:
-        print("tokens", tokens.shape, tokens)
-        print("precursors", precursors.shape, precursors)
+    def _create_beamsearch_cache(
+        self, scores: torch.Tensor, tokens: torch.Tensor
+    ) -> Tuple[
+        torch.Tensor,
+        torch.Tensor,
+        Dict[int, int],
+        Dict[int, Set[str]],
+        Dict[int, List[List[Tuple[float, int]]]],
+    ]:
+        """
+        Create cache tensor and dictionary to store and group terminated beams during beam search decoding
+
+        Parameters
+        ----------
+        scores : torch.Tensor of shape (n_spectra, max_length, n_amino_acids, n_beams)
+            Output scores of the model.
+        tokens : torch.Tensor of size (n_spectra, max_length, n_beams)
+            Output token of the model corresponding to amino acid sequences of peptides.
+
+        Returns
+        -------
+        cache_scores : torch.Tensor of shape
+        (n_spectra* n_beams, max_length, n_amino_acids)
+            The score for each amino acid in cached peptides.
+        cache_tokens : torch.Tensor of shape
+        (n_spectra* n_beams, max_length)
+            The token for each amino acid in cached peptides.
+        cache_idx_dict : Dict[int, int]
+            Next available tensor index to cache peptides for each spectrum.
+        cache_seq_dict : Dict[int, Set[str]]
+            Set of decoded peptides for each spectrum.
+        cache_score_dict : Dict[int, List[List[Tuple[float, int]]]
+            Confidence score for each decoded peptide, separated as precursor m/z fitting vs not, for each spectrum.
+
+        """
+
+        batch = scores.shape[0]
+        beam = scores.shape[-1]
+
+        # Cache terminated beams and their scores
+        cache_scores = einops.rearrange(scores.clone(), "B L V S -> (B S) L V")
+        cache_tokens = einops.rearrange(tokens.clone(), "B L S -> (B S) L")
+
+        # Keep pointer to free rows in the cache and already cached predictions
+        cache_idx_dict = {
+            spec_idx: spec_idx * beam for spec_idx in range(batch)
+        }
+        # Keep already decoded peptides to avoid duplicates in cache
+        cache_seq_dict = {spec_idx: set() for spec_idx in range(batch)}
+        # Store peptide scores to replace lower score peptides in cache
+        # with higher score peptides during decoding.
+        cache_score_dict = {spec_idx: [[], []] for spec_idx in range(batch)}
+
+        return (
+            cache_scores,
+            cache_tokens,
+            cache_idx_dict,
+            cache_seq_dict,
+            cache_score_dict,
+        )
+
+    def _terminate_finished_beams(
+        self, tokens: torch.Tensor, precursors: torch.Tensor, idx: int
+    ) -> Tuple[List[int], torch.Tensor]:
+        """
+        Terminate beams exceeding precursor m/z tolerance and track all terminated beams
+
+        Parameters
+        ----------
+        tokens : torch.Tensor of shape (n_spectra* n_beams, max_length)
+            Output token of the model corresponding to amino acid sequences of peptides.
+        precursors : torch.Tensor of size (n_spectra* n_beams, 3)
+            The measured precursor mass (axis 0), precursor charge (axis 1), and
+            precursor m/z (axis 2) of each MS/MS spectrum.
+        idx : int
+            Index to be considered in the current decoding step
+
+        Returns
+        -------
+        finished_beams_idx : List[int]
+            Indices of all finished beams on tokens tensor
+        tokens : torch.Tensor of size (n_spectra* n_beams, max_length)
+            Output token of the model corresponding to amino acid sequences of peptides.
+
+        """
         # Terminate beams which exceed the precursor m/z
         for beam_i in range(len(tokens)):
             # Check only non-terminated beams
@@ -330,25 +422,67 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         finished_beams_idx = torch.where(finished_beams_bool == True)[
             0
         ].tolist()
-        print(
-            "finished_beams_idx", len(finished_beams_idx), finished_beams_idx
-        )
-        return finished_beams_idx
+
+        return finished_beams_idx, tokens
 
     def _cache_finished_beams(
         self,
-        finished_beams_idx,
-        cache_idx_dict,
-        cache_seq_dict,
-        cache_score_dict,
-        cache_tokens,
-        cache_scores,
-        tokens,
-        precursors,
-        scores,
-        idx,
-    ):
+        finished_beams_idx: List[int],
+        cache_idx_dict: Dict[int, int],
+        cache_seq_dict: Dict[int, Set[str]],
+        cache_score_dict: Dict[int, List[List[Tuple[float, int]]]],
+        cache_tokens: torch.Tensor,
+        cache_scores: torch.Tensor,
+        tokens: torch.Tensor,
+        precursors: torch.Tensor,
+        scores: torch.Tensor,
+        idx: int,
+    ) -> Tuple[
+        Dict[int, int],
+        Dict[int, Set[str]],
+        Dict[int, List[List[Tuple[float, int]]]],
+    ]:
+        """
+        Cache terminated beams, group and order by fitting precursor m/z and confidence score
 
+        Parameters
+        ----------
+        finished_beams_idx : List[int]
+            Indices of all finished beams on tokens tensor
+        cache_idx_dict : Dict[int, int]
+            Next available tensor index to cache peptides for each spectrum.
+        cache_seq_dict : Dict[int,  Set[str]]
+            Set of decoded peptides for each spectrum.
+        cache_score_dict : Dict[int, List[List[Tuple[float, int]]]
+            Confidence score for each decoded peptide, separated as precursor m/z fitting vs not, for each spectrum.
+        cache_tokens : torch.Tensor of shape
+        (n_spectra* n_beams, max_length)
+            The token for each amino acid in cached peptides.
+        cache_scores : torch.Tensor of shape
+        (n_spectra* n_beams, max_length, n_amino_acids)
+            The score for each amino acid in cached peptides.
+        tokens : torch.Tensor of shape (n_spectra* n_beams, max_length)
+            Output token of the model corresponding to amino acid sequences of peptides.
+        precursors : torch.Tensor of size (n_spectra* n_beams, 3)
+            The measured precursor mass (axis 0), precursor charge (axis 1), and
+            precursor m/z (axis 2) of each MS/MS spectrum.
+         scores : torch.Tensor of shape (n_spectra*  n_beams, max_length, n_amino_acids)
+            Output scores of the model.
+        idx : int
+            Index to be considered in the current decoding step
+
+        Returns
+        -------
+        finished_beams_idx : List[int]
+            Indices of all finished beams on tokens tensor
+        cache_idx_dict : Dict[int, int]
+            Next available tensor index to cache peptides for each spectrum.
+        cache_seq_dict : Dict[int,  Set[str]]
+            Set of decoded peptides for each spectrum.
+        cache_score_dict : Dict[int, List[List[Tuple[float, int]]]
+            Confidence score for each decoded peptide, separated as precursor m/z fitting vs not, for each spectrum.
+
+        """
         beam = self.n_beams
         # Store finished beams in the cache
         if len(finished_beams_idx) > 0:
@@ -488,8 +622,40 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         return cache_idx_dict, cache_seq_dict, cache_score_dict
 
     def _get_top_peptide(
-        self, cache_score_dict, cache_tokens, cache_scores, batch
-    ):
+        self,
+        cache_score_dict: Dict[int, int],
+        cache_tokens: torch.tensor,
+        cache_scores: torch.tensor,
+        batch: int,
+    ) -> Tuple[torch.tensor, torch.tensor]:
+        """
+        Return the peptide with highest confidence score, with fitting precursor m/z for each spectrum.
+        If no peptides within precursor m/z tolerance, return the highest scoring peptide among the non-fitting
+
+        Parameters
+        ----------
+        cache_score_dict : Dict[int, List[List[Tuple[float, int]]]
+            Confidence score for each decoded peptide, separated as precursor m/z fitting vs not, for each spectrum.
+        cache_tokens : torch.Tensor of shape
+        (n_spectra* n_beams, max_length)
+            The token for each amino acid in cached peptides.
+        cache_scores : torch.Tensor of shape
+        (n_spectra* n_beams, max_length, n_amino_acids)
+            The score for each amino acid in cached peptides.
+        batch: int
+            Number of spectra in the batch
+
+        Returns
+        -------
+        output_tokens : torch.Tensor of shape
+        (n_spectra, max_length)
+            The token for each amino acid in the output peptides.
+        output_scores : torch.Tensor of shape
+        (n_spectra, max_length, n_amino_acids)
+            The score for each amino acid in cached peptides.
+
+
+        """
         # Sizes:
         length = self.max_length + 1  # L
         vocab = self.decoder.vocab_size + 1  # V
@@ -519,8 +685,31 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
 
         return output_tokens, output_scores
 
-    def _get_topk_beams(self, scores, tokens, batch, idx):
+    def _get_topk_beams(
+        self, scores: torch.tensor, tokens: torch.tensor, batch: int, idx: int
+    ) -> Tuple[torch.tensor, torch.tensor]:
+        """
+        Find top-k beams with highest confidence scores and continue decoding from those.
+        Discontinue decoding for beam where stop token was predicted.
 
+        Parameters
+        ----------
+        scores : torch.Tensor of shape (n_spectra*  n_beams, max_length, n_amino_acids)
+            Output scores of the model.
+        tokens : torch.Tensor of shape (n_spectra* n_beams, max_length)
+            Output token of the model corresponding to amino acid sequences of peptides.
+        batch: int
+            Number of spectra in the batch
+        idx : int
+            Index to be considered in the current decoding step
+
+        Returns
+        -------
+        scores : torch.Tensor of shape (n_spectra, max_length, n_amino_acids, n_beams,)
+            Output scores of the model.
+        tokens : torch.Tensor of shape (n_spectra, max_length,  n_beams)
+            Output token of the model corresponding to amino acid sequences of peptides.
+        """
         beam = self.n_beams  # S
         vocab = self.decoder.vocab_size + 1  # V
 
