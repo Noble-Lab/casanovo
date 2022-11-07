@@ -20,7 +20,6 @@ def test_version():
     assert casanovo.__version__ is not None
 
 
-
 def test_n_workers(monkeypatch):
     """Check that n_workers is correct without a GPU."""
     monkeypatch.setattr("torch.cuda.is_available", lambda: False)
@@ -110,7 +109,8 @@ def test_tensorboard():
 
     model = Spec2Pep()
     assert model.tb_summarywriter is None
-    
+
+
 def test_graph_gen(tmp_path):
     data_len = 99
 
