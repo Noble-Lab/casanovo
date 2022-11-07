@@ -7,6 +7,7 @@ import depthcharge.masses
 import numpy as np
 import pytorch_lightning as pl
 import torch
+from torch.utils.tensorboard import SummaryWriter
 from depthcharge.components import ModelMixin, PeptideDecoder, SpectrumEncoder
 
 from . import evaluate
@@ -63,9 +64,9 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         fit the specified isotope error: `abs(calc_mz - (precursor_mz - isotope * 1.00335 / precursor_charge)) < precursor_mass_tol`
     n_log : int
         The number of epochs to wait between logging messages.
-    tb_summarywriter: Optional[torch.utils.tensorboard.SummaryWriter]
-        Object to record performance metrics during training. If ``None``, don't
-        use a ``SummarWriter``.
+    tb_summarywriter: Optional[str]
+        Folder path to record performance metrics during training. If ``None``, don't
+        use a ``SummaryWriter``.
     warmup_iters: int
         The number of warm up iterations for the learning rate scheduler.
     max_iters: int
@@ -78,10 +79,10 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
 
     def __init__(
         self,
-        dim_model: int = 128,
+        dim_model: int = 512,
         n_head: int = 8,
         dim_feedforward: int = 1024,
-        n_layers: int = 1,
+        n_layers: int = 9,
         dropout: float = 0.0,
         dim_intensity: Optional[int] = None,
         custom_encoder: Optional[SpectrumEncoder] = None,
@@ -142,7 +143,10 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         # Logging.
         self.n_log = n_log
         self._history = []
-        self.tb_summarywriter = tb_summarywriter
+        if tb_summarywriter is not None:
+            self.tb_summarywriter = SummaryWriter(tb_summarywriter)
+        else:
+            self.tb_summarywriter = tb_summarywriter
 
         # Output writer during predicting.
         self.out_writer = out_writer
