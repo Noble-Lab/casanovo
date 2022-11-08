@@ -14,11 +14,11 @@ warnings.filterwarnings("ignore", category=DeprecationWarning)
 import appdirs
 import click
 import github
-import pytorch_lightning as pl
 import requests
 import torch
 import tqdm
 import yaml
+from pytorch_lightning.lite import LightningLite
 
 from . import __version__
 from . import utils
@@ -180,7 +180,7 @@ def main(
     if n_gpus > 1:
         config["train_batch_size"] = config["train_batch_size"] // n_gpus
 
-    pl.utilities.seed.seed_everything(seed=config["random_seed"], workers=True)
+    LightningLite.seed_everything(seed=config["random_seed"], workers=True)
 
     # Download model weights if these were not specified (except when training).
     if model is None and mode != "train":
