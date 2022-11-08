@@ -79,11 +79,13 @@ def test_get_model_weights(monkeypatch):
             assert os.path.isfile(filename)
             assert casanovo._get_model_weights() == filename
 
-    # Impossible to find model weights for non-matching version.
-    with monkeypatch.context() as mnk:
-        mnk.setattr(casanovo, "__version__", "999.999.999")
-        with pytest.raises(ValueError):
-            casanovo._get_model_weights()
+    # Impossible to find model weights for (i) full version mismatch and (ii)
+    # major version mismatch.
+    for version in ["999.999.999", "999.0.0"]:
+        with monkeypatch.context() as mnk:
+            mnk.setattr(casanovo, "__version__", version)
+            with pytest.raises(ValueError):
+                casanovo._get_model_weights()
 
     # Test GitHub API rate limit.
     def request(self, *args, **kwargs):

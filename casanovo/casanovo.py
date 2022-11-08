@@ -258,7 +258,11 @@ def _get_model_weights() -> str:
             file_version = tuple(
                 g for g in re.match(r".*_v(\d+)_(\d+)_(\d+)", root).groups()
             )
-            match = sum([i == j for i, j in zip(version, file_version)])
+            match = (
+                sum(m)
+                if (m := [i == j for i, j in zip(version, file_version)])[0]
+                else 0
+            )
             if match > version_match[2]:
                 version_match = os.path.join(cache_dir, filename), None, match
     # Provide the cached model weights if found.
@@ -279,7 +283,11 @@ def _get_model_weights() -> str:
                     r"v(\d+)\.(\d+)\.(\d+)", release.tag_name
                 ).groups()
             )
-            match = sum([i == j for i, j in zip(version, rel_version)])
+            match = (
+                sum(m)
+                if (m := [i == j for i, j in zip(version, rel_version)])[0]
+                else 0
+            )
             if match > version_match[2]:
                 for release_asset in release.get_assets():
                     fn, ext = os.path.splitext(release_asset.name)
