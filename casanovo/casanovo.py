@@ -156,6 +156,7 @@ def main(
         weight_decay=float,
         train_batch_size=int,
         predict_batch_size=int,
+        n_beams=int,
         max_epochs=int,
         num_sanity_val_steps=int,
         train_from_scratch=bool,
@@ -163,7 +164,6 @@ def main(
         model_save_folder_path=str,
         save_weights_only=bool,
         every_n_train_steps=int,
-        n_beams=int,
     )
     for k, t in config_types.items():
         try:

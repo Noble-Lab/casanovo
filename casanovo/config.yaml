@@ -65,7 +65,7 @@ weight_decay: 1e-5
 # Training/inference options.
 train_batch_size: 32
 predict_batch_size: 1024
-n_beams: 1
+n_beams: 5
 
 logger:
 max_epochs: 30
