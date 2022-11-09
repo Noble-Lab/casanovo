@@ -8,7 +8,7 @@ import torch
 
 from casanovo import casanovo
 from casanovo import utils
-from casanovo.denovo.model import Spec2Pep
+from casanovo.denovo.model import Spec2Pep, _aa_to_pep_score
 
 
 def test_version():
@@ -101,7 +101,7 @@ def test_get_model_weights(monkeypatch):
 
 def test_tensorboard():
     """
-    Test that tensorboard.SummaryWriter object is created only when folder path is passed
+    Test tensorboard.SummaryWriter object created only when folder path passed
     """
     model = Spec2Pep(tb_summarywriter="test_path")
     assert model.tb_summarywriter is not None
@@ -110,9 +110,26 @@ def test_tensorboard():
     assert model.tb_summarywriter is None
 
 
+def test_aa_to_pep_score():
+    """
+    Test how peptide confidence scores are derived from amino acid scores.
+    Currently, AA scores are just averaged.
+    """
+    assert (
+        _aa_to_pep_score(
+            [
+                0.0,
+                0.5,
+                1.0,
+            ]
+        )
+        == 0.5
+    )
+
+
 def test_beam_search_decode():
     """
-    Test that beam search decoding and its sub-functions as intended during inference
+    Test beam search decoding and its sub-functions
     """
     model = Spec2Pep(n_beams=4)
 
@@ -124,8 +141,10 @@ def test_beam_search_decode():
     idx = 4
 
     # Initialize scores and tokens:
-    scores = torch.zeros(batch, length, vocab, beam)
-    scores[scores == 0] = torch.nan
+    scores = torch.full(
+        size=(batch, length, vocab, beam), fill_value=torch.nan
+    )
+    is_beam_prec_fit = (batch * beam) * [False]
 
     # Ground truth peptide is "PEPK"
     precursors = torch.tensor([469.2536487, 2.0, 235.63410081688]).repeat(
@@ -133,7 +152,7 @@ def test_beam_search_decode():
     )
     tokens = torch.zeros(batch * beam, length).long()
 
-    tokens[0, :4] = torch.tensor(
+    tokens[0, :idx] = torch.tensor(
         [
             model.decoder._aa2idx["P"],
             model.decoder._aa2idx["E"],
@@ -141,7 +160,7 @@ def test_beam_search_decode():
             model.decoder._aa2idx["K"],
         ]
     )
-    tokens[1, :4] = torch.tensor(
+    tokens[1, :idx] = torch.tensor(
         [
             model.decoder._aa2idx["P"],
             model.decoder._aa2idx["E"],
@@ -149,7 +168,7 @@ def test_beam_search_decode():
             model.decoder._aa2idx["R"],
         ]
     )
-    tokens[2, :4] = torch.tensor(
+    tokens[2, :idx] = torch.tensor(
         [
             model.decoder._aa2idx["P"],
             model.decoder._aa2idx["E"],
@@ -157,7 +176,7 @@ def test_beam_search_decode():
             model.decoder._aa2idx["G"],
         ]
     )
-    tokens[3, :4] = torch.tensor(
+    tokens[3, :idx] = torch.tensor(
         [
             model.decoder._aa2idx["P"],
             model.decoder._aa2idx["E"],
@@ -168,12 +187,15 @@ def test_beam_search_decode():
 
     # Test _terminate_finished_beams()
     finished_beams_idx, updated_tokens = model._terminate_finished_beams(
-        tokens=tokens, precursors=precursors, idx=idx
+        tokens=tokens,
+        precursors=precursors,
+        is_beam_prec_fit=is_beam_prec_fit,
+        idx=idx,
     )
 
-    assert finished_beams_idx == [0, 1, 3]
+    assert torch.equal(finished_beams_idx, torch.tensor([0, 1, 3]))
     assert torch.equal(
-        updated_tokens[:, 4],
+        updated_tokens[:, idx],
         torch.tensor([model.stop_token, model.stop_token, 0, 0]),
     )
 
@@ -183,9 +205,9 @@ def test_beam_search_decode():
     (
         cache_scores,
         cache_tokens,
-        cache_idx_dict,
-        cache_seq_dict,
-        cache_score_dict,
+        cache_next_idx,
+        cache_pred_seq,
+        cache_pred_score,
     ) = model._create_beamsearch_cache(scores, tokens)
 
     scores = cache_scores.clone()
@@ -193,32 +215,38 @@ def test_beam_search_decode():
         scores[:, i, :] = 1
         scores[1, i, updated_tokens[1, i].item()] = 2
 
-    (
-        cache_idx_dict,
-        cache_seq_dict,
-        cache_score_dict,
-    ) = model._cache_finished_beams(
+    model._cache_finished_beams(
         finished_beams_idx,
-        cache_idx_dict,
-        cache_seq_dict,
-        cache_score_dict,
+        cache_next_idx,
+        cache_pred_seq,
+        cache_pred_score,
         cache_tokens,
         cache_scores,
         updated_tokens,
         precursors,
         scores,
+        is_beam_prec_fit,
         idx,
     )
 
-    assert cache_idx_dict[0] == 3
-    assert cache_seq_dict[0] == set(["PEPK", "PEPR", "PEP"])
+    assert cache_next_idx[0] == 3
+    # Keep track of peptides that should be in cache
+    correct_pep = 0
+    for pep in cache_pred_seq[0]:
+        if (
+            torch.equal(pep, torch.tensor([4, 14, 4, 13]))
+            or torch.equal(pep, torch.tensor([4, 14, 4, 18]))
+            or torch.equal(pep, torch.tensor([4, 14, 4]))
+        ):
+            correct_pep += 1
+    assert correct_pep == 3
     # Check if precursor fitting and non-fitting peptides cached correctly
-    assert len(cache_score_dict[0][0]) == 1
-    assert len(cache_score_dict[0][1]) == 2
+    assert len(cache_pred_score[0][0]) == 1
+    assert len(cache_pred_score[0][1]) == 2
 
     # Test _get_top_peptide()
     output_tokens, output_scores = model._get_top_peptide(
-        cache_score_dict, cache_tokens, cache_scores, batch
+        cache_pred_score, cache_tokens, cache_scores, batch
     )
 
     # Check if output equivalent to "PEPK"
@@ -256,7 +284,195 @@ def test_beam_search_decode():
     # Test beam_search_decode()
     spectra = torch.zeros(1, 5, 2)
     precursors = torch.tensor([[469.2536487, 2.0, 235.63410081688]])
-    scores, tokens = model.beam_search_decode(spectra, precursors)
+    model_scores, model_tokens = model.beam_search_decode(spectra, precursors)
 
-    assert tokens.shape[0] == 1
-    assert model.stop_token in tokens
+    assert model_tokens.shape[0] == 1
+    assert model.stop_token in model_tokens
+
+    # Re-initialize scores and tokens to further test caching functionality.
+    scores_v2 = torch.full(
+        size=(
+            batch * beam,
+            length,
+            vocab,
+        ),
+        fill_value=torch.nan,
+    )
+    tokens_v2 = torch.zeros(batch * beam, length).long()
+
+    tokens_v2[0, : idx + 1] = torch.tensor(
+        [
+            model.decoder._aa2idx["P"],
+            model.decoder._aa2idx["K"],
+            model.decoder._aa2idx["K"],
+            model.decoder._aa2idx["P"],
+            model.decoder._aa2idx["$"],
+        ]
+    )
+    tokens_v2[1, : idx + 1] = torch.tensor(
+        [
+            model.decoder._aa2idx["E"],
+            model.decoder._aa2idx["P"],
+            model.decoder._aa2idx["P"],
+            model.decoder._aa2idx["K"],
+            model.decoder._aa2idx["$"],
+        ]
+    )
+    tokens_v2[2, : idx + 1] = torch.tensor(
+        [
+            model.decoder._aa2idx["P"],
+            model.decoder._aa2idx["E"],
+            model.decoder._aa2idx["P"],
+            model.decoder._aa2idx["R"],
+            model.decoder._aa2idx["$"],
+        ]
+    )
+    tokens_v2[3, : idx + 1] = torch.tensor(
+        [
+            model.decoder._aa2idx["P"],
+            model.decoder._aa2idx["M"],
+            model.decoder._aa2idx["K"],
+            model.decoder._aa2idx["P"],
+            model.decoder._aa2idx["$"],
+        ]
+    )
+
+    # Test if fitting replaces non-fitting in the cache
+    # and only higher scoring non-fitting replaces non-fitting
+    for i in range(idx + 1):
+        scores_v2[:, i, :] = 1
+        scores_v2[0, i, tokens_v2[0, i].item()] = 4
+        scores_v2[1, i, tokens_v2[1, i].item()] = 0.5
+        scores_v2[2, i, tokens_v2[2, i].item()] = 3
+        scores_v2[3, i, tokens_v2[3, i].item()] = 0.5
+
+    finished_beams_idx_v2 = torch.tensor([0, 1, 2, 3])
+    is_beam_prec_fit_v2 = [False, True, False, False]
+
+    model._cache_finished_beams(
+        finished_beams_idx_v2,
+        cache_next_idx,
+        cache_pred_seq,
+        cache_pred_score,
+        cache_tokens,
+        cache_scores,
+        tokens_v2,
+        precursors,
+        scores_v2,
+        is_beam_prec_fit_v2,
+        idx + 1,
+    )
+
+    assert cache_next_idx[0] == 4
+    # Check if precursor fitting and non-fitting peptides cached correctly
+    assert len(cache_pred_score[0][0]) == 2
+    assert len(cache_pred_score[0][1]) == 2
+
+    # Keep track of peptides that should (not) be in cache
+    correct_pep = 0
+    wrong_pep = 0
+
+    for pep in cache_pred_seq[0]:
+        if (
+            torch.equal(pep, torch.tensor([4, 13, 13, 4]))
+            or torch.equal(pep, torch.tensor([14, 4, 4, 13]))
+            or torch.equal(pep, torch.tensor([4, 14, 4, 18]))
+        ):
+            correct_pep += 1
+        elif torch.equal(pep, torch.tensor([4, 15, 13, 4])):
+            wrong_pep += 1
+    assert correct_pep == 3
+    assert wrong_pep == 0
+
+    # Test for a single beam
+    model = Spec2Pep(n_beams=1)
+
+    # Sizes:
+    batch = 1  # B
+    length = model.max_length + 1  # L
+    vocab = model.decoder.vocab_size + 1  # V
+    beam = model.n_beams  # S
+    idx = 4
+
+    # Initialize scores and tokens:
+    scores = torch.full(
+        size=(batch, length, vocab, beam), fill_value=torch.nan
+    )
+    is_beam_prec_fit = (batch * beam) * [False]
+
+    # Ground truth peptide is "PEPK"
+    precursors = torch.tensor([469.2536487, 2.0, 235.63410081688]).repeat(
+        beam * batch, 1
+    )
+    tokens = torch.zeros(batch * beam, length).long()
+
+    tokens[0, :idx] = torch.tensor(
+        [
+            model.decoder._aa2idx["P"],
+            model.decoder._aa2idx["E"],
+            model.decoder._aa2idx["P"],
+            model.decoder._aa2idx["K"],
+        ]
+    )
+
+    # Test _terminate_finished_beams()
+    finished_beams_idx, updated_tokens = model._terminate_finished_beams(
+        tokens=tokens,
+        precursors=precursors,
+        is_beam_prec_fit=is_beam_prec_fit,
+        idx=idx,
+    )
+
+    assert torch.equal(finished_beams_idx, torch.tensor([0]))
+    assert torch.equal(
+        updated_tokens[:, idx],
+        torch.tensor([model.stop_token]),
+    )
+
+    # Test _create_beamsearch_cache() and _cache_finished_beams()
+    tokens = torch.zeros(batch, length, beam).long()
+
+    (
+        cache_scores,
+        cache_tokens,
+        cache_next_idx,
+        cache_pred_seq,
+        cache_pred_score,
+    ) = model._create_beamsearch_cache(scores, tokens)
+
+    scores = cache_scores.clone()
+    for i in range(idx):
+        scores[:, i, :] = 1
+
+    model._cache_finished_beams(
+        finished_beams_idx,
+        cache_next_idx,
+        cache_pred_seq,
+        cache_pred_score,
+        cache_tokens,
+        cache_scores,
+        updated_tokens,
+        precursors,
+        scores,
+        is_beam_prec_fit,
+        idx,
+    )
+
+    assert cache_next_idx[0] == 1
+    # Keep track of peptides that should be in cache
+    correct_pep = 0
+    for pep in cache_pred_seq[0]:
+        if torch.equal(pep, torch.tensor([4, 14, 4, 13])):
+            correct_pep += 1
+    assert correct_pep == 1
+    # Check if precursor fitting and non-fitting peptides cached correctly
+    assert len(cache_pred_score[0][0]) == 1
+    assert len(cache_pred_score[0][1]) == 0
+
+    # Test _get_top_peptide()
+    output_tokens, output_scores = model._get_top_peptide(
+        cache_pred_score, cache_tokens, cache_scores, batch
+    )
+
+    # Check if output equivalent to "PEPK"
+    assert torch.equal(output_tokens[0], cache_tokens[0])
