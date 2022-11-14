@@ -295,7 +295,6 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
                 cache_tokens,
                 cache_scores,
                 tokens,
-                precursors,
                 scores,
                 is_beam_prec_fit,
                 idx,
@@ -516,7 +515,6 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         cache_tokens: torch.Tensor,
         cache_scores: torch.Tensor,
         tokens: torch.Tensor,
-        precursors: torch.Tensor,
         scores: torch.Tensor,
         is_beam_prec_fit: List[bool],
         idx: int,
@@ -544,9 +542,6 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
             The score for each amino acid in cached peptides.
         tokens : torch.Tensor of shape (n_spectra * n_beams, max_length)
             Output token of the model corresponding to amino acid sequences.
-        precursors : torch.Tensor of size (n_spectra * n_beams, 3)
-            The measured precursor mass (axis 0), precursor charge (axis 1), and
-            precursor m/z (axis 2) of each MS/MS spectrum.
          scores : torch.Tensor of shape
          (n_spectra *  n_beams, max_length, n_amino_acids)
             Output scores of the model.
