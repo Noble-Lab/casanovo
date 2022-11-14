@@ -133,20 +133,20 @@ def test_beam_search_decode():
     """
     model = Spec2Pep(n_beams=4)
 
-    # Sizes:
+    # Sizes.
     batch = 1  # B
     length = model.max_length + 1  # L
     vocab = model.decoder.vocab_size + 1  # V
     beam = model.n_beams  # S
     idx = 4
 
-    # Initialize scores and tokens:
+    # Initialize scores and tokens.
     scores = torch.full(
         size=(batch, length, vocab, beam), fill_value=torch.nan
     )
-    is_beam_prec_fit = (batch * beam) * [False]
+    is_beam_prec_fit = torch.zeros(batch * beam, dtype=torch.bool)
 
-    # Ground truth peptide is "PEPK"
+    # Ground truth peptide is "PEPK".
     precursors = torch.tensor([469.2536487, 2.0, 235.63410081688]).repeat(
         beam * batch, 1
     )
@@ -185,7 +185,7 @@ def test_beam_search_decode():
         ]
     )
 
-    # Test _terminate_finished_beams()
+    # Test _terminate_finished_beams().
     finished_beams_idx, updated_tokens = model._terminate_finished_beams(
         tokens=tokens,
         precursors=precursors,
@@ -199,7 +199,7 @@ def test_beam_search_decode():
         torch.tensor([model.stop_token, model.stop_token, 0, 0]),
     )
 
-    # Test _create_beamsearch_cache() and _cache_finished_beams()
+    # Test _create_beamsearch_cache() and _cache_finished_beams().
     tokens = torch.zeros(batch, length, beam).long()
 
     (
@@ -223,37 +223,35 @@ def test_beam_search_decode():
         cache_tokens,
         cache_scores,
         updated_tokens,
-        precursors,
         scores,
         is_beam_prec_fit,
         idx,
     )
 
     assert cache_next_idx[0] == 3
-    # Keep track of peptides that should be in cache
+    # Keep track of peptides that should be in cache.
     correct_pep = 0
     for pep in cache_pred_seq[0]:
-        if (
+        correct_pep += (
             torch.equal(pep, torch.tensor([4, 14, 4, 13]))
             or torch.equal(pep, torch.tensor([4, 14, 4, 18]))
             or torch.equal(pep, torch.tensor([4, 14, 4]))
-        ):
-            correct_pep += 1
+        )
     assert correct_pep == 3
-    # Check if precursor fitting and non-fitting peptides cached correctly
+    # Check if precursor fitting and non-fitting peptides cached correctly.
     assert len(cache_pred_score[0][0]) == 1
     assert len(cache_pred_score[0][1]) == 2
 
-    # Test _get_top_peptide()
+    # Test _get_top_peptide().
     output_tokens, output_scores = model._get_top_peptide(
         cache_pred_score, cache_tokens, cache_scores, batch
     )
 
-    # Check if output equivalent to "PEPK"
+    # Check if output equivalent to "PEPK".
     assert torch.equal(output_tokens[0], cache_tokens[0])
 
-    # Test _get_topk_beams()
-    # Generate scores for the non-terminated beam
+    # Test _get_topk_beams().
+    # Generate scores for the non-terminated beam.
     scores[2, idx, :] = 1
 
     for i in range(1, 5):
@@ -281,7 +279,7 @@ def test_beam_search_decode():
     assert torch.equal(new_tokens[0][: idx + 1, :], expected_tokens)
     assert torch.equal(new_scores[0][idx, :], expected_scores)
 
-    # Test beam_search_decode()
+    # Test beam_search_decode().
     spectra = torch.zeros(1, 5, 2)
     precursors = torch.tensor([[469.2536487, 2.0, 235.63410081688]])
     model_scores, model_tokens = model.beam_search_decode(spectra, precursors)
@@ -291,12 +289,7 @@ def test_beam_search_decode():
 
     # Re-initialize scores and tokens to further test caching functionality.
     scores_v2 = torch.full(
-        size=(
-            batch * beam,
-            length,
-            vocab,
-        ),
-        fill_value=torch.nan,
+        size=(batch * beam, length, vocab), fill_value=torch.nan
     )
     tokens_v2 = torch.zeros(batch * beam, length).long()
 
@@ -337,8 +330,8 @@ def test_beam_search_decode():
         ]
     )
 
-    # Test if fitting replaces non-fitting in the cache
-    # and only higher scoring non-fitting replaces non-fitting
+    # Test if fitting replaces non-fitting in the cache and only higher scoring
+    # non-fitting replaces non-fitting.
     for i in range(idx + 1):
         scores_v2[:, i, :] = 1
         scores_v2[0, i, tokens_v2[0, i].item()] = 4
@@ -347,7 +340,7 @@ def test_beam_search_decode():
         scores_v2[3, i, tokens_v2[3, i].item()] = 0.5
 
     finished_beams_idx_v2 = torch.tensor([0, 1, 2, 3])
-    is_beam_prec_fit_v2 = [False, True, False, False]
+    is_beam_prec_fit_v2 = torch.BoolTensor([False, True, False, False])
 
     model._cache_finished_beams(
         finished_beams_idx_v2,
@@ -357,18 +350,17 @@ def test_beam_search_decode():
         cache_tokens,
         cache_scores,
         tokens_v2,
-        precursors,
         scores_v2,
         is_beam_prec_fit_v2,
         idx + 1,
     )
 
     assert cache_next_idx[0] == 4
-    # Check if precursor fitting and non-fitting peptides cached correctly
+    # Check if precursor fitting and non-fitting peptides cached correctly.
     assert len(cache_pred_score[0][0]) == 2
     assert len(cache_pred_score[0][1]) == 2
 
-    # Keep track of peptides that should (not) be in cache
+    # Keep track of peptides that should (not) be in cache.
     correct_pep = 0
     wrong_pep = 0
 
@@ -384,21 +376,21 @@ def test_beam_search_decode():
     assert correct_pep == 3
     assert wrong_pep == 0
 
-    # Test for a single beam
+    # Test for a single beam.
     model = Spec2Pep(n_beams=1)
 
-    # Sizes:
+    # Sizes.
     batch = 1  # B
     length = model.max_length + 1  # L
     vocab = model.decoder.vocab_size + 1  # V
     beam = model.n_beams  # S
     idx = 4
 
-    # Initialize scores and tokens:
+    # Initialize scores and tokens.
     scores = torch.full(
         size=(batch, length, vocab, beam), fill_value=torch.nan
     )
-    is_beam_prec_fit = (batch * beam) * [False]
+    is_beam_prec_fit = torch.zeros(batch * beam, dtype=torch.bool)
 
     # Ground truth peptide is "PEPK"
     precursors = torch.tensor([469.2536487, 2.0, 235.63410081688]).repeat(
@@ -415,7 +407,7 @@ def test_beam_search_decode():
         ]
     )
 
-    # Test _terminate_finished_beams()
+    # Test _terminate_finished_beams().
     finished_beams_idx, updated_tokens = model._terminate_finished_beams(
         tokens=tokens,
         precursors=precursors,
@@ -425,11 +417,10 @@ def test_beam_search_decode():
 
     assert torch.equal(finished_beams_idx, torch.tensor([0]))
     assert torch.equal(
-        updated_tokens[:, idx],
-        torch.tensor([model.stop_token]),
+        updated_tokens[:, idx], torch.tensor([model.stop_token])
     )
 
-    # Test _create_beamsearch_cache() and _cache_finished_beams()
+    # Test _create_beamsearch_cache() and _cache_finished_beams().
     tokens = torch.zeros(batch, length, beam).long()
 
     (
@@ -452,27 +443,25 @@ def test_beam_search_decode():
         cache_tokens,
         cache_scores,
         updated_tokens,
-        precursors,
         scores,
         is_beam_prec_fit,
         idx,
     )
 
     assert cache_next_idx[0] == 1
-    # Keep track of peptides that should be in cache
+    # Keep track of peptides that should be in cache.
     correct_pep = 0
     for pep in cache_pred_seq[0]:
-        if torch.equal(pep, torch.tensor([4, 14, 4, 13])):
-            correct_pep += 1
+        correct_pep += torch.equal(pep, torch.tensor([4, 14, 4, 13]))
     assert correct_pep == 1
-    # Check if precursor fitting and non-fitting peptides cached correctly
+    # Check if precursor fitting and non-fitting peptides cached correctly.
     assert len(cache_pred_score[0][0]) == 1
     assert len(cache_pred_score[0][1]) == 0
 
-    # Test _get_top_peptide()
+    # Test _get_top_peptide().
     output_tokens, output_scores = model._get_top_peptide(
         cache_pred_score, cache_tokens, cache_scores, batch
     )
 
-    # Check if output equivalent to "PEPK"
+    # Check if output equivalent to "PEPK".
     assert torch.equal(output_tokens[0], cache_tokens[0])
