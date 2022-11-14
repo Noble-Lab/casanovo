@@ -110,9 +110,9 @@ def _execute_existing(
         max_charge=config["max_charge"],
         precursor_mass_tol=config["precursor_mass_tol"],
         isotope_error_range=config["isotope_error_range"],
+        n_beams=config["n_beams"],
         n_log=config["n_log"],
         out_writer=out_writer,
-        n_beams=config["n_beams"],
     )
     # Read the MS/MS spectra for which to predict peptide sequences.
     if annotated:
@@ -262,13 +262,13 @@ def train(
         max_charge=config["max_charge"],
         precursor_mass_tol=config["precursor_mass_tol"],
         isotope_error_range=config["isotope_error_range"],
+        n_beams=config["n_beams"],
         n_log=config["n_log"],
         tb_summarywriter=config["tb_summarywriter"],
         warmup_iters=config["warmup_iters"],
         max_iters=config["max_iters"],
         lr=config["learning_rate"],
         weight_decay=config["weight_decay"],
-        n_beams=config["n_beams"],
     )
     if config["train_from_scratch"]:
         model = Spec2Pep(**model_params)
