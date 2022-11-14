@@ -573,39 +573,26 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
             )
             # Check if predicted seq already in cache
             if not is_peptide_cached:
+                smx = self.softmax(scores)
+                aa_scores = [
+                    smx[i, idx, aa_idx.item()].item()
+                    for idx, aa_idx in enumerate(tokens[i][:stop_token_idx])
+                ]
+                pep_score = _aa_to_pep_score(aa_scores)
                 # Directly cache if we don't already have k peptides cached
-                smx = self.softmax(scores)[i, :, :]
                 if insert_idx < (spec_idx + 1) * beam:
                     cache_tokens[insert_idx, :] = tokens[i, :]
                     cache_scores[insert_idx, :, :] = scores[i, :, :]
                     cache_next_idx[spec_idx] += 1  # move the pointer
                     cache_pred_seq[spec_idx].add(tokens[i][:stop_token_idx])
 
-                    aa_scores = [
-                        smx[idx][aa_idx.item()].item()
-                        for idx, aa_idx in enumerate(
-                            tokens[i][:stop_token_idx]
-                        )
-                    ]
-                    pep_score = _aa_to_pep_score(aa_scores)
-
                     # Cache peptides with fitting (idx=0) non-fitting (idx=1)
                     # precursor m/z separately
-                    cache_i = not is_beam_prec_fit[i]
                     heappush(
-                        cache_pred_score[spec_idx][cache_i],
+                        cache_pred_score[spec_idx][not is_beam_prec_fit[i]],
                         (pep_score, insert_idx),
                     )
-
                 else:
-                    aa_scores = [
-                        smx[idx][aa_idx.item()].item()
-                        for idx, aa_idx in enumerate(
-                            tokens[i][:stop_token_idx]
-                        )
-                    ]
-                    new_score = _aa_to_pep_score(aa_scores)
-
                     # Cache fitting peptide either to replace non-fitting or
                     # higher confidence than lowest scoring fitting peptide
                     if is_beam_prec_fit[i]:
@@ -620,7 +607,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
                             ]
                             heappush(
                                 cache_pred_score[spec_idx][0],
-                                (new_score, pop_insert_idx),
+                                (pep_score, pop_insert_idx),
                             )
                             cache_pred_seq[spec_idx].add(
                                 tokens[i][:stop_token_idx]
@@ -633,14 +620,14 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
                                 pop_pep_score,
                                 pop_insert_idx,
                             ) = cache_pred_score[spec_idx][0][0]
-                            if new_score > pop_pep_score:
+                            if pep_score > pop_pep_score:
                                 cache_tokens[pop_insert_idx, :] = tokens[i, :]
                                 cache_scores[pop_insert_idx, :, :] = scores[
                                     i, :, :
                                 ]
                                 heappushpop(
                                     cache_pred_score[spec_idx][0],
-                                    (new_score, pop_insert_idx),
+                                    (pep_score, pop_insert_idx),
                                 )
                                 cache_pred_seq[spec_idx].add(
                                     tokens[i][:stop_token_idx]
@@ -655,14 +642,14 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
                                 pop_pep_score,
                                 pop_insert_idx,
                             ) = cache_pred_score[spec_idx][1][0]
-                            if new_score > pop_pep_score:
+                            if pep_score > pop_pep_score:
                                 cache_tokens[pop_insert_idx, :] = tokens[i, :]
                                 cache_scores[pop_insert_idx, :, :] = scores[
                                     i, :, :
                                 ]
                                 heappushpop(
                                     cache_pred_score[spec_idx][1],
-                                    (new_score, pop_insert_idx),
+                                    (pep_score, pop_insert_idx),
                                 )
                                 cache_pred_seq[spec_idx].add(
                                     tokens[i][:stop_token_idx]
@@ -711,17 +698,13 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
             size=(batch, length, vocab), fill_value=torch.nan
         )
         output_scores = output_scores.type_as(cache_scores)
-        output_tokens = torch.zeros(batch, length)
-        output_tokens = output_tokens.type_as(cache_tokens)
+        output_tokens = torch.zeros(batch, length).type_as(cache_tokens)
 
         # Return the top scoring peptide (fitting precursor mass if possible)
         for spec_idx in range(batch):
-            cached_fitting, cached_nonfitting = cache_pred_score[spec_idx]
-            cache = (
-                cached_fitting
-                if len(cached_fitting) > 0
-                else cached_nonfitting
-            )
+            cache = cache_pred_score[spec_idx][
+                len(cache_pred_score[spec_idx][0]) == 0
+            ]
             _, top_score_idx = max(cache, key=itemgetter(1))
 
             output_tokens[spec_idx, :] = cache_tokens[top_score_idx, :]
@@ -764,30 +747,22 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         scores = einops.rearrange(scores, "(B S) L V -> B L V S", S=beam)
         tokens = einops.rearrange(tokens, "(B S) L -> B L S", S=beam)
         prev_tokens = einops.repeat(
-            tokens[:, :idx, :],
-            "B L S -> B L V S",
-            V=vocab,
+            tokens[:, :idx, :], "B L S -> B L V S", V=vocab
         )
 
         # Get the previous tokens and scores:
         prev_scores = torch.gather(
-            scores[:, :idx, :, :],
-            dim=2,
-            index=prev_tokens,
+            scores[:, :idx, :, :], dim=2, index=prev_tokens
         )
         prev_scores = einops.repeat(
-            prev_scores[:, :, 0, :],
-            "B L S -> B L (V S)",
-            V=vocab,
+            prev_scores[:, :, 0, :], "B L S -> B L (V S)", V=vocab
         )
 
         # Get scores for all possible beams at this step
-        step_scores = torch.zeros(batch, idx + 1, beam * vocab)
-        step_scores = step_scores.type_as(scores)
+        step_scores = torch.zeros(batch, idx + 1, beam * vocab).type_as(scores)
         step_scores[:, :idx, :] = prev_scores
         step_scores[:, idx, :] = einops.rearrange(
-            scores[:, idx, :, :],
-            "B V S -> B (V S)",
+            scores[:, idx, :, :], "B V S -> B (V S)"
         )
 
         # Mask out terminated beams. Include delta mass induced termination
@@ -803,8 +778,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
 
         # Figure out the top K decodings
         _, top_idx = torch.topk(
-            step_scores.nanmean(dim=1) * (~finished_mask).int().float(),
-            beam,
+            step_scores.nanmean(dim=1) * (~finished_mask).int().float(), beam
         )
         v_idx, s_idx = np.unravel_index(top_idx.cpu(), (vocab, beam))
         s_idx = einops.rearrange(s_idx, "B S -> (B S)")
@@ -812,16 +786,11 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
 
         # Record the top K decodings
         tokens[:, :idx, :] = einops.rearrange(
-            prev_tokens[b_idx, :, 0, s_idx],
-            "(B S) L -> B L S",
-            S=beam,
+            prev_tokens[b_idx, :, 0, s_idx], "(B S) L -> B L S", S=beam
         )
-
         tokens[:, idx, :] = torch.tensor(v_idx)
         scores[:, : idx + 1, :, :] = einops.rearrange(
-            scores[b_idx, : idx + 1, :, s_idx],
-            "(B S) L V -> B L V S",
-            S=beam,
+            scores[b_idx, : idx + 1, :, s_idx], "(B S) L V -> B L V S", S=beam
         )
 
         return scores, tokens
