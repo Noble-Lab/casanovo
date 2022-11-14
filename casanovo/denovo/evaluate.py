@@ -221,13 +221,15 @@ def aa_match_batch(
     """
     aa_matches_batch, n_aa1, n_aa2 = [], 0, 0
     for peptide1, peptide2 in zip(peptides1, peptides2):
-        tokens1 = re.split(r"(?<=.)(?=[A-Z])", peptide1)
-        tokens2 = re.split(r"(?<=.)(?=[A-Z])", peptide2)
-        n_aa1, n_aa2 = n_aa1 + len(tokens1), n_aa2 + len(tokens2)
+        if isinstance(peptide1, str):
+            peptide1 = re.split(r"(?<=.)(?=[A-Z])", peptide1)
+        if isinstance(peptide2, str):
+            peptide2 = re.split(r"(?<=.)(?=[A-Z])", peptide2)
+        n_aa1, n_aa2 = n_aa1 + len(peptide1), n_aa2 + len(peptide2)
         aa_matches_batch.append(
             aa_match(
-                tokens1,
-                tokens2,
+                peptide1,
+                peptide2,
                 aa_dict,
                 cum_mass_threshold,
                 ind_mass_threshold,
