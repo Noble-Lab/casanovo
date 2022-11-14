@@ -85,8 +85,8 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         The number of warm up iterations for the learning rate scheduler.
     max_iters: int
         The total number of iterations for the learning rate scheduler.
-    out_filename: Optional[str]
-        The output file name for the prediction results.
+    out_writer: Optional[str]
+        The output writer for the prediction results.
     **kwargs : Dict
         Additional keyword arguments passed to the Adam optimizer.
     """
@@ -214,6 +214,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Beam search decode the spectra.
+
         Return the highest scoring peptide, within the precursor m/z tolerance
         whenever possible.
 
@@ -231,11 +232,9 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
 
         Returns
         -------
-        scores : torch.Tensor of shape
-        (n_spectra, max_length, n_amino_acids)
+        scores : torch.Tensor of shape (n_spectra, max_length, n_amino_acids)
             The score for each amino acid.
-        tokens : torch.Tensor of shape
-        (n_spectra, max_length)
+        tokens : torch.Tensor of shape (n_spectra, max_length)
             The token sequence for each spectrum.
         """
         memories, mem_masks = self.encoder(spectra)
@@ -350,8 +349,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         cache_scores : torch.Tensor of shape
         (n_spectra * n_beams, max_length, n_amino_acids)
             The score for each amino acid in cached peptides.
-        cache_tokens : torch.Tensor of shape
-        (n_spectra * n_beams, max_length)
+        cache_tokens : torch.Tensor of shape (n_spectra * n_beams, max_length)
             The token for each amino acid in cached peptides.
         cache_next_idx : Dict[int, int]
             Next available tensor index to cache peptides for each spectrum.
@@ -361,7 +359,6 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
             Confidence score for each decoded peptide, separated as
             precursor m/z fitting vs not, for each spectrum.
         """
-
         batch = scores.shape[0]
         beam = scores.shape[-1]
 
@@ -396,6 +393,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Terminate beams exceeding precursor m/z tolerance.
+
         Track all terminated beams.
 
         Parameters
@@ -525,6 +523,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
     ):
         """
         Cache terminated beams.
+
         Group and order by fitting precursor m/z and confidence score.
 
         Parameters
@@ -538,8 +537,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         cache_pred_score : Dict[int, List[List[Tuple[float, int]]]
             Confidence score for each decoded peptide, separated as
             precursor m/z fitting vs not, for each spectrum.
-        cache_tokens : torch.Tensor of shape
-        (n_spectra * n_beams, max_length)
+        cache_tokens : torch.Tensor of shape (n_spectra * n_beams, max_length)
             The token for each amino acid in cached peptides.
         cache_scores : torch.Tensor of shape
         (n_spectra * n_beams, max_length, n_amino_acids)
@@ -633,7 +631,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
 
                         # If all cached peptides are all precursor fitting
                         else:
-                            # Peak at the top of the heap
+                            # Peek at the top of the heap
                             (
                                 pop_pep_score,
                                 pop_insert_idx,
@@ -655,7 +653,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
                     # than lowest scoring non-fitting peptide cached
                     else:
                         if len(cache_pred_score[spec_idx][1]) > 0:
-                            # Peak at the top of the heap
+                            # Peek at the top of the heap
                             (
                                 pop_pep_score,
                                 pop_insert_idx,
@@ -685,28 +683,27 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         batch: int,
     ) -> Tuple[torch.tensor, torch.tensor]:
         """
-        Return the peptide with highest confidence score for each spectrum.
-        If no peptides within precursor m/z tolerance, return the highest
-        scoring peptide among the non-fitting.
+        Return the peptide with the highest confidence score for each spectrum.
+
+        If there are no peptides within the precursor m/z tolerance, return the
+        highest-scoring peptide among the non-fitting predictions.
 
         Parameters
         ----------
         cache_pred_score : Dict[int, List[List[Tuple[float, int]]]
             Confidence score for each decoded peptide, separated as
             precursor m/z fitting vs not, for each spectrum.
-        cache_tokens : torch.Tensor of shape
-        (n_spectra * n_beams, max_length)
+        cache_tokens : torch.Tensor of shape (n_spectra * n_beams, max_length)
             The token for each amino acid in cached peptides.
         cache_scores : torch.Tensor of shape
         (n_spectra * n_beams, max_length, n_amino_acids)
             The score for each amino acid in cached peptides.
         batch: int
-            Number of spectra in the batch
+            Number of spectra in the batch.
 
         Returns
         -------
-        output_tokens : torch.Tensor of shape
-        (n_spectra, max_length)
+        output_tokens : torch.Tensor of shape (n_spectra, max_length)
             The token for each amino acid in the output peptides.
         output_scores : torch.Tensor of shape
         (n_spectra, max_length, n_amino_acids)
@@ -744,6 +741,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
     ) -> Tuple[torch.tensor, torch.tensor]:
         """
         Find top-k beams with highest confidences and continue decoding those.
+
         Discontinue decoding for beam where stop token was predicted.
 
         Parameters
