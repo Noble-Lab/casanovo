@@ -299,6 +299,8 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
                 is_beam_prec_fit,
                 idx,
             )
+            # Set all beams back to False after caching is completed
+            is_beam_prec_fit = (batch * beam) * [False]
 
             # Stop decoding when all current beams are terminated
             decoded = (tokens == self.stop_token).any(axis=1)
@@ -665,10 +667,6 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
                                 cache_pred_seq[spec_idx].add(
                                     tokens[i][:stop_token_idx]
                                 )
-
-        # Set all beams back to False after caching is completed
-        batch = tokens.shape[0]
-        is_beam_prec_fit = (batch * beam) * [False]
 
     def _get_top_peptide(
         self,
