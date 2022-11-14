@@ -1,17 +1,8 @@
 """A de novo peptide sequencing model."""
+import heapq
 import logging
-import re
-from typing import (
-    Any,
-    Dict,
-    List,
-    Optional,
-    Set,
-    Tuple,
-    Union,
-)
-from heapq import heappop, heappush, heappushpop
-from operator import itemgetter
+import operator
+from typing import Any, Dict, List, Optional, Set, Tuple, Union
 
 import depthcharge.masses
 import einops
@@ -588,7 +579,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
 
                     # Cache peptides with fitting (idx=0) non-fitting (idx=1)
                     # precursor m/z separately
-                    heappush(
+                    heapq.heappush(
                         cache_pred_score[spec_idx][not is_beam_prec_fit[i]],
                         (pep_score, insert_idx),
                     )
@@ -598,14 +589,14 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
                     if is_beam_prec_fit[i]:
                         # Check if any non-fitting peptide cached
                         if len(cache_pred_score[spec_idx][1]) > 0:
-                            _, pop_insert_idx = heappop(
+                            _, pop_insert_idx = heapq.heappop(
                                 cache_pred_score[spec_idx][1]
                             )
                             cache_tokens[pop_insert_idx, :] = tokens[i, :]
                             cache_scores[pop_insert_idx, :, :] = scores[
                                 i, :, :
                             ]
-                            heappush(
+                            heapq.heappush(
                                 cache_pred_score[spec_idx][0],
                                 (pep_score, pop_insert_idx),
                             )
@@ -625,7 +616,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
                                 cache_scores[pop_insert_idx, :, :] = scores[
                                     i, :, :
                                 ]
-                                heappushpop(
+                                heapq.heappushpop(
                                     cache_pred_score[spec_idx][0],
                                     (pep_score, pop_insert_idx),
                                 )
@@ -647,7 +638,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
                                 cache_scores[pop_insert_idx, :, :] = scores[
                                     i, :, :
                                 ]
-                                heappushpop(
+                                heapq.heappushpop(
                                     cache_pred_score[spec_idx][1],
                                     (pep_score, pop_insert_idx),
                                 )
@@ -705,7 +696,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
             cache = cache_pred_score[spec_idx][
                 len(cache_pred_score[spec_idx][0]) == 0
             ]
-            _, top_score_idx = max(cache, key=itemgetter(1))
+            _, top_score_idx = max(cache, key=operator.itemgetter(1))
 
             output_tokens[spec_idx, :] = cache_tokens[top_score_idx, :]
             output_scores[spec_idx, :, :] = cache_scores[top_score_idx, :, :]
