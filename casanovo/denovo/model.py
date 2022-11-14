@@ -230,24 +230,23 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         """
         memories, mem_masks = self.encoder(spectra)
 
-        # Sizes:
+        # Sizes.
         batch = spectra.shape[0]  # B
         length = self.max_length + 1  # L
         vocab = self.decoder.vocab_size + 1  # V
         beam = self.n_beams  # S
 
-        # Initialize scores and tokens:
+        # Initialize scores and tokens.
         scores = torch.full(
             size=(batch, length, vocab, beam), fill_value=torch.nan
         )
         scores = scores.type_as(spectra)
-        tokens = torch.zeros(batch, length, beam, dtype=torch.int64).to(
-            self.encoder.device
-        )
-        # Keep track if terminated beams have fitting precursor m/z
-        is_beam_prec_fit = (batch * beam) * [False]
+        tokens = torch.zeros(batch, length, beam, dtype=torch.int64)
+        tokens = tokens.to(self.encoder.device)
+        # Keep track whether terminated beams have fitting precursor m/z.
+        beam_fits_prec_tol = torch.zeros(batch * beam, dtype=torch.bool)
 
-        # Create cache for decoded beams
+        # Create cache for decoded beams.
         (
             cache_scores,
             cache_tokens,
@@ -256,28 +255,27 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
             cache_pred_score,
         ) = self._create_beamsearch_cache(scores, tokens)
 
-        # Create the first prediction
+        # Get the first prediction.
         pred, _ = self.decoder(None, precursors, memories, mem_masks)
-        _, idx = torch.topk(pred[:, 0, :], beam, dim=1)
-        tokens[:, 0, :] = idx
+        tokens[:, 0, :] = torch.topk(pred[:, 0, :], beam, dim=1)[1]
         scores[:, :1, :, :] = einops.repeat(pred, "B L V -> B L V S", S=beam)
 
-        # Make precursors and memories the right shape for decoding:
+        # Make precursors and memories the right shape for decoding.
         precursors = einops.repeat(precursors, "B L -> (B S) L", S=beam)
         mem_masks = einops.repeat(mem_masks, "B L -> (B S) L", S=beam)
         memories = einops.repeat(memories, "B L V -> (B S) L V", S=beam)
 
-        # The main decoding loop:
-        for idx in range(1, self.max_length + 1):
+        # The main decoding loop.
+        for i in range(1, self.max_length + 1):
             scores = einops.rearrange(scores, "B L V S -> (B S) L V")
             tokens = einops.rearrange(tokens, "B L S -> (B S) L")
-            # Terminate beams exceeding precursor m/z tolerance
-            # and track all terminated beams
+            # Terminate beams exceeding precursor m/z tolerance and track all
+            # terminated beams.
             finished_beams_idx, tokens = self._terminate_finished_beams(
-                tokens, precursors, is_beam_prec_fit, idx
+                tokens, precursors, beam_fits_prec_tol, i
             )
             # Cache terminated beams, group and order by fitting precursor m/z
-            # and confidence score
+            # and confidence score.
             self._cache_finished_beams(
                 finished_beams_idx,
                 cache_next_idx,
@@ -287,32 +285,32 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
                 cache_scores,
                 tokens,
                 scores,
-                is_beam_prec_fit,
-                idx,
+                beam_fits_prec_tol,
+                i,
             )
-            # Set all beams back to False after caching is completed
-            is_beam_prec_fit = (batch * beam) * [False]
+            # Reset all precursor tolerance status of all beams.
+            beam_fits_prec_tol = torch.zeros(batch * beam, dtype=torch.bool)
 
-            # Stop decoding when all current beams are terminated
+            # Stop decoding when all current beams are terminated.
             decoded = (tokens == self.stop_token).any(axis=1)
             if decoded.all():
-                # Return the peptide with highest confidence score, within
-                # precursor m/z tolerance if possible
+                # Return the peptide with the highest confidence score, within
+                # the precursor m/z tolerance if possible.
                 output_tokens, output_scores = self._get_top_peptide(
                     cache_pred_score, cache_tokens, cache_scores, batch
                 )
                 break
 
-            # Get scores
-            scores[~decoded, : idx + 1, :], _ = self.decoder(
-                tokens[~decoded, :idx],
+            # Get scores.
+            scores[~decoded, : i + 1, :], _ = self.decoder(
+                tokens[~decoded, :i],
                 precursors[~decoded, :],
                 memories[~decoded, :, :],
                 mem_masks[~decoded, :],
             )
 
-            # Find top-k beams with highest scores and continue decoding those
-            scores, tokens = self._get_topk_beams(scores, tokens, batch, idx)
+            # Find top-k beams with highest scores and continue decoding those.
+            scores, tokens = self._get_topk_beams(scores, tokens, batch, i)
 
         return self.softmax(output_scores), output_tokens
 
@@ -351,22 +349,19 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
             Confidence score for each decoded peptide, separated as
             precursor m/z fitting vs not, for each spectrum.
         """
-        batch = scores.shape[0]
-        beam = scores.shape[-1]
+        batch, beam = scores.shape[0], scores.shape[-1]
 
-        # Cache terminated beams and their scores
+        # Cache terminated beams and their scores.
         cache_scores = einops.rearrange(scores.clone(), "B L V S -> (B S) L V")
         cache_tokens = einops.rearrange(tokens.clone(), "B L S -> (B S) L")
 
-        # Keep pointer to free rows in the cache and already cached predictions
-        cache_next_idx = {
-            spec_idx: spec_idx * beam for spec_idx in range(batch)
-        }
-        # Keep already decoded peptides to avoid duplicates in cache
-        cache_pred_seq = {spec_idx: set() for spec_idx in range(batch)}
-        # Store peptide scores to replace lower score peptides in cache
-        # with higher score peptides during decoding.
-        cache_pred_score = {spec_idx: [[], []] for spec_idx in range(batch)}
+        # Keep pointer to free rows in the cache and already cached predictions.
+        cache_next_idx = {i: i * beam for i in range(batch)}
+        # Keep already decoded peptides to avoid duplicates in cache.
+        cache_pred_seq = {i: set() for i in range(batch)}
+        # Store peptide scores to replace lower score peptides in cache with
+        # higher score peptides during decoding.
+        cache_pred_score = {i: [[], []] for i in range(batch)}
 
         return (
             cache_scores,
@@ -380,11 +375,11 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         self,
         tokens: torch.Tensor,
         precursors: torch.Tensor,
-        is_beam_prec_fit: List[bool],
+        is_beam_prec_fit: torch.Tensor,
         idx: int,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """
-        Terminate beams exceeding precursor m/z tolerance.
+        Terminate beams exceeding the precursor m/z tolerance.
 
         Track all terminated beams.
 
@@ -395,8 +390,9 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         precursors : torch.Tensor of size (n_spectra * n_beams, 3)
             The measured precursor mass (axis 0), precursor charge (axis 1), and
             precursor m/z (axis 2) of each MS/MS spectrum.
-        is_beam_prec_fit: List[bool]
-            List indicating if current beams are within precursor m/z tolerance.
+        is_beam_prec_fit: torch.Tensor of shape (n_spectra * n_beams)
+            Boolean tensor indicating if current beams are within precursor m/z
+            tolerance.
         idx : int
             Index to be considered in the current decoding step.
 
@@ -407,33 +403,33 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         tokens : torch.Tensor of size (n_spectra * n_beams, max_length)
             Output token of the model corresponding to amino acid sequences.
         """
-        # Check if N-terminal NH3 loss is in the vocabulary
+        # Check if N-terminal NH3 loss is in the vocabulary.
         is_nh3_loss_in_vocab = (
             self.peptide_mass_calculator.masses.get("-17.027", "") != ""
         )
 
-        # Terminate beams which exceed the precursor m/z
+        # Terminate beams that exceed the precursor m/z.
         for beam_i in range(len(tokens)):
-            # Check only non-terminated beams
+            # Check only non-terminated beams.
             if self.stop_token not in tokens[beam_i]:
-                # Finish if dummy predicted at the previous step
+                # Finish if dummy was predicted at the previous step.
                 if tokens[beam_i][idx - 1] == 0:
                     tokens[beam_i][idx - 1] = self.stop_token
-                # Check delta m/z and terminate the beam if it exceeds threshold
+                # Terminate the beam if it exceeds the precursor m/z tolerance.
                 else:
-                    precursor_mz = precursors[beam_i, 2].item()
                     precursor_charge = precursors[beam_i, 1].item()
+                    precursor_mz = precursors[beam_i, 2].item()
                     peptide_seq = [
                         self.decoder._idx2aa.get(i.item(), "")
                         for i in tokens[beam_i][:idx]
                     ]
                     try:
-                        pred_mz = self.peptide_mass_calculator.mass(
+                        calc_mz = self.peptide_mass_calculator.mass(
                             seq=peptide_seq, charge=precursor_charge
                         )
                         delta_mass_ppm = [
                             _calc_mass_error(
-                                pred_mz,
+                                calc_mz,
                                 precursor_mz,
                                 precursor_charge,
                                 isotope,
@@ -452,19 +448,19 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
                             for d in delta_mass_ppm
                         )
 
-                        # Don't terminate if m/z difference is by NH3 loss
+                        # Don't terminate if m/z difference is by NH3 loss.
                         if (
                             exceeds_precursor_mz_tol
                             and not is_within_precursor_mz_tol
                             and is_nh3_loss_in_vocab
                         ):
                             alt_peptide_seq = peptide_seq + ["-17.027"]
-                            pred_mz = self.peptide_mass_calculator.mass(
+                            calc_mz = self.peptide_mass_calculator.mass(
                                 seq=alt_peptide_seq, charge=precursor_charge
                             )
                             delta_mass_ppm = [
                                 _calc_mass_error(
-                                    pred_mz,
+                                    calc_mz,
                                     precursor_mz,
                                     precursor_charge,
                                     isotope,
@@ -484,7 +480,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
 
                     except KeyError:
                         (
-                            pred_mz,
+                            calc_mz,
                             is_within_precursor_mz_tol,
                             exceeds_precursor_mz_tol,
                         ) = (np.nan, False, False)
@@ -493,11 +489,9 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
                         tokens[beam_i][idx] = self.stop_token
                         is_beam_prec_fit[beam_i] = is_within_precursor_mz_tol
 
-        # Get the list of indices for finished beams
-        finished_beams_bool = (tokens == self.stop_token).any(dim=1)
-        finished_beams_idx = torch.where(finished_beams_bool)[0]
-
-        return finished_beams_idx, tokens
+        # Get the indices of finished beams.
+        finished_idx = torch.where((tokens == self.stop_token).any(dim=1))[0]
+        return finished_idx, tokens
 
     def _cache_finished_beams(
         self,
@@ -509,7 +503,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         cache_scores: torch.Tensor,
         tokens: torch.Tensor,
         scores: torch.Tensor,
-        is_beam_prec_fit: List[bool],
+        is_beam_prec_fit: torch.Tensor,
         idx: int,
     ):
         """
@@ -538,31 +532,28 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
          scores : torch.Tensor of shape
          (n_spectra *  n_beams, max_length, n_amino_acids)
             Output scores of the model.
-        is_beam_prec_fit: List[bool]
-            List indicating if current beams are within precursor m/z tolerance.
+        is_beam_prec_fit: torch.Tensor of shape (n_spectra * n_beams)
+            Boolean tensor indicating if current beams are within the precursor
+            m/z tolerance.
         idx : int
             Index to be considered in the current decoding step.
         """
         beam = self.n_beams
-        # Store finished beams in the cache
+        # Store finished beams in the cache.
         for i in finished_beams_idx:
             i = i.item()
-            spec_idx = i // beam  # find the starting index of the spectrum
+            spec_idx = i // beam  # Find the starting index of the spectrum.
             insert_idx = cache_next_idx[spec_idx]
 
-            # Check position of stop token (changes in case stopped early)
-            if tokens[i][idx] == self.stop_token:
-                stop_token_idx = idx
-            else:
-                stop_token_idx = idx - 1
-
+            # Check position of stop token (changes in case stopped early).
+            stop_token_idx = idx - (not tokens[i][idx] == self.stop_token)
             is_peptide_cached = any(
                 [
                     torch.equal(pep, tokens[i][:stop_token_idx])
                     for pep in cache_pred_seq[spec_idx]
                 ]
             )
-            # Check if predicted seq already in cache
+            # Check if predicted peptide already in cache.
             if not is_peptide_cached:
                 smx = self.softmax(scores)
                 aa_scores = [
@@ -570,24 +561,24 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
                     for idx, aa_idx in enumerate(tokens[i][:stop_token_idx])
                 ]
                 pep_score = _aa_to_pep_score(aa_scores)
-                # Directly cache if we don't already have k peptides cached
+                # Directly cache if we don't already have k peptides cached.
                 if insert_idx < (spec_idx + 1) * beam:
                     cache_tokens[insert_idx, :] = tokens[i, :]
                     cache_scores[insert_idx, :, :] = scores[i, :, :]
-                    cache_next_idx[spec_idx] += 1  # move the pointer
+                    cache_next_idx[spec_idx] += 1  # Move the pointer.
                     cache_pred_seq[spec_idx].add(tokens[i][:stop_token_idx])
 
-                    # Cache peptides with fitting (idx=0) non-fitting (idx=1)
-                    # precursor m/z separately
+                    # Cache peptides with fitting (idx=0) or non-fitting (idx=1)
+                    # precursor m/z separately.
                     heapq.heappush(
                         cache_pred_score[spec_idx][not is_beam_prec_fit[i]],
                         (pep_score, insert_idx),
                     )
                 else:
                     # Cache fitting peptide either to replace non-fitting or
-                    # higher confidence than lowest scoring fitting peptide
+                    # higher confidence than lowest scoring fitting peptide.
                     if is_beam_prec_fit[i]:
-                        # Check if any non-fitting peptide cached
+                        # Check if any non-fitting peptide cached.
                         if len(cache_pred_score[spec_idx][1]) > 0:
                             _, pop_insert_idx = heapq.heappop(
                                 cache_pred_score[spec_idx][1]
@@ -603,14 +594,12 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
                             cache_pred_seq[spec_idx].add(
                                 tokens[i][:stop_token_idx]
                             )
-
-                        # If all cached peptides are all precursor fitting
+                        # If all cached peptides are all precursor fitting.
                         else:
-                            # Peek at the top of the heap
-                            (
-                                pop_pep_score,
-                                pop_insert_idx,
-                            ) = cache_pred_score[spec_idx][0][0]
+                            # Peek at the top of the heap.
+                            pop_pep_score, pop_insert_idx = cache_pred_score[
+                                spec_idx
+                            ][0][0]
                             if pep_score > pop_pep_score:
                                 cache_tokens[pop_insert_idx, :] = tokens[i, :]
                                 cache_scores[pop_insert_idx, :, :] = scores[
@@ -623,16 +612,14 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
                                 cache_pred_seq[spec_idx].add(
                                     tokens[i][:stop_token_idx]
                                 )
-
-                    # Cache non-fitting peptide if higher confidence
-                    # than lowest scoring non-fitting peptide cached
+                    # Cache non-fitting peptide if higher confidence than lowest
+                    # scoring non-fitting peptide cached.
                     else:
                         if len(cache_pred_score[spec_idx][1]) > 0:
-                            # Peek at the top of the heap
-                            (
-                                pop_pep_score,
-                                pop_insert_idx,
-                            ) = cache_pred_score[spec_idx][1][0]
+                            # Peek at the top of the heap.
+                            pop_pep_score, pop_insert_idx = cache_pred_score[
+                                spec_idx
+                            ][1][0]
                             if pep_score > pop_pep_score:
                                 cache_tokens[pop_insert_idx, :] = tokens[i, :]
                                 cache_scores[pop_insert_idx, :, :] = scores[
@@ -680,18 +667,18 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         (n_spectra, max_length, n_amino_acids)
             The score for each amino acid in cached peptides.
         """
-        # Sizes:
+        # Sizes.
         length = self.max_length + 1  # L
         vocab = self.decoder.vocab_size + 1  # V
 
-        # Create output tensors for top scoring peptides and their scores
+        # Create output tensors for top scoring peptides and their scores.
         output_scores = torch.full(
             size=(batch, length, vocab), fill_value=torch.nan
         )
         output_scores = output_scores.type_as(cache_scores)
         output_tokens = torch.zeros(batch, length).type_as(cache_tokens)
 
-        # Return the top scoring peptide (fitting precursor mass if possible)
+        # Return the top scoring peptide (fitting precursor mass if possible).
         for spec_idx in range(batch):
             cache = cache_pred_score[spec_idx][
                 len(cache_pred_score[spec_idx][0]) == 0
@@ -709,7 +696,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         """
         Find top-k beams with highest confidences and continue decoding those.
 
-        Discontinue decoding for beam where stop token was predicted.
+        Discontinue decoding for beams where the stop token was predicted.
 
         Parameters
         ----------
@@ -734,14 +721,14 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         beam = self.n_beams  # S
         vocab = self.decoder.vocab_size + 1  # V
 
-        # Reshape to group by spectrum (B for "batch")
+        # Reshape to group by spectrum (B for "batch").
         scores = einops.rearrange(scores, "(B S) L V -> B L V S", S=beam)
         tokens = einops.rearrange(tokens, "(B S) L -> B L S", S=beam)
         prev_tokens = einops.repeat(
             tokens[:, :idx, :], "B L S -> B L V S", V=vocab
         )
 
-        # Get the previous tokens and scores:
+        # Get the previous tokens and scores.
         prev_scores = torch.gather(
             scores[:, :idx, :, :], dim=2, index=prev_tokens
         )
@@ -749,14 +736,14 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
             prev_scores[:, :, 0, :], "B L S -> B L (V S)", V=vocab
         )
 
-        # Get scores for all possible beams at this step
+        # Get scores for all possible beams at this step.
         step_scores = torch.zeros(batch, idx + 1, beam * vocab).type_as(scores)
         step_scores[:, :idx, :] = prev_scores
         step_scores[:, idx, :] = einops.rearrange(
             scores[:, idx, :, :], "B V S -> B (V S)"
         )
 
-        # Mask out terminated beams. Include delta mass induced termination
+        # Mask out terminated beams. Include delta mass induced termination.
         extended_prev_tokens = einops.repeat(
             tokens[:, : idx + 1, :], "B L S -> B L V S", V=vocab
         )
@@ -764,10 +751,10 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
             einops.rearrange(extended_prev_tokens, "B L V S -> B L (V S)")
             == self.stop_token
         ).any(axis=1)
-        # Mask out the index '0', i.e. padding token, by default
+        # Mask out the index '0', i.e. padding token, by default.
         finished_mask[:, :beam] = True
 
-        # Figure out the top K decodings
+        # Figure out the top K decodings.
         _, top_idx = torch.topk(
             step_scores.nanmean(dim=1) * (~finished_mask).int().float(), beam
         )
@@ -775,7 +762,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         s_idx = einops.rearrange(s_idx, "B S -> (B S)")
         b_idx = einops.repeat(torch.arange(batch), "B -> (B S)", S=beam)
 
-        # Record the top K decodings
+        # Record the top K decodings.
         tokens[:, :idx, :] = einops.rearrange(
             prev_tokens[b_idx, :, 0, s_idx], "(B S) L -> B L S", S=beam
         )
