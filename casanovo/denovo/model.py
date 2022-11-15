@@ -547,11 +547,11 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
 
             # Check position of stop token (changes in case stopped early).
             stop_token_idx = idx - (not tokens[i][idx] == self.stop_token)
+            # Check if predicted peptide already in cache.
             pred_seq = tokens[i][:stop_token_idx]
             is_peptide_cached = any(
                 torch.equal(pep, pred_seq) for pep in cache_pred_seq[spec_idx]
             )
-            # Check if predicted peptide already in cache.
             if not is_peptide_cached:
                 smx = self.softmax(scores)
                 aa_scores = [
