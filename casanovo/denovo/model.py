@@ -556,7 +556,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
                 smx = self.softmax(scores)
                 aa_scores = [
                     smx[i, idx, aa_idx.item()].item()
-                    for idx, aa_idx in enumerate(tokens[i][:stop_token_idx])
+                    for idx, aa_idx in enumerate(pred_seq)
                 ]
                 pep_score = _aa_to_pep_score(aa_scores)
                 # Directly cache if we don't already have k peptides cached.
