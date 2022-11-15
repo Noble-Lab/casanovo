@@ -8,6 +8,7 @@ import torch
 
 from casanovo import casanovo
 from casanovo import utils
+from casanovo.denovo.evaluate import aa_match_batch, aa_match_metrics
 from casanovo.denovo.model import Spec2Pep, _aa_to_pep_score
 
 
@@ -80,11 +81,13 @@ def test_get_model_weights(monkeypatch):
             assert os.path.isfile(filename)
             assert casanovo._get_model_weights() == filename
 
-    # Impossible to find model weights for non-matching version.
-    with monkeypatch.context() as mnk:
-        mnk.setattr(casanovo, "__version__", "999.999.999")
-        with pytest.raises(ValueError):
-            casanovo._get_model_weights()
+    # Impossible to find model weights for (i) full version mismatch and (ii)
+    # major version mismatch.
+    for version in ["999.999.999", "999.0.0"]:
+        with monkeypatch.context() as mnk:
+            mnk.setattr(casanovo, "__version__", version)
+            with pytest.raises(ValueError):
+                casanovo._get_model_weights()
 
     # Test GitHub API rate limit.
     def request(self, *args, **kwargs):
@@ -465,3 +468,43 @@ def test_beam_search_decode():
 
     # Check if output equivalent to "PEPK".
     assert torch.equal(output_tokens[0], cache_tokens[0])
+
+
+def test_eval_metrics():
+    """
+    Test peptide and amino acid-level evaluation metrics.
+    Predicted AAs are considered correct if they are <0.1Da from the
+    corresponding ground truth (GT) AA with either a suffix or prefix <0.5Da
+    from GT. A peptide prediction is correct if all its AA are correct matches.
+    """
+    model = Spec2Pep()
+
+    preds = [
+        "SPEIK",
+        "SPAEL",
+        "SPAEKL",
+        "ASPEKL",
+        "SPEKL",
+        "SPELQ",
+        "PSEKL",
+        "SPEK",
+    ]
+    gt = len(preds) * ["SPELK"]
+
+    aa_matches, n_pred_aa, n_gt_aa = aa_match_batch(
+        peptides1=preds,
+        peptides2=gt,
+        aa_dict=model.decoder._peptide_mass.masses,
+        mode="best",
+    )
+
+    assert n_pred_aa == 41
+    assert n_gt_aa == 40
+
+    aa_precision, aa_recall, pep_precision = aa_match_metrics(
+        aa_matches, n_gt_aa, n_pred_aa
+    )
+
+    assert 2 / 8 == pytest.approx(pep_precision)
+    assert 26 / 40 == pytest.approx(aa_recall)
+    assert 26 / 41 == pytest.approx(aa_precision)
