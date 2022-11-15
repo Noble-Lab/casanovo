@@ -340,7 +340,7 @@ def test_beam_search_decode():
         scores_v2[0, i, tokens_v2[0, i].item()] = 4
         scores_v2[1, i, tokens_v2[1, i].item()] = 0.5
         scores_v2[2, i, tokens_v2[2, i].item()] = 3
-        scores_v2[3, i, tokens_v2[3, i].item()] = 0.5
+        scores_v2[3, i, tokens_v2[3, i].item()] = 0.4
 
     finished_beams_idx_v2 = torch.tensor([0, 1, 2, 3])
     is_beam_prec_fit_v2 = torch.BoolTensor([False, True, False, False])

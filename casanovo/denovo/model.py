@@ -543,8 +543,6 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         for i in finished_beams_idx:
             i = i.item()
             spec_idx = i // beam  # Find the starting index of the spectrum.
-            insert_idx = cache_next_idx[spec_idx]
-
             # Check position of stop token (changes in case stopped early).
             stop_token_idx = idx - (not tokens[i][idx] == self.stop_token)
             # Check if predicted peptide already in cache.
@@ -552,78 +550,47 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
             is_peptide_cached = any(
                 torch.equal(pep, pred_seq) for pep in cache_pred_seq[spec_idx]
             )
-            if not is_peptide_cached:
-                smx = self.softmax(scores)
-                aa_scores = [
-                    smx[i, idx, aa_idx.item()].item()
-                    for idx, aa_idx in enumerate(pred_seq)
-                ]
-                pep_score = _aa_to_pep_score(aa_scores)
-                # Directly cache if we don't already have k peptides cached.
-                if insert_idx < (spec_idx + 1) * beam:
-                    cache_tokens[insert_idx, :] = tokens[i, :]
-                    cache_scores[insert_idx, :, :] = scores[i, :, :]
-                    cache_next_idx[spec_idx] += 1  # Move the pointer.
-                    cache_pred_seq[spec_idx].add(pred_seq)
-
-                    # Cache peptides with fitting (idx=0) or non-fitting (idx=1)
-                    # precursor m/z separately.
-                    heapq.heappush(
-                        cache_pred_score[spec_idx][not is_beam_prec_fit[i]],
-                        (pep_score, insert_idx),
-                    )
-                else:
-                    # Cache fitting peptide either to replace non-fitting or
-                    # higher confidence than lowest scoring fitting peptide.
-                    if is_beam_prec_fit[i]:
-                        # Check if any non-fitting peptide cached.
-                        if len(cache_pred_score[spec_idx][1]) > 0:
-                            _, pop_insert_idx = heapq.heappop(
-                                cache_pred_score[spec_idx][1]
-                            )
-                            cache_tokens[pop_insert_idx, :] = tokens[i, :]
-                            cache_scores[pop_insert_idx, :, :] = scores[
-                                i, :, :
-                            ]
-                            heapq.heappush(
-                                cache_pred_score[spec_idx][0],
-                                (pep_score, pop_insert_idx),
-                            )
-                            cache_pred_seq[spec_idx].add(pred_seq)
-                        # If all cached peptides are all precursor fitting.
-                        else:
-                            # Peek at the top of the heap.
-                            pop_pep_score, pop_insert_idx = cache_pred_score[
-                                spec_idx
-                            ][0][0]
-                            if pep_score > pop_pep_score:
-                                cache_tokens[pop_insert_idx, :] = tokens[i, :]
-                                cache_scores[pop_insert_idx, :, :] = scores[
-                                    i, :, :
-                                ]
-                                heapq.heappushpop(
-                                    cache_pred_score[spec_idx][0],
-                                    (pep_score, pop_insert_idx),
-                                )
-                                cache_pred_seq[spec_idx].add(pred_seq)
-                    # Cache non-fitting peptide if higher confidence than lowest
-                    # scoring non-fitting peptide cached.
-                    else:
-                        if len(cache_pred_score[spec_idx][1]) > 0:
-                            # Peek at the top of the heap.
-                            pop_pep_score, pop_insert_idx = cache_pred_score[
-                                spec_idx
-                            ][1][0]
-                            if pep_score > pop_pep_score:
-                                cache_tokens[pop_insert_idx, :] = tokens[i, :]
-                                cache_scores[pop_insert_idx, :, :] = scores[
-                                    i, :, :
-                                ]
-                                heapq.heappushpop(
-                                    cache_pred_score[spec_idx][1],
-                                    (pep_score, pop_insert_idx),
-                                )
-                                cache_pred_seq[spec_idx].add(pred_seq)
+            # Don't cache this peptide if it was already predicted previously.
+            if is_peptide_cached:
+                continue
+            smx = self.softmax(scores)
+            aa_scores = [smx[i, j, k].item() for j, k in enumerate(pred_seq)]
+            pep_score = _aa_to_pep_score(aa_scores)
+            # Cache peptides with fitting (idx=0) or non-fitting (idx=1)
+            # precursor m/z separately.
+            cache_pred_score_idx = cache_pred_score[spec_idx]
+            cache_i = int(not is_beam_prec_fit[i])
+            # Directly cache if we don't already have k peptides cached.
+            if cache_next_idx[spec_idx] < (spec_idx + 1) * beam:
+                insert_idx = cache_next_idx[spec_idx]
+                cache_next_idx[spec_idx] += 1  # Move the pointer.
+                heap_update = heapq.heappush
+            # If any prediction has a non-fitting precursor m/z and this
+            # prediction has a fitting precursor m/z, replace the non-fitting
+            # peptide with the lowest score, irrespective of the current
+            # predicted score.
+            elif is_beam_prec_fit[i] and len(cache_pred_score_idx[1]) > 0:
+                _, insert_idx = heapq.heappop(cache_pred_score_idx[1])
+                heap_update = heapq.heappush
+            # Else, replace the lowest-scoring peptide with corresponding
+            # fitting or non-fitting precursor m/z if the current predicted
+            # score is higher.
+            elif len(cache_pred_score_idx[cache_i]) > 0:
+                # Peek at the top of the heap (lowest score).
+                pop_pep_score, insert_idx = cache_pred_score_idx[cache_i][0]
+                heap_update = heapq.heappushpop
+                # Don't store this prediction if it has a lower score than all
+                # previous predictions.
+                if pep_score <= pop_pep_score:
+                    continue
+            # Finally, no matching cache found (we should never get here).
+            else:
+                continue
+            # Store the current prediction in its relevant cache.
+            cache_tokens[insert_idx, :] = tokens[i, :]
+            cache_scores[insert_idx, :, :] = scores[i, :, :]
+            heap_update(cache_pred_score_idx[cache_i], (pep_score, insert_idx))
+            cache_pred_seq[spec_idx].add(pred_seq)
 
     def _get_top_peptide(
         self,
