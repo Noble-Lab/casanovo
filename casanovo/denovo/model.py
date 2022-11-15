@@ -547,11 +547,9 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
 
             # Check position of stop token (changes in case stopped early).
             stop_token_idx = idx - (not tokens[i][idx] == self.stop_token)
+            pred_seq = tokens[i][:stop_token_idx]
             is_peptide_cached = any(
-                [
-                    torch.equal(pep, tokens[i][:stop_token_idx])
-                    for pep in cache_pred_seq[spec_idx]
-                ]
+                torch.equal(pep, pred_seq) for pep in cache_pred_seq[spec_idx]
             )
             # Check if predicted peptide already in cache.
             if not is_peptide_cached:
@@ -566,7 +564,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
                     cache_tokens[insert_idx, :] = tokens[i, :]
                     cache_scores[insert_idx, :, :] = scores[i, :, :]
                     cache_next_idx[spec_idx] += 1  # Move the pointer.
-                    cache_pred_seq[spec_idx].add(tokens[i][:stop_token_idx])
+                    cache_pred_seq[spec_idx].add(pred_seq)
 
                     # Cache peptides with fitting (idx=0) or non-fitting (idx=1)
                     # precursor m/z separately.
@@ -591,9 +589,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
                                 cache_pred_score[spec_idx][0],
                                 (pep_score, pop_insert_idx),
                             )
-                            cache_pred_seq[spec_idx].add(
-                                tokens[i][:stop_token_idx]
-                            )
+                            cache_pred_seq[spec_idx].add(pred_seq)
                         # If all cached peptides are all precursor fitting.
                         else:
                             # Peek at the top of the heap.
@@ -609,9 +605,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
                                     cache_pred_score[spec_idx][0],
                                     (pep_score, pop_insert_idx),
                                 )
-                                cache_pred_seq[spec_idx].add(
-                                    tokens[i][:stop_token_idx]
-                                )
+                                cache_pred_seq[spec_idx].add(pred_seq)
                     # Cache non-fitting peptide if higher confidence than lowest
                     # scoring non-fitting peptide cached.
                     else:
@@ -629,9 +623,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
                                     cache_pred_score[spec_idx][1],
                                     (pep_score, pop_insert_idx),
                                 )
-                                cache_pred_seq[spec_idx].add(
-                                    tokens[i][:stop_token_idx]
-                                )
+                                cache_pred_seq[spec_idx].add(pred_seq)
 
     def _get_top_peptide(
         self,
