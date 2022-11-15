@@ -134,7 +134,7 @@ def test_beam_search_decode():
     """
     Test beam search decoding and its sub-functions
     """
-    model = Spec2Pep(n_beams=4)
+    model = Spec2Pep(n_beams=4, residues="massivekb")
 
     # Sizes.
     batch = 1  # B
