@@ -715,58 +715,6 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         tokens = einops.rearrange(tokens, "B L S -> (B S) L")
         return scores, tokens
 
-    def greedy_decode(
-        self, spectra: torch.Tensor, precursors: torch.Tensor
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
-        """
-        Greedy decoding of the spectrum predictions.
-
-        Parameters
-        ----------
-        spectra : torch.Tensor of shape (n_spectra, n_peaks, 2)
-            The spectra for which to predict peptide sequences.
-            Axis 0 represents an MS/MS spectrum, axis 1 contains the peaks in
-            the MS/MS spectrum, and axis 2 is essentially a 2-tuple specifying
-            the m/z-intensity pair for each peak. These should be zero-padded,
-            such that all of the spectra in the batch are the same length.
-        precursors : torch.Tensor of size (n_spectra, 3)
-            The measured precursor mass (axis 0), precursor charge (axis 1), and
-            precursor m/z (axis 2) of each MS/MS spectrum.
-
-        Returns
-        -------
-        scores : torch.Tensor of shape (n_spectra, max_length, n_amino_acids)
-            The individual amino acid scores for each prediction.
-        tokens : torch.Tensor of shape (n_spectra, max_length)
-            The predicted tokens for each spectrum.
-        """
-        memories, mem_masks = self.encoder(spectra)
-        # Initialize the scores.
-        scores = torch.zeros(
-            spectra.shape[0], self.max_length + 1, self.decoder.vocab_size + 1
-        ).type_as(spectra)
-        # Start with the first amino acid predictions.
-        scores[:, :1, :], _ = self.decoder(
-            None, precursors, memories, mem_masks
-        )
-        tokens = torch.argmax(scores, axis=2)
-        # Keep predicting until a stop token is predicted or max_length is
-        # reached.
-        # The stop token does not count towards max_length.
-        for i in range(2, self.max_length + 2):
-            decoded = (tokens == self.stop_token).any(axis=1)
-            if decoded.all():
-                break
-            scores[~decoded, :i, :], _ = self.decoder(
-                tokens[~decoded, : (i - 1)],
-                precursors[~decoded, :],
-                memories[~decoded, :, :],
-                mem_masks[~decoded, :],
-            )
-            tokens = torch.argmax(scores, axis=2)
-
-        return self.softmax(scores), tokens
-
     def _forward_step(
         self,
         spectra: torch.Tensor,
