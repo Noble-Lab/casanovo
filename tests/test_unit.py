@@ -253,6 +253,16 @@ def test_beam_search_decode():
     # Check if output equivalent to "PEPK".
     assert torch.equal(output_tokens[0], cache_tokens[0])
 
+    # If no peptides are finished
+    dummy_cache_pred_score = {0: [[], []]}
+
+    dummy_output_tokens, dummy_output_scores = model._get_top_peptide(
+        dummy_cache_pred_score, cache_tokens, cache_scores, batch
+    )
+
+    # Check if output equivalent to zero tensor
+    assert sum(dummy_output_tokens[0]).item() == 0
+
     # Test _get_topk_beams()
     # Generate scores for the non-terminated beam
     scores[2, idx, :] = 1

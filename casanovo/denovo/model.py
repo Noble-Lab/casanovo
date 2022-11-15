@@ -299,7 +299,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
                 output_tokens, output_scores = self._get_top_peptide(
                     cache_pred_score, cache_tokens, cache_scores, batch
                 )
-                break
+                return self.softmax(output_scores), output_tokens
 
             # Get scores.
             scores[~decoded, : i + 1, :], _ = self.decoder(
@@ -312,6 +312,9 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
             # Find top-k beams with highest scores and continue decoding those.
             scores, tokens = self._get_topk_beams(scores, tokens, batch, i)
 
+        output_tokens, output_scores = self._get_top_peptide(
+            cache_pred_score, cache_tokens, cache_scores, batch
+        )
         return self.softmax(output_scores), output_tokens
 
     def _create_beamsearch_cache(
@@ -624,8 +627,12 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
             cache = cache_pred_score[spec_idx][
                 len(cache_pred_score[spec_idx][0]) == 0
             ]
-            _, top_score_idx = max(cache, key=operator.itemgetter(0))
 
+            try:
+                _, top_score_idx = max(cache, key=operator.itemgetter(0))
+            # Continue if no there are no finished beams
+            except ValueError:
+                continue
             output_tokens[spec_idx, :] = cache_tokens[top_score_idx, :]
             output_scores[spec_idx, :, :] = cache_scores[top_score_idx, :, :]
 
@@ -892,6 +899,9 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
                 for spectrum_i, precursor, peptide, aa_scores in zip(*step):
                     peptide_tokens = peptide[1:]
                     peptide = "".join(peptide_tokens)
+                    # If non-finished beam exceeding max_length, return dummy
+                    if len(peptide) == 0:
+                        peptide_tokens = peptide
                     # Take scores corresponding to the predicted amino acids.
                     top_aa_scores = [
                         aa_scores[idx][self.decoder._aa2idx[aa]].item()
