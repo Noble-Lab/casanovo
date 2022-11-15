@@ -4,14 +4,15 @@
 
 Make sure you are in the `casanovo_env` environment. You can ensure this by typing:
 
-```
+```sh
 conda activate casanovo_env
 ```
 
 **Which command-line options are available?**
 
 Run the following command in your command prompt to see all possible command-line configuration options:
-```
+
+```sh
 casanovo --help
 ```
 
@@ -36,11 +37,8 @@ You can avoid this error by explicitly specifying the model file using the `--mo
 
 Casanovo can leverage Apple's Metal Performance Shaders (MPS) on newer Mac computers, which requires that the `PYTORCH_ENABLE_MPS_FALLBACK` is set to `1`:
 
-``` sh
+```sh
 export PYTORCH_ENABLE_MPS_FALLBACK=1
 ```
 
 This will need to be set with each new shell session, or you can add it to your `.bashrc` / `.zshrc` to set this environment variable by default.
-
-
-

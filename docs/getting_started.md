@@ -19,14 +19,16 @@ Once you have conda installed, you can use this helpful [cheat sheet](https://do
 Fist, open the terminal (MacOS and Linux) or the Anaconda Prompt (Windows).
 All of the commands that follow should be entered this terminal or Anaconda Prompt window---that is, your *shell*. 
 To create a new conda environment for Casanovo, run the following:
-```
+
+```sh
 conda create --name casanovo_env python=3.10
 ```
 
 This will create an anaconda environment called `casanovo_env` that has Python 3.10 installed.
 
 Activate this environment by running:
-```
+
+```sh
 conda activate casanovo_env
 ```
 
@@ -47,7 +49,7 @@ For installation instructions, see the [PyTorch documentation](https://pytorch.o
 
 You can now install the Casanovo Python package (dependencies will be installed automatically as needed):
 
-``` sh
+```sh
 pip install casanovo
 ```
 
@@ -72,26 +74,31 @@ Not all releases might have a model file included on the [Releases page](https:/
 ## Running Casanovo
 
 ### Sequence new mass spectra
+
 To sequence your own mass spectra with Casanovo, use the `denovo` mode:
-```
+
+```sh
 casanovo --mode=denovo --peak_path=path/to/predict/spectra.mgf --output=path/to/output
 ```
 
 Casanovo can predict peptide sequences for MS/MS spectra in mzML, mzXML, and MGF files.
 This will write peptide predictions for the given MS/MS spectra to the specified output file in mzTab format.
 
-### Evaluate *de novo* sequenceing performance
+### Evaluate *de novo* sequencing performance
 
 To evaluate _de novo_ sequencing performance based on known mass spectrum annotations, run:
-```
+
+```sh
 casanovo --mode=eval --peak_path=path/to/test/annotated_spectra.mgf
 ```
 
 To evaluate the peptide predictions, ground truth peptide labels must to be provided as an annotated MGF file where the peptide sequence is denoted in the `SEQ` field.
 
 ### Train a new model
+
 To train a model from scratch, run:
-```
+
+```sh
 casanovo --mode=train --peak_path=path/to/train/annotated_spectra.mgf --peak_path_val=path/to/validation/annotated_spectra.mgf
 ```
 
@@ -109,7 +116,7 @@ To obtain *de novo* sequencing predictions for these spectra:
 2. [Install Casanovo](#installation).
 3. Ensure your Casanovo conda environment is activated by typing `conda activate casanovo_env`. (If you named your environment differently, type in that name instead.)
 4. Sequence the mass spectra with Casanovo, replacing `[PATH_TO]` with the path to the example MGF file that you downloaded:
-```
+```sh
 casanovo --mode=denovo --peak_path=[PATH_TO]/sample_preprocessed_spectra.mgf
 ```
 
@@ -120,6 +127,3 @@ If you want to store the output mzTab file in a different location than the curr
 This job should complete in < 1 minute.
 
 Congratulations! Casanovo is installed and running.
-
-
-
