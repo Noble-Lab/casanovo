@@ -260,15 +260,15 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         tokens[:, 0, :] = torch.topk(pred[:, 0, :], beam, dim=1)[1]
         scores[:, :1, :, :] = einops.repeat(pred, "B L V -> B L V S", S=beam)
 
-        # Make precursors and memories the right shape for decoding.
+        # Make all tensors the right shape for decoding.
         precursors = einops.repeat(precursors, "B L -> (B S) L", S=beam)
         mem_masks = einops.repeat(mem_masks, "B L -> (B S) L", S=beam)
         memories = einops.repeat(memories, "B L V -> (B S) L V", S=beam)
+        scores = einops.rearrange(scores, "B L V S -> (B S) L V")
+        tokens = einops.rearrange(tokens, "B L S -> (B S) L")
 
         # The main decoding loop.
         for i in range(1, self.max_length + 1):
-            scores = einops.rearrange(scores, "B L V S -> (B S) L V")
-            tokens = einops.rearrange(tokens, "B L S -> (B S) L")
             # Terminate beams exceeding precursor m/z tolerance and track all
             # terminated beams.
             finished_beams_idx, tokens = self._terminate_finished_beams(
@@ -404,9 +404,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
             Output token of the model corresponding to amino acid sequences.
         """
         # Check if N-terminal NH3 loss is in the vocabulary.
-        is_nh3_loss_in_vocab = (
-            self.peptide_mass_calculator.masses.get("-17.027", "") != ""
-        )
+        is_nh3_loss_in_vocab = "-17.027" in self.peptide_mass_calculator.masses
 
         # Terminate beams that exceed the precursor m/z.
         for beam_i in range(len(tokens)):
@@ -419,10 +417,14 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
                 else:
                     precursor_charge = precursors[beam_i, 1].item()
                     precursor_mz = precursors[beam_i, 2].item()
-                    peptide_seq = [
-                        self.decoder._idx2aa.get(i.item(), "")
-                        for i in tokens[beam_i][:idx]
-                    ]
+                    peptide_seq = list(
+                        reversed(
+                            [
+                                self.decoder._idx2aa.get(i.item(), "")
+                                for i in tokens[beam_i][:idx]
+                            ]
+                        )
+                    )
                     try:
                         calc_mz = self.peptide_mass_calculator.mass(
                             seq=peptide_seq, charge=precursor_charge
@@ -454,7 +456,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
                             and not is_within_precursor_mz_tol
                             and is_nh3_loss_in_vocab
                         ):
-                            alt_peptide_seq = peptide_seq + ["-17.027"]
+                            alt_peptide_seq = ["-17.027"] + peptide_seq
                             calc_mz = self.peptide_mass_calculator.mass(
                                 seq=alt_peptide_seq, charge=precursor_charge
                             )
@@ -470,12 +472,9 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
                                     self.isotope_error_range[1] + 1,
                                 )
                             ]
-                            is_precursor_mz_tol_w_loss = any(
+                            exceeds_precursor_mz_tol = not any(
                                 abs(d) < self.precursor_mass_tol
                                 for d in delta_mass_ppm
-                            )
-                            exceeds_precursor_mz_tol = (
-                                not is_precursor_mz_tol_w_loss
                             )
 
                     except KeyError:
@@ -642,7 +641,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
             cache = cache_pred_score[spec_idx][
                 len(cache_pred_score[spec_idx][0]) == 0
             ]
-            _, top_score_idx = max(cache, key=operator.itemgetter(1))
+            _, top_score_idx = max(cache, key=operator.itemgetter(0))
 
             output_tokens[spec_idx, :] = cache_tokens[top_score_idx, :]
             output_scores[spec_idx, :, :] = cache_scores[top_score_idx, :, :]
@@ -672,9 +671,9 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         Returns
         -------
         scores : torch.Tensor of shape
-        (n_spectra, max_length, n_amino_acids, n_beams)
+        (n_spectra * n_beams, max_length, n_amino_acids)
             Output scores of the model.
-        tokens : torch.Tensor of shape (n_spectra, max_length,  n_beams)
+        tokens : torch.Tensor of shape (n_spectra * n_beams, max_length)
             Output token of the model corresponding to amino acid sequences.
         """
         beam = self.n_beams  # S
@@ -715,7 +714,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
 
         # Figure out the top K decodings.
         _, top_idx = torch.topk(
-            step_scores.nanmean(dim=1) * (~finished_mask).int().float(), beam
+            step_scores.nanmean(dim=1) * (~finished_mask).float(), beam
         )
         v_idx, s_idx = np.unravel_index(top_idx.cpu(), (vocab, beam))
         s_idx = einops.rearrange(s_idx, "B S -> (B S)")
@@ -729,7 +728,8 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         scores[:, : idx + 1, :, :] = einops.rearrange(
             scores[b_idx, : idx + 1, :, s_idx], "(B S) L V -> B L V S", S=beam
         )
-
+        scores = einops.rearrange(scores, "B L V S -> (B S) L V")
+        tokens = einops.rearrange(tokens, "B L S -> (B S) L")
         return scores, tokens
 
     def greedy_decode(

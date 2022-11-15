@@ -253,8 +253,8 @@ def test_beam_search_decode():
     # Check if output equivalent to "PEPK".
     assert torch.equal(output_tokens[0], cache_tokens[0])
 
-    # Test _get_topk_beams().
-    # Generate scores for the non-terminated beam.
+    # Test _get_topk_beams()
+    # Generate scores for the non-terminated beam
     scores[2, idx, :] = 1
 
     for i in range(1, 5):
@@ -266,21 +266,20 @@ def test_beam_search_decode():
 
     expected_tokens = torch.tensor(
         [
-            [4, 4, 4, 4],
-            [14, 14, 14, 14],
-            [4, 4, 4, 4],
-            [1, 1, 1, 1],
-            [4, 3, 2, 1],
+            [4, 14, 4, 1, 4],
+            [4, 14, 4, 1, 3],
+            [4, 14, 4, 1, 2],
+            [4, 14, 4, 1, 1],
         ]
     )
 
-    expected_scores = torch.ones(vocab, beam)
+    expected_scores = torch.ones(beam, vocab)
 
     for i in range(1, 5):
-        expected_scores[i] = i + 1
+        expected_scores[:, i] = i + 1
 
-    assert torch.equal(new_tokens[0][: idx + 1, :], expected_tokens)
-    assert torch.equal(new_scores[0][idx, :], expected_scores)
+    assert torch.equal(new_tokens[:, : idx + 1], expected_tokens)
+    assert torch.equal(new_scores[:, idx, :], expected_scores)
 
     # Test beam_search_decode().
     spectra = torch.zeros(1, 5, 2)
