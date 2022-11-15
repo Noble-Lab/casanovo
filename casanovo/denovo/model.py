@@ -441,7 +441,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
                                 self.isotope_error_range[1] + 1,
                             )
                         ]
-                        exceeds_precursor_mz_tol = any(
+                        exceeds_precursor_mz_tol = all(
                             d > -self.precursor_mass_tol
                             for d in delta_mass_ppm
                         )
