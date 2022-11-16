@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+### Changed
+
+- Update PyTorch Lightning global seed setting.
+
+### Fixed
+
+- Don't use model weights with incorrect major version number.
+
 ## [3.1.0] - 2022-11-03
 
 ### Added
