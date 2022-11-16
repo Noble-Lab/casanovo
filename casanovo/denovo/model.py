@@ -187,18 +187,8 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
             spectra.to(self.encoder.device),
             precursors.to(self.decoder.device),
         )
-        peptides = []
-        for t in tokens:
-            sequence = [self.decoder._idx2aa.get(i.item(), "") for i in t]
-            if "$" in sequence:
-                idx = sequence.index("$")
-                sequence = sequence[: idx + 1]
 
-            if self.decoder.reverse:
-                sequence = list(reversed(sequence))
-            peptides += [sequence]
-
-        return peptides, aa_scores
+        return [self.decoder.detokenize(t) for t in tokens], aa_scores
 
     def beam_search_decode(
         self, spectra: torch.Tensor, precursors: torch.Tensor
@@ -427,13 +417,11 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
                     # anymore by a subsequently predicted AA with negative mass.
                     matches_precursor_mz = exceeds_precursor_mz = False
                     for aa in aa_neg_mass:
-                        peptide_seq = [
-                            self.decoder._idx2aa.get(i.item(), "")
-                            for i in tokens[beam_i][:idx]
-                        ]
+                        peptide_seq = self.decoder.detokenize(
+                            tokens[beam_i][:idx]
+                        )
                         if aa is not None:
                             peptide_seq.append(aa)
-                        peptide_seq = list(reversed(peptide_seq))
                         try:
                             calc_mz = self.peptide_mass_calculator.mass(
                                 seq=peptide_seq, charge=precursor_charge
