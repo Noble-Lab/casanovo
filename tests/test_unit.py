@@ -478,6 +478,50 @@ def test_beam_search_decode():
     # Check if output equivalent to "PEPK".
     assert torch.equal(output_tokens[0], cache_tokens[0])
 
+    # Test _terminate_finished_beams for tokens with negative mass
+    model = Spec2Pep(n_beams=2, residues="massivekb")
+    # Sizes:
+    batch = 1  # B
+    length = model.max_length + 1  # L
+    vocab = model.decoder.vocab_size + 1  # V
+    beam = model.n_beams  # S
+    idx = 2
+    # Initialize scores and tokens:
+    scores = torch.full(
+        size=(batch, length, vocab, beam), fill_value=torch.nan
+    )
+    is_beam_prec_fit = (batch * beam) * [False]
+    # Ground truth peptide is "-17.027GK"
+    precursors = torch.tensor([186.100442485, 2.0, 94.05749770938]).repeat(
+        beam * batch, 1
+    )
+    tokens = torch.zeros(batch * beam, length).long()
+    tokens[0, :idx] = torch.tensor(
+        [
+            model.decoder._aa2idx["G"],
+            model.decoder._aa2idx["K"],
+        ]
+    )
+
+    tokens[1, :idx] = torch.tensor(
+        [
+            model.decoder._aa2idx["A"],
+            model.decoder._aa2idx["K"],
+        ]
+    )
+    # Test _terminate_finished_beams()
+    finished_beams_idx, updated_tokens = model._terminate_finished_beams(
+        tokens=tokens,
+        precursors=precursors,
+        is_beam_prec_fit=is_beam_prec_fit,
+        idx=idx,
+    )
+    assert torch.equal(finished_beams_idx, torch.tensor([1]))
+    assert torch.equal(
+        updated_tokens[:, idx],
+        torch.tensor([0, model.stop_token]),
+    )
+
 
 def test_eval_metrics():
     """
