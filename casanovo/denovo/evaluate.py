@@ -1,6 +1,6 @@
 """Methods to evaluate peptide-spectrum predictions."""
 import re
-from typing import Dict, List, Tuple
+from typing import Dict, Iterable, List, Tuple
 
 import numpy as np
 from spectrum_utils.utils import mass_diff
@@ -182,8 +182,8 @@ def aa_match(
 
 
 def aa_match_batch(
-    peptides1: List[str],
-    peptides2: List[str],
+    peptides1: Iterable,
+    peptides2: Iterable,
     aa_dict: Dict[str, float],
     cum_mass_threshold: float = 0.5,
     ind_mass_threshold: float = 0.1,
@@ -194,10 +194,10 @@ def aa_match_batch(
 
     Parameters
     ----------
-    peptides1 : List[str]
-        The first list of (untokenized) peptide sequences to be compared.
-    peptides2 : List[str]
-        The second list of (untokenized) peptide sequences to be compared.
+    peptides1 : Iterable
+        The first list of peptide sequences to be compared.
+    peptides2 : Iterable
+        The second list of peptide sequences to be compared.
     aa_dict : Dict[str, float]
         Mapping of amino acid tokens to their mass values.
     cum_mass_threshold : float
@@ -221,6 +221,7 @@ def aa_match_batch(
     """
     aa_matches_batch, n_aa1, n_aa2 = [], 0, 0
     for peptide1, peptide2 in zip(peptides1, peptides2):
+        # Split peptides into individual AAs if necessary.
         if isinstance(peptide1, str):
             peptide1 = re.split(r"(?<=.)(?=[A-Z])", peptide1)
         if isinstance(peptide2, str):

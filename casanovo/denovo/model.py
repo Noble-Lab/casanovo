@@ -194,7 +194,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         self, spectra: torch.Tensor, precursors: torch.Tensor
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """
-        Beam search decode the spectra.
+        Beam search decoding of the spectrum predictions.
 
         Return the highest scoring peptide, within the precursor m/z tolerance
         whenever possible.
@@ -208,15 +208,15 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
             the m/z-intensity pair for each peak. These should be zero-padded,
             such that all of the spectra in the batch are the same length.
         precursors : torch.Tensor of size (n_spectra, 3)
-            The measured precursor mass (axis 0), precursor charge (axis 1),
-            and precursor m/z (axis 2) of each MS/MS spectrum.
+            The measured precursor mass (axis 0), precursor charge (axis 1), and
+            precursor m/z (axis 2) of each MS/MS spectrum.
 
         Returns
         -------
         scores : torch.Tensor of shape (n_spectra, max_length, n_amino_acids)
-            The score for each amino acid.
+            The individual amino acid scores for each prediction.
         tokens : torch.Tensor of shape (n_spectra, max_length)
-            The token sequence for each spectrum.
+            The predicted tokens for each spectrum.
         """
         memories, mem_masks = self.encoder(spectra)
 
@@ -278,30 +278,25 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
                 beam_fits_prec_tol,
                 i,
             )
-            # Reset all precursor tolerance status of all beams.
+            # Reset precursor tolerance status of all beams.
             beam_fits_prec_tol = torch.zeros(batch * beam, dtype=torch.bool)
 
             # Stop decoding when all current beams are terminated.
             decoded = (tokens == self.stop_token).any(axis=1)
             if decoded.all():
-                # Return the peptide with the highest confidence score, within
-                # the precursor m/z tolerance if possible.
-                output_tokens, output_scores = self._get_top_peptide(
-                    cache_pred_score, cache_tokens, cache_scores, batch
-                )
-                return self.softmax(output_scores), output_tokens
-
-            # Get scores.
+                break
+            # Update the scores.
             scores[~decoded, : i + 1, :], _ = self.decoder(
                 tokens[~decoded, :i],
                 precursors[~decoded, :],
                 memories[~decoded, :, :],
                 mem_masks[~decoded, :],
             )
-
             # Find top-k beams with highest scores and continue decoding those.
             scores, tokens = self._get_topk_beams(scores, tokens, batch, i)
 
+        # Return the peptide with the highest confidence score, within the
+        # precursor m/z tolerance if possible.
         output_tokens, output_scores = self._get_top_peptide(
             cache_pred_score, cache_tokens, cache_scores, batch
         )
@@ -415,16 +410,14 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
                     precursor_mz = precursors[beam_i, 2].item()
                     # Only terminate if the m/z difference cannot be corrected
                     # anymore by a subsequently predicted AA with negative mass.
+                    matches_precursor_mz = exceeds_precursor_mz = False
                     for aa in aa_neg_mass:
-                        matches_precursor_mz = exceeds_precursor_mz = False
-                        peptide_seq = self.decoder.detokenize(
-                            tokens[beam_i][:idx]
-                        )
+                        peptide = self.decoder.detokenize(tokens[beam_i][:idx])
                         if aa is not None:
-                            peptide_seq.append(aa)
+                            peptide.append(aa)
                         try:
                             calc_mz = self.peptide_mass_calculator.mass(
-                                seq=peptide_seq, charge=precursor_charge
+                                seq=peptide, charge=precursor_charge
                             )
                             delta_mass_ppm = [
                                 _calc_mass_error(
@@ -450,13 +443,11 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
                             # the precursor m/z + tolerance and hasn't been
                             # corrected by a subsequently predicted AA with
                             # negative mass.
-                            exceeds_precursor_mz |= all(
+                            exceeds_precursor_mz = aa is not None and all(
                                 d > self.precursor_mass_tol
                                 for d in delta_mass_ppm
                             )
-                            if matches_precursor_mz or (
-                                aa != None and exceeds_precursor_mz == False
-                            ):
+                            if matches_precursor_mz or exceeds_precursor_mz:
                                 break
                         except KeyError:
                             matches_precursor_mz = exceeds_precursor_mz = False
@@ -617,12 +608,10 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
             cache = cache_pred_score[spec_idx][
                 len(cache_pred_score[spec_idx][0]) == 0
             ]
-
-            try:
-                _, top_score_idx = max(cache, key=operator.itemgetter(0))
-            # Continue if no there are no finished beams
-            except ValueError:
+            # Skip this spectrum if it doesn't have any finished beams.
+            if len(cache) == 0:
                 continue
+            _, top_score_idx = max(cache, key=operator.itemgetter(0))
             output_tokens[spec_idx, :] = cache_tokens[top_score_idx, :]
             output_scores[spec_idx, :, :] = cache_scores[top_score_idx, :, :]
 
@@ -886,16 +875,18 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
             return
         for batch in results:
             for step in batch:
-                for spectrum_i, precursor, peptide, aa_scores in zip(*step):
-                    peptide_tokens = peptide[1:]
-                    peptide = "".join(peptide_tokens)
-                    # If non-finished beam exceeding max_length, return dummy
+                for spectrum_i, precursor, aa_tokens, aa_scores in zip(*step):
+                    # Omit stop token.
+                    aa_tokens = aa_tokens[1:]
+                    peptide = "".join(aa_tokens)
+                    # If this is a non-finished beam (after exceeding
+                    # `max_length`), return a dummy (empty) peptide.
                     if len(peptide) == 0:
-                        peptide_tokens = peptide
+                        aa_tokens = peptide
                     # Take scores corresponding to the predicted amino acids.
                     top_aa_scores = [
-                        aa_scores[idx][self.decoder._aa2idx[aa]].item()
-                        for idx, aa in enumerate(reversed(peptide_tokens))
+                        aa_score[self.decoder._aa2idx[aa_token]].item()
+                        for aa_score, aa_token in zip(aa_scores, aa_tokens)
                     ]
                     peptide_score = _aa_to_pep_score(top_aa_scores)
                     # Compare the experimental vs calculated precursor m/z.
@@ -904,7 +895,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
                     precursor_mz = precursor_mz.item()
                     try:
                         calc_mz = self.peptide_mass_calculator.mass(
-                            peptide_tokens, precursor_charge
+                            aa_tokens, precursor_charge
                         )
                         delta_mass_ppm = [
                             _calc_mass_error(
