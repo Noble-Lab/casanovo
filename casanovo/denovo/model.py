@@ -415,8 +415,8 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
                     precursor_mz = precursors[beam_i, 2].item()
                     # Only terminate if the m/z difference cannot be corrected
                     # anymore by a subsequently predicted AA with negative mass.
-                    matches_precursor_mz = exceeds_precursor_mz = False
                     for aa in aa_neg_mass:
+                        matches_precursor_mz = exceeds_precursor_mz = False
                         peptide_seq = self.decoder.detokenize(
                             tokens[beam_i][:idx]
                         )
@@ -454,7 +454,9 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
                                 d > self.precursor_mass_tol
                                 for d in delta_mass_ppm
                             )
-                            if matches_precursor_mz:
+                            if matches_precursor_mz or (
+                                aa != None and exceeds_precursor_mz == False
+                            ):
                                 break
                         except KeyError:
                             matches_precursor_mz = exceeds_precursor_mz = False
