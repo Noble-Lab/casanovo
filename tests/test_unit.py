@@ -299,6 +299,12 @@ def test_beam_search_decode():
     assert model_tokens.shape[0] == 1
     assert model.stop_token in model_tokens
 
+    # Test output if decoding loop isn't stopped with termination of all beams
+    model.max_length = 0
+    model_scores, model_tokens = model.beam_search_decode(spectra, precursors)
+    assert torch.equal(model_tokens, torch.tensor([[0]]))
+    model.max_length = 100
+
     # Re-initialize scores and tokens to further test caching functionality.
     scores_v2 = torch.full(
         size=(batch * beam, length, vocab), fill_value=torch.nan
