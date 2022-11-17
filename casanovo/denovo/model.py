@@ -939,7 +939,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         aa_tokens : List[str]
             Amino acid tokens of the peptide sequence.
         aa_scores : torch.Tensor
-            Amino acid-level confidence scores in
+            Amino acid-level confidence scores for the predicted sequence.
 
         Returns
         -------
@@ -953,25 +953,23 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
             Amino acid-level confidence scores for the predicted sequence.
         """
         # Omit stop token.
-        aa_tokens = (
-            aa_tokens[1:] if self.decoder.reverse == True else aa_tokens[:-1]
-        )
+        aa_tokens = aa_tokens[1:] if self.decoder.reverse else aa_tokens[:-1]
         peptide = "".join(aa_tokens)
 
-        # If this is a non-finished beam (after exceeding
-        # `max_length`), return a dummy (empty) peptide and NaN scores.
+        # If this is a non-finished beam (after exceeding `max_length`), return
+        # a dummy (empty) peptide and NaN scores.
         if len(peptide) == 0:
-            aa_tokens = peptide
+            aa_tokens = []
 
         # Take scores corresponding to the predicted amino acids. Reverse tokens
         # to correspond with correct amino acids as needed.
-        step = -1 if self.decoder.reverse == True else 1
+        step = -1 if self.decoder.reverse else 1
         top_aa_scores = [
             aa_score[self.decoder._aa2idx[aa_token]].item()
             for aa_score, aa_token in zip(aa_scores, aa_tokens[::step])
         ][::step]
 
-        # Get peptide-level score from amino acid-level scores
+        # Get peptide-level score from amino acid-level scores.
         peptide_score = _aa_to_pep_score(top_aa_scores)
         aa_scores = ",".join(list(map("{:.5f}".format, top_aa_scores)))
         return peptide, aa_tokens, peptide_score, aa_scores

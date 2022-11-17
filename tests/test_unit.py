@@ -3,9 +3,9 @@ import platform
 import tempfile
 
 import github
+import numpy as np
 import pytest
 import torch
-import numpy as np
 
 from casanovo import casanovo
 from casanovo import utils
@@ -578,7 +578,7 @@ def test_get_output_peptide_and_scores():
         aa_scores,
     ) = model._get_output_peptide_and_scores(aa_tokens, aa_scores)
     assert peptide == ""
-    assert np.isnan(np.mean(peptide_score))
+    assert np.isnan(peptide_score)
     assert aa_scores == ""
 
 
