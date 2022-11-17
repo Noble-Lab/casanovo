@@ -876,19 +876,16 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         for batch in results:
             for step in batch:
                 for spectrum_i, precursor, aa_tokens, aa_scores in zip(*step):
-                    # Omit stop token.
-                    aa_tokens = aa_tokens[1:]
-                    peptide = "".join(aa_tokens)
-                    # If this is a non-finished beam (after exceeding
-                    # `max_length`), return a dummy (empty) peptide.
-                    if len(peptide) == 0:
-                        aa_tokens = peptide
-                    # Take scores corresponding to the predicted amino acids.
-                    top_aa_scores = [
-                        aa_score[self.decoder._aa2idx[aa_token]].item()
-                        for aa_score, aa_token in zip(aa_scores, aa_tokens)
-                    ]
-                    peptide_score = _aa_to_pep_score(top_aa_scores)
+                    # Get peptide sequence, amino acid and peptide-level
+                    # confidence scores to write to output file.
+                    (
+                        peptide,
+                        aa_tokens,
+                        peptide_score,
+                        aa_scores,
+                    ) = self._get_output_peptide_and_scores(
+                        aa_tokens, aa_scores
+                    )
                     # Compare the experimental vs calculated precursor m/z.
                     _, precursor_charge, precursor_mz = precursor
                     precursor_charge = int(precursor_charge.item())
@@ -918,9 +915,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
                     # Subtract one if the precursor m/z tolerance is violated.
                     if not is_within_precursor_mz_tol:
                         peptide_score -= 1
-                    aa_scores = ",".join(
-                        reversed(list(map("{:.5f}".format, top_aa_scores)))
-                    )
+
                     self.out_writer.psms.append(
                         (
                             peptide,
@@ -932,6 +927,54 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
                             aa_scores,
                         ),
                     )
+
+    def _get_output_peptide_and_scores(
+        self, aa_tokens: List[str], aa_scores: torch.Tensor
+    ) -> Tuple[str, List[str], float, str]:
+        """
+        Get peptide to output, amino acid and peptide-level confidence scores.
+
+        Parameters
+        ----------
+        aa_tokens : List[str]
+            Amino acid tokens of the peptide sequence.
+        aa_scores : torch.Tensor
+            Amino acid-level confidence scores in
+
+        Returns
+        -------
+        peptide : str
+            Peptide sequence.
+        aa_tokens : List[str]
+            Amino acid tokens of the peptide sequence.
+        peptide_score : str
+            Peptide-level confidence score.
+        aa_scores : str
+            Amino acid-level confidence scores for the predicted sequence.
+        """
+        # Omit stop token.
+        aa_tokens = (
+            aa_tokens[1:] if self.decoder.reverse == True else aa_tokens[:-1]
+        )
+        peptide = "".join(aa_tokens)
+
+        # If this is a non-finished beam (after exceeding
+        # `max_length`), return a dummy (empty) peptide and NaN scores.
+        if len(peptide) == 0:
+            aa_tokens = peptide
+
+        # Take scores corresponding to the predicted amino acids. Reverse tokens
+        # to correspond with correct amino acids as needed.
+        step = -1 if self.decoder.reverse == True else 1
+        top_aa_scores = [
+            aa_score[self.decoder._aa2idx[aa_token]].item()
+            for aa_score, aa_token in zip(aa_scores, aa_tokens[::step])
+        ][::step]
+
+        # Get peptide-level score from amino acid-level scores
+        peptide_score = _aa_to_pep_score(top_aa_scores)
+        aa_scores = ",".join(list(map("{:.5f}".format, top_aa_scores)))
+        return peptide, aa_tokens, peptide_score, aa_scores
 
     def _log_history(self) -> None:
         """
