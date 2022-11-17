@@ -5,6 +5,7 @@ import tempfile
 import github
 import pytest
 import torch
+import numpy as np
 
 from casanovo import casanovo
 from casanovo import utils
@@ -527,6 +528,58 @@ def test_beam_search_decode():
         updated_tokens[:, idx],
         torch.tensor([0, model.stop_token]),
     )
+
+
+def test_get_output_peptide_and_scores():
+    """
+    Test output peptides and amino acid/peptide-level scores have correct format.
+    """
+    # Test a common case with reverse decoding (C- to N-terminus)
+    model = Spec2Pep()
+    aa_tokens = [model.decoder._idx2aa[model.stop_token], "G", "K"]
+    aa_scores = torch.zeros(model.max_length, model.decoder.vocab_size + 1)
+    aa_scores[0][model.decoder._aa2idx["K"]] = 1
+    aa_scores[1][model.decoder._aa2idx["G"]] = 1
+
+    (
+        peptide,
+        aa_tokens,
+        peptide_score,
+        aa_scores,
+    ) = model._get_output_peptide_and_scores(aa_tokens, aa_scores)
+    assert peptide == "GK"
+    assert peptide_score == 1
+    assert aa_scores == "1.00000,1.00000"
+
+    # Test a case with straigth decoding (N- to C-terminus)
+    model.decoder.reverse = False
+    aa_tokens = ["G", "K", model.decoder._idx2aa[model.stop_token]]
+    aa_scores = torch.zeros(model.max_length, model.decoder.vocab_size + 1)
+    aa_scores[0][model.decoder._aa2idx["G"]] = 1
+    aa_scores[1][model.decoder._aa2idx["K"]] = 1
+
+    (
+        peptide,
+        aa_tokens,
+        peptide_score,
+        aa_scores,
+    ) = model._get_output_peptide_and_scores(aa_tokens, aa_scores)
+    assert peptide == "GK"
+    assert peptide_score == 1
+    assert aa_scores == "1.00000,1.00000"
+
+    # Test when predicted peptide is empty
+    aa_tokens = ["", ""]
+
+    (
+        peptide,
+        aa_tokens,
+        peptide_score,
+        aa_scores,
+    ) = model._get_output_peptide_and_scores(aa_tokens, aa_scores)
+    assert peptide == ""
+    assert np.isnan(np.mean(peptide_score))
+    assert aa_scores == ""
 
 
 def test_eval_metrics():
