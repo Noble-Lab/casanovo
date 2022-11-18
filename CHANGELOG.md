@@ -26,6 +26,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Maximum supported Python version updated to 3.10.
 - No need to explicitly specify a config file, the default config will be used instead.
 - Initialize Tensorboard during training by passing its directory location.
+- Use beam search decoding rather than greedy decoding to predict the peptides.
 
 ### Fixed
 
