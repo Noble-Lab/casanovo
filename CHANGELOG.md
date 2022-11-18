@@ -9,6 +9,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ### Changed
 
 - Update PyTorch Lightning global seed setting.
+- Use beam search decoding rather than greedy decoding to predict the peptides.
 
 ### Fixed
 
