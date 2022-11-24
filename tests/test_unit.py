@@ -5,14 +5,13 @@ import tempfile
 import pandas as pd
 import github
 import pytest
+from pyteomics import mgf
 
 from casanovo import casanovo
 from casanovo import utils
 from casanovo.denovo.model import Spec2Pep
 import casanovo.denovo.model_runner as model_runner
 import casanovo.denovo.evaluate as evaluate
-
-from pyteomics import mgf
 
 
 def test_version():
@@ -84,11 +83,13 @@ def test_get_model_weights(monkeypatch):
             assert os.path.isfile(filename)
             assert casanovo._get_model_weights() == filename
 
-    # Impossible to find model weights for non-matching version.
-    with monkeypatch.context() as mnk:
-        mnk.setattr(casanovo, "__version__", "999.999.999")
-        with pytest.raises(ValueError):
-            casanovo._get_model_weights()
+    # Impossible to find model weights for (i) full version mismatch and (ii)
+    # major version mismatch.
+    for version in ["999.999.999", "999.0.0"]:
+        with monkeypatch.context() as mnk:
+            mnk.setattr(casanovo, "__version__", version)
+            with pytest.raises(ValueError):
+                casanovo._get_model_weights()
 
     # Test GitHub API rate limit.
     def request(self, *args, **kwargs):
@@ -191,4 +192,45 @@ def test_eval(tmp_path):
     assert coverage[-1] == 1
 
     # Ensure graph generation does not crash
-    model_runner.generate_pc_data(mgf_file_path, mzt_file_path)
+    model_runner.generate_pc_graph(mgf_file_path, mzt_file_path)
+
+
+def test_eval_metrics():
+    """
+    Test that peptide and amino acid-level evaluation metrics.
+    Predicted AAs are considered correct match if they're <0.1Da from
+    the corresponding ground truth (GT) AA with either a suffix or
+    prefix <0.5Da from GT. A peptide prediction is correct if all
+    its AA are correct matches.
+    """
+    model = Spec2Pep()
+
+    preds = [
+        "SPEIK",
+        "SPAEL",
+        "SPAEKL",
+        "ASPEKL",
+        "SPEKL",
+        "SPELQ",
+        "PSEKL",
+        "SPEK",
+    ]
+    gt = len(preds) * ["SPELK"]
+
+    aa_matches, n_pred_aa, n_gt_aa = evaluate.aa_match_batch(
+        peptides1=preds,
+        peptides2=gt,
+        aa_dict=model.decoder._peptide_mass.masses,
+        mode="best",
+    )
+
+    assert n_pred_aa == 41
+    assert n_gt_aa == 40
+
+    aa_precision, aa_recall, pep_precision = evaluate.aa_match_metrics(
+        aa_matches, n_gt_aa, n_pred_aa
+    )
+
+    assert round(2 / 8, 3) == round(pep_precision, 3)
+    assert round(26 / 40, 3) == round(aa_recall, 3)
+    assert round(26 / 41, 3) == round(aa_precision, 3)

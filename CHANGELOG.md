@@ -6,8 +6,36 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
-## [3.0.0] - 2022-10-10
+### Changed
+
+- Update PyTorch Lightning global seed setting.
+
+### Fixed
+
+- Don't use model weights with incorrect major version number.
+
+## [3.1.0] - 2022-11-03
+
 ### Added
+
+- Matching model weights are automatically downloaded from GitHub.
+- Automatically calculate testing code coverage.
+
+### Changed
+
+- Maximum supported Python version updated to 3.10.
+- No need to explicitly specify a config file, the default config will be used instead.
+- Initialize Tensorboard during training by passing its directory location.
+
+### Fixed
+
+- Don't use worker threads on Windows and MacOS.
+- Fix for running when no GPU is available.
+
+## [3.0.0] - 2022-10-10
+
+### Added
+
 - The first PyPI release! :tada:
 - Tests are run on every PR automatically.
 - Test code coverage must be maintained or improved with each change.
@@ -109,7 +137,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 - Initial Casanovo version.
 
-[Unreleased]: https://github.com/Noble-Lab/casanovo/compare/v2.1.1...HEAD
+[Unreleased]: https://github.com/Noble-Lab/casanovo/compare/v3.1.0...HEAD
+[3.1.0]: https://github.com/Noble-Lab/casanovo/compare/v3.0.0...v3.1.0
+[3.0.0]: https://github.com/Noble-Lab/casanovo/compare/v2.1.1...v3.0.0
 [2.1.1]: https://github.com/Noble-Lab/casanovo/compare/v2.1.0...v2.1.1
 [2.1.0]: https://github.com/Noble-Lab/casanovo/compare/v2.0.1...v2.1.0
 [2.0.1]: https://github.com/Noble-Lab/casanovo/compare/v2.0.0...v2.0.1

@@ -14,11 +14,11 @@ warnings.filterwarnings("ignore", category=DeprecationWarning)
 import appdirs
 import click
 import github
-import pytorch_lightning as pl
 import requests
 import torch
 import tqdm
 import yaml
+from pytorch_lightning.lite import LightningLite
 
 from . import __version__
 from . import utils
@@ -180,7 +180,7 @@ def main(
     if n_gpus > 1:
         config["train_batch_size"] = config["train_batch_size"] // n_gpus
 
-    pl.utilities.seed.seed_everything(seed=config["random_seed"], workers=True)
+    LightningLite.seed_everything(seed=config["random_seed"], workers=True)
 
     # Download model weights if these were not specified (except when training).
     if model is None and mode != "train":
@@ -261,7 +261,11 @@ def _get_model_weights() -> str:
             file_version = tuple(
                 g for g in re.match(r".*_v(\d+)_(\d+)_(\d+)", root).groups()
             )
-            match = sum([i == j for i, j in zip(version, file_version)])
+            match = (
+                sum(m)
+                if (m := [i == j for i, j in zip(version, file_version)])[0]
+                else 0
+            )
             if match > version_match[2]:
                 version_match = os.path.join(cache_dir, filename), None, match
     # Provide the cached model weights if found.
@@ -282,7 +286,11 @@ def _get_model_weights() -> str:
                     r"v(\d+)\.(\d+)\.(\d+)", release.tag_name
                 ).groups()
             )
-            match = sum([i == j for i, j in zip(version, rel_version)])
+            match = (
+                sum(m)
+                if (m := [i == j for i, j in zip(version, rel_version)])[0]
+                else 0
+            )
             if match > version_match[2]:
                 for release_asset in release.get_assets():
                     fn, ext = os.path.splitext(release_asset.name)
