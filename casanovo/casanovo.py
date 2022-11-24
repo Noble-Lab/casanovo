@@ -67,7 +67,7 @@ logger = logging.getLogger("casanovo")
 @click.option(
     "--output",
     help="The base output file name to store logging (extension: .log) and "
-    "(optionally) prediction results (extension: .csv). If run in eval mode, the location to place the generated graph",
+    "(optionally) prediction results (extension: .csv). If run in eval mode, the location to place the generated data .csv",
     type=click.Path(dir_okay=False),
 )
 def main(

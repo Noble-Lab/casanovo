@@ -111,7 +111,7 @@ def test_tensorboard():
     assert model.tb_summarywriter is None
 
 
-def test_graph_gen(tmp_path):
+def test_eval(tmp_path):
     data_len = 99
 
     d = tmp_path / "eval_files"
@@ -176,15 +176,19 @@ def test_graph_gen(tmp_path):
         mzt_file_path, index=False, sep="\t"
     )  # Write .mztab to temp dir
 
-    precision, coverage, threshold = evaluate._get_preccov_mztab_mgf(
-        mzt_file_path, mgf_file_path
-    )
+    (
+        scan,
+        true_seq,
+        output_seq,
+        output_score,
+        precision,
+        coverage,
+    ) = evaluate._get_preccov_mztab_mgf(mzt_file_path, mgf_file_path)
 
     # Ensure benchmark values consistent
-    assert threshold == int(0.75 * data_len)
     for prec in precision:
         assert prec == 1
     assert coverage[-1] == 1
 
     # Ensure graph generation does not crash
-    model_runner.generate_pc_graph(mgf_file_path, mzt_file_path)
+    model_runner.generate_pc_data(mgf_file_path, mzt_file_path)

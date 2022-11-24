@@ -9,6 +9,7 @@ import uuid
 from typing import Any, Dict, Iterable, List, Optional, Union
 
 import numpy as np
+import pandas as pd
 import pytorch_lightning as pl
 import torch
 from depthcharge.data import AnnotatedSpectrumIndex, SpectrumIndex
@@ -20,8 +21,6 @@ from ..denovo.dataloaders import DeNovoDataModule
 from ..denovo.model import Spec2Pep
 
 from .evaluate import _get_preccov_mztab_mgf
-import seaborn as sns
-import matplotlib.pyplot as plt
 from sklearn.metrics import auc
 
 
@@ -177,51 +176,35 @@ def _execute_existing(
     tmp_dir.cleanup()
     out_writer.save()
     if not annotated:
-        generate_pc_graph(peak_path, out_writer.filename)
+        mgf_file = peak_path
+        mzt_file = out_writer.filename
+        (
+            scan,
+            true_seq,
+            output_seq,
+            output_score,
+            precision,
+            coverage,
+        ) = _get_preccov_mztab_mgf(mzt_file, mgf_file)
+        output_name = os.path.splitext(os.path.abspath(mzt_file))[0]
 
-
-def generate_pc_graph(mgf_file: str, mzt_file: str):
-    precision, coverage, threshold = _get_preccov_mztab_mgf(mzt_file, mgf_file)
-    output_name = os.path.splitext(os.path.abspath(mzt_file))[0]
-
-    plt.style.use(["seaborn-white", "seaborn-paper"])
-    sns.set_context("paper", font_scale=0.75)
-    width = 4
-    height = width / 1.618
-    _, ax = plt.subplots(figsize=(width, height))
-
-    ax.set_xlim(0, 1)
-    ax.set_ylim(0, 1)
-
-    ax.set_xlabel("Coverage")
-    ax.set_ylabel("Peptide precision")
-
-    ax.plot(
-        coverage,
-        precision,
-        label=f"Casanovo AUC = {auc(coverage, precision):.3f}",
-    )
-    ax.scatter(
-        coverage[threshold],
-        precision[threshold],
-        s=20,
-        marker="*",
-        c="red",
-        edgecolors="black",
-        zorder=10,
-    )
-
-    ax.legend(loc="lower left")
-    sns.despine()
-    plt.title("Casanovo PC Curve")
-    plt.grid(True)
-    plt.savefig(f"{output_name}.png", dpi=300, bbox_inches="tight")
-    try:
-        os.remove(f"{output_name}.mztab")
-        os.remove(f"{output_name}.log")
-    except FileNotFoundError:
-        # Do nothing
-        pass
+        df = pd.DataFrame(
+            data={
+                "precision": precision,
+                "coverage": coverage,
+                "scan": scan,
+                "true_seq": true_seq,
+                "output_seq": output_seq,
+                "output_score": output_score,
+            }
+        )
+        df.to_csv(output_name + ".csv", sep=",", index=False)  # Write to csv
+        try:
+            os.remove(f"{output_name}.mztab")
+            os.remove(f"{output_name}.log")
+        except FileNotFoundError:
+            # Do nothing
+            pass
 
 
 def train(

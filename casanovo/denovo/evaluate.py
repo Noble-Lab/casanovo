@@ -352,6 +352,7 @@ def _get_true_labels(mgf_filename: str):
 
 
 def _calc_pc(raw_pc_df):
+    # TODO: Update docstring
     """
     Calculates the precision and coverage from a pandas dataframe with columns "scan", "true_seq", "output_seq", "output_score"
 
@@ -380,12 +381,20 @@ def _calc_pc(raw_pc_df):
     )
     coverage = np.arange(1, len(peptide_matches) + 1) / len(peptide_matches)
 
-    return precision, coverage
+    return (
+        raw_pc_df["scan"],
+        raw_pc_df["true_seq"],
+        raw_pc_df["output_seq"],
+        raw_pc_df["output_score"],
+        precision,
+        coverage,
+    )
 
 
 def _get_preccov_mztab_mgf(
     mzt_filename: str, mgf_filename: str, excl_n_terminals=False
 ):
+    # TODO: Update docstring
     """
     Extract the precision and coverage from an new Casanovo .mztab directory and the associated input .mgf directory
 
@@ -437,8 +446,8 @@ def _get_preccov_mztab_mgf(
             ~raw_pc_df.output_seq.str.contains("|".join(discard))
         ]
 
-    threshold = np.argmax(raw_pc_df["output_score"] < 0)
+    scan, true_seq, output_seq, output_score, precision, coverage = _calc_pc(
+        raw_pc_df
+    )
 
-    precision, coverage = _calc_pc(raw_pc_df)
-
-    return precision, coverage, threshold
+    return scan, true_seq, output_seq, output_score, precision, coverage
