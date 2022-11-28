@@ -6,9 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+## [3.2.0] - 2022-11-18
+
 ### Changed
 
 - Update PyTorch Lightning global seed setting.
+- Use beam search decoding rather than greedy decoding to predict the peptides.
 
 ### Fixed
 
@@ -137,7 +140,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 - Initial Casanovo version.
 
-[Unreleased]: https://github.com/Noble-Lab/casanovo/compare/v3.1.0...HEAD
+[Unreleased]: https://github.com/Noble-Lab/casanovo/compare/v3.2.0...HEAD
+[3.2.0]: https://github.com/Noble-Lab/casanovo/compare/v3.1.0...v3.2.0
 [3.1.0]: https://github.com/Noble-Lab/casanovo/compare/v3.0.0...v3.1.0
 [3.0.0]: https://github.com/Noble-Lab/casanovo/compare/v2.1.1...v3.0.0
 [2.1.1]: https://github.com/Noble-Lab/casanovo/compare/v2.1.0...v2.1.1
