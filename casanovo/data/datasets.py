@@ -84,7 +84,29 @@ class SpectrumDataset(Dataset):
         spectrum = self._process_peaks(
             mz_array, int_array, precursor_mz, precursor_charge
         )
-        return spectrum, precursor_mz, precursor_charge, str(idx)
+        return (
+            spectrum,
+            precursor_mz,
+            precursor_charge,
+            self.get_spectrum_id(idx)[1],
+        )
+
+    def get_spectrum_id(self, idx):
+        """Return the identifier for a single mass spectrum.
+        Parameters
+        ----------
+        idx : int
+            The index of a mass spectrum within the SpectrumIndex.
+        Returns
+        -------
+        ms_data_file : str
+            The mass spectrometry data file from which the mass spectrum was
+            originally parsed.
+        identifier : str
+            The mass spectrum identifier, per PSI recommendations.
+        """
+        with self.index:
+            return self.index.get_spectrum_id(idx)
 
     def _process_peaks(
         self,
