@@ -1,3 +1,5 @@
+import pandas as pd
+
 import casanovo
 from casanovo import casanovo
 
@@ -20,3 +22,12 @@ def test_denovo(mgf_small, tmp_path, monkeypatch):
         standalone_mode=False,
     )
     assert output_filename.is_file()
+
+    with open(output_filename) as f_in:
+        for skiprows, line in enumerate(f_in):
+            if line.startswith("PSH"):
+                break
+    df = pd.read_csv(output_filename, skiprows=skiprows, sep="\t")
+
+    assert df.PSM_ID[0] == "index=0"
+    assert df.PSM_ID[1] == "index=1"
