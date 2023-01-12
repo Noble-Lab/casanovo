@@ -42,3 +42,14 @@ export PYTORCH_ENABLE_MPS_FALLBACK=1
 ```
 
 This will need to be set with each new shell session, or you can add it to your `.bashrc` / `.zshrc` to set this environment variable by default.
+
+**How do I know which model to use after training Casanovo?**
+
+By default, Casanovo saves a snapshot of the model weights after every 50,000 training steps.
+Note that the number of samples that are processed during a single training step depends on the batch size.
+Therefore, when using the default training batch size of 32, this correspond to saving a model snapshot after every 1.6 million training samples.
+You can optionally modify the snapshot frequency in the [config file](https://github.com/Noble-Lab/casanovo/blob/main/casanovo/config.yaml) (parameter `every_n_train_steps`), depending on your dataset size.
+Note that taking very frequent model snapshots will result in somewhat slower training time because Casanovo will evaluate its performance on the validation data for every snapshot.
+
+When saving a model snapshot, Casanovo will use the validation data to compute performance measures (training loss, validation loss, amino acid precision, and peptide precision) and print this information to the console and log file.
+After your training job is finished, you can identify the best performing model that achieves the maximum peptide and amino acid precision from the log file and use the corresponding model snapshot.
