@@ -18,6 +18,7 @@ from .. import utils
 from ..data import ms_io
 from ..denovo.dataloaders import DeNovoDataModule
 from ..denovo.model import Spec2Pep
+from ..denovo.model import DBSpec2Pep
 
 
 logger = logging.getLogger("casanovo")
@@ -311,6 +312,85 @@ def train(
     trainer.fit(
         model, train_loader.train_dataloader(), val_loader.val_dataloader()
     )
+    # Clean up temporary files.
+    tmp_dir.cleanup()
+
+
+def db_search(
+    peak_path: str,
+    model_filename: str,
+    config: Dict[str, Any],
+) -> None:
+    # Load the trained model.
+    if not os.path.isfile(model_filename):
+        logger.error(
+            "Could not find the trained model weights at file %s",
+            model_filename,
+        )
+        raise FileNotFoundError("Could not find the trained model weights")
+    model = DBSpec2Pep().load_from_checkpoint(
+        model_filename,
+        dim_model=config["dim_model"],
+        n_head=config["n_head"],
+        dim_feedforward=config["dim_feedforward"],
+        n_layers=config["n_layers"],
+        dropout=config["dropout"],
+        dim_intensity=config["dim_intensity"],
+        custom_encoder=config["custom_encoder"],
+        max_length=config["max_length"],
+        residues=config["residues"],
+        max_charge=config["max_charge"],
+        precursor_mass_tol=config["precursor_mass_tol"],
+        isotope_error_range=config["isotope_error_range"],
+        n_beams=config["n_beams"],
+        n_log=config["n_log"],
+    )
+    # Read the MS/MS spectra for which to predict peptide sequences.
+    peak_ext = (".mgf", ".h5", ".hdf5")
+    if len(peak_filenames := _get_peak_filenames(peak_path, peak_ext)) == 0:
+        logger.error("Could not find peak files from %s", peak_path)
+        raise FileNotFoundError("Could not find peak files")
+    peak_is_index = any(
+        [os.path.splitext(fn)[1] in (".h5", ".hdf5") for fn in peak_filenames]
+    )
+    if peak_is_index and len(peak_filenames) > 1:
+        logger.error("Multiple HDF5 spectrum indexes specified")
+        raise ValueError("Multiple HDF5 spectrum indexes specified")
+    tmp_dir = tempfile.TemporaryDirectory()
+    if peak_is_index:
+        idx_filename, peak_filenames = peak_filenames[0], None
+    else:
+        idx_filename = os.path.join(tmp_dir.name, f"{uuid.uuid4().hex}.hdf5")
+    SpectrumIdx = AnnotatedSpectrumIndex
+    valid_charge = np.arange(1, config["max_charge"] + 1)
+    index = SpectrumIdx(
+        idx_filename, peak_filenames, valid_charge=valid_charge
+    )
+    # Initialize the data loader.
+    loaders = DeNovoDataModule(
+        test_index=index,
+        n_peaks=config["n_peaks"],
+        min_mz=config["min_mz"],
+        max_mz=config["max_mz"],
+        min_intensity=config["min_intensity"],
+        remove_precursor_tol=config["remove_precursor_tol"],
+        n_workers=config["n_workers"],
+        batch_size=config["predict_batch_size"],
+    )
+    loaders.setup(stage="test")
+
+    # Create the Trainer object.
+    trainer = pl.Trainer(
+        accelerator="cpu",
+        auto_select_gpus=True,
+        devices=1,  #!TODO: Unsure why this breaks when not 1, fix later
+        logger=config["logger"],
+        max_epochs=config["max_epochs"],
+        num_sanity_val_steps=config["num_sanity_val_steps"],
+        strategy=_get_strategy(),
+    )
+    # Run the model
+    trainer.predict(model, loaders.test_dataloader())
     # Clean up temporary files.
     tmp_dir.cleanup()
 

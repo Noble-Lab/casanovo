@@ -1031,6 +1031,26 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         return [optimizer], {"scheduler": lr_scheduler, "interval": "step"}
 
 
+class DBSpec2Pep(Spec2Pep):
+    """Inherits Spec2Pep"""  # TODO: Describe model differences, add type annotations
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+    def predict_step(self, batch, *args):
+        pred, truth = self._forward_step(*batch)
+        # pred = pred[:, :-1, :].reshape(-1, self.decoder.vocab_size + 1)
+        calc_match_score(self, pred, truth)
+        # for x in self.residues.keys():
+        # print(f"AA: {x} --- {self.decoder._aa2idx[x]}")
+
+
+def calc_match_score(dbs2p, pred, truth):
+    print(pred)
+    print("--------------------")
+    print(truth)
+
+
 class CosineWarmupScheduler(torch.optim.lr_scheduler._LRScheduler):
     """
     Learning rate scheduler with linear warm up followed by cosine shaped decay.

@@ -40,7 +40,7 @@ logger = logging.getLogger("casanovo")
     "previously trained model).\n"
     '- "eval" will evaluate the performance of a\ntrained model using '
     "previously acquired spectrum\nannotations.",
-    type=click.Choice(["denovo", "train", "eval"]),
+    type=click.Choice(["denovo", "train", "eval", "db"]),
 )
 @click.option(
     "--model",
@@ -227,6 +227,9 @@ def main(
     elif mode == "train":
         logger.info("Train the Casanovo model.")
         model_runner.train(peak_path, peak_path_val, model, config)
+    elif mode == "db":
+        logger.info("Database seach with casanovo")
+        model_runner.db_search(peak_path, model, config)
 
 
 def _get_model_weights() -> str:
