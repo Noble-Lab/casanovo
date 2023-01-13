@@ -358,8 +358,8 @@ def _get_strategy() -> Optional[DDPStrategy]:
     Optional[DDPStrategy]
         The strategy parameter for the Trainer.
     """
-    if torch.cuda.device_count() > 1:
-        return DDPStrategy(find_unused_parameters=False, static_graph=True)
+    # if torch.cuda.device_count() > 1:
+    #     return DDPStrategy(find_unused_parameters=False, static_graph=True)
 
     return None
 
@@ -374,12 +374,13 @@ def _get_devices() -> Union[int, str]:
         The number of GPUs/CPUs to use, or "auto" to let PyTorch Lightning
         determine the appropriate number of devices.
     """
-    if any(
-        operator.attrgetter(device + ".is_available")(torch)()
-        for device in ["cuda", "backends.mps"]
-    ):
-        return -1
-    elif not (n_workers := utils.n_workers()):
-        return "auto"
-    else:
-        return n_workers
+    return 1
+    # if any(
+    #     operator.attrgetter(device + ".is_available")(torch)()
+    #     for device in ["cuda", "backends.mps"]
+    # ):
+    #     return -1
+    # elif not (n_workers := utils.n_workers()):
+    #     return "auto"
+    # else:
+    #     return n_workers
