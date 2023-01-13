@@ -138,7 +138,6 @@ def _execute_existing(
     index = SpectrumIdx(
         idx_filename, peak_filenames, valid_charge=valid_charge
     )
-    print("SpectrumIdx", index.n_spectra)
     # Initialize the data loader.
     loaders = DeNovoDataModule(
         test_index=index,

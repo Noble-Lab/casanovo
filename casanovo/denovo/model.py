@@ -834,6 +834,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         aa_scores : torch.Tensor of shape (n_spectra, length, n_amino_acids)
             The individual amino acid scores for each prediction.
         """
+        print("predict_step", len(batch[0]), batch[2])
         peptides, aa_scores = self.forward(batch[0], batch[1])
         return batch[2], batch[1], peptides, aa_scores
 
