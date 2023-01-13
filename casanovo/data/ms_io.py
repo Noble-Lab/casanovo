@@ -165,8 +165,6 @@ class MztabWriter:
                     "opt_ms_run[1]_aa_scores",
                 ]
             )
-            import logging
-            logging.debug(self.psms)
             for psm in self.psms:
                 writer.writerow(
                     [

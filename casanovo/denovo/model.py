@@ -916,9 +916,6 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
                     if not is_within_precursor_mz_tol:
                         peptide_score -= 1
 
-                    logger.debug(
-                        "%s %s %f", peptide, spectrum_i, peptide_score
-                    )
                     self.out_writer.psms.append(
                         (
                             peptide,
