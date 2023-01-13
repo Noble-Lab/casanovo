@@ -27,7 +27,7 @@ def test_denovo(mgf_small, tmp_path, monkeypatch):
         for skiprows, line in enumerate(f_in):
             if line.startswith("PSH"):
                 break
-                
+
     psms = pd.read_csv(output_filename, skiprows=skiprows, sep="\t")
 
     # Because we're searching from an MGF file, the PSMs are identified using
