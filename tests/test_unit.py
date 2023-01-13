@@ -626,7 +626,7 @@ def test_eval_metrics():
     assert 26 / 41 == pytest.approx(aa_precision)
 
 
-def test_spectrum_id(mgf_small, tmp_path):
+def test_spectrum_id_mgf(mgf_small, tmp_path):
     """Test that spectra from MGF files are specified by their index."""
     mgf_small2 = tmp_path / "mgf_small2.mgf"
     shutil.copy(mgf_small, mgf_small2)
@@ -649,3 +649,24 @@ def test_spectrum_id(mgf_small, tmp_path):
         ):
             spectrum_id = str(filename), f"index={mgf_i}"
             assert dataset.get_spectrum_id(i) == spectrum_id
+
+
+def test_spectrum_id_mzml(mzml_small, tmp_path):
+    """Test that spectra from mzML files are specified by their scan number."""
+    mzml_small2 = tmp_path / "mzml_small2.mzml"
+    shutil.copy(mzml_small, mzml_small2)
+
+    index = SpectrumIndex(
+        tmp_path / "index.hdf5", [mzml_small, mzml_small2], overwrite=True
+    )
+    dataset = SpectrumDataset(index)
+    for i, (filename, scan_nr) in enumerate(
+        [
+            (mzml_small, 0),
+            (mzml_small, 17),
+            (mzml_small2, 0),
+            (mzml_small2, 17),
+        ]
+    ):
+        spectrum_id = str(filename), f"scan={scan_nr}"
+        assert dataset.get_spectrum_id(i) == spectrum_id

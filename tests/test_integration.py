@@ -1,6 +1,5 @@
 import pandas as pd
 
-import casanovo
 from casanovo import casanovo
 
 
