@@ -835,7 +835,6 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
             The individual amino acid scores for each prediction.
         """
         peptides, aa_scores = self.forward(batch[0], batch[1])
-        print("predict_step", ["".join(pep) for pep in peptides], batch[2])
         return batch[2], batch[1], peptides, aa_scores
 
     def on_train_epoch_end(self) -> None:
@@ -872,7 +871,6 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         Write the predicted peptide sequences and amino acid scores to the
         output file.
         """
-        print("on_predict_epoch_end", results, self.out_writer)
         if self.out_writer is None:
             return
         for batch in results:

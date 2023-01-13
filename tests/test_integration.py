@@ -22,10 +22,7 @@ def test_denovo(mgf_small, tmp_path, monkeypatch):
     )
     assert output_filename.is_file()
 
-    with open(output_filename) as f_in:
-        print(output_filename)
-        print("".join(f_in.readlines()))
-
+    # Verify that the spectrum predictions are correct.
     with open(output_filename) as f_in:
         for skiprows, line in enumerate(f_in):
             if line.startswith("PSH"):
@@ -36,4 +33,6 @@ def test_denovo(mgf_small, tmp_path, monkeypatch):
     # Because we're searching from an MGF file, the PSMs are identified using
     # their index.
     assert psms.PSM_ID[0] == "index=0"
+    assert psms.sequence[0] == "LESLLEK"
     assert psms.PSM_ID[1] == "index=1"
+    assert psms.sequence[1] == "PEPTLDEK"
