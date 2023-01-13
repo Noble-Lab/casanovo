@@ -2,7 +2,6 @@
 import numpy as np
 import psims
 import pytest
-from psims.mzml import MzMLWriter
 from pyteomics.mass import calculate_mass
 
 
@@ -126,7 +125,7 @@ def _create_mzml(peptides, mzml_file, random_state=42):
     """
     rng = np.random.default_rng(random_state)
 
-    with MzMLWriter(str(mzml_file)) as writer:
+    with psims.mzml.MzMLWriter(str(mzml_file)) as writer:
         writer.controlled_vocabularies()
         writer.file_description(["MSn spectrum"])
         writer.software_list(
@@ -138,7 +137,26 @@ def _create_mzml(peptides, mzml_file, random_state=42):
                 }
             ]
         )
-        with writer.run():
+        writer.instrument_configuration_list(
+            [
+                writer.InstrumentConfiguration(
+                    "ic",
+                    [
+                        writer.Source(1, ["instrument model"]),
+                        writer.Analyzer(2, ["instrument model"]),
+                        writer.Detector(3, ["instrument model"]),
+                    ],
+                )
+            ]
+        )
+        writer.data_processing_list(
+            [
+                writer.DataProcessing(
+                    [writer.ProcessingMethod(1, "psims-writer")], id="dp"
+                )
+            ]
+        )
+        with writer.run(id=1, instrument_configuration="ic"):
             with writer.spectrum_list(len(peptides)):
                 for i, peptide in enumerate(peptides):
                     charge = rng.choice([2, 3])
