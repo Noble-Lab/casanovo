@@ -2,6 +2,7 @@ import os
 import platform
 import shutil
 import tempfile
+import warnings
 
 import github
 import numpy as np
@@ -574,12 +575,14 @@ def test_get_output_peptide_and_scores():
     # Test when predicted peptide is empty
     aa_tokens = ["", ""]
 
-    (
-        peptide,
-        _,
-        peptide_score,
-        aa_scores,
-    ) = model._get_output_peptide_and_scores(aa_tokens, aa_scores)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", category=RuntimeWarning)
+        (
+            peptide,
+            _,
+            peptide_score,
+            aa_scores,
+        ) = model._get_output_peptide_and_scores(aa_tokens, aa_scores)
     assert peptide == ""
     assert np.isnan(peptide_score)
     assert aa_scores == ""
