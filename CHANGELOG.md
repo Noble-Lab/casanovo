@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+### Changed
+
+- Spectra from mzML and mzXML peak files are referred to by their scan numbers in the mzTab output instead of their indexes.
+
 ## [3.2.0] - 2022-11-18
 
 ### Changed
