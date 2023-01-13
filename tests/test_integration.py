@@ -28,7 +28,9 @@ def test_denovo(mgf_small, tmp_path, monkeypatch):
             if line.startswith("PSH"):
                 break
                 
-    df = pd.read_csv(output_filename, skiprows=skiprows, sep="\t")
+    psms = pd.read_csv(output_filename, skiprows=skiprows, sep="\t")
 
-    assert df.PSM_ID[0] == "index=0"
-    assert df.PSM_ID[1] == "index=1"
+    # Because we're searching from an MGF file, the PSMs are identified using
+    # their index.
+    assert psms.PSM_ID[0] == "index=0"
+    assert psms.PSM_ID[1] == "index=1"

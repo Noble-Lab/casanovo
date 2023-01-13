@@ -108,7 +108,8 @@ def test_get_model_weights(monkeypatch):
 
 def test_tensorboard():
     """
-    Test tensorboard.SummaryWriter object created only when folder path passed
+    Test that the tensorboard.SummaryWriter object is only created when a folder
+    path is passed.
     """
     model = Spec2Pep(tb_summarywriter="test_path")
     assert model.tb_summarywriter is not None
@@ -119,8 +120,8 @@ def test_tensorboard():
 
 def test_aa_to_pep_score():
     """
-    Test how peptide confidence scores are derived from amino acid scores.
-    Currently, AA scores are just averaged.
+    Test calculation of peptide confidence scores from amino acid scores.
+    Currently, peptide scores are determined by averaging the AA scores.
     """
     assert (
         _aa_to_pep_score(
@@ -135,9 +136,7 @@ def test_aa_to_pep_score():
 
 
 def test_beam_search_decode():
-    """
-    Test beam search decoding and its sub-functions
-    """
+    """Test beam search decoding and its sub-functions."""
     model = Spec2Pep(n_beams=4, residues="massivekb")
 
     # Sizes.
@@ -535,7 +534,8 @@ def test_beam_search_decode():
 
 def test_get_output_peptide_and_scores():
     """
-    Test output peptides and amino acid/peptide-level scores have correct format.
+    Test that the output peptides and amino acid/peptide-level scores are
+    correctly formatted.
     """
     # Test a common case with reverse decoding (C- to N-terminus)
     model = Spec2Pep()
@@ -546,15 +546,15 @@ def test_get_output_peptide_and_scores():
 
     (
         peptide,
-        aa_tokens,
+        _,
         peptide_score,
         aa_scores,
     ) = model._get_output_peptide_and_scores(aa_tokens, aa_scores)
     assert peptide == "GK"
-    assert peptide_score == 1
+    assert peptide_score == pytest.approx(1)
     assert aa_scores == "1.00000,1.00000"
 
-    # Test a case with straigth decoding (N- to C-terminus)
+    # Test a case with straight decoding (N- to C-terminus)
     model.decoder.reverse = False
     aa_tokens = ["G", "K", model.decoder._idx2aa[model.stop_token]]
     aa_scores = torch.zeros(model.max_length, model.decoder.vocab_size + 1)
@@ -563,12 +563,12 @@ def test_get_output_peptide_and_scores():
 
     (
         peptide,
-        aa_tokens,
+        _,
         peptide_score,
         aa_scores,
     ) = model._get_output_peptide_and_scores(aa_tokens, aa_scores)
     assert peptide == "GK"
-    assert peptide_score == 1
+    assert peptide_score == pytest.approx(1)
     assert aa_scores == "1.00000,1.00000"
 
     # Test when predicted peptide is empty
@@ -576,7 +576,7 @@ def test_get_output_peptide_and_scores():
 
     (
         peptide,
-        aa_tokens,
+        _,
         peptide_score,
         aa_scores,
     ) = model._get_output_peptide_and_scores(aa_tokens, aa_scores)
@@ -589,8 +589,9 @@ def test_eval_metrics():
     """
     Test peptide and amino acid-level evaluation metrics.
     Predicted AAs are considered correct if they are <0.1Da from the
-    corresponding ground truth (GT) AA with either a suffix or prefix <0.5Da
-    from GT. A peptide prediction is correct if all its AA are correct matches.
+    corresponding ground truth AA with either a suffix or prefix <0.5Da from
+    the ground truth. A peptide prediction is correct if all its AA are correct
+    matches.
     """
     model = Spec2Pep()
 
@@ -626,18 +627,25 @@ def test_eval_metrics():
 
 
 def test_spectrum_id(mgf_small, tmp_path):
-    """Test the mgf index."""
+    """Test that spectra from MGF files are specified by their index."""
     mgf_small2 = tmp_path / "mgf_small2.mgf"
     shutil.copy(mgf_small, mgf_small2)
 
-    index = SpectrumIndex(tmp_path / "index.hdf5", [mgf_small, mgf_small2])
-    dataset = SpectrumDataset(index)
-    assert dataset.get_spectrum_id(0) == (str(mgf_small), "index=0")
-    assert dataset.get_spectrum_id(3) == (str(mgf_small2), "index=1")
-
-    index = AnnotatedSpectrumIndex(
-        tmp_path / "index2.hdf5", [mgf_small, mgf_small2]
-    )
-    dataset = AnnotatedSpectrumDataset(index)
-    assert dataset.get_spectrum_id(0) == (str(mgf_small), "index=0")
-    assert dataset.get_spectrum_id(3) == (str(mgf_small2), "index=1")
+    for index_func, dataset_func in [
+        (SpectrumIndex, SpectrumDataset),
+        (AnnotatedSpectrumIndex, AnnotatedSpectrumDataset),
+    ]:
+        index = index_func(
+            tmp_path / "index.hdf5", [mgf_small, mgf_small2], overwrite=True
+        )
+        dataset = dataset_func(index)
+        for i, (filename, mgf_i) in enumerate(
+            [
+                (mgf_small, 0),
+                (mgf_small, 1),
+                (mgf_small2, 0),
+                (mgf_small2, 1),
+            ]
+        ):
+            spectrum_id = str(filename), f"index={mgf_i}"
+            assert dataset.get_spectrum_id(i) == spectrum_id
