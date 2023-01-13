@@ -166,6 +166,7 @@ def _create_mzml(peptides, mzml_file, random_state=42):
                         mz=calculate_mass(peptide, charge=charge),
                         charge=charge,
                     )
+                    precursor.activation({"params": ["HCD"]})
 
                     mzs, intensities = _peptide_to_peaks(peptide, charge)
                     writer.write_spectrum(
