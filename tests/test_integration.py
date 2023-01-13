@@ -24,6 +24,10 @@ def test_denovo(mgf_small, tmp_path, monkeypatch):
     assert output_filename.is_file()
 
     with open(output_filename) as f_in:
+        print(output_filename)
+        print("".join(f_in.readlines()))
+
+    with open(output_filename) as f_in:
         for skiprows, line in enumerate(f_in):
             if line.startswith("PSH"):
                 break
