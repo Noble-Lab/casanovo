@@ -964,14 +964,16 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         # Take scores corresponding to the predicted amino acids. Reverse tokens
         # to correspond with correct amino acids as needed.
         step = -1 if self.decoder.reverse else 1
-        top_aa_scores = [
-            aa_score[self.decoder._aa2idx[aa_token]].item()
-            for aa_score, aa_token in zip(aa_scores, aa_tokens[::step])
-        ][::step]
+        top_aa_scores = np.asarray(
+            [
+                aa_score[self.decoder._aa2idx[aa_token]].item()
+                for aa_score, aa_token in zip(aa_scores, aa_tokens[::step])
+            ][::step]
+        )
 
         # Get peptide-level score from amino acid-level scores.
-        peptide_score = _aa_to_pep_score(top_aa_scores)
-        aa_scores = ",".join(list(map("{:.5f}".format, top_aa_scores)))
+        aa_scores, peptide_score = _aa_pep_score(top_aa_scores)
+        aa_scores = ",".join(list(map("{:.5f}".format, aa_scores)))
         return peptide, aa_tokens, peptide_score, aa_scores
 
     def _log_history(self) -> None:
@@ -1088,18 +1090,26 @@ def _calc_mass_error(
     return (calc_mz - (obs_mz - isotope * 1.00335 / charge)) / obs_mz * 10**6
 
 
-def _aa_to_pep_score(aa_scores: List[float]) -> float:
+def _aa_pep_score(aa_scores: np.ndarray) -> Tuple[np.ndarray, float]:
     """
-    Calculate peptide-level confidence score from amino acid level scores.
+    Calculate amino acid and peptide-level confidence score from the raw amino
+    acid scores.
+
+    The peptide score is the mean of the raw amino acid scores. The amino acid
+    scores are the mean of the raw amino acid scores and the peptide score.
 
     Parameters
     ----------
-    aa_scores : List[float]
+    aa_scores : np.ndarray
         Amino acid level confidence scores.
 
     Returns
     -------
-    float
-        Peptide confidence score.
+    aa_scores : np.ndarray
+        The amino acid scores.
+    peptide_score : float
+        The peptide score.
     """
-    return np.mean(aa_scores)
+    peptide_score = np.mean(aa_scores)
+    aa_scores = (aa_scores + peptide_score) / 2
+    return aa_scores, peptide_score
