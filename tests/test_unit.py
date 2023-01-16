@@ -665,10 +665,10 @@ def test_spectrum_id_mzml(mzml_small, tmp_path):
     dataset = SpectrumDataset(index)
     for i, (filename, scan_nr) in enumerate(
         [
-            (mzml_small, 0),
             (mzml_small, 17),
-            (mzml_small2, 0),
+            (mzml_small, 111),
             (mzml_small2, 17),
+            (mzml_small2, 111),
         ]
     ):
         spectrum_id = str(filename), f"scan={scan_nr}"

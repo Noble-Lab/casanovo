@@ -142,10 +142,11 @@ def _create_mzml(peptides, mzml_file, random_state=42):
                 writer.InstrumentConfiguration(
                     "ic",
                     [
-                        writer.Source(1, ["instrument model"]),
-                        writer.Analyzer(2, ["instrument model"]),
-                        writer.Detector(3, ["instrument model"]),
+                        writer.Source(1, ["ionization type"]),
+                        writer.Analyzer(2, ["mass analyzer type"]),
+                        writer.Detector(3, ["detector type"]),
                     ],
+                    ["instrument model"],
                 )
             ]
         )

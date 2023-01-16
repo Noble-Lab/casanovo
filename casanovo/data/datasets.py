@@ -79,8 +79,8 @@ class SpectrumDataset(Dataset):
         precursor_charge : int
             The precursor charge.
         spectrum_id: Tuple[str, str]
-            The unique spectrum identifier, as determined by its original peak
-            file and index in therein.
+            The unique spectrum identifier, formed by its original peak file and
+            identifier (index or scan number) therein.
         """
         mz_array, int_array, precursor_mz, precursor_charge = self.index[idx]
         spectrum = self._process_peaks(
