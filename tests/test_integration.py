@@ -1,20 +1,21 @@
-import pandas as pd
+import pyteomics.mztab
 
 from casanovo import casanovo
 
 
-def test_denovo(mgf_small, tmp_path, monkeypatch):
+def test_denovo(mgf_small, mzml_small, tmp_path, monkeypatch):
     # We can use this to explicitly test different versions.
     monkeypatch.setattr(casanovo, "__version__", "3.0.1")
 
-    # Predict on a small MGF file and verify that the output file exists.
+    # Predict on small files (MGF and mzML) and verify that the output mzTab
+    # file exists.
     output_filename = tmp_path / "test.mztab"
     casanovo.main(
         [
             "--mode",
             "denovo",
             "--peak_path",
-            str(mgf_small),
+            str(mgf_small).replace(".mgf", ".m*"),
             "--output",
             str(output_filename),
         ],
@@ -22,17 +23,20 @@ def test_denovo(mgf_small, tmp_path, monkeypatch):
     )
     assert output_filename.is_file()
 
-    # Verify that the spectrum predictions are correct.
-    with open(output_filename) as f_in:
-        for skiprows, line in enumerate(f_in):
-            if line.startswith("PSH"):
-                break
+    mztab = pyteomics.mztab.MzTab(str(output_filename))
+    # Verify that both input peak files are listed in the metadata.
+    for i, filename in enumerate(["small.mgf", "small.mzml"], 1):
+        assert f"ms_run[{i}]-location" in mztab.metadata
+        assert mztab.metadata[f"ms_run[{i}]-location"].endswith(filename)
 
-    psms = pd.read_csv(output_filename, skiprows=skiprows, sep="\t")
-
-    # Because we're searching from an MGF file, the PSMs are identified using
-    # their index.
-    assert psms.PSM_ID[0] == "index=0"
-    assert psms.sequence[0] == "LESLLEK"
-    assert psms.PSM_ID[1] == "index=1"
-    assert psms.sequence[1] == "PEPTLDEK"
+    # Verify that the spectrum predictions are correct and indexed according to
+    # the peak input file type.
+    psms = mztab.spectrum_match_table
+    assert psms.loc[1, "sequence"] == "LESLLEK"
+    assert psms.loc[1, "spectra_ref"] == "ms_run[1]:index=0"
+    assert psms.loc[2, "sequence"] == "PEPTLDEK"
+    assert psms.loc[2, "spectra_ref"] == "ms_run[1]:index=1"
+    assert psms.loc[3, "sequence"] == "LESLLEK"
+    assert psms.loc[3, "spectra_ref"] == "ms_run[2]:scan=17"
+    assert psms.loc[4, "sequence"] == "PEPTLDEK"
+    assert psms.loc[4, "spectra_ref"] == "ms_run[2]:scan=111"

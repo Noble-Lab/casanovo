@@ -1,10 +1,13 @@
 """Mass spectrometry file type input/output operations."""
 import collections
 import csv
+import operator
 import os
 import re
 from pathlib import Path
 from typing import Any, Dict, List
+
+import natsort
 
 from .. import __version__
 
@@ -36,6 +39,7 @@ class MztabWriter:
                 "[MS, MS:1001143, search engine specific score for PSMs, ]",
             ),
         ]
+        self._run_map = {}
         self.psms = []
 
     def set_metadata(self, config: Dict[str, Any], **kwargs) -> None:
@@ -130,13 +134,14 @@ class MztabWriter:
         peak_filenames : List[str]
             The input peak file name(s).
         """
-        for i, filename in enumerate(sorted(peak_filenames), 1):
+        for i, filename in enumerate(natsort.natsorted(peak_filenames), 1):
             self.metadata.append(
                 (
                     f"ms_run[{i}]-location",
                     Path(os.path.abspath(filename)).as_uri(),
                 ),
             )
+            self._run_map[filename] = i
 
     def save(self) -> None:
         """
@@ -172,12 +177,14 @@ class MztabWriter:
                     "opt_ms_run[1]_aa_scores",
                 ]
             )
-            for psm in self.psms:
+            for i, psm in enumerate(
+                    natsort.natsorted(self.psms, key=operator.itemgetter(1)), 1
+            ):
                 writer.writerow(
                     [
                         "PSM",
                         psm[0],  # sequence
-                        psm[1],  # PSM_ID
+                        i,       # PSM_ID
                         "null",  # accession
                         "null",  # unique
                         "null",  # database
@@ -193,7 +200,7 @@ class MztabWriter:
                         psm[3],  # charge
                         psm[4],  # exp_mass_to_charge
                         psm[5],  # calc_mass_to_charge
-                        f"ms_run[1]:index={psm[1]}",  # spectra_ref
+                        f"ms_run[{self._run_map[psm[1][0]]}]:{psm[1][1]}",
                         "null",  # pre
                         "null",  # post
                         "null",  # start
