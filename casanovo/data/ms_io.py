@@ -4,7 +4,7 @@ import csv
 import os
 import re
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, List
 
 from .. import __version__
 
@@ -38,16 +38,12 @@ class MztabWriter:
         ]
         self.psms = []
 
-    def set_metadata(
-        self, filename_in: str, config: Dict[str, Any], **kwargs
-    ) -> None:
+    def set_metadata(self, config: Dict[str, Any], **kwargs) -> None:
         """
         Specify metadata information to write to the mzTab header.
 
         Parameters
         ----------
-        filename_in : str
-            The name or directory of the input file(s).
         config : Dict[str, Any]
             The active configuration options.
         kwargs
@@ -79,12 +75,6 @@ class MztabWriter:
                 fixed_mods.append((aa, mods.pop()))
 
         # Add all config values to the mzTab metadata section.
-        self.metadata.append(
-            (
-                "ms_run[1]-location",
-                Path(os.path.abspath(filename_in)).as_uri(),
-            ),
-        )
         if len(fixed_mods) == 0:
             self.metadata.append(
                 (
@@ -130,6 +120,23 @@ class MztabWriter:
                 self.metadata.append(
                     (f"software[1]-setting[{i}]", f"{key} = {value}")
                 )
+
+    def set_ms_run(self, peak_filenames: List[str]) -> None:
+        """
+        Add input peak files to the mzTab metadata section.
+
+        Parameters
+        ----------
+        peak_filenames : List[str]
+            The input peak file name(s).
+        """
+        for i, filename in enumerate(sorted(peak_filenames), 1):
+            self.metadata.append(
+                (
+                    f"ms_run[{i}]-location",
+                    Path(os.path.abspath(filename)).as_uri(),
+                ),
+            )
 
     def save(self) -> None:
         """
