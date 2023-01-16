@@ -59,7 +59,9 @@ class SpectrumDataset(Dataset):
         """The number of spectra."""
         return self.n_spectra
 
-    def __getitem__(self, idx) -> Tuple[torch.Tensor, float, int, Tuple[str, str]]:
+    def __getitem__(
+        self, idx
+    ) -> Tuple[torch.Tensor, float, int, Tuple[str, str]]:
         """
         Return the MS/MS spectrum with the given index.
 

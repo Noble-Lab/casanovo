@@ -178,13 +178,13 @@ class MztabWriter:
                 ]
             )
             for i, psm in enumerate(
-                    natsort.natsorted(self.psms, key=operator.itemgetter(1)), 1
+                natsort.natsorted(self.psms, key=operator.itemgetter(1)), 1
             ):
                 writer.writerow(
                     [
                         "PSM",
                         psm[0],  # sequence
-                        i,       # PSM_ID
+                        i,  # PSM_ID
                         "null",  # accession
                         "null",  # unique
                         "null",  # database
