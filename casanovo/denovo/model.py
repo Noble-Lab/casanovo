@@ -1032,23 +1032,66 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
 
 
 class DBSpec2Pep(Spec2Pep):
-    """Inherits Spec2Pep"""  # TODO: Describe model differences, add type annotations
+    """
+    Inherits Spec2Pep
+
+    Hijacks teacher-forcing implemented in Spec2Pep and uses it to predict scores between a spectra and associated peptide
+    """
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
     def predict_step(self, batch, *args):
         pred, truth = self._forward_step(*batch)
-        # pred = pred[:, :-1, :].reshape(-1, self.decoder.vocab_size + 1)
-        calc_match_score(self, pred, truth)
-        # for x in self.residues.keys():
-        # print(f"AA: {x} --- {self.decoder._aa2idx[x]}")
+        calc_match_score(pred, truth)
 
 
-def calc_match_score(dbs2p, pred, truth):
-    print(pred)
-    print("--------------------")
-    print(truth)
+def calc_match_score(
+    batch_all_aa_scores: torch.Tensor, truth_aa_indicies: torch.Tensor
+) -> List[float]:
+    """
+    Take in teacher-forced scoring of amino acids of the peptides (in a batch) and use the truth labels
+    to calculate a score between the input spectra and associated peptide. The score will be [DESCRIBE SCORE NORMALIZATION]
+
+        Parameters
+        ----------
+        batch_all_aa_scores : torch.Tensor
+            Amino acid scores for all amino acids in the vocabulary for every prediction made to generate the associated peptide (for an entire batch)
+        truth_aa_indicies : torch.Tensor
+            Indicies of the score for each actual amino acid in the peptide (for an entire batch)
+
+        Returns
+        -------
+        score : list[float]
+            The score between the input spectra and associated peptide (for an entire batch)
+    """
+    batch_all_aa_scores = batch_all_aa_scores[
+        :, :-2, :
+    ]  # Remove trailing tokens from predictions #!SOFTMAX THIS + LOG IT
+    truth_aa_indicies = truth_aa_indicies[
+        :, :-1
+    ]  # Remove trailing tokens from label
+    all_scores = []
+
+    for all_aa_pred, truth_indicies in zip(
+        batch_all_aa_scores, truth_aa_indicies
+    ):
+        assert len(all_aa_pred) == len(
+            truth_indicies
+        )  # Ensure that length of score list and indexes to pull from are the same length
+        aa_score_sum = 0
+        for scores, true_index in zip(all_aa_pred, truth_indicies):
+            aa_score_sum += scores[
+                true_index
+            ].item()  # Use the truth label to extract from scores lists the score for that amino acid
+
+        normalized_score = aa_score_sum / len(
+            truth_indicies
+        )  # Normalize score along peptide length
+        all_scores.append(normalized_score)
+
+    # print(all_scores)
+    return all_scores
 
 
 class CosineWarmupScheduler(torch.optim.lr_scheduler._LRScheduler):

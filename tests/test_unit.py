@@ -11,6 +11,7 @@ from casanovo import casanovo
 from casanovo import utils
 from casanovo.denovo.evaluate import aa_match_batch, aa_match_metrics
 from casanovo.denovo.model import Spec2Pep, _aa_to_pep_score
+from casanovo.denovo.model import DBSpec2Pep, calc_match_score
 
 
 def test_version():
@@ -620,3 +621,37 @@ def test_eval_metrics():
     assert 2 / 8 == pytest.approx(pep_precision)
     assert 26 / 40 == pytest.approx(aa_recall)
     assert 26 / 41 == pytest.approx(aa_precision)
+
+
+def test_calc_match_score_small():
+    # Small test
+    truth_labels = torch.tensor([[1, 2, 3, 28]])  # GAS
+    pred_test = torch.FloatTensor(1, 5, 29)
+    pred_test = pred_test.zero_()
+    pred_test[0][0][1] = 7
+    pred_test[0][1][2] = 5
+    pred_test[0][2][3] = 3
+    pred_test[0][3][28] = 20  # Should be ignored
+    pred_test[0][4][28] = 20  # Should be ignored
+
+    assert [5] == calc_match_score(pred_test, truth_labels)
+
+
+def test_calc_match_score_batch():
+    # Batch test
+    truth_labels = torch.tensor([[3, 2, 1, 28], [18, 2, 5, 28]])  # GAS, #VAR
+    pred_test = torch.FloatTensor(2, 5, 29)
+    pred_test = pred_test.zero_()
+    pred_test[0][0][3] = 7.0
+    pred_test[0][1][2] = 5.0
+    pred_test[0][2][1] = 3.0
+    pred_test[0][3][28] = 20.0  # Should be ignored
+    pred_test[0][4][28] = 20.0  # Should be ignored
+
+    pred_test[1][0][18] = 3.0
+    pred_test[1][1][2] = 4.0
+    pred_test[1][2][5] = 0.5
+    pred_test[0][3][28] = 20.0  # Should be ignored
+    pred_test[0][4][28] = 20.0  # Should be ignored
+
+    assert [5, 2.5] == calc_match_score(pred_test, truth_labels)
