@@ -953,7 +953,10 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
             Amino acid-level confidence scores for the predicted sequence.
         """
         # Omit stop token.
-        aa_tokens = aa_tokens[1:] if self.decoder.reverse else aa_tokens[:-1]
+        if self.decoder.reverse and aa_tokens[0] == "$":
+            aa_tokens = aa_tokens[1:]
+        elif not self.decoder.reverse and aa_tokens[-1] == "$":
+            aa_tokens = aa_tokens[:-1]
         peptide = "".join(aa_tokens)
 
         # If this is a non-finished beam (after exceeding `max_length`), return
