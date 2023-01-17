@@ -16,6 +16,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ### Fixed
 
 - Don't use model weights with incorrect major version number.
+- Verify that the final predicted amino acid is the stop token.
 
 ## [3.1.0] - 2022-11-03
 
