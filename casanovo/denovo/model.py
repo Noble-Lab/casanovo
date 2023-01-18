@@ -801,15 +801,14 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
                 if "$" not in peptide_pred and len(peptide_pred) > 0:
                     peptides_pred.append(peptide_pred)
                     peptides_true.append(peptide_true)
-        aa_precision, aa_recall, pep_recall = evaluate.aa_match_metrics(
+        aa_precision, _, pep_precision = evaluate.aa_match_metrics(
             *evaluate.aa_match_batch(
                 peptides_pred, peptides_true, self.decoder._peptide_mass.masses
             )
         )
         log_args = dict(on_step=False, on_epoch=True, sync_dist=True)
-        self.log("aa_precision", {"valid": aa_precision}, **log_args)
-        self.log("aa_recall", {"valid": aa_recall}, **log_args)
-        self.log("pep_recall", {"valid": pep_recall}, **log_args)
+        self.log("peptide precision at coverage=1", {"valid": pep_precision}, **log_args)
+        self.log("aa precision at coverage=1", {"valid": aa_precision}, **log_args)
 
         return loss
 
