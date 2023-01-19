@@ -59,7 +59,7 @@ casanovo --help
 ```
 
 All auxiliary data, model, and training-related parameters can be specified in a user created `.yaml` configuration file.
-See [`casanovo/config.yaml`](https://github.com/Noble-Lab/casanovo/blob/main/casanovo/config.yaml) for the default configuration that was used to obtain the reported results.
+See [`casanovo/config.yaml`](https://github.com/Noble-Lab/casanovo/blob/main/casanovo/config.yaml) for the default configuration that was used to obtain the reported results. You can change some of the parameters on this file when de novo sequencing as needed (marked as such) and should not change other parameters unless you're training a new Casanovo model.
 
 
 ### Download model weights
