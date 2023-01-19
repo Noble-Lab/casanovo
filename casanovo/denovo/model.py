@@ -2,6 +2,7 @@
 import heapq
 import logging
 import operator
+import csv
 from typing import Any, Dict, List, Optional, Set, Tuple, Union
 
 import depthcharge.masses
@@ -1042,8 +1043,31 @@ class DBSpec2Pep(Spec2Pep):
         super().__init__(*args, **kwargs)
 
     def predict_step(self, batch, *args):
-        pred, truth = self._forward_step(*batch)
-        calc_match_score(pred, truth)
+        for idx, ms_spectra in enumerate(batch[0]):
+            # Batch by ms spectra and comma-separated peptides
+            # Split peptides into list
+            peptides = batch[2][idx].split(",")
+            # Reshape precursors
+            precursors = batch[1][idx]
+            precursors = precursors.repeat(len(peptides), 1)
+            # Reshape ms_spectra
+            ms_spectra = ms_spectra[ms_spectra != torch.FloatTensor([0, 0])]
+            ms_spectra = ms_spectra.reshape(len(ms_spectra) // 2, 2)
+            ms_spectra = ms_spectra.repeat(len(peptides), 1, 1)
+            # Create the new batch
+            new_batch = (ms_spectra, precursors, peptides)
+            # Use _forward_step
+            pred, truth = self._forward_step(*new_batch)
+            # Calculate the score between spectra + peptide list
+            lsm = torch.nn.LogSoftmax(dim=1)
+            score_result = calc_match_score(lsm(pred), truth)
+            self.save_info(score_result)
+
+    def save_info(self, score_result):
+        with open("test.csv", "a") as out_f:
+            out_writer = csv.writer(out_f)
+            out_writer.writerow(score_result)
+            out_f.close()
 
 
 def calc_match_score(
@@ -1067,10 +1091,10 @@ def calc_match_score(
     """
     batch_all_aa_scores = batch_all_aa_scores[
         :, :-2, :
-    ]  # Remove trailing tokens from predictions #!SOFTMAX THIS + LOG IT
+    ]  # Remove trailing tokens from predictions, change to -1 to keep stop token
     truth_aa_indicies = truth_aa_indicies[
         :, :-1
-    ]  # Remove trailing tokens from label
+    ]  # Remove trailing tokens from label, remove -1 to keep stop token
     all_scores = []
 
     for all_aa_pred, truth_indicies in zip(
@@ -1089,8 +1113,6 @@ def calc_match_score(
             truth_indicies
         )  # Normalize score along peptide length
         all_scores.append(normalized_score)
-
-    # print(all_scores)
     return all_scores
 
 
