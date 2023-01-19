@@ -1,27 +1,43 @@
 ###
 # Casanovo configuration.
 # Blank entries are interpreted as "None"
+# Parameters that can be modified when running inference with Casanovo are marked with "(I)".
+# Other parameters should not be changed unless a new Casanovo model is being trained.
 ###
 
 # Random seed to ensure reproducible results.
 random_seed: 454
 
 # Spectrum processing options.
+# Max number of peaks in spectrum
 n_peaks: 150
+# Min peak m/z allowed
 min_mz: 50.0
+# Max peak m/z allowed
 max_mz: 2500.0
+# Min peak intensity allowed
 min_intensity: 0.01
+# m/z tolerance to use when removing the precursor peak 
 remove_precursor_tol: 2.0  # Da
+# Max precursor charge allowed
 max_charge: 10
+# Tolerance for precursor m/z filtering (I)
 precursor_mass_tol: 50  # ppm
+# Isotope error range for precursor m/z filtering (I)
 isotope_error_range: [0, 1]
 
 # Model architecture options.
+# Dimentionality of latent representations, i.e. peak embeddings
 dim_model: 512
+# Number of attention heads
 n_head: 8
+# Dimensionality of fully connected layers
 dim_feedforward: 1024
+# Number of transformer layers in spectrum encoder and peptide decoder
 n_layers: 9
+# Dropout rate for model weights
 dropout: 0.0
+# Number of dimensions to use for encoding peak intensity
 dim_intensity:
 custom_encoder:
 max_length: 100
