@@ -39,8 +39,11 @@ n_layers: 9
 dropout: 0.0
 # Number of dimensions to use for encoding peak intensity
 dim_intensity:
+# Option to provide a pre-trained spectrum encoder
 custom_encoder:
+# Max decoded peptide length
 max_length: 100
+# Amino acid and modification vocabulary to use
 residues:
   "G": 57.021464
   "A": 71.037114
@@ -71,25 +74,39 @@ residues:
   "+43.006": 43.005814      # Carbamylation
   "-17.027": -17.026549     # NH3 loss
   "+43.006-17.027": 25.980265
+# Logging frequency in training steps
 n_log: 1
+# Tensorboard object to keep track of training metrics
 tb_summarywriter:
+# Number of warmup iterations for learning rate scheduler
 warmup_iters: 100_000
+# Max number of iterations for learning rate scheduler
 max_iters: 600_000
+# Learning rate for weight updates during training
 learning_rate: 5e-4
+# Regularization term for weight updates
 weight_decay: 1e-5
 
 # Training/inference options.
+# Number of spectra in one training batch
 train_batch_size: 32
+# Number of spectra in one inference batch
 predict_batch_size: 1024
+# Number of beams used in beam search
 n_beams: 5
-
+# Object for logging training progress
 logger:
+# Max number of training epochs
 max_epochs: 30
+# Number of validation steps to run before training begins
 num_sanity_val_steps: 0
-
+# Set to "False" to further train a pre-trained Casanovo model
 train_from_scratch: True
-
+# Save model checkpoints during training
 save_model: True
+# Path to saved checkpoints
 model_save_folder_path: ""
+# Set to "False" to save the PyTorch model instance
 save_weights_only: True
+# Model checkpointing frequency in training steps
 every_n_train_steps: 50_000
