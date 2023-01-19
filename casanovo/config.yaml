@@ -1,8 +1,9 @@
 ###
 # Casanovo configuration.
-# Blank entries are interpreted as "None"
-# Parameters that can be modified when running inference with Casanovo are marked with "(I)".
-# Other parameters should not be changed unless a new Casanovo model is being trained.
+# Blank entries are interpreted as "None".
+# Parameters that can be modified when running inference with Casanovo,
+# i.e. denovo and eval modes in CLI, are marked with "(I)". Other parameters
+# shouldn't be changed unless a new Casanovo model is being trained.
 ###
 
 # Random seed to ensure reproducible results.
@@ -17,7 +18,7 @@ min_mz: 50.0
 max_mz: 2500.0
 # Min peak intensity allowed
 min_intensity: 0.01
-# m/z tolerance to use when removing the precursor peak 
+# m/z tolerance to use when removing the precursor peak
 remove_precursor_tol: 2.0  # Da
 # Max precursor charge allowed
 max_charge: 10
