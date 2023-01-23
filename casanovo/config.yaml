@@ -2,29 +2,31 @@
 # Casanovo configuration.
 # Blank entries are interpreted as "None".
 # Parameters that can be modified when running inference with Casanovo,
-# i.e. denovo and eval modes in CLI, are marked with "(I)". Other parameters
-# shouldn't be changed unless a new Casanovo model is being trained.
+# i.e. denovo and eval modes in the command line interface, are marked with
+# "(I)". Other parameters shouldn't be changed unless a new Casanovo model
+# is being trained.
 ###
 
 # Random seed to ensure reproducible results.
 random_seed: 454
 
 # Spectrum processing options.
-# Max number of peaks in spectrum
+# Number of the most intense peaks to retain, any remaining peaks are discarded
 n_peaks: 150
-# Min peak m/z allowed
+# Min peak m/z allowed, peaks with smaller m/z are discarded
 min_mz: 50.0
-# Max peak m/z allowed
+# Max peak m/z allowed, peaks with larger m/z are discarded
 max_mz: 2500.0
-# Min peak intensity allowed
+# Min peak intensity allowed, less intense peaks are discarded
 min_intensity: 0.01
-# m/z tolerance to use when removing the precursor peak
+# Max absolute m/z difference allowed when removing the precursor peak
 remove_precursor_tol: 2.0  # Da
-# Max precursor charge allowed
+# Max precursor charge allowed, spectra with larger charge are skipped
 max_charge: 10
-# Tolerance for precursor m/z filtering (I)
+# Max absolute difference allowed with respect to observed precursor m/z (I)
+# Predictions outside the tolerance range are assinged a negative peptide score
 precursor_mass_tol: 50  # ppm
-# Isotope error range for precursor m/z filtering (I)
+# Isotopes to consider when comparing predicted and observed precursor m/z's (I)
 isotope_error_range: [0, 1]
 
 # Model architecture options.
@@ -39,8 +41,10 @@ n_layers: 9
 # Dropout rate for model weights
 dropout: 0.0
 # Number of dimensions to use for encoding peak intensity
+# Projected up to ``dim_model`` by default and summed with the peak m/z encoding
 dim_intensity:
-# Option to provide a pre-trained spectrum encoder
+# Option to provide a pre-trained spectrum encoder when training
+# Trained from scratch by default
 custom_encoder:
 # Max decoded peptide length
 max_length: 100
@@ -74,7 +78,7 @@ residues:
   "+42.011": 42.010565      # Acetylation
   "+43.006": 43.005814      # Carbamylation
   "-17.027": -17.026549     # NH3 loss
-  "+43.006-17.027": 25.980265
+  "+43.006-17.027": 25.980265      # Carbamylation and NH3 loss
 # Logging frequency in training steps
 n_log: 1
 # Tensorboard object to keep track of training metrics
