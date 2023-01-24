@@ -30,7 +30,7 @@ precursor_mass_tol: 50  # ppm
 isotope_error_range: [0, 1]
 
 # Model architecture options.
-# Dimentionality of latent representations, i.e. peak embeddings
+# Dimensionality of latent representations, i.e. peak embeddings
 dim_model: 512
 # Number of attention heads
 n_head: 8
