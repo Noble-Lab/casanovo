@@ -519,9 +519,9 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
             # Don't cache this peptide if it was already predicted previously.
             if is_peptide_cached:
                 continue
-            smx = self.softmax(scores)
+            smx = self.softmax(scores[i:i+1, :len(pred_seq), :])
             aa_scores = np.asarray(
-                [smx[i, j, k].item() for j, k in enumerate(pred_seq)]
+                [smx[0, j, k].item() for j, k in enumerate(pred_seq)]
             )
             pep_score = _aa_pep_score(aa_scores)[1]
             # Cache peptides with fitting (idx=0) or non-fitting (idx=1)
