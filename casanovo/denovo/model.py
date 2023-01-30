@@ -1059,14 +1059,16 @@ class DBSpec2Pep(Spec2Pep):
             # Use _forward_step
             pred, truth = self._forward_step(*new_batch)
             # Calculate the score between spectra + peptide list
-            lsm = torch.nn.LogSoftmax(dim=1)
-            score_result = calc_match_score(lsm(pred), truth)
-            self.save_info(score_result)
+            sm = torch.nn.Softmax(dim=2)  # dim=2 is very important!
+            pred = sm(pred)
+            score_result, per_aa_score = calc_match_score(pred, truth)
+            self.save_info(score_result, per_aa_score)
 
-    def save_info(self, score_result):
+    def save_info(self, score_result, per_aa_score):
         with open("test.csv", "a") as out_f:
             out_writer = csv.writer(out_f)
             out_writer.writerow(score_result)
+            # out_writer.writerow([z[::-1] for z in [[float("%0.5f" % x) for x in y] for y in per_aa_score]])
             out_f.close()
 
 
@@ -1096,6 +1098,7 @@ def calc_match_score(
         :, :-1
     ]  # Remove trailing tokens from label, remove -1 to keep stop token
     all_scores = []
+    per_aa_scores = []
 
     for all_aa_pred, truth_indicies in zip(
         batch_all_aa_scores, truth_aa_indicies
@@ -1103,17 +1106,15 @@ def calc_match_score(
         assert len(all_aa_pred) == len(
             truth_indicies
         )  # Ensure that length of score list and indexes to pull from are the same length
-        aa_score_sum = 0
+        aa_scores = []
         for scores, true_index in zip(all_aa_pred, truth_indicies):
-            aa_score_sum += scores[
-                true_index
-            ].item()  # Use the truth label to extract from scores lists the score for that amino acid
-
-        normalized_score = aa_score_sum / len(
-            truth_indicies
+            aa_scores.append(scores[true_index].item())
+        normalized_score = np.mean(
+            aa_scores
         )  # Normalize score along peptide length
         all_scores.append(normalized_score)
-    return all_scores
+        per_aa_scores.append(aa_scores)
+    return all_scores, per_aa_scores
 
 
 class CosineWarmupScheduler(torch.optim.lr_scheduler._LRScheduler):
