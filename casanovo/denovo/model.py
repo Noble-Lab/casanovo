@@ -1110,7 +1110,7 @@ def calc_match_score(
         for scores, true_index in zip(all_aa_pred, truth_indicies):
             aa_scores.append(scores[true_index].item())
         normalized_score = np.mean(
-            aa_scores
+            aa_scores  #! Convert to product and normalization by length, or alternatively use LogSoftmax
         )  # Normalize score along peptide length
         all_scores.append(normalized_score)
         per_aa_scores.append(aa_scores)
