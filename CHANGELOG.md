@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+### Changed
+
+- Calculate the amino acid scores as the average of the amino acid scores and the peptide score.
+
+### Fixed
+
+- Verify that the final predicted amino acid is the stop token.
+
 ## [3.2.0] - 2022-11-18
 
 ### Changed

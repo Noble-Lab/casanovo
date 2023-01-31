@@ -271,7 +271,7 @@ def aa_match_metrics(
         AAs.
     aa_recall: float
         The number of correct AA predictions divided by the number of true AAs.
-    pep_recall: float
+    pep_precision: float
         The number of correct peptide predictions divided by the number of
         peptides.
     """
@@ -280,10 +280,10 @@ def aa_match_metrics(
     )
     aa_precision = n_aa_correct / (n_aa_pred + 1e-8)
     aa_recall = n_aa_correct / (n_aa_true + 1e-8)
-    pep_recall = sum([aa_matches[1] for aa_matches in aa_matches_batch]) / (
+    pep_precision = sum([aa_matches[1] for aa_matches in aa_matches_batch]) / (
         len(aa_matches_batch) + 1e-8
     )
-    return aa_precision, aa_recall, pep_recall
+    return aa_precision, aa_recall, pep_precision
 
 
 def aa_precision_recall(
