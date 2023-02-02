@@ -1043,20 +1043,7 @@ class DBSpec2Pep(Spec2Pep):
         super().__init__(*args, **kwargs)
 
     def predict_step(self, batch, *args):
-        for idx, ms_spectra in enumerate(batch[0]):
-            # Batch by ms spectra and comma-separated peptides
-            # Split peptides into list
-            peptides = batch[2][idx].split(",")
-            # Reshape precursors
-            precursors = batch[1][idx]
-            precursors = precursors.repeat(len(peptides), 1)
-            # Reshape ms_spectra
-            ms_spectra = ms_spectra[ms_spectra != torch.FloatTensor([0, 0])]
-            ms_spectra = ms_spectra.reshape(len(ms_spectra) // 2, 2)
-            ms_spectra = ms_spectra.repeat(len(peptides), 1, 1)
-            # Create the new batch
-            new_batch = (ms_spectra, precursors, peptides)
-            # Use _forward_step
+        for new_batch in new_batch_generator(batch):
             pred, truth = self._forward_step(*new_batch)
             # Calculate the score between spectra + peptide list
             sm = torch.nn.Softmax(dim=2)  # dim=2 is very important!
@@ -1070,6 +1057,38 @@ class DBSpec2Pep(Spec2Pep):
             out_writer.writerow(score_result)
             # out_writer.writerow([z[::-1] for z in [[float("%0.5f" % x) for x in y] for y in per_aa_score]])
             out_f.close()
+
+
+def new_batch_generator(batch):
+    """
+    Take a standard casanovo batch and change it to batch by spectra (multiple associated peptides in this format where
+    SEQ = TARGET1, DECOY1...)
+
+    Parameters
+    ----------
+    batch : Tuple(torch.Tensor, torch.Tensor, array)
+        Standard casanovo batch
+
+    Yields
+    -------
+    new_batch : (torch.Tensor, torch.Tensor, array)
+        A new batch that shares one spectra but has different ptptides to score against
+    """
+    for idx, ms_spectra in enumerate(batch[0]):
+        # Batch by ms spectra and comma-separated peptides
+        # Split peptides into list
+        peptides = batch[2][idx].split(",")
+        # Reshape precursors
+        precursors = batch[1][idx]
+        precursors = precursors.repeat(len(peptides), 1)
+        # Reshape ms_spectra
+        ms_spectra = ms_spectra[ms_spectra != torch.FloatTensor([0, 0])]
+        ms_spectra = ms_spectra.reshape(len(ms_spectra) // 2, 2)
+        ms_spectra = ms_spectra.repeat(len(peptides), 1, 1)
+        # Create the new batch
+        new_batch = (ms_spectra, precursors, peptides)
+        # Use _forward_step
+        yield new_batch
 
 
 def calc_match_score(
@@ -1106,6 +1125,10 @@ def calc_match_score(
         assert len(all_aa_pred) == len(
             truth_indicies
         )  # Ensure that length of score list and indexes to pull from are the same length
+        for (
+            preds
+        ) in all_aa_pred:  # Ensure softmax distribution along correct axis
+            assert round(sum(preds).item()) == 1
         aa_scores = []
         for scores, true_index in zip(all_aa_pred, truth_indicies):
             aa_scores.append(scores[true_index].item())

@@ -11,7 +11,11 @@ from casanovo import casanovo
 from casanovo import utils
 from casanovo.denovo.evaluate import aa_match_batch, aa_match_metrics
 from casanovo.denovo.model import Spec2Pep, _aa_to_pep_score
-from casanovo.denovo.model import DBSpec2Pep, calc_match_score
+from casanovo.denovo.model import (
+    DBSpec2Pep,
+    calc_match_score,
+    new_batch_generator,
+)
 
 
 def test_version():
@@ -655,3 +659,16 @@ def test_calc_match_score_batch():
     pred_test[0][4][28] = 20.0  # Should be ignored
 
     assert [5, 2.5] == calc_match_score(pred_test, truth_labels)
+
+
+def test_batch_generator():
+    input = (
+        torch.ones(2, 4, 2),
+        torch.FloatTensor(2, 3),
+        ["PEPTIDE, EEPITPD", "SLSHSPGK, HKSLPSSG, VVQEQGTHPK, KVEQTGQPHV"],
+    )
+    batches = []
+    for new_batch in new_batch_generator(input):
+        batches.append(new_batch)
+    assert list(batches[0][0].size()) == [2, 4, 2]
+    assert list(batches[1][0].size()) == [4, 4, 2]
