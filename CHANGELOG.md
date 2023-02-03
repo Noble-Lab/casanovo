@@ -9,10 +9,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ### Changed
 
 - Calculate the amino acid scores as the average of the amino acid scores and the peptide score.
+- Spectra from mzML and mzXML peak files are referred to by their scan numbers in the mzTab output instead of their indexes.
 
 ### Fixed
 
 - Verify that the final predicted amino acid is the stop token.
+- Spectra are correctly matched to their input peak file when analyzing multiple files simultaneously.
 
 ## [3.2.0] - 2022-11-18
 

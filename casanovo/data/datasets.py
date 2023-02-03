@@ -59,7 +59,9 @@ class SpectrumDataset(Dataset):
         """The number of spectra."""
         return self.n_spectra
 
-    def __getitem__(self, idx) -> Tuple[torch.Tensor, float, int, str]:
+    def __getitem__(
+        self, idx
+    ) -> Tuple[torch.Tensor, float, int, Tuple[str, str]]:
         """
         Return the MS/MS spectrum with the given index.
 
@@ -76,15 +78,39 @@ class SpectrumDataset(Dataset):
             The precursor m/z.
         precursor_charge : int
             The precursor charge.
-        spectrum_id: str
-            The unique spectrum identifier, as determined by its index in the
-            original peak file.
+        spectrum_id: Tuple[str, str]
+            The unique spectrum identifier, formed by its original peak file and
+            identifier (index or scan number) therein.
         """
         mz_array, int_array, precursor_mz, precursor_charge = self.index[idx]
         spectrum = self._process_peaks(
             mz_array, int_array, precursor_mz, precursor_charge
         )
-        return spectrum, precursor_mz, precursor_charge, str(idx)
+        return (
+            spectrum,
+            precursor_mz,
+            precursor_charge,
+            self.get_spectrum_id(idx),
+        )
+
+    def get_spectrum_id(self, idx: int) -> Tuple[str, str]:
+        """
+        Return the identifier of the MS/MS spectrum with the given index.
+
+        Parameters
+        ----------
+        idx : int
+            The index of the MS/MS spectrum within the SpectrumIndex.
+
+        Returns
+        -------
+        ms_data_file : str
+            The peak file from which the MS/MS spectrum was originally parsed.
+        identifier : str
+            The MS/MS spectrum identifier, per PSI recommendations.
+        """
+        with self.index:
+            return self.index.get_spectrum_id(idx)
 
     def _process_peaks(
         self,

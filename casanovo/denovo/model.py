@@ -926,7 +926,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
                     self.out_writer.psms.append(
                         (
                             peptide,
-                            spectrum_i,
+                            tuple(spectrum_i),
                             peptide_score,
                             precursor_charge,
                             precursor_mz,
