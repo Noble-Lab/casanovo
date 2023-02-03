@@ -17,7 +17,6 @@ from casanovo.denovo.model import Spec2Pep, _aa_pep_score
 from depthcharge.data import SpectrumIndex, AnnotatedSpectrumIndex
 
 
-
 def test_version():
     """Check that the version is not None."""
     assert casanovo.__version__ is not None
