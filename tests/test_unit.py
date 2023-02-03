@@ -13,8 +13,9 @@ from casanovo import casanovo
 from casanovo import utils
 from casanovo.data.datasets import SpectrumDataset, AnnotatedSpectrumDataset
 from casanovo.denovo.evaluate import aa_match_batch, aa_match_metrics
-from casanovo.denovo.model import Spec2Pep, _aa_to_pep_score
+from casanovo.denovo.model import Spec2Pep, _aa_pep_score
 from depthcharge.data import SpectrumIndex, AnnotatedSpectrumIndex
+
 
 
 def test_version():
@@ -119,21 +120,15 @@ def test_tensorboard():
     assert model.tb_summarywriter is None
 
 
-def test_aa_to_pep_score():
+def test_aa_pep_score():
     """
-    Test calculation of peptide confidence scores from amino acid scores.
-    Currently, peptide scores are determined by averaging the AA scores.
+    Test the calculation of amino acid and peptide scores from the raw amino
+    acid scores.
     """
-    assert (
-        _aa_to_pep_score(
-            [
-                0.0,
-                0.5,
-                1.0,
-            ]
-        )
-        == 0.5
-    )
+    aa_scores_orig = np.asarray([0.0, 0.5, 1.0])
+    aa_scores, peptide_score = _aa_pep_score(aa_scores_orig)
+    np.testing.assert_array_equal(aa_scores, np.asarray([0.25, 0.5, 0.75]))
+    assert peptide_score == pytest.approx(0.5)
 
 
 def test_beam_search_decode():
