@@ -509,21 +509,25 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         for i in finished_beams_idx:
             i = i.item()
             spec_idx = i // beam  # Find the starting index of the spectrum.
-            # Check position of stop token (changes in case stopped early).
-            stop_token_idx = idx - (not tokens[i][idx] == self.stop_token)
+            pred_seq = tokens[i][:idx]
+            # Omit the stop token from the peptide sequence (if predicted).
+            has_stop_token = pred_seq[-1] == self.stop_token
+            peptide = pred_seq[:-1] if has_stop_token else pred_seq
             # Check if predicted peptide already in cache.
-            pred_seq = tokens[i][:stop_token_idx]
             is_peptide_cached = any(
-                torch.equal(pep, pred_seq) for pep in cache_pred_seq[spec_idx]
+                torch.equal(pep, peptide) for pep in cache_pred_seq[spec_idx]
             )
             # Don't cache this peptide if it was already predicted previously.
             if is_peptide_cached:
                 continue
-            smx = self.softmax(scores[i:i+1, :len(pred_seq), :])
-            aa_scores = np.asarray(
-                [smx[0, j, k].item() for j, k in enumerate(pred_seq)]
-            )
-            pep_score = _aa_pep_score(aa_scores)[1]
+            smx = self.softmax(scores[i : i + 1, : len(pred_seq), :])
+            aa_scores = [smx[0, j, k].item() for j, k in enumerate(pred_seq)]
+            # Add an explicit token with score 0 if the stop token was not
+            # predicted (i.e. in case of early stopping).
+            if not has_stop_token:
+                aa_scores.append(0)
+            # Calculate peptide score.
+            pep_score = _aa_pep_score(np.asarray(aa_scores))[1]
             # Cache peptides with fitting (idx=0) or non-fitting (idx=1)
             # precursor m/z separately.
             cache_pred_score_idx = cache_pred_score[spec_idx]
@@ -936,7 +940,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
                     )
 
     def _get_output_peptide_and_scores(
-        self, aa_tokens: List[str], aa_scores: torch.Tensor
+        self, aa_tokens: List[str], raw_aa_scores: torch.Tensor
     ) -> Tuple[str, List[str], float, str]:
         """
         Get peptide to output, amino acid and peptide-level confidence scores.
@@ -945,7 +949,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         ----------
         aa_tokens : List[str]
             Amino acid tokens of the peptide sequence.
-        aa_scores : torch.Tensor
+        raw_aa_scores : torch.Tensor
             Amino acid-level confidence scores for the predicted sequence.
 
         Returns
@@ -959,32 +963,43 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         aa_scores : str
             Amino acid-level confidence scores for the predicted sequence.
         """
-        # Omit stop token.
+        # Take scores corresponding to the predicted amino acids. Reverse tokens
+        # and scores to correspond with the correct amino acids as needed.
+        step = -1 if self.decoder.reverse else 1
+        aa_scores = np.asarray(
+            [
+                aa_score[self.decoder._aa2idx[aa_token]].item()
+                for aa_score, aa_token in zip(raw_aa_scores, aa_tokens[::step])
+            ][::step]
+        )
+
+        # Get the peptide-level score from the amino acid-level scores.
+        aa_scores, peptide_score = _aa_pep_score(aa_scores)
+
+        # Omit the stop token from the peptide sequence and the amino acid-level
+        # scores.
+        # The position of the stop token itself depends on the decoding order.
+        # The position of the stop token score is always the first one, because
+        # scores were already reordered previously if necessary.
         if self.decoder.reverse and aa_tokens[0] == "$":
             aa_tokens = aa_tokens[1:]
+            aa_scores = aa_scores[1:]
         elif not self.decoder.reverse and aa_tokens[-1] == "$":
             aa_tokens = aa_tokens[:-1]
+            aa_scores = aa_scores[1:]
         peptide = "".join(aa_tokens)
 
         # If this is a non-finished beam (after exceeding `max_length`), return
         # a dummy (empty) peptide and NaN scores.
         if len(peptide) == 0:
-            aa_tokens = []
-
-        # Take scores corresponding to the predicted amino acids. Reverse tokens
-        # to correspond with correct amino acids as needed.
-        step = -1 if self.decoder.reverse else 1
-        top_aa_scores = np.asarray(
-            [
-                aa_score[self.decoder._aa2idx[aa_token]].item()
-                for aa_score, aa_token in zip(aa_scores, aa_tokens[::step])
-            ][::step]
-        )
-
-        # Get peptide-level score from amino acid-level scores.
-        aa_scores, peptide_score = _aa_pep_score(top_aa_scores)
-        aa_scores = ",".join(list(map("{:.5f}".format, aa_scores)))
-        return peptide, aa_tokens, peptide_score, aa_scores
+            return "", [], np.nan, ""
+        else:
+            return (
+                peptide,
+                aa_tokens,
+                peptide_score,
+                ",".join(list(map("{:.5f}".format, aa_scores))),
+            )
 
     def _log_history(self) -> None:
         """
