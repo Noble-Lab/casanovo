@@ -328,12 +328,17 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         )
         finished_beams[tokens[:, step] == self.stop_token] = True
         finished_beams[tokens[:, step] == 0] = True
-        beam_fits_precursor = torch.zeros(tokens.shape[0], dtype=torch.bool).to(
-            self.encoder.device
-        )
+        beam_fits_precursor = torch.zeros(
+            tokens.shape[0], dtype=torch.bool
+        ).to(self.encoder.device)
         # Terminate beams that exceed the precursor m/z.
         for i in range(len(finished_beams)):
             peptide = self.decoder.detokenize(tokens[i][: step + 1])
+            # Omit stop token.
+            if self.decoder.reverse and peptide[0] == "$":
+                peptide = peptide[1:]
+            elif not self.decoder.reverse and peptide[-1] == "$":
+                peptide = peptide[:-1]
             precursor_charge = precursors[i, 1]
             precursor_mz = precursors[i, 2]
             # Terminate the beam if it has not been finished by the model but
@@ -373,15 +378,28 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
                     # Terminate the beam if the calculated m/z exceeds the
                     # precursor m/z + tolerance and hasn't been corrected by a
                     # subsequently predicted AA with negative mass.
-                    exceeds_precursor_mz = aa is not None and all(
-                        d > self.precursor_mass_tol
-                        for d in delta_mass_ppm
-                    )
+                    if matches_precursor_mz:
+                        exceeds_precursor_mz = False
+                    else:
+                        exceeds_precursor_mz = all(
+                            d > self.precursor_mass_tol for d in delta_mass_ppm
+                        )
+                        exceeds_precursor_mz = (
+                            finished_beams[i] or aa is not None
+                        ) and exceeds_precursor_mz
                     if matches_precursor_mz or exceeds_precursor_mz:
                         break
                 except KeyError:
                     matches_precursor_mz = exceeds_precursor_mz = False
-            if matches_precursor_mz or exceeds_precursor_mz:
+            # Don't finish beams that still have too low m/z.
+            if (
+                finished_beams[i]
+                and not matches_precursor_mz
+                and not exceeds_precursor_mz
+            ):
+                finished_beams[i] = False
+            # Finish beams that fit or exceed the precursor m/z.
+            elif matches_precursor_mz or exceeds_precursor_mz:
                 finished_beams[i] = True
                 beam_fits_precursor[i] = matches_precursor_mz
         return finished_beams, beam_fits_precursor
