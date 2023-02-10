@@ -119,10 +119,15 @@ def test_aa_pep_score():
     Test the calculation of amino acid and peptide scores from the raw amino
     acid scores.
     """
-    aa_scores_orig = np.asarray([0.0, 0.5, 1.0])
-    aa_scores, peptide_score = _aa_pep_score(aa_scores_orig)
+    aa_scores_raw = np.asarray([0.0, 0.5, 1.0])
+
+    aa_scores, peptide_score = _aa_pep_score(aa_scores_raw, True)
     np.testing.assert_array_equal(aa_scores, np.asarray([0.25, 0.5, 0.75]))
     assert peptide_score == pytest.approx(0.5)
+
+    aa_scores, peptide_score = _aa_pep_score(aa_scores_raw, False)
+    np.testing.assert_array_equal(aa_scores, np.asarray([0.25, 0.5, 0.75]))
+    assert peptide_score == pytest.approx(-0.5)
 
 
 def test_beam_search_decode():
