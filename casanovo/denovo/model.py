@@ -438,9 +438,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
             ):
                 continue
             smx = self.softmax(scores[i : i + 1, : step + 1, :])
-            aa_scores = [
-                smx[0, j, k].item() for j, k in enumerate(pred_tokens)
-            ]
+            aa_scores = smx[0, range(len(pred_tokens)), pred_tokens].tolist()
             # Add an explicit score 0 for the missing stop token in case this
             # was not predicted (i.e. early stopping).
             if not has_stop_token:
