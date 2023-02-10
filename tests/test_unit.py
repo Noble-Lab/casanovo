@@ -154,8 +154,6 @@ def test_beam_search_decode():
     tokens = torch.zeros(batch * beam, length, dtype=torch.int64)
     # Create cache for decoded beams.
     pred_cache = {i: [] for i in range(batch)}
-    finished_beams = -torch.ones(batch * beam, dtype=torch.int8)
-    beam_fits_precursor = torch.zeros(batch * beam, dtype=torch.bool)
 
     # Ground truth peptide is "PEPK".
     true_peptide = "PEPK"
@@ -170,12 +168,12 @@ def test_beam_search_decode():
             scores[i, j, tokens[1, j]] = 1
 
     # Test _finish_beams().
-    model._finish_beams(
-        tokens, precursors, step, finished_beams, beam_fits_precursor
+    finished_beams, beam_fits_precursor = model._finish_beams(
+        tokens, precursors, step
     )
     # First two beams finished due to the precursor m/z filter, final beam
     # finished due to predicted stop token, third beam unfinished.
-    assert torch.equal(finished_beams, torch.tensor([step, step, -1, step]))
+    assert torch.equal(finished_beams, torch.tensor([True, True, False, True]))
     assert torch.equal(
         beam_fits_precursor, torch.tensor([True, False, False, False])
     )
@@ -252,7 +250,7 @@ def test_beam_search_decode():
     scores[j, i, tokens[j, i]] = s
 
     pred_cache = {i: [] for i in range(batch)}
-    finished_beams = torch.tensor([step, step, step, step])
+    finished_beams = torch.tensor([True, True, True, True])
     beam_fits_precursor = torch.BoolTensor([False, True, True, False])
 
     model._cache_finished_beams(
@@ -279,8 +277,6 @@ def test_beam_search_decode():
     tokens = torch.zeros(batch * beam, length, dtype=torch.int64)
 
     pred_cache = {i: [] for i in range(batch)}
-    finished_beams = -torch.ones(batch * beam, dtype=torch.int8)
-    beam_fits_precursor = torch.zeros(batch * beam, dtype=torch.bool)
 
     # Ground truth peptide is "PEPK".
     true_peptide = "PEPK"
@@ -291,10 +287,10 @@ def test_beam_search_decode():
     tokens[0, : step + 1] = torch.tensor([aa2idx[aa] for aa in true_peptide])
 
     # Test _finish_beams().
-    model._finish_beams(
-        tokens, precursors, step, finished_beams, beam_fits_precursor
+    finished_beams, beam_fits_precursor = model._finish_beams(
+        tokens, precursors, step
     )
-    assert torch.equal(finished_beams, torch.tensor([step]))
+    assert torch.equal(finished_beams, torch.tensor([True]))
 
     # Test _cache_finished_beams().
     model._cache_finished_beams(
@@ -306,8 +302,6 @@ def test_beam_search_decode():
     model = Spec2Pep(n_beams=2, residues="massivekb")
     beam = model.n_beams  # S
     step = 1
-    finished_beams = -torch.ones(batch * beam, dtype=torch.int8)
-    beam_fits_precursor = torch.zeros(batch * beam, dtype=torch.bool)
 
     # Ground truth peptide is "-17.027GK".
     precursors = torch.tensor([186.10044, 2.0, 94.05750]).repeat(
@@ -318,10 +312,10 @@ def test_beam_search_decode():
         tokens[i, : step + 1] = torch.tensor([aa2idx[aa] for aa in peptide])
 
     # Test _finish_beams().
-    model._finish_beams(
-        tokens, precursors, step, finished_beams, beam_fits_precursor
+    finished_beams, beam_fits_precursor = model._finish_beams(
+        tokens, precursors, step
     )
-    assert torch.equal(finished_beams, torch.tensor([-1, step]))
+    assert torch.equal(finished_beams, torch.tensor([False, True]))
 
 
 def test_eval_metrics():

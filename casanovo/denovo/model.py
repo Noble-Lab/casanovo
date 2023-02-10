@@ -265,15 +265,14 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
             )
 
             # Stop decoding when all current beams have been finished.
-            decoded = finished_beams
-            if decoded.all():
+            if finished_beams.all():
                 break
             # Update the scores.
-            scores[~decoded, : step + 2, :], _ = self.decoder(
-                tokens[~decoded, : step + 1],
-                precursors[~decoded, :],
-                memories[~decoded, :, :],
-                mem_masks[~decoded, :],
+            scores[~finished_beams, : step + 2, :], _ = self.decoder(
+                tokens[~finished_beams, : step + 1],
+                precursors[~finished_beams, :],
+                memories[~finished_beams, :, :],
+                mem_masks[~finished_beams, :],
             )
             # Find the top-k beams with the highest scores and continue decoding
             # those.
@@ -347,7 +346,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
                     calc_peptide = peptide
                 else:
                     calc_peptide = peptide.copy()
-                    peptide.append(aa)
+                    calc_peptide.append(aa)
                 try:
                     calc_mz = self.peptide_mass_calculator.mass(
                         seq=calc_peptide, charge=precursor_charge
