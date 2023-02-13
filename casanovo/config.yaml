@@ -28,6 +28,8 @@ max_charge: 10
 precursor_mass_tol: 50  # ppm
 # Isotopes to consider when comparing predicted and observed precursor m/z's (I)
 isotope_error_range: [0, 1]
+# The minimum length of predicted peptides.
+min_peptide_len: 7
 
 # Model architecture options.
 # Dimensionality of latent representations, i.e. peak embeddings

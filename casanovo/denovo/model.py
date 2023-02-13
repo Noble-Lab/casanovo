@@ -65,6 +65,8 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         fit the specified isotope error:
         `abs(calc_mz - (precursor_mz - isotope * 1.00335 / precursor_charge))
         < precursor_mass_tol`
+    min_peptide_len : int
+        The minimum length of predicted peptides.
     n_beams: int
         Number of beams used during beam search decoding.
     n_log : int
@@ -96,6 +98,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         max_charge: int = 5,
         precursor_mass_tol: float = 50,
         isotope_error_range: Tuple[int, int] = (0, 1),
+        min_peptide_len: int = 8,
         n_beams: int = 5,
         n_log: int = 10,
         tb_summarywriter: Optional[
@@ -141,6 +144,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         self.residues = residues
         self.precursor_mass_tol = precursor_mass_tol
         self.isotope_error_range = isotope_error_range
+        self.min_peptide_len = min_peptide_len
         self.n_beams = n_beams
         self.peptide_mass_calculator = depthcharge.masses.PeptideMass(
             self.residues
@@ -251,20 +255,25 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         for step in range(0, self.max_length):
             # Terminate beams exceeding the precursor m/z tolerance and track
             # all finished beams (either terminated or stop token predicted).
-            finished_beams, beam_fits_precursor = self._finish_beams(
-                tokens, precursors, step
-            )
-            # Cache peptide predictions from the finished beams.
+            (
+                finished_beams,
+                beam_fits_precursor,
+                discarded_beams,
+            ) = self._finish_beams(tokens, precursors, step)
+            # Cache peptide predictions from the finished beams (but not the
+            # discarded beams).
             self._cache_finished_beams(
                 tokens,
                 scores,
                 step,
-                finished_beams,
+                finished_beams & ~discarded_beams,
                 beam_fits_precursor,
                 pred_cache,
             )
 
             # Stop decoding when all current beams have been finished.
+            # Continue with beams that have not been finished and not discarded.
+            finished_beams |= discarded_beams
             if finished_beams.all():
                 break
             # Update the scores.
@@ -277,7 +286,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
             # Find the top-k beams with the highest scores and continue decoding
             # those.
             tokens, scores = self._get_topk_beams(
-                tokens, scores, batch, step + 1
+                tokens, scores, finished_beams, batch, step + 1
             )
 
         # Return the peptide with the highest confidence score, within the
@@ -289,7 +298,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         tokens: torch.Tensor,
         precursors: torch.Tensor,
         step: int,
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
+    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """
         Track all beams that have been finished, either by predicting the stop
         token or because they were terminated due to exceeding the precursor
@@ -314,6 +323,10 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         beam_fits_precursor: torch.Tensor of shape (n_spectra * n_beams)
             Boolean tensor indicating if current beams are within precursor m/z
             tolerance.
+        discarded_beams : torch.Tensor of shape (n_spectra * n_beams)
+            Boolean tensor indicating whether the current beams should be
+            discarded (e.g. because they were predicted to end but violate the
+            minimum peptide length).
         """
         # Check for tokens with a negative mass (i.e. neutral loss).
         aa_neg_mass = [None]
@@ -331,20 +344,33 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         beam_fits_precursor = torch.zeros(
             tokens.shape[0], dtype=torch.bool
         ).to(self.encoder.device)
-        # Terminate beams that exceed the precursor m/z.
+        discarded_beams = torch.zeros(tokens.shape[0], dtype=torch.bool).to(
+            self.encoder.device
+        )
+        # Check which beams should be terminated or discarded based on the
+        # predicted peptide.
         for i in range(len(finished_beams)):
-            peptide = self.decoder.detokenize(tokens[i][: step + 1])
+            pred_tokens = tokens[i][: step + 1]
+            peptide_len = len(pred_tokens)
+            peptide = self.decoder.detokenize(pred_tokens)
             # Omit stop token.
             if self.decoder.reverse and peptide[0] == "$":
                 peptide = peptide[1:]
+                peptide_len -= 1
             elif not self.decoder.reverse and peptide[-1] == "$":
                 peptide = peptide[:-1]
-            precursor_charge = precursors[i, 1]
-            precursor_mz = precursors[i, 2]
+                peptide_len -= 1
+            # Discard beams that were predicted to end but don't fit the minimum
+            # peptide length.
+            if finished_beams[i] and peptide_len < self.min_peptide_len:
+                discarded_beams[i] = True
+                continue
             # Terminate the beam if it has not been finished by the model but
             # the peptide mass exceeds the precursor m/z to an extent that it
             # cannot be corrected anymore by a subsequently predicted AA with
             # negative mass.
+            precursor_charge = precursors[i, 1]
+            precursor_mz = precursors[i, 2]
             matches_precursor_mz = exceeds_precursor_mz = False
             for aa in [None] if finished_beams[i] else aa_neg_mass:
                 if aa is None:
@@ -391,25 +417,22 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
                         break
                 except KeyError:
                     matches_precursor_mz = exceeds_precursor_mz = False
-            # Don't finish beams that still have too low m/z.
-            if (
-                finished_beams[i]
-                and not matches_precursor_mz
-                and not exceeds_precursor_mz
-            ):
-                finished_beams[i] = False
             # Finish beams that fit or exceed the precursor m/z.
-            elif matches_precursor_mz or exceeds_precursor_mz:
+            # Don't finish beams that don't include a stop token if they don't
+            # exceed the precursor m/z tolerance yet.
+            if finished_beams[i]:
+                beam_fits_precursor[i] = matches_precursor_mz
+            elif exceeds_precursor_mz:
                 finished_beams[i] = True
                 beam_fits_precursor[i] = matches_precursor_mz
-        return finished_beams, beam_fits_precursor
+        return finished_beams, beam_fits_precursor, discarded_beams
 
     def _cache_finished_beams(
         self,
         tokens: torch.Tensor,
         scores: torch.Tensor,
         step: int,
-        finished_beams: torch.Tensor,
+        beams_to_cache: torch.Tensor,
         beam_fits_precursor: torch.Tensor,
         pred_cache: Dict[int, List[Tuple[float, np.ndarray, torch.Tensor]]],
     ):
@@ -426,9 +449,9 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
             spectra.
         step : int
             Index of the current decoding step.
-        finished_beams : torch.Tensor of shape (n_spectra * n_beams)
-            Boolean tensor indicating whether the current beams have been
-            finished.
+        beams_to_cache : torch.Tensor of shape (n_spectra * n_beams)
+            Boolean tensor indicating whether the current beams are ready for
+            caching.
         beam_fits_precursor: torch.Tensor of shape (n_spectra * n_beams)
             Boolean tensor indicating whether the beams are within the
             precursor m/z tolerance.
@@ -438,11 +461,13 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
             peptide score, amino acid-level scores, and the predicted tokens is
             stored.
         """
-        for i in range(len(finished_beams)):
-            if not finished_beams[i]:
+        for i in range(len(beams_to_cache)):
+            if not beams_to_cache[i]:
                 continue
             # Find the starting index of the spectrum.
             spec_idx = i // self.n_beams
+            # FIXME: The next 3 lines are very similar as what's done in
+            #  _finish_beams. Avoid code duplication?
             pred_tokens = tokens[i][: step + 1]
             # Omit the stop token from the peptide sequence (if predicted).
             has_stop_token = pred_tokens[-1] == self.stop_token
@@ -478,7 +503,12 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
             )
 
     def _get_topk_beams(
-        self, tokens: torch.tensor, scores: torch.tensor, batch: int, step: int
+        self,
+        tokens: torch.tensor,
+        scores: torch.tensor,
+        finished_beams: torch.tensor,
+        batch: int,
+        step: int,
     ) -> Tuple[torch.tensor, torch.tensor]:
         """
         Find the top-k beams with the highest scores and continue decoding
@@ -494,6 +524,9 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
          (n_spectra *  n_beams, max_length, n_amino_acids)
             Scores for the predicted amino acid tokens for all beams and all
             spectra.
+        finished_beams : torch.Tensor of shape (n_spectra * n_beams)
+            Boolean tensor indicating whether the current beams are ready for
+            caching.
         batch: int
             Number of spectra in the batch.
         step : int
@@ -537,14 +570,9 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
 
         # Mask out terminated beams. Include precursor m/z tolerance induced
         # termination.
-        # FIXME: Can we re-use `finished_beams` instead?
-        extended_prev_tokens = einops.repeat(
-            tokens[:, : step + 1, :], "B L S -> B L V S", V=vocab
+        finished_mask = einops.repeat(
+            finished_beams, "(B S) -> B (V S)", S=beam, V=vocab
         )
-        finished_mask = (
-            einops.rearrange(extended_prev_tokens, "B L V S -> B L (V S)")
-            == self.stop_token
-        ).any(axis=1)
         # Mask out the index '0', i.e. padding token, by default.
         finished_mask[:, :beam] = True
 
