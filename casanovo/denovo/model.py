@@ -514,7 +514,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         Find the top-k beams with the highest scores and continue decoding
         those.
 
-        Stop decoding for beams where the stop token was predicted.
+        Stop decoding for beams that have been finished.
 
         Parameters
         ----------
