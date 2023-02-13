@@ -217,9 +217,7 @@ def main(
     if mode == "denovo":
         logger.info("Predict peptide sequences with Casanovo.")
         writer = ms_io.MztabWriter(f"{output}.mztab")
-        writer.set_metadata(
-            peak_path, config, model=model, config_filename=config_fn
-        )
+        writer.set_metadata(config, model=model, config_filename=config_fn)
         model_runner.predict(peak_path, model, config, writer)
         writer.save()
     elif mode == "eval":
