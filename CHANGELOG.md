@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+### Added
+
+- Included the `min_peptide_len` parameter in the configuration file to restrict predictions to peptide with a minimum length.
+
 ### Changed
 
 - Calculate the amino acid scores as the average of the amino acid scores and the peptide score.
@@ -13,6 +17,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ### Fixed
 
 - Verify that the final predicted amino acid is the stop token.
+- The score of the stop token is taken into account when calculating the predicted peptide score.
 
 ## [3.2.0] - 2022-11-18
 
