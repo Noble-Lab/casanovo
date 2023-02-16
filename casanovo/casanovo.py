@@ -182,6 +182,16 @@ def main(
     config["n_workers"] = utils.n_workers()
     if n_gpus > 1:
         config["train_batch_size"] = config["train_batch_size"] // n_gpus
+    # Optionally modify the number of top matches based on the number of beams.
+    if config["top_match"] > config["n_beams"]:
+        logger.warning(
+            "It is not possible to export more PSMs per spectrum than the "
+            "number of beams. `top_match` was previously %d, but has now been "
+            "decreased to %d, equal to `n_beams`",
+            config["top_match"],
+            config["n_beams"],
+        )
+        config["top_match"] = config["n_beams"]
 
     LightningLite.seed_everything(seed=config["random_seed"], workers=True)
 
