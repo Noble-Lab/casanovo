@@ -369,10 +369,13 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
             multiple_mods = torch.isin(
                 tokens[dim0, final_pos], n_term
             ) & torch.isin(tokens[dim0, final_pos - 1], n_term)
-            # FIXME: N-terminal modifications occur at an internal position.
-            # internal_mods = torch.isin(tokens[dim0, :final_pos - 1], n_term).any()
-            # discarded_beams[multiple_mods | internal_mods] = True
-            discarded_beams[multiple_mods] = True
+            # N-terminal modifications occur at an internal position.
+            # Broadcasting trick to create a two-dimensional mask.
+            mask = (final_pos - 1)[:, None] > torch.arange(tokens.shape[1])
+            internal_mods = torch.isin(
+                torch.where(mask.to(self.encoder.device), tokens, 0), n_term
+            ).any(dim=1)
+            discarded_beams[multiple_mods | internal_mods] = True
 
         # Check which beams should be terminated or discarded based on the
         # predicted peptide.
