@@ -335,23 +335,51 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         for aa, mass in self.peptide_mass_calculator.masses.items():
             if mass < 0:
                 aa_neg_mass.append(aa)
+        # Find N-terminal residues.
+        n_term = torch.Tensor(
+            [
+                self.decoder._aa2idx[aa]
+                for aa in self.peptide_mass_calculator.masses
+                if aa.startswith(("+", "-"))
+            ]
+        ).to(self.decoder.device)
 
-        # Find beams that finished because of a predicted stop or dummy token in
-        # the current step.
-        finished_beams = torch.zeros(tokens.shape[0], dtype=torch.bool).to(
-            self.encoder.device
-        )
-        finished_beams[tokens[:, step] == self.stop_token] = True
-        finished_beams[tokens[:, step] == 0] = True
         beam_fits_precursor = torch.zeros(
             tokens.shape[0], dtype=torch.bool
         ).to(self.encoder.device)
+        # Beams with a stop token predicted in the current step can be finished.
+        finished_beams = torch.zeros(tokens.shape[0], dtype=torch.bool).to(
+            self.encoder.device
+        )
+        ends_stop_token = tokens[:, step] == self.stop_token
+        finished_beams[ends_stop_token] = True
+        # Beams with a dummy token predicted in the current step can be
+        # discarded.
         discarded_beams = torch.zeros(tokens.shape[0], dtype=torch.bool).to(
             self.encoder.device
         )
+        discarded_beams[tokens[:, step] == 0] = True
+        # Discard beams with invalid modification combinations (i.e. N-terminal
+        # modifications occur multiple times or in internal positions).
+        if step > 1:  # Only relevant for longer predictions.
+            dim0 = torch.arange(tokens.shape[0])
+            final_pos = torch.full((ends_stop_token.shape[0],), step)
+            final_pos[ends_stop_token] = step - 1
+            # Multiple N-terminal modifications.
+            multiple_mods = torch.isin(
+                tokens[dim0, final_pos], n_term
+            ) & torch.isin(tokens[dim0, final_pos - 1], n_term)
+            # FIXME: N-terminal modifications occur at an internal position.
+            # internal_mods = torch.isin(tokens[dim0, :final_pos - 1], n_term).any()
+            # discarded_beams[multiple_mods | internal_mods] = True
+            discarded_beams[multiple_mods] = True
+
         # Check which beams should be terminated or discarded based on the
         # predicted peptide.
         for i in range(len(finished_beams)):
+            # Skip already discarded beams.
+            if discarded_beams[i]:
+                continue
             pred_tokens = tokens[i][: step + 1]
             peptide_len = len(pred_tokens)
             peptide = self.decoder.detokenize(pred_tokens)
@@ -479,6 +507,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
                 torch.equal(pred_cached[-1], pred_peptide)
                 for pred_cached in pred_cache[spec_idx]
             ):
+                # TODO: Add duplicate predictions with their highest score.
                 continue
             smx = self.softmax(scores[i : i + 1, : step + 1, :])
             aa_scores = smx[0, range(len(pred_tokens)), pred_tokens].tolist()
