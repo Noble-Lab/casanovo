@@ -101,6 +101,8 @@ train_batch_size: 32
 predict_batch_size: 1024
 # Number of beams used in beam search (I)
 n_beams: 5
+# Number of PSMs for each spectrum (I)
+top_match: 1
 # Object for logging training progress
 logger:
 # Max number of training epochs

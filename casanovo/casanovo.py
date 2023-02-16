@@ -158,6 +158,7 @@ def main(
         train_batch_size=int,
         predict_batch_size=int,
         n_beams=int,
+        top_match=int,
         max_epochs=int,
         num_sanity_val_steps=int,
         train_from_scratch=bool,
