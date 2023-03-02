@@ -84,6 +84,10 @@ casanovo --mode=denovo --peak_path=path/to/predict/spectra.mgf --output=path/to/
 Casanovo can predict peptide sequences for MS/MS spectra in mzML, mzXML, and MGF files.
 This will write peptide predictions for the given MS/MS spectra to the specified output file in mzTab format.
 
+> **Warning**
+> If you are running inference with Casanovo on a system that has multiple GPUs, it is necessary to restrict Casanovo to (maximum) a single GPU.
+> For example, for CUDA-capable GPUs, GPU visibility can be controlled by setting the `CUDA_VISIBLE_DEVICES` shell variable.
+
 ### Evaluate *de novo* sequencing performance
 
 To evaluate _de novo_ sequencing performance based on known mass spectrum annotations, run:
