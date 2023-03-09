@@ -376,7 +376,7 @@ def _get_devices() -> Union[int, str]:
     """
     if any(
         operator.attrgetter(device + ".is_available")(torch)()
-        for device in ["cuda", "backends.mps"]
+        for device in ("cuda",)
     ):
         return -1
     elif not (n_workers := utils.n_workers()):
