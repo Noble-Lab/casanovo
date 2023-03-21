@@ -1,3 +1,4 @@
+import heapq
 import os
 import platform
 import shutil
@@ -140,7 +141,7 @@ def test_beam_search_decode():
     """
     Test beam search decoding and its sub-functions.
     """
-    model = Spec2Pep(n_beams=4, residues="massivekb", min_peptide_len=2)
+    model = Spec2Pep(n_beams=4, residues="massivekb", min_peptide_len=4)
     model.decoder.reverse = False  # For simplicity.
     aa2idx = model.decoder._aa2idx
 
@@ -177,7 +178,8 @@ def test_beam_search_decode():
         tokens, precursors, step
     )
     # Second beam finished due to the precursor m/z filter, final beam finished
-    # due to predicted stop token, first and third beam unfinished.
+    # due to predicted stop token, first and third beam unfinished. Final beam
+    # discarded due to length.
     assert torch.equal(
         finished_beams, torch.tensor([False, True, False, True])
     )
@@ -185,12 +187,17 @@ def test_beam_search_decode():
         beam_fits_precursor, torch.tensor([False, False, False, False])
     )
     assert torch.equal(
-        discarded_beams, torch.tensor([False, False, False, False])
+        discarded_beams, torch.tensor([False, False, False, True])
     )
 
     # Test _cache_finished_beams().
     model._cache_finished_beams(
-        tokens, scores, step, finished_beams, beam_fits_precursor, pred_cache
+        tokens,
+        scores,
+        step,
+        finished_beams & ~discarded_beams,
+        beam_fits_precursor,
+        pred_cache,
     )
     # Verify that the correct peptides have been cached.
     correct_cached = 0
@@ -205,37 +212,51 @@ def test_beam_search_decode():
             pytest.fail(
                 "Unexpected peptide tensor in the finished beams cache"
             )
-    assert correct_cached == 2
+    assert correct_cached == 1
 
     # Test _get_top_peptide().
-    # FIXME: No longer true because no stop token is predicted for the true
-    #  peptide.
-    # assert model._get_top_peptide(pred_cache)[0][-1] == true_peptide
+    # Return the candidate peptide with the highest score
+    test_cache = {i: [] for i in range(batch)}
+    heapq.heappush(
+        test_cache[0], (0.93, 4 * [0.93], torch.tensor([4, 14, 4, 19]))
+    )
+    heapq.heappush(
+        test_cache[0], (0.95, 4 * [0.95], torch.tensor([4, 14, 4, 13]))
+    )
+    heapq.heappush(
+        test_cache[0], (0.94, 4 * [0.94], torch.tensor([4, 14, 4, 14]))
+    )
+
+    assert model._get_top_peptide(test_cache)[0][-1] == "PEPK"
     # Test that an empty predictions is returned when no beams have been
     # finished.
     empty_cache = {i: [] for i in range(batch)}
     assert model._get_top_peptide(empty_cache)[0][-1] == ""
 
     # Test _get_topk_beams().
-    # FIXME
-    # # Set scores to proceed generating the unfinished beam.
-    # scores[2, step + 1, :] = 0
-    # scores[2, step + 1, range(4)] = torch.tensor([1., 2., 3., 4.])
-    # new_tokens, new_scores = model._get_topk_beams(tokens, scores, batch, step)
-    # expected_tokens = torch.tensor(
-    #     [
-    #         [4, 14, 4, 1, 4],
-    #         [4, 14, 4, 1, 3],
-    #         [4, 14, 4, 1, 2],
-    #         [4, 14, 4, 1, 1],
-    #     ]
-    # )
-    # # Only the expected scores of the final step.
-    # expected_scores = torch.zeros(beam, vocab)
-    # expected_scores[:, range(4)] = torch.tensor([1., 2., 3., 4.])
-    #
-    # assert torch.equal(new_tokens[:, :step + 1], expected_tokens)
-    # assert torch.equal(new_scores[:, step + 1, :], expected_scores)
+    # Set scores to proceed generating the unfinished beam.
+    step = 4
+    scores[2, step, :] = 0
+    scores[2, step, range(1, 5)] = torch.tensor([1.0, 2.0, 3.0, 4.0])
+    # Modify finished beams array to allow decoding from only one beam
+    test_finished_beams = torch.tensor([True, True, False, True])
+    new_tokens, new_scores = model._get_topk_beams(
+        tokens, scores, test_finished_beams, batch, step
+    )
+    expected_tokens = torch.tensor(
+        [
+            [4, 14, 4, 1, 4],
+            [4, 14, 4, 1, 3],
+            [4, 14, 4, 1, 2],
+            [4, 14, 4, 1, 1],
+        ]
+    )
+    # Only the expected scores of the final step.
+    expected_scores = torch.zeros(beam, vocab)
+    expected_scores[:, range(1, 5)] = torch.tensor([1.0, 2.0, 3.0, 4.0])
+
+    assert torch.equal(new_tokens[:, : step + 1], expected_tokens)
+    assert torch.equal(new_scores[:, step, :], expected_scores)
 
     # Test output if decoding loop isn't stopped with termination of all beams.
     model.max_length = 0
@@ -244,8 +265,6 @@ def test_beam_search_decode():
     precursors = torch.tensor([[469.25364, 2.0, 235.63410]])
     assert model.beam_search_decode(spectra, precursors)[0][-1] == ""
     model.max_length = 100
-
-    step = 4
 
     # Re-initialize scores and tokens to further test caching functionality.
     scores = torch.full(
@@ -277,9 +296,11 @@ def test_beam_search_decode():
     assert negative_score == 2
 
     # Test using a single beam only.
-    model = Spec2Pep(n_beams=1)
+    model = Spec2Pep(n_beams=1, residues="massivekb", min_peptide_len=2)
     beam = model.n_beams  # S
-    step = 3
+    model.decoder.reverse = False  # For simplicity.
+    aa2idx = model.decoder._aa2idx
+    step = 4
 
     # Initialize scores and tokens.
     scores = torch.full(
@@ -291,7 +312,7 @@ def test_beam_search_decode():
     pred_cache = {i: [] for i in range(batch)}
 
     # Ground truth peptide is "PEPK".
-    true_peptide = "PEPK"
+    true_peptide = "PEPK$"
     precursors = torch.tensor([469.25364, 2.0, 235.63410]).repeat(
         beam * batch, 1
     )
@@ -302,17 +323,17 @@ def test_beam_search_decode():
     finished_beams, beam_fits_precursor, discarded_beams = model._finish_beams(
         tokens, precursors, step
     )
-    # FIXME: No longer true because no stop token has been predicted.
-    assert torch.equal(finished_beams, torch.tensor([False]))
-    assert torch.equal(beam_fits_precursor, torch.tensor([False]))
+
+    assert torch.equal(finished_beams, torch.tensor([True]))
+    assert torch.equal(beam_fits_precursor, torch.tensor([True]))
     assert torch.equal(discarded_beams, torch.tensor([False]))
 
     # Test _cache_finished_beams().
     model._cache_finished_beams(
         tokens, scores, step, finished_beams, beam_fits_precursor, pred_cache
     )
-    # FIXME
-    # assert torch.equal(pred_cache[0][0][-1], torch.tensor([4, 14, 4, 13]))
+
+    assert torch.equal(pred_cache[0][0][-1], torch.tensor([4, 14, 4, 13]))
 
     # Test _finish_beams() for tokens with a negative mass.
     model = Spec2Pep(n_beams=2, residues="massivekb")
