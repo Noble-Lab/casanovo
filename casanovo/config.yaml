@@ -115,3 +115,5 @@ model_save_folder_path: ""
 save_weights_only: True
 # Model checkpointing frequency in training steps
 every_n_train_steps: 50_000
+# Disable usage of a GPU (including Apple MPS):
+no_gpu: False

@@ -157,7 +157,7 @@ def _execute_existing(
     trainer = pl.Trainer(
         accelerator="auto",
         auto_select_gpus=True,
-        devices=_get_devices(),
+        devices=_get_devices(config["no_gpu"]),
         logger=config["logger"],
         max_epochs=config["max_epochs"],
         num_sanity_val_steps=config["num_sanity_val_steps"],
@@ -303,7 +303,7 @@ def train(
         accelerator="auto",
         auto_select_gpus=True,
         callbacks=callbacks,
-        devices=_get_devices(),
+        devices=_get_devices(config["no_gpu"]),
         logger=config["logger"],
         max_epochs=config["max_epochs"],
         num_sanity_val_steps=config["num_sanity_val_steps"],
@@ -366,9 +366,14 @@ def _get_strategy() -> Optional[DDPStrategy]:
     return None
 
 
-def _get_devices() -> Union[int, str]:
+def _get_devices(no_gpu: bool) -> Union[int, str]:
     """
     Get the number of GPUs/CPUs for the Trainer to use.
+
+    Parameters
+    ----------
+    no_gpu : bool
+        If true, disable all GPU usage.
 
     Returns
     -------
@@ -376,7 +381,7 @@ def _get_devices() -> Union[int, str]:
         The number of GPUs/CPUs to use, or "auto" to let PyTorch Lightning
         determine the appropriate number of devices.
     """
-    if any(
+    if not no_gpu and any(
         operator.attrgetter(device + ".is_available")(torch)()
         for device in ["cuda", "backends.mps"]
     ):
