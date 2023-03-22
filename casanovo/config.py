@@ -121,7 +121,6 @@ class Config:
             logger.error("Incorrect type for configuration value %s: %s", k, e)
             raise TypeError(f"Incorrect type for configuration value {k}: {e}")
         except KeyError:
-            print("blah")
             if param == "residues":
                 self._params[param] = {
                     str(aa): float(mass) for aa, mass in self[param].items()
