@@ -24,7 +24,7 @@ from . import __version__
 from . import utils
 from .data import ms_io
 from .denovo import model_runner
-
+from .config import Config
 
 logger = logging.getLogger("casanovo")
 
@@ -124,63 +124,7 @@ def main(
     logging.getLogger("urllib3").setLevel(logging.WARNING)
 
     # Read parameters from the config file.
-    if config is None:
-        config = os.path.join(
-            os.path.dirname(os.path.realpath(__file__)), "config.yaml"
-        )
-    config_fn = config
-    with open(config) as f_in:
-        config = yaml.safe_load(f_in)
-    # Ensure that the config values have the correct type.
-    config_types = dict(
-        random_seed=int,
-        n_peaks=int,
-        min_mz=float,
-        max_mz=float,
-        min_intensity=float,
-        remove_precursor_tol=float,
-        max_charge=int,
-        precursor_mass_tol=float,
-        isotope_error_range=lambda min_max: (int(min_max[0]), int(min_max[1])),
-        min_peptide_len=int,
-        dim_model=int,
-        n_head=int,
-        dim_feedforward=int,
-        n_layers=int,
-        dropout=float,
-        dim_intensity=int,
-        max_length=int,
-        n_log=int,
-        warmup_iters=int,
-        max_iters=int,
-        learning_rate=float,
-        weight_decay=float,
-        train_batch_size=int,
-        predict_batch_size=int,
-        n_beams=int,
-        max_epochs=int,
-        num_sanity_val_steps=int,
-        train_from_scratch=bool,
-        save_model=bool,
-        model_save_folder_path=str,
-        save_weights_only=bool,
-        every_n_train_steps=int,
-    )
-    for k, t in config_types.items():
-        try:
-            if config[k] is not None:
-                config[k] = t(config[k])
-        except (TypeError, ValueError) as e:
-            logger.error("Incorrect type for configuration value %s: %s", k, e)
-            raise TypeError(f"Incorrect type for configuration value {k}: {e}")
-    config["residues"] = {
-        str(aa): float(mass) for aa, mass in config["residues"].items()
-    }
-    # Add extra configuration options and scale by the number of GPUs.
-    n_gpus = torch.cuda.device_count()
-    config["n_workers"] = utils.n_workers()
-    if n_gpus > 1:
-        config["train_batch_size"] = config["train_batch_size"] // n_gpus
+    config = Config(config)
 
     LightningLite.seed_everything(seed=config["random_seed"], workers=True)
 
@@ -208,7 +152,7 @@ def main(
     logger.debug("model = %s", model)
     logger.debug("peak_path = %s", peak_path)
     logger.debug("peak_path_val = %s", peak_path_val)
-    logger.debug("config = %s", config_fn)
+    logger.debug("config = %s", config.file)
     logger.debug("output = %s", output)
     for key, value in config.items():
         logger.debug("%s = %s", str(key), str(value))
@@ -217,7 +161,7 @@ def main(
     if mode == "denovo":
         logger.info("Predict peptide sequences with Casanovo.")
         writer = ms_io.MztabWriter(f"{output}.mztab")
-        writer.set_metadata(config, model=model, config_filename=config_fn)
+        writer.set_metadata(config, model=model, config_filename=config.file)
         model_runner.predict(peak_path, model, config, writer)
         writer.save()
     elif mode == "eval":
