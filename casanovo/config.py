@@ -109,22 +109,18 @@ class Config:
             The expected callable type of the parameter.
         """
         try:
+            param_val = self._user_config.get(param, self._params[param])
             if param == "residues":
                 residues = {
-                    str(aa): float(mass)
-                    for aa, mass in self._user_config[param].items()
+                    str(aa): float(mass) for aa, mass in param_val.items()
                 }
                 self._params["residues"] = residues
-            elif self._user_config[param] is not None:
-                self._params[param] = param_type(self._user_config[param])
-        except (TypeError, ValueError) as e:
-            logger.error("Incorrect type for configuration value %s: %s", k, e)
-            raise TypeError(f"Incorrect type for configuration value {k}: {e}")
-        except KeyError:
-            if param == "residues":
-                self._params[param] = {
-                    str(aa): float(mass) for aa, mass in self[param].items()
-                }
-                self._params["residues"] = residues
-            elif self._params[param] is not None:
-                self._params[param] = param_type(self[param])
+            elif param_val is not None:
+                self._params[param] = param_type(param_val)
+        except (TypeError, ValueError) as err:
+            logger.error(
+                "Incorrect type for configuration value %s: %s", param, err
+            )
+            raise TypeError(
+                f"Incorrect type for configuration value {param}: {err}"
+            )
