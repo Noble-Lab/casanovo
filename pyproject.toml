@@ -43,10 +43,10 @@ file = "README.md"
 content-type = "text/markdown"
 
 [project.urls]
-Homepage = "https://github.com/wfondrie/mokapot"
-Documentation = "https://mokapot.readthedocs.io"
-"Bug Tracker" = "https://github.com/wfondrie/mokapot/issues"
-"Discussion Board" = "https://github.com/wfondrie/mokapot/discussions"
+Homepage = "https://github.com/Noble-Lab/casanovo"
+Documentation = "https://casanovo.readthedocs.io"
+"Bug Tracker" = "https://github.com/Noble-Lab/casanovo/issues"
+"Discussion Board" = "https://github.com/Noble-Lab/casanovo/discussions"
 
 [project.optional-dependencies]
 docs = [
