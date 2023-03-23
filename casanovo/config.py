@@ -42,6 +42,7 @@ class Config:
         max_charge=int,
         precursor_mass_tol=float,
         isotope_error_range=lambda min_max: (int(min_max[0]), int(min_max[1])),
+        min_peptide_len=int,
         dim_model=int,
         n_head=int,
         dim_feedforward=int,

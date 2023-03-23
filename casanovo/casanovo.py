@@ -125,6 +125,7 @@ def main(
 
     # Read parameters from the config file.
     config = Config(config)
+
     LightningLite.seed_everything(seed=config["random_seed"], workers=True)
 
     # Download model weights if these were not specified (except when training).
