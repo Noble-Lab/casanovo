@@ -749,7 +749,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
 
     def predict_step(
         self, batch: Tuple[torch.Tensor, torch.Tensor, torch.Tensor], *args
-    ) -> Tuple[torch.Tensor, torch.Tensor, List[List[str]], torch.Tensor]:
+    ) -> List[Tuple[np.ndarray, float, float, str, float, np.ndarray]]:
         """
         A single prediction step.
 
@@ -761,28 +761,30 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
 
         Returns
         -------
-        spectrum_idx : torch.Tensor
-            The spectrum identifiers.
-        precursors : torch.Tensor
-            Precursor information for each spectrum.
-        peptides : List[List[str]]
-            The predicted peptide sequences for each spectrum.
-        aa_scores : torch.Tensor of shape (n_spectra, length, n_amino_acids)
-            The individual amino acid scores for each prediction.
+        predictions: List[Tuple[np.ndarray, float, float, str, float, np.ndarray]]
+            Model predictions for the given batch of spectra containing spectrum
+            ids, precursor information, peptide sequences as well as peptide
+            and amino acid-level confidence scores.
         """
+        predictions = []
+
         for (
             (_, precursor_charge, precursor_mz),
             spectrum_i,
             (peptide_score, aa_scores, peptide),
         ) in zip(batch[1], batch[2], self.forward(batch[0], batch[1])):
-            yield (
-                spectrum_i,
-                precursor_charge.item(),
-                precursor_mz.item(),
-                peptide,
-                peptide_score,
-                aa_scores,
+            predictions.append(
+                (
+                    spectrum_i,
+                    precursor_charge.item(),
+                    precursor_mz.item(),
+                    peptide,
+                    peptide_score,
+                    aa_scores,
+                )
             )
+
+        return predictions
 
     def on_train_epoch_end(self) -> None:
         """
