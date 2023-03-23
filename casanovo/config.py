@@ -70,6 +70,7 @@ class Config:
 
     def __init__(self, config_file: Optional[str] = None):
         """Initialize a Config object."""
+        self.file = str(config_file) if config_file is None else "default"
         with self._default_config.open() as f_in:
             self._params = yaml.safe_load(f_in)
 

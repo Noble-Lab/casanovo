@@ -152,7 +152,7 @@ def main(
     logger.debug("model = %s", model)
     logger.debug("peak_path = %s", peak_path)
     logger.debug("peak_path_val = %s", peak_path_val)
-    logger.debug("config = %s", config_fn)
+    logger.debug("config = %s", config.file)
     logger.debug("output = %s", output)
     for key, value in config.items():
         logger.debug("%s = %s", str(key), str(value))
@@ -161,7 +161,7 @@ def main(
     if mode == "denovo":
         logger.info("Predict peptide sequences with Casanovo.")
         writer = ms_io.MztabWriter(f"{output}.mztab")
-        writer.set_metadata(config, model=model, config_filename=config_fn)
+        writer.set_metadata(config, model=model, config_filename=config.file)
         model_runner.predict(peak_path, model, config, writer)
         writer.save()
     elif mode == "eval":
