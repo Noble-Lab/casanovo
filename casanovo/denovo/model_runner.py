@@ -110,6 +110,7 @@ def _execute_existing(
         max_charge=config["max_charge"],
         precursor_mass_tol=config["precursor_mass_tol"],
         isotope_error_range=config["isotope_error_range"],
+        min_peptide_len=config["min_peptide_len"],
         n_beams=config["n_beams"],
         n_log=config["n_log"],
         out_writer=out_writer,
