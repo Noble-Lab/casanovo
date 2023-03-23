@@ -71,7 +71,7 @@ casanovo = "casanovo.casanovo:main"
 include-package-data = true
 
 [tool.setuptools.packages.find]
-where = ["casanovo"]
+exclude = ["docs", "tests", "sample_data"]
 
 [tool.setuptools_scm]
 
