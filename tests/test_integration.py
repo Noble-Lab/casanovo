@@ -1,10 +1,8 @@
-import pytest
 import pyteomics.mztab
 
 from casanovo import casanovo
 
 
-@pytest.mark.skip("This test doesn't work.")
 def test_denovo(mgf_small, mzml_small, tmp_path, monkeypatch):
     # We can use this to explicitly test different versions.
     monkeypatch.setattr(casanovo, "__version__", "3.0.1")

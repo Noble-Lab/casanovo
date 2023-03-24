@@ -126,3 +126,7 @@ class Config:
             raise TypeError(
                 f"Incorrect type for configuration value {param}: {err}"
             )
+
+    def items(self) -> tuple[str, ...]:
+        """Return the parameters"""
+        return self._params.items()
