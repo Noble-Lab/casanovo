@@ -127,6 +127,6 @@ class Config:
                 f"Incorrect type for configuration value {param}: {err}"
             )
 
-    def items(self) -> tuple[str, ...]:
+    def items(self) -> Tuple[str, ...]:
         """Return the parameters"""
         return self._params.items()
