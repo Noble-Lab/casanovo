@@ -101,7 +101,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         max_charge: int = 5,
         precursor_mass_tol: float = 50,
         isotope_error_range: Tuple[int, int] = (0, 1),
-        min_peptide_len: int = 8,
+        min_peptide_len: int = 6,
         n_beams: int = 5,
         top_match: int = 1,
         n_log: int = 10,
@@ -783,7 +783,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
 
     def predict_step(
         self, batch: Tuple[torch.Tensor, torch.Tensor, torch.Tensor], *args
-    ) -> Tuple[torch.Tensor, torch.Tensor, List[List[str]], torch.Tensor]:
+    ) -> List[Tuple[np.ndarray, float, float, str, float, np.ndarray]]:
         """
         A single prediction step.
 

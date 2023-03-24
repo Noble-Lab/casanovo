@@ -39,10 +39,11 @@ If this is the case, then you have set up conda and the environment correctly.
 Be sure to retype in the activation command into your terminal when you reopen anaconda and want to use Casanovo.
 ```
 
-### *Optional:* Install PyTorch
+### *Optional:* Install PyTorch manually
 
-If you have a graphics processing unit (GPU) that you want Casanovo to use, we recommend installing PyTorch manually.
-This will ensure that the version of PyTorch used by Casanovo will be compatible with your CPU.
+Casanovo employs the PyTorch machine learning framework, which by default will be installed automatically along with the other dependencies.
+However, if you have a graphics processing unit (GPU) that you want Casanovo to use, we recommend installing PyTorch manually.
+This will ensure that the version of PyTorch used by Casanovo will be compatible with your GPU.
 For installation instructions, see the [PyTorch documentation](https://pytorch.org/get-started/locally/#start-locally)
 
 ### Install Casanovo
@@ -83,6 +84,10 @@ casanovo --mode=denovo --peak_path=path/to/predict/spectra.mgf --output=path/to/
 
 Casanovo can predict peptide sequences for MS/MS spectra in mzML, mzXML, and MGF files.
 This will write peptide predictions for the given MS/MS spectra to the specified output file in mzTab format.
+
+> **Warning**
+> If you are running inference with Casanovo on a system that has multiple GPUs, it is necessary to restrict Casanovo to (maximum) a single GPU.
+> For example, for CUDA-capable GPUs, GPU visibility can be controlled by setting the `CUDA_VISIBLE_DEVICES` shell variable.
 
 ### Evaluate *de novo* sequencing performance
 

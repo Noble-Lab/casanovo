@@ -28,8 +28,8 @@ max_charge: 10
 precursor_mass_tol: 50  # ppm
 # Isotopes to consider when comparing predicted and observed precursor m/z's (I)
 isotope_error_range: [0, 1]
-# The minimum length of predicted peptides.
-min_peptide_len: 7
+# The minimum length of predicted peptides (I).
+min_peptide_len: 6
 
 # Model architecture options.
 # Dimensionality of latent representations, i.e. peak embeddings
@@ -119,3 +119,5 @@ model_save_folder_path: ""
 save_weights_only: True
 # Model checkpointing frequency in training steps
 every_n_train_steps: 50_000
+# Disable usage of a GPU (including Apple MPS):
+no_gpu: False
