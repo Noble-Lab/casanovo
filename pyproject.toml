@@ -61,7 +61,6 @@ dev = [
     "psims",
     "pyteomics",
     "pytest",
-    "requests",
 ]
 
 [project.scripts]
