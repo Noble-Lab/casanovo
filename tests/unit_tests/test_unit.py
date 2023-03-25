@@ -1,3 +1,4 @@
+import collections
 import heapq
 import os
 import platform
@@ -159,7 +160,7 @@ def test_beam_search_decode():
     scores = einops.rearrange(scores, "B L V S -> (B S) L V")
     tokens = torch.zeros(batch * beam, length, dtype=torch.int64)
     # Create cache for decoded beams.
-    pred_cache = {i: [] for i in range(batch)}
+    pred_cache = collections.OrderedDict((i, []) for i in range(batch))
 
     # Ground truth peptide is "PEPK".
     true_peptide = "PEPK"
@@ -216,7 +217,7 @@ def test_beam_search_decode():
 
     # Test _get_top_peptide().
     # Return the candidate peptide with the highest score
-    test_cache = {i: [] for i in range(batch)}
+    test_cache = collections.OrderedDict((i, []) for i in range(batch))
     heapq.heappush(
         test_cache[0], (0.93, 4 * [0.93], torch.tensor([4, 14, 4, 19]))
     )
@@ -227,11 +228,11 @@ def test_beam_search_decode():
         test_cache[0], (0.94, 4 * [0.94], torch.tensor([4, 14, 4, 14]))
     )
 
-    assert model._get_top_peptide(test_cache)[0][-1] == "PEPK"
+    assert list(model._get_top_peptide(test_cache))[0][0][-1] == "PEPK"
     # Test that an empty predictions is returned when no beams have been
     # finished.
-    empty_cache = {i: [] for i in range(batch)}
-    assert model._get_top_peptide(empty_cache)[0][-1] == ""
+    empty_cache = collections.OrderedDict((i, []) for i in range(batch))
+    assert len(list(model._get_top_peptide(empty_cache))[0]) == 0
 
     # Test _get_topk_beams().
     # Set scores to proceed generating the unfinished beam.
@@ -263,7 +264,7 @@ def test_beam_search_decode():
     # 1 spectrum with 5 peaks (2 values: m/z and intensity).
     spectra = torch.zeros(1, 5, 2)
     precursors = torch.tensor([[469.25364, 2.0, 235.63410]])
-    assert model.beam_search_decode(spectra, precursors)[0][-1] == ""
+    assert len(list(model.beam_search_decode(spectra, precursors))[0]) == 0
     model.max_length = 100
 
     # Re-initialize scores and tokens to further test caching functionality.
@@ -280,7 +281,7 @@ def test_beam_search_decode():
     scores[:, i, :] = 1
     scores[j, i, tokens[j, i]] = s
 
-    pred_cache = {i: [] for i in range(batch)}
+    pred_cache = collections.OrderedDict((i, []) for i in range(batch))
     finished_beams = torch.tensor([True, True, True, True])
     beam_fits_precursor = torch.BoolTensor([False, True, True, False])
 
@@ -309,7 +310,7 @@ def test_beam_search_decode():
     scores = einops.rearrange(scores, "B L V S -> (B S) L V")
     tokens = torch.zeros(batch * beam, length, dtype=torch.int64)
 
-    pred_cache = {i: [] for i in range(batch)}
+    pred_cache = collections.OrderedDict((i, []) for i in range(batch))
 
     # Ground truth peptide is "PEPK".
     true_peptide = "PEPK$"
