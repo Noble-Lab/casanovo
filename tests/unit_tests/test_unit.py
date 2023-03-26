@@ -225,7 +225,7 @@ def test_beam_search_decode():
         test_cache[0], (0.95, 4 * [0.95], torch.tensor([4, 14, 4, 13]))
     )
     heapq.heappush(
-        test_cache[0], (0.94, 4 * [0.94], torch.tensor([4, 14, 4, 14]))
+        test_cache[0], (0.94, 4 * [0.94], torch.tensor([4, 14, 4, 4]))
     )
 
     assert list(model._get_top_peptide(test_cache))[0][0][-1] == "PEPK"
@@ -233,6 +233,11 @@ def test_beam_search_decode():
     # finished.
     empty_cache = collections.OrderedDict((i, []) for i in range(batch))
     assert len(list(model._get_top_peptide(empty_cache))[0]) == 0
+    # Test multiple PSM per spectrum and if it's highest scoring peptides
+    model.top_match = 2
+    assert set(
+        [pep[-1] for pep in list(model._get_top_peptide(test_cache))[0]]
+    ) == set(["PEPK", "PEPP"])
 
     # Test _get_topk_beams().
     # Set scores to proceed generating the unfinished beam.
@@ -339,6 +344,7 @@ def test_beam_search_decode():
     # Test _finish_beams() for tokens with a negative mass.
     model = Spec2Pep(n_beams=2, residues="massivekb")
     beam = model.n_beams  # S
+    aa2idx = model.decoder._aa2idx
     step = 1
 
     # Ground truth peptide is "-17.027GK".
@@ -356,6 +362,38 @@ def test_beam_search_decode():
     assert torch.equal(finished_beams, torch.tensor([False, True]))
     assert torch.equal(beam_fits_precursor, torch.tensor([False, False]))
     assert torch.equal(discarded_beams, torch.tensor([False, False]))
+
+    # Test _finish_beams() for multiple/internal N-mods and dummy predictions.
+    model = Spec2Pep(n_beams=3, residues="massivekb", min_peptide_len=3)
+    beam = model.n_beams  # S
+    model.decoder.reverse = True
+    aa2idx = model.decoder._aa2idx
+    step = 4
+
+    # Ground truth peptide is irrelevant for this test.
+    precursors = torch.tensor([1861.0044, 2.0, 940.5750]).repeat(
+        beam * batch, 1
+    )
+    tokens = torch.zeros(batch * beam, length, dtype=torch.int64)
+    # Reverse decoding
+    for i, peptide in enumerate(
+        [
+            ["K", "A", "A", "A", "+43.006-17.027"],
+            ["K", "A", "A", "+42.011", "A"],
+            ["K", "A", "A", "+43.006", "+42.011"],
+        ]
+    ):
+        tokens[i, : step + 1] = torch.tensor([aa2idx[aa] for aa in peptide])
+
+    # Test _finish_beams(). All should be discarded
+    finished_beams, beam_fits_precursor, discarded_beams = model._finish_beams(
+        tokens, precursors, step
+    )
+    assert torch.equal(finished_beams, torch.tensor([False, False, False]))
+    assert torch.equal(
+        beam_fits_precursor, torch.tensor([False, False, False])
+    )
+    assert torch.equal(discarded_beams, torch.tensor([False, True, True]))
 
 
 def test_eval_metrics():
