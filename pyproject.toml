@@ -1,12 +1,82 @@
 [build-system]
-requires = ["setuptools>=42", "wheel", "setuptools_scm[toml]>=3.4"]
+requires = ["setuptools>=61", "wheel", "setuptools_scm[toml]>=3.4"]
 build-backend = "setuptools.build_meta"
+
+[project]
+name = "casanovo"
+authors = [
+    {name = "Melih Yilmaz", email = "melih@cs.washington.edu"},
+    {name = "William E. Fondrie", email = "fondriew@gmail.com"},
+    {name = "Wout Bittremieux", email = "wout.bittremieux@uantwerpen.be"},
+]
+description = "De novo mass spectrometry peptide sequencing with a transformer model"
+license = {text = "Apache 2.0"}
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: OS Independent",
+    "Topic :: Scientific/Engineering :: Bio-Informatics",
+]
+requires-python = ">=3.8"
+dependencies = [
+    "appdirs",
+    "click",
+    "depthcharge-ms>=0.1.0,<0.2.0",
+    "natsort",
+    "numpy",
+    "pandas",
+    "psutil",
+    "PyGithub",
+    "pytorch-lightning>=1.7,<2.0",
+    "PyYAML",
+    "requests",
+    "scikit-learn",
+    "spectrum_utils",
+    "tensorboard",
+    "torch>=1.9",
+    "tqdm",
+]
+dynamic = ["version"]
+
+[project.readme]
+file = "README.md"
+content-type = "text/markdown"
+
+[project.urls]
+Homepage = "https://github.com/Noble-Lab/casanovo"
+Documentation = "https://casanovo.readthedocs.io"
+"Bug Tracker" = "https://github.com/Noble-Lab/casanovo/issues"
+"Discussion Board" = "https://github.com/Noble-Lab/casanovo/discussions"
+
+[project.optional-dependencies]
+docs = [
+    "sphinx>=4.5.0",
+    "myst-parser>=0.18.1",
+    "sphinx-book-theme>=0.3.3"
+]
+dev = [
+    "pre-commit>=2.7.1",
+    "black>=19.10b0",
+    "ppx",
+    "psims",
+    "pyteomics",
+    "pytest",
+]
+
+[project.scripts]
+casanovo = "casanovo.casanovo:main"
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.packages.find]
+exclude = ["docs", "tests", "sample_data"]
 
 [tool.setuptools_scm]
 
 [tool.black]
 line-length = 79
-target-version = ['py37']
+target-version = ['py38']
 include = '\.pyi?$'
 exclude = '''
 
