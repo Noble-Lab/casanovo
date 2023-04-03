@@ -4,7 +4,6 @@ import os
 import platform
 import shutil
 import tempfile
-import warnings
 
 import einops
 import github
@@ -237,7 +236,7 @@ def test_beam_search_decode():
     model.top_match = 2
     assert set(
         [pep[-1] for pep in list(model._get_top_peptide(test_cache))[0]]
-    ) == set(["PEPK", "PEPP"])
+    ) == {"PEPK", "PEPP"}
 
     # Test _get_topk_beams().
     # Set scores to proceed generating the unfinished beam.

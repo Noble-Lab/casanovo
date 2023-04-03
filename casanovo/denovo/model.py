@@ -371,7 +371,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
             ) & torch.isin(tokens[dim0, final_pos - 1], n_term)
             # N-terminal modifications occur at an internal position.
             # Broadcasting trick to create a two-dimensional mask.
-            mask = (final_pos - 1)[:, None] > torch.arange(tokens.shape[1])
+            mask = (final_pos - 1)[:, None] >= torch.arange(tokens.shape[1])
             internal_mods = torch.isin(
                 torch.where(mask.to(self.encoder.device), tokens, 0), n_term
             ).any(dim=1)
