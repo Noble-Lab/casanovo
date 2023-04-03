@@ -1,8 +1,9 @@
 """A de novo peptide sequencing model."""
+import collections
 import heapq
 import itertools
 import logging
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
 
 import depthcharge.masses
 import einops
@@ -69,6 +70,8 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         The minimum length of predicted peptides.
     n_beams: int
         Number of beams used during beam search decoding.
+    top_match: int
+        Number of PSMs to return for each spectrum.
     n_log : int
         The number of epochs to wait between logging messages.
     tb_summarywriter: Optional[str]
@@ -100,6 +103,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         isotope_error_range: Tuple[int, int] = (0, 1),
         min_peptide_len: int = 6,
         n_beams: int = 5,
+        top_match: int = 1,
         n_log: int = 10,
         tb_summarywriter: Optional[
             torch.utils.tensorboard.SummaryWriter
@@ -146,6 +150,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         self.isotope_error_range = isotope_error_range
         self.min_peptide_len = min_peptide_len
         self.n_beams = n_beams
+        self.top_match = top_match
         self.peptide_mass_calculator = depthcharge.masses.PeptideMass(
             self.residues
         )
@@ -164,7 +169,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
 
     def forward(
         self, spectra: torch.Tensor, precursors: torch.Tensor
-    ) -> List[Tuple[float, np.ndarray, str]]:
+    ) -> List[List[Tuple[float, np.ndarray, str]]]:
         """
         Predict peptide sequences for a batch of MS/MS spectra.
 
@@ -182,10 +187,10 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
 
         Returns
         -------
-        pred_peptides : List[Tuple[float, np.ndarray, str]]
-            The top predicted peptide for each spectrum, represented as a tuple
-            with the peptide score, amino acid-level scores, and the predicted
-            peptides.
+        pred_peptides : List[List[Tuple[float, np.ndarray, str]]]
+            For each spectrum, a list with the top peptide predictions. A
+            peptide predictions consists of a tuple with the peptide score,
+            the amino acid scores, and the predicted peptide sequence.
         """
         return self.beam_search_decode(
             spectra.to(self.encoder.device),
@@ -194,12 +199,9 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
 
     def beam_search_decode(
         self, spectra: torch.Tensor, precursors: torch.Tensor
-    ) -> List[Tuple[float, np.ndarray, str]]:
+    ) -> List[List[Tuple[float, np.ndarray, str]]]:
         """
         Beam search decoding of the spectrum predictions.
-
-        Return the highest scoring peptide, within the precursor m/z tolerance
-        whenever possible.
 
         Parameters
         ----------
@@ -215,10 +217,10 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
 
         Returns
         -------
-        pred_peptides : List[Tuple[float, np.ndarray, str]]
-            The top predicted peptide for each spectrum, represented as a tuple
-            with the peptide score, amino acid-level scores, and the predicted
-            peptides.
+        pred_peptides : List[List[Tuple[float, np.ndarray, str]]]
+            For each spectrum, a list with the top peptide prediction(s). A
+            peptide predictions consists of a tuple with the peptide score,
+            the amino acid scores, and the predicted peptide sequence.
         """
         memories, mem_masks = self.encoder(spectra)
 
@@ -237,7 +239,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         tokens = tokens.to(self.encoder.device)
 
         # Create cache for decoded beams.
-        pred_cache = {i: [] for i in range(batch)}
+        pred_cache = collections.OrderedDict((i, []) for i in range(batch))
 
         # Get the first prediction.
         pred, _ = self.decoder(None, precursors, memories, mem_masks)
@@ -291,7 +293,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
 
         # Return the peptide with the highest confidence score, within the
         # precursor m/z tolerance if possible.
-        return self._get_top_peptide(pred_cache)
+        return list(self._get_top_peptide(pred_cache))
 
     def _finish_beams(
         self,
@@ -333,23 +335,54 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         for aa, mass in self.peptide_mass_calculator.masses.items():
             if mass < 0:
                 aa_neg_mass.append(aa)
+        # Find N-terminal residues.
+        n_term = torch.Tensor(
+            [
+                self.decoder._aa2idx[aa]
+                for aa in self.peptide_mass_calculator.masses
+                if aa.startswith(("+", "-"))
+            ]
+        ).to(self.decoder.device)
 
-        # Find beams that finished because of a predicted stop or dummy token in
-        # the current step.
-        finished_beams = torch.zeros(tokens.shape[0], dtype=torch.bool).to(
-            self.encoder.device
-        )
-        finished_beams[tokens[:, step] == self.stop_token] = True
-        finished_beams[tokens[:, step] == 0] = True
         beam_fits_precursor = torch.zeros(
             tokens.shape[0], dtype=torch.bool
         ).to(self.encoder.device)
+        # Beams with a stop token predicted in the current step can be finished.
+        finished_beams = torch.zeros(tokens.shape[0], dtype=torch.bool).to(
+            self.encoder.device
+        )
+        ends_stop_token = tokens[:, step] == self.stop_token
+        finished_beams[ends_stop_token] = True
+        # Beams with a dummy token predicted in the current step can be
+        # discarded.
         discarded_beams = torch.zeros(tokens.shape[0], dtype=torch.bool).to(
             self.encoder.device
         )
+        discarded_beams[tokens[:, step] == 0] = True
+        # Discard beams with invalid modification combinations (i.e. N-terminal
+        # modifications occur multiple times or in internal positions).
+        if step > 1:  # Only relevant for longer predictions.
+            dim0 = torch.arange(tokens.shape[0])
+            final_pos = torch.full((ends_stop_token.shape[0],), step)
+            final_pos[ends_stop_token] = step - 1
+            # Multiple N-terminal modifications.
+            multiple_mods = torch.isin(
+                tokens[dim0, final_pos], n_term
+            ) & torch.isin(tokens[dim0, final_pos - 1], n_term)
+            # N-terminal modifications occur at an internal position.
+            # Broadcasting trick to create a two-dimensional mask.
+            mask = (final_pos - 1)[:, None] >= torch.arange(tokens.shape[1])
+            internal_mods = torch.isin(
+                torch.where(mask.to(self.encoder.device), tokens, 0), n_term
+            ).any(dim=1)
+            discarded_beams[multiple_mods | internal_mods] = True
+
         # Check which beams should be terminated or discarded based on the
         # predicted peptide.
         for i in range(len(finished_beams)):
+            # Skip already discarded beams.
+            if discarded_beams[i]:
+                continue
             pred_tokens = tokens[i][: step + 1]
             peptide_len = len(pred_tokens)
             peptide = self.decoder.detokenize(pred_tokens)
@@ -477,6 +510,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
                 torch.equal(pred_cached[-1], pred_peptide)
                 for pred_cached in pred_cache[spec_idx]
             ):
+                # TODO: Add duplicate predictions with their highest score.
                 continue
             smx = self.softmax(scores[i : i + 1, : step + 1, :])
             aa_scores = smx[0, range(len(pred_tokens)), pred_tokens].tolist()
@@ -599,7 +633,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
     def _get_top_peptide(
         self,
         pred_cache: Dict[int, List[Tuple[float, np.ndarray, torch.Tensor]]],
-    ) -> List[Tuple[float, np.ndarray, str]]:
+    ) -> Iterable[List[Tuple[float, np.ndarray, str]]]:
         """
         Return the peptide with the highest confidence score for each spectrum.
 
@@ -612,25 +646,25 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
 
         Returns
         -------
-        pred_peptides : List[Tuple[float, np.ndarray, str]]
-            The top predicted peptide for each spectrum, represented as a tuple
-            with the peptide score, amino acid-level scores, and the predicted
-            peptide.
+        pred_peptides : Iterable[List[Tuple[float, np.ndarray, str]]]
+            For each spectrum, a list with the top peptide prediction(s). A
+            peptide predictions consists of a tuple with the peptide score,
+            the amino acid scores, and the predicted peptide sequence.
         """
-        pred_peptides = []
-        for spec_preds in pred_cache.values():
-            if len(spec_preds) > 0:
-                pred = heapq.nlargest(1, spec_preds)
-                pred_peptides.append(
+        for peptides in pred_cache.values():
+            if len(peptides) > 0:
+                yield [
                     (
-                        pred[0][0],
-                        pred[0][1],
-                        "".join(self.decoder.detokenize(pred[0][2])),
+                        pep_score,
+                        aa_scores,
+                        "".join(self.decoder.detokenize(pred_tokens)),
                     )
-                )
+                    for pep_score, aa_scores, pred_tokens in heapq.nlargest(
+                        self.top_match, peptides
+                    )
+                ]
             else:
-                pred_peptides.append((np.nan, np.asarray([]), ""))
-        return pred_peptides
+                yield []
 
     def _forward_step(
         self,
@@ -767,22 +801,28 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
             and amino acid-level confidence scores.
         """
         predictions = []
-
         for (
-            (_, precursor_charge, precursor_mz),
+            precursor_charge,
+            precursor_mz,
             spectrum_i,
-            (peptide_score, aa_scores, peptide),
-        ) in zip(batch[1], batch[2], self.forward(batch[0], batch[1])):
-            predictions.append(
-                (
-                    spectrum_i,
-                    precursor_charge.item(),
-                    precursor_mz.item(),
-                    peptide,
-                    peptide_score,
-                    aa_scores,
+            spectrum_preds,
+        ) in zip(
+            batch[1][:, 1].cpu().detach().numpy(),
+            batch[1][:, 2].cpu().detach().numpy(),
+            batch[2],
+            self.forward(batch[0], batch[1]),
+        ):
+            for peptide_score, aa_scores, peptide in spectrum_preds:
+                predictions.append(
+                    (
+                        spectrum_i,
+                        precursor_charge,
+                        precursor_mz,
+                        peptide,
+                        peptide_score,
+                        aa_scores,
+                    )
                 )
-            )
 
         return predictions
 

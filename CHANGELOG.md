@@ -9,6 +9,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ### Added
 
 - Included the `min_peptide_len` parameter in the configuration file to restrict predictions to peptide with a minimum length.
+- Export multiple PSMs per spectrum using the `top_match` parameter in the configuration file.
 
 ### Changed
 
@@ -20,6 +21,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Verify that the final predicted amino acid is the stop token.
 - Spectra are correctly matched to their input peak file when analyzing multiple files simultaneously.
 - The score of the stop token is taken into account when calculating the predicted peptide score.
+- Peptides with incorrect N-terminal modifications (multiple or internal positions) are no longer predicted.
 
 ## [3.2.0] - 2022-11-18
 

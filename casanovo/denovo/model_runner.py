@@ -112,6 +112,7 @@ def _execute_existing(
         isotope_error_range=config["isotope_error_range"],
         min_peptide_len=config["min_peptide_len"],
         n_beams=config["n_beams"],
+        top_match=config["top_match"],
         n_log=config["n_log"],
         out_writer=out_writer,
     )
@@ -266,6 +267,7 @@ def train(
         precursor_mass_tol=config["precursor_mass_tol"],
         isotope_error_range=config["isotope_error_range"],
         n_beams=config["n_beams"],
+        top_match=config["top_match"],
         n_log=config["n_log"],
         tb_summarywriter=config["tb_summarywriter"],
         warmup_iters=config["warmup_iters"],
