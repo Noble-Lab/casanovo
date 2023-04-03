@@ -74,6 +74,15 @@ Not all releases might have a model file included on the [Releases page](https:/
 
 ## Running Casanovo
 
+```{note}
+We recommend a Linux system with a dedicated GPU to achieve optimal runtime performance.
+Notably, Casanovo is restricted to single-threaded execution only on Windows and MacOS.
+```
+
+> **Warning**
+> Casanovo can currently crash if no GPU is available.
+> We are actively trying to fix this known issue.
+
 ### Sequence new mass spectra
 
 To sequence your own mass spectra with Casanovo, use the `denovo` mode:

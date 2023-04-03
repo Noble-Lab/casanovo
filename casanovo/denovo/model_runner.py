@@ -386,7 +386,7 @@ def _get_devices(no_gpu: bool) -> Union[int, str]:
     """
     if not no_gpu and any(
         operator.attrgetter(device + ".is_available")(torch)()
-        for device in ["cuda", "backends.mps"]
+        for device in ("cuda",)
     ):
         return -1
     elif not (n_workers := utils.n_workers()):
