@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+## [3.3.0] - 2023-04-04
+
 ### Added
 
 - Included the `min_peptide_len` parameter in the configuration file to restrict predictions to peptide with a minimum length.
@@ -157,7 +159,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 - Initial Casanovo version.
 
-[Unreleased]: https://github.com/Noble-Lab/casanovo/compare/v3.2.0...HEAD
+[Unreleased]: https://github.com/Noble-Lab/casanovo/compare/v3.3.0...HEAD
+[3.2.0]: https://github.com/Noble-Lab/casanovo/compare/v3.2.0...v3.3.0
 [3.2.0]: https://github.com/Noble-Lab/casanovo/compare/v3.1.0...v3.2.0
 [3.1.0]: https://github.com/Noble-Lab/casanovo/compare/v3.0.0...v3.1.0
 [3.0.0]: https://github.com/Noble-Lab/casanovo/compare/v2.1.1...v3.0.0
