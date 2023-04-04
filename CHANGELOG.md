@@ -22,6 +22,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Spectra are correctly matched to their input peak file when analyzing multiple files simultaneously.
 - The score of the stop token is taken into account when calculating the predicted peptide score.
 - Peptides with incorrect N-terminal modifications (multiple or internal positions) are no longer predicted.
+- Upgrade to Depthcharge v0.2.0 to fix sinusoidal encoding.
 
 ## [3.2.0] - 2022-11-18
 
