@@ -123,7 +123,7 @@ If a training is continued for a previously trained model, specify the starting 
 ## Try Casanovo on a small example
 
 Here, we demonstrate how to use Casanovo using a small collection of mass spectra in an MGF file (~100 MS/MS spectra).
-The example MGF file is available at [`sample_data/sample_preprocessed_spectra.mgf`](https://github.com/Noble-Lab/casanovo/blob/main/sample_data/sample_preprocessed_spectra.mgf`).
+The example MGF file is available at [`sample_data/sample_preprocessed_spectra.mgf`](https://github.com/Noble-Lab/casanovo/blob/main/sample_data/sample_preprocessed_spectra.mgf).
 
 To obtain *de novo* sequencing predictions for these spectra:
 1. Download the example MGF above.
