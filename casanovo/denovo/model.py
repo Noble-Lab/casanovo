@@ -754,19 +754,18 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
 
         # Calculate and log amino acid and peptide match evaluation metrics from
         # the predicted peptides.
-        peptides_pred_raw, _ = self.forward(batch[0], batch[1])
-        # FIXME: Temporary fix to skip predictions with multiple stop tokens.
-        peptides_pred, peptides_true = [], []
-        for peptide_pred, peptide_true in zip(peptides_pred_raw, batch[2]):
-            if len(peptide_pred) > 0:
-                if peptide_pred[0] == "$":
-                    peptide_pred = peptide_pred[1:]  # Remove stop token.
-                if "$" not in peptide_pred and len(peptide_pred) > 0:
-                    peptides_pred.append(peptide_pred)
-                    peptides_true.append(peptide_true)
+        predicted_peptide_seq = []
+        true_peptide_seq = batch[2]
+
+        for spectrum_preds in self.forward(batch[0], batch[1]):
+            for _, _, peptide_seq in spectrum_preds:
+                predicted_peptide_seq.append(peptide_seq)
+
         aa_precision, _, pep_precision = evaluate.aa_match_metrics(
             *evaluate.aa_match_batch(
-                peptides_pred, peptides_true, self.decoder._peptide_mass.masses
+                predicted_peptide_seq,
+                true_peptide_seq,
+                self.decoder._peptide_mass.masses,
             )
         )
         log_args = dict(on_step=False, on_epoch=True, sync_dist=True)
@@ -842,13 +841,12 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         metrics = {
             "epoch": self.trainer.current_epoch,
             "valid": callback_metrics["CELoss"]["valid"].detach(),
-            "valid_aa_precision": callback_metrics["aa_precision"][
-                "valid"
-            ].detach(),
-            "valid_aa_recall": callback_metrics["aa_recall"]["valid"].detach(),
-            "valid_pep_recall": callback_metrics["pep_recall"][
-                "valid"
-            ].detach(),
+            "valid_aa_precision": callback_metrics[
+                "AA precision at coverage=1"
+            ]["valid"].detach(),
+            "valid_pep_precision": callback_metrics[
+                "Peptide precision at coverage=1"
+            ]["valid"].detach(),
         }
         self._history.append(metrics)
         self._log_history()
