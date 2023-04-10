@@ -480,3 +480,16 @@ def test_spectrum_id_mzml(mzml_small, tmp_path):
     ):
         spectrum_id = str(filename), f"scan={scan_nr}"
         assert dataset.get_spectrum_id(i) == spectrum_id
+
+
+def test_train_val_step_functions():
+    """Test train and validation step functions operating on batches."""
+    model = Spec2Pep(n_beams=1, residues="massivekb", min_peptide_len=4)
+    spectra = torch.zeros(1, 5, 2)
+    precursors = torch.tensor([[469.25364, 2.0, 235.63410]])
+    peptides = ["PEPK"]
+    batch = (spectra, precursors, peptides)
+
+    # Check if valid loss value returned
+    assert model.training_step(batch) > 0
+    assert model.validation_step(batch) > 0
