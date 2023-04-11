@@ -830,7 +830,11 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         Log the training loss at the end of each epoch.
         """
         train_loss = self.trainer.callback_metrics["CELoss"]["train"].detach()
-        self._history[-1]["train"] = train_loss
+        metrics = {
+            "step": self.trainer.global_step,
+            "train": train_loss,
+        }
+        self._history.append(metrics)
         self._log_history()
 
     def on_validation_epoch_end(self) -> None:
@@ -839,7 +843,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         """
         callback_metrics = self.trainer.callback_metrics
         metrics = {
-            "epoch": self.trainer.current_epoch,
+            "step": self.trainer.global_step,
             "valid": callback_metrics["CELoss"]["valid"].detach(),
             "valid_aa_precision": callback_metrics[
                 "AA precision at coverage=1"
@@ -890,36 +894,35 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         Write log to console, if requested.
         """
         # Log only if all output for the current epoch is recorded.
-        if len(self._history) > 0 and len(self._history[-1]) == 6:
-            if len(self._history) == 1:
+        if len(self._history) == 1:
+            logger.info(
+                "Step\tTrain loss\tValid loss\tPeptide precision\tAA precision"
+            )
+        metrics = self._history[-1]
+        if len(self._history) > 0:
+            if metrics["step"] % self.n_log == 0:
                 logger.info(
-                    "Epoch\tTrain loss\tValid loss\tAA precision\tAA recall\t"
-                    "Peptide recall"
-                )
-            metrics = self._history[-1]
-            if metrics["epoch"] % self.n_log == 0:
-                logger.info(
-                    "%i\t%.6f\t%.6f\t%.6f\t%.6f\t%.6f",
-                    metrics["epoch"] + 1,
+                    "%i\t%.6f\t%.6f\t%.6f\t%.6f",
+                    metrics["step"],
                     metrics.get("train", np.nan),
                     metrics.get("valid", np.nan),
+                    metrics.get("valid_pep_precision", np.nan),
                     metrics.get("valid_aa_precision", np.nan),
-                    metrics.get("valid_aa_recall", np.nan),
-                    metrics.get("valid_pep_recall", np.nan),
                 )
                 if self.tb_summarywriter is not None:
                     for descr, key in [
                         ("loss/train_crossentropy_loss", "train"),
-                        ("loss/dev_crossentropy_loss", "valid"),
-                        ("eval/dev_aa_precision", "valid_aa_precision"),
-                        ("eval/dev_aa_recall", "valid_aa_recall"),
-                        ("eval/dev_pep_recall", "valid_pep_recall"),
+                        ("loss/val_crossentropy_loss", "valid"),
+                        ("eval/val_pep_precision", "valid_pep_precision"),
+                        ("eval/val_aa_precision", "valid_aa_precision"),
                     ]:
-                        self.tb_summarywriter.add_scalar(
-                            descr,
-                            metrics.get(key, np.nan),
-                            metrics["epoch"] + 1,
-                        )
+                        metric_value = metrics.get(key, np.nan)
+                        if metric_value is not np.nan:
+                            self.tb_summarywriter.add_scalar(
+                                descr,
+                                metric_value,
+                                metrics["step"],
+                            )
 
     def configure_optimizers(
         self,

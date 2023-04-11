@@ -12,11 +12,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 - Included the `min_peptide_len` parameter in the configuration file to restrict predictions to peptide with a minimum length.
 - Export multiple PSMs per spectrum using the `top_match` parameter in the configuration file.
+- `every_n_train_steps` parameter now controls the frequency of both validation epochs and model checkpointing during training.
 
 ### Changed
 
 - Calculate the amino acid scores as the average of the amino acid scores and the peptide score.
 - Spectra from mzML and mzXML peak files are referred to by their scan numbers in the mzTab output instead of their indexes.
+- We now log steps rather than epochs as units of progress during training.
+- Validation performance metrics are logged (and added to tensorboard) at the validation epoch, and training loss is logged at the end of training epoch, i.e. training and validation metrics are logged asynchronously.
 
 ### Fixed
 

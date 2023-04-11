@@ -307,10 +307,12 @@ def train(
         auto_select_gpus=True,
         callbacks=callbacks,
         devices=_get_devices(config["no_gpu"]),
+        enable_checkpointing=config["save_model"],
         logger=config["logger"],
         max_epochs=config["max_epochs"],
         num_sanity_val_steps=config["num_sanity_val_steps"],
         strategy=_get_strategy(),
+        val_check_interval=config["every_n_train_steps"],
     )
     # Train the model.
     trainer.fit(
