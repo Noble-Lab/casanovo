@@ -307,6 +307,7 @@ def train(
         auto_select_gpus=True,
         callbacks=callbacks,
         devices=_get_devices(config["no_gpu"]),
+        enable_checkpointing=config["save_model"],
         logger=config["logger"],
         max_epochs=config["max_epochs"],
         num_sanity_val_steps=config["num_sanity_val_steps"],

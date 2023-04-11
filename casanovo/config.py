@@ -51,6 +51,7 @@ class Config:
         dim_intensity=int,
         max_length=int,
         n_log=int,
+        tb_summarywriter=str,
         warmup_iters=int,
         max_iters=int,
         learning_rate=float,

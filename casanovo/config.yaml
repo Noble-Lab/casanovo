@@ -81,7 +81,7 @@ residues:
   "+43.006": 43.005814      # Carbamylation
   "-17.027": -17.026549     # NH3 loss
   "+43.006-17.027": 25.980265      # Carbamylation and NH3 loss
-# Logging frequency in training steps
+# Logging frequency in training epochs
 n_log: 1
 # Tensorboard object to keep track of training metrics
 tb_summarywriter:
