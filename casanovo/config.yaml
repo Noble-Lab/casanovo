@@ -81,7 +81,7 @@ residues:
   "+43.006": 43.005814      # Carbamylation
   "-17.027": -17.026549     # NH3 loss
   "+43.006-17.027": 25.980265      # Carbamylation and NH3 loss
-# Logging frequency in training epochs
+# Logging frequency in training steps
 n_log: 1
 # Tensorboard object to keep track of training metrics
 tb_summarywriter:
@@ -117,7 +117,7 @@ save_model: True
 model_save_folder_path: ""
 # Set to "False" to save the PyTorch model instance
 save_weights_only: True
-# Model checkpointing frequency in training steps
+# Model validation and checkpointing frequency in training steps
 every_n_train_steps: 50_000
 # Disable usage of a GPU (including Apple MPS):
 no_gpu: False

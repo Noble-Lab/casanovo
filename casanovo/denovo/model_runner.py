@@ -312,6 +312,7 @@ def train(
         max_epochs=config["max_epochs"],
         num_sanity_val_steps=config["num_sanity_val_steps"],
         strategy=_get_strategy(),
+        val_check_interval=config["every_n_train_steps"],
     )
     # Train the model.
     trainer.fit(
