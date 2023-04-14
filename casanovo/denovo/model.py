@@ -754,18 +754,13 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
 
         # Calculate and log amino acid and peptide match evaluation metrics from
         # the predicted peptides.
-        predicted_peptide_seq = []
-        true_peptide_seq = batch[2]
-
+        peptides_pred, peptides_true = [], batch[2]
         for spectrum_preds in self.forward(batch[0], batch[1]):
-            for _, _, peptide_seq in spectrum_preds:
-                predicted_peptide_seq.append(peptide_seq)
-
+            for _, _, pred in spectrum_preds:
+                peptides_pred.append(pred)
         aa_precision, _, pep_precision = evaluate.aa_match_metrics(
             *evaluate.aa_match_batch(
-                predicted_peptide_seq,
-                true_peptide_seq,
-                self.decoder._peptide_mass.masses,
+                peptides_pred, peptides_true, self.decoder._peptide_mass.masses
             )
         )
         log_args = dict(on_step=False, on_epoch=True, sync_dist=True)
@@ -894,35 +889,34 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         Write log to console, if requested.
         """
         # Log only if all output for the current epoch is recorded.
+        if len(self._history) == 0:
+            return
         if len(self._history) == 1:
             logger.info(
                 "Step\tTrain loss\tValid loss\tPeptide precision\tAA precision"
             )
         metrics = self._history[-1]
-        if len(self._history) > 0:
-            if metrics["step"] % self.n_log == 0:
-                logger.info(
-                    "%i\t%.6f\t%.6f\t%.6f\t%.6f",
-                    metrics["step"],
-                    metrics.get("train", np.nan),
-                    metrics.get("valid", np.nan),
-                    metrics.get("valid_pep_precision", np.nan),
-                    metrics.get("valid_aa_precision", np.nan),
-                )
-                if self.tb_summarywriter is not None:
-                    for descr, key in [
-                        ("loss/train_crossentropy_loss", "train"),
-                        ("loss/val_crossentropy_loss", "valid"),
-                        ("eval/val_pep_precision", "valid_pep_precision"),
-                        ("eval/val_aa_precision", "valid_aa_precision"),
-                    ]:
-                        metric_value = metrics.get(key, np.nan)
-                        if metric_value is not np.nan:
-                            self.tb_summarywriter.add_scalar(
-                                descr,
-                                metric_value,
-                                metrics["step"],
-                            )
+        if metrics["step"] % self.n_log == 0:
+            logger.info(
+                "%i\t%.6f\t%.6f\t%.6f\t%.6f",
+                metrics["step"],
+                metrics.get("train", np.nan),
+                metrics.get("valid", np.nan),
+                metrics.get("valid_pep_precision", np.nan),
+                metrics.get("valid_aa_precision", np.nan),
+            )
+            if self.tb_summarywriter is not None:
+                for descr, key in [
+                    ("loss/train_crossentropy_loss", "train"),
+                    ("loss/val_crossentropy_loss", "valid"),
+                    ("eval/val_pep_precision", "valid_pep_precision"),
+                    ("eval/val_aa_precision", "valid_aa_precision"),
+                ]:
+                    metric_value = metrics.get(key, np.nan)
+                    if not np.isnan(metric_value):
+                        self.tb_summarywriter.add_scalar(
+                            descr, metric_value, metrics["step"]
+                        )
 
     def configure_optimizers(
         self,
