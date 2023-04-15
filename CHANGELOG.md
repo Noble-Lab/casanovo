@@ -6,20 +6,31 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+### Added
+
+- `every_n_train_steps` parameter now controls the frequency of both validation epochs and model checkpointing during training.
+
+### Changed
+
+- We now log steps rather than epochs as units of progress during training.
+- Validation performance metrics are logged (and added to tensorboard) at the validation epoch, and training loss is logged at the end of training epoch, i.e. training and validation metrics are logged asynchronously.
+
+### Fixed
+
+- Upgrade to Depthcharge v0.2.0 to fix sinusoidal encoding.
+- Correctly refer to input peak files by their full file path.
+
 ## [3.3.0] - 2023-04-04
 
 ### Added
 
 - Included the `min_peptide_len` parameter in the configuration file to restrict predictions to peptide with a minimum length.
 - Export multiple PSMs per spectrum using the `top_match` parameter in the configuration file.
-- `every_n_train_steps` parameter now controls the frequency of both validation epochs and model checkpointing during training.
 
 ### Changed
 
 - Calculate the amino acid scores as the average of the amino acid scores and the peptide score.
 - Spectra from mzML and mzXML peak files are referred to by their scan numbers in the mzTab output instead of their indexes.
-- We now log steps rather than epochs as units of progress during training.
-- Validation performance metrics are logged (and added to tensorboard) at the validation epoch, and training loss is logged at the end of training epoch, i.e. training and validation metrics are logged asynchronously.
 
 ### Fixed
 
@@ -27,7 +38,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Spectra are correctly matched to their input peak file when analyzing multiple files simultaneously.
 - The score of the stop token is taken into account when calculating the predicted peptide score.
 - Peptides with incorrect N-terminal modifications (multiple or internal positions) are no longer predicted.
-- Upgrade to Depthcharge v0.2.0 to fix sinusoidal encoding.
 
 ## [3.2.0] - 2022-11-18
 
@@ -164,7 +174,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Initial Casanovo version.
 
 [Unreleased]: https://github.com/Noble-Lab/casanovo/compare/v3.3.0...HEAD
-[3.2.0]: https://github.com/Noble-Lab/casanovo/compare/v3.2.0...v3.3.0
+[3.3.0]: https://github.com/Noble-Lab/casanovo/compare/v3.2.0...v3.3.0
 [3.2.0]: https://github.com/Noble-Lab/casanovo/compare/v3.1.0...v3.2.0
 [3.1.0]: https://github.com/Noble-Lab/casanovo/compare/v3.0.0...v3.1.0
 [3.0.0]: https://github.com/Noble-Lab/casanovo/compare/v2.1.1...v3.0.0
