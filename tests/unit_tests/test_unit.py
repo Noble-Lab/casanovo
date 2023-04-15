@@ -13,6 +13,7 @@ import torch
 
 from casanovo import casanovo
 from casanovo import utils
+from casanovo.data import ms_io
 from casanovo.data.datasets import SpectrumDataset, AnnotatedSpectrumDataset
 from casanovo.denovo.evaluate import aa_match_batch, aa_match_metrics
 from casanovo.denovo.model import Spec2Pep, _aa_pep_score
@@ -493,3 +494,15 @@ def test_train_val_step_functions():
     # Check if valid loss value returned
     assert model.training_step(batch) > 0
     assert model.validation_step(batch) > 0
+
+
+def test_run_map(mgf_small):
+    out_writer = ms_io.MztabWriter("dummy.mztab")
+    # Set peak file by base file name only.
+    out_writer.set_ms_run([os.path.basename(mgf_small.name)])
+    assert os.path.basename(mgf_small.name) not in out_writer._run_map
+    assert os.path.abspath(mgf_small.name) in out_writer._run_map
+    # Set peak file by full path.
+    out_writer.set_ms_run([os.path.abspath(mgf_small.name)])
+    assert os.path.basename(mgf_small.name) not in out_writer._run_map
+    assert os.path.abspath(mgf_small.name) in out_writer._run_map
