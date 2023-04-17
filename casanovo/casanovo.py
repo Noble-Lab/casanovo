@@ -67,7 +67,7 @@ logger = logging.getLogger("casanovo")
 @click.option(
     "--output",
     help="The base output file name to store logging (extension: .log) and "
-    "(optionally) prediction results (extension: .csv).",
+    "(optionally) prediction results (extension: .mztab).",
     type=click.Path(dir_okay=False),
 )
 def main(
@@ -96,7 +96,8 @@ def main(
             f"casanovo_{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}",
         )
     else:
-        output = os.path.splitext(os.path.abspath(output))[0]
+        basename, ext = os.path.splitext(os.path.abspath(output))
+        output = basename if ext.lower() in (".log", ".mztab") else output
 
     # Configure logging.
     logging.captureWarnings(True)
