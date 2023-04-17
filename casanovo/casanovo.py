@@ -96,7 +96,8 @@ def main(
             f"casanovo_{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}",
         )
     else:
-        output = os.path.splitext(os.path.abspath(output))[0]
+        basename, ext = os.path.splitext(os.path.abspath(output))
+        output = basename if ext.lower() == ".mztab" else output
 
     # Configure logging.
     logging.captureWarnings(True)
