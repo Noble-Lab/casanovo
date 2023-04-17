@@ -97,7 +97,7 @@ def main(
         )
     else:
         basename, ext = os.path.splitext(os.path.abspath(output))
-        output = basename if ext.lower() == ".mztab" else output
+        output = basename if ext.lower() in (".log", ".mztab") else output
 
     # Configure logging.
     logging.captureWarnings(True)
