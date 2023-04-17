@@ -135,11 +135,9 @@ class MztabWriter:
             The input peak file name(s).
         """
         for i, filename in enumerate(natsort.natsorted(peak_filenames), 1):
+            filename = os.path.abspath(filename)
             self.metadata.append(
-                (
-                    f"ms_run[{i}]-location",
-                    Path(os.path.abspath(filename)).as_uri(),
-                ),
+                (f"ms_run[{i}]-location", Path(filename).as_uri()),
             )
             self._run_map[filename] = i
 
@@ -180,6 +178,7 @@ class MztabWriter:
             for i, psm in enumerate(
                 natsort.natsorted(self.psms, key=operator.itemgetter(1)), 1
             ):
+                filename, idx = os.path.abspath(psm[1][0]), psm[1][1]
                 writer.writerow(
                     [
                         "PSM",
@@ -200,7 +199,7 @@ class MztabWriter:
                         psm[3],  # charge
                         psm[4],  # exp_mass_to_charge
                         psm[5],  # calc_mass_to_charge
-                        f"ms_run[{self._run_map[psm[1][0]]}]:{psm[1][1]}",
+                        f"ms_run[{self._run_map[filename]}]:{idx}",
                         "null",  # pre
                         "null",  # post
                         "null",  # start
