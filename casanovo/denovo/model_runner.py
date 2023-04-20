@@ -12,6 +12,7 @@ import numpy as np
 import pytorch_lightning as pl
 import torch
 from depthcharge.data import AnnotatedSpectrumIndex, SpectrumIndex
+from pytorch_lightning.accelerators import find_usable_cuda_devices
 from pytorch_lightning.strategies import DDPStrategy
 
 from .. import utils
@@ -158,7 +159,6 @@ def _execute_existing(
     # Create the Trainer object.
     trainer = pl.Trainer(
         accelerator="auto",
-        auto_select_gpus=True,
         devices=_get_devices(config["no_gpu"]),
         logger=config["logger"],
         max_epochs=config["max_epochs"],
@@ -371,7 +371,7 @@ def _get_strategy() -> Optional[DDPStrategy]:
     return None
 
 
-def _get_devices(no_gpu: bool) -> Union[int, str]:
+def _get_devices(no_gpu: bool) -> Union[List[int], str, int]:
     """
     Get the number of GPUs/CPUs for the Trainer to use.
 
@@ -382,15 +382,15 @@ def _get_devices(no_gpu: bool) -> Union[int, str]:
 
     Returns
     -------
-    Union[int, str]
-        The number of GPUs/CPUs to use, or "auto" to let PyTorch Lightning
-        determine the appropriate number of devices.
+    Union[List[int], str, int]
+        Identifiers of the GPUs to use, the number of CPUs to use, or "auto" to
+        let PyTorch Lightning determine the appropriate number of devices.
     """
     if not no_gpu and any(
         operator.attrgetter(device + ".is_available")(torch)()
         for device in ("cuda",)
     ):
-        return -1
+        return find_usable_cuda_devices()
     elif not (n_workers := utils.n_workers()):
         return "auto"
     else:
