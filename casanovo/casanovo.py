@@ -15,9 +15,7 @@ import appdirs
 import click
 import github
 import requests
-import torch
 import tqdm
-import yaml
 from pytorch_lightning.lite import LightningLite
 
 from . import __version__
@@ -116,6 +114,7 @@ def main(
     root.addHandler(file_handler)
     # Disable dependency non-critical log messages.
     logging.getLogger("depthcharge").setLevel(logging.INFO)
+    logging.getLogger("fsspec").setLevel(logging.WARNING)
     logging.getLogger("github").setLevel(logging.WARNING)
     logging.getLogger("h5py").setLevel(logging.WARNING)
     logging.getLogger("numba").setLevel(logging.WARNING)
