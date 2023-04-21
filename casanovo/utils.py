@@ -1,4 +1,5 @@
 """Small utility functions"""
+import logging
 import os
 import platform
 import re
@@ -6,6 +7,9 @@ from typing import Tuple
 
 import psutil
 import torch
+
+
+logger = logging.getLogger("casanovo")
 
 
 def n_workers() -> int:
@@ -26,6 +30,10 @@ def n_workers() -> int:
     """
     # Windows or MacOS: no multiprocessing.
     if platform.system() in ["Windows", "Darwin"]:
+        logger.warning(
+            "Dataloader multiprocessing is currently not supported on Windows "
+            "or MacOS; using only a single thread."
+        )
         return 0
     # Linux: scale the number of workers by the number of GPUs (if present).
     try:

@@ -10,6 +10,10 @@ import warnings
 from typing import Optional, Tuple
 
 warnings.filterwarnings("ignore", category=DeprecationWarning)
+warnings.filterwarnings(
+    "ignore",
+    ".*Consider increasing the value of the `num_workers` argument*",
+)
 
 import appdirs
 import click
