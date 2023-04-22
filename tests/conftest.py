@@ -199,7 +199,7 @@ def tiny_config(tmp_path):
     }
 
     cfg_file = tmp_path / "config.yml"
-    with cfg_file.open("w+") as out_file:
+    with cfg_file.open("w+", encoding="utf-8") as out_file:
         yaml.dump(cfg, out_file)
 
     return cfg_file
