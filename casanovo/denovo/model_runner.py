@@ -241,7 +241,7 @@ class ModelRunner:
         if not self.model_filename.exists():
             logger.error(
                 "Could not find the model weights at file %s",
-                model_filename,
+                self.model_filename,
             )
             raise FileNotFoundError("Could not find the model weights file")
 
