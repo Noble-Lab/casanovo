@@ -3,9 +3,9 @@ import functools
 import os
 from typing import List, Optional, Tuple
 
-import numpy as np
-import pytorch_lightning as pl
 import torch
+import numpy as np
+import lightning.pytorch as pl
 from depthcharge.data import AnnotatedSpectrumIndex
 
 from ..data.datasets import AnnotatedSpectrumDataset, SpectrumDataset
@@ -52,7 +52,8 @@ class DeNovoDataModule(pl.LightningDataModule):
         train_index: Optional[AnnotatedSpectrumIndex] = None,
         valid_index: Optional[AnnotatedSpectrumIndex] = None,
         test_index: Optional[AnnotatedSpectrumIndex] = None,
-        batch_size: int = 128,
+        train_batch_size: int = 128,
+        eval_batch_size: int = 1028,
         n_peaks: Optional[int] = 150,
         min_mz: float = 50.0,
         max_mz: float = 2500.0,
@@ -65,7 +66,8 @@ class DeNovoDataModule(pl.LightningDataModule):
         self.train_index = train_index
         self.valid_index = valid_index
         self.test_index = test_index
-        self.batch_size = batch_size
+        self.train_batch_size = train_batch_size
+        self.eval_batch_size = eval_batch_size
         self.n_peaks = n_peaks
         self.min_mz = min_mz
         self.max_mz = max_mz
@@ -119,7 +121,9 @@ class DeNovoDataModule(pl.LightningDataModule):
                 self.test_dataset = make_dataset(self.test_index)
 
     def _make_loader(
-        self, dataset: torch.utils.data.Dataset
+        self,
+        dataset: torch.utils.data.Dataset,
+        batch_size: int,
     ) -> torch.utils.data.DataLoader:
         """
         Create a PyTorch DataLoader.
@@ -128,6 +132,8 @@ class DeNovoDataModule(pl.LightningDataModule):
         ----------
         dataset : torch.utils.data.Dataset
             A PyTorch Dataset.
+        batch_size : int
+            The batch size to use.
 
         Returns
         -------
@@ -136,7 +142,7 @@ class DeNovoDataModule(pl.LightningDataModule):
         """
         return torch.utils.data.DataLoader(
             dataset,
-            batch_size=self.batch_size,
+            batch_size=batch_size,
             collate_fn=prepare_batch,
             pin_memory=True,
             num_workers=self.n_workers,
@@ -144,19 +150,19 @@ class DeNovoDataModule(pl.LightningDataModule):
 
     def train_dataloader(self) -> torch.utils.data.DataLoader:
         """Get the training DataLoader."""
-        return self._make_loader(self.train_dataset)
+        return self._make_loader(self.train_dataset, self.train_batch_size)
 
     def val_dataloader(self) -> torch.utils.data.DataLoader:
         """Get the validation DataLoader."""
-        return self._make_loader(self.valid_dataset)
+        return self._make_loader(self.valid_dataset, self.eval_batch_size)
 
     def test_dataloader(self) -> torch.utils.data.DataLoader:
         """Get the test DataLoader."""
-        return self._make_loader(self.test_dataset)
+        return self._make_loader(self.test_dataset, self.eval_batch_size)
 
     def predict_dataloader(self) -> torch.utils.data.DataLoader:
         """Get the predict DataLoader."""
-        return self._make_loader(self.test_dataset)
+        return self._make_loader(self.test_dataset, self.eval_batch_size)
 
 
 def prepare_batch(

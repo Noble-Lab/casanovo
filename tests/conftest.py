@@ -2,6 +2,7 @@
 import numpy as np
 import psims
 import pytest
+import yaml
 from pyteomics.mass import calculate_mass
 
 
@@ -180,3 +181,25 @@ def _create_mzml(peptides, mzml_file, random_state=42):
                     )
 
     return mzml_file
+
+
+@pytest.fixture
+def tiny_config(tmp_path):
+    """A config file for a tiny model."""
+    cfg = {
+        "n_head": 2,
+        "dim_feedfoward": 10,
+        "n_layers": 1,
+        "warmup_iters": 1,
+        "max_iters": 10,
+        "max_epochs": 10,
+        "every_n_train_steps": 1,
+        "model_save_folder_path": str(tmp_path),
+        "accelerator": "cpu",
+    }
+
+    cfg_file = tmp_path / "config.yml"
+    with cfg_file.open("w+") as out_file:
+        yaml.dump(cfg, out_file)
+
+    return cfg_file

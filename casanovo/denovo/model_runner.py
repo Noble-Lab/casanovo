@@ -6,15 +6,17 @@ import operator
 import os
 import tempfile
 import uuid
+from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Union
 
 import numpy as np
-import pytorch_lightning as pl
 import torch
+import lightning.pytorch as pl
+from lightning.pytorch.strategies import DDPStrategy
 from depthcharge.data import AnnotatedSpectrumIndex, SpectrumIndex
-from pytorch_lightning.strategies import DDPStrategy
 
 from .. import utils
+from ..config import Config
 from ..data import ms_io
 from ..denovo.dataloaders import DeNovoDataModule
 from ..denovo.model import Spec2Pep
@@ -23,307 +25,350 @@ from ..denovo.model import Spec2Pep
 logger = logging.getLogger("casanovo")
 
 
-def predict(
-    peak_path: str,
-    model_filename: str,
-    config: Dict[str, Any],
-    out_writer: ms_io.MztabWriter,
-) -> None:
-    """
-    Predict peptide sequences with a trained Casanovo model.
+class ModelRunner:
+    """A class to run Casanovo models.
 
     Parameters
     ----------
-    peak_path : str
-        The path with peak files for predicting peptide sequences.
-    model_filename : str
-        The file name of the model weights (.ckpt file).
-    config : Dict[str, Any]
-        The configuration options.
-    out_writer : ms_io.MztabWriter
-        The mzTab writer to export the prediction results.
+    config : Config object
+        The casanovo configuration.
+    model_filename : str, optional
+        The model filename is required for eval and de novo modes,
+        but not for training a model from scratch.
     """
-    _execute_existing(peak_path, model_filename, config, False, out_writer)
 
+    def __init__(
+        self,
+        config: Config,
+        model_filename: Optional[str] = None,
+    ) -> None:
+        """Initialize a ModelRunner"""
+        self.config = config
+        self.model_filename = model_filename
 
-def evaluate(
-    peak_path: str, model_filename: str, config: Dict[str, Any]
-) -> None:
-    """
-    Evaluate peptide sequence predictions from a trained Casanovo model.
+        # Initialized later:
+        self.tmp_dir = None
+        self.trainer = None
+        self.model = None
+        self.loaders = None
+        self.writer = None
 
-    Parameters
-    ----------
-    peak_path : str
-        The path with peak files for predicting peptide sequences.
-    model_filename : str
-        The file name of the model weights (.ckpt file).
-    config : Dict[str, Any]
-        The configuration options.
-    """
-    _execute_existing(peak_path, model_filename, config, True)
+        # Configure checkpoints.
+        if config.save_model:
+            self.callbacks = [
+                pl.callbacks.ModelCheckpoint(
+                    dirpath=config.model_save_folder_path,
+                    save_top_k=-1,
+                    save_weights_only=config.save_weights_only,
+                    every_n_train_steps=config.every_n_train_steps,
+                )
+            ]
+        else:
+            self.callbacks = None
 
+    def __enter__(self):
+        """Enter the context manager"""
+        self.tmp_dir = tempfile.TemporaryDirectory()
+        return self
 
-def _execute_existing(
-    peak_path: str,
-    model_filename: str,
-    config: Dict[str, Any],
-    annotated: bool,
-    out_writer: Optional[ms_io.MztabWriter] = None,
-) -> None:
-    """
-    Predict peptide sequences with a trained Casanovo model with/without
-    evaluation.
+    def __exit__(self, exc_type, exc_value, traceback):
+        """Cleanup on exit"""
+        self.tmp_dir.cleanup()
+        self.tmp_dir = None
 
-    Parameters
-    ----------
-    peak_path : str
-        The path with peak files for predicting peptide sequences.
-    model_filename : str
-        The file name of the model weights (.ckpt file).
-    config : Dict[str, Any]
-        The configuration options.
-    annotated : bool
-        Whether the input peak files are annotated (execute in evaluation mode)
-        or not (execute in prediction mode only).
-    out_writer : Optional[ms_io.MztabWriter]
-        The mzTab writer to export the prediction results.
-    """
-    # Load the trained model.
-    if not os.path.isfile(model_filename):
-        logger.error(
-            "Could not find the trained model weights at file %s",
-            model_filename,
+    def train(
+        self,
+        train_peak_path: Iterable[str],
+        valid_peak_path: Iterable[str],
+    ) -> None:
+        """Train the Casanovo model.
+
+        Parameters
+        ----------
+        train_peak_path : iterable of str
+            The path to the MS data files for training.
+        valid_peak_path : iterable of str
+            The path to the MS data files for validation.
+
+        Returns
+        -------
+        self
+        """
+        self.initialize_trainer(train=True)
+        self.initialize_model(train=True)
+
+        train_index = self._get_index(train_peak_path, True, "training")
+        valid_index = self._get_index(valid_peak_path, True, "validation")
+        self.initialize_data_module(train_index, valid_index)
+        self.loaders.setup()
+
+        self.trainer.fit(
+            self.model,
+            self.loaders.train_dataloader(),
+            self.loaders.val_dataloader(),
         )
-        raise FileNotFoundError("Could not find the trained model weights")
-    model = Spec2Pep().load_from_checkpoint(
-        model_filename,
-        dim_model=config["dim_model"],
-        n_head=config["n_head"],
-        dim_feedforward=config["dim_feedforward"],
-        n_layers=config["n_layers"],
-        dropout=config["dropout"],
-        dim_intensity=config["dim_intensity"],
-        custom_encoder=config["custom_encoder"],
-        max_length=config["max_length"],
-        residues=config["residues"],
-        max_charge=config["max_charge"],
-        precursor_mass_tol=config["precursor_mass_tol"],
-        isotope_error_range=config["isotope_error_range"],
-        min_peptide_len=config["min_peptide_len"],
-        n_beams=config["n_beams"],
-        top_match=config["top_match"],
-        n_log=config["n_log"],
-        out_writer=out_writer,
-    )
-    # Read the MS/MS spectra for which to predict peptide sequences.
-    if annotated:
-        peak_ext = (".mgf", ".h5", ".hdf5")
-    else:
-        peak_ext = (".mgf", ".mzml", ".mzxml", ".h5", ".hdf5")
-    if len(peak_filenames := _get_peak_filenames(peak_path, peak_ext)) == 0:
-        logger.error("Could not find peak files from %s", peak_path)
-        raise FileNotFoundError("Could not find peak files")
-    else:
-        out_writer.set_ms_run(peak_filenames)
-    peak_is_index = any(
-        [os.path.splitext(fn)[1] in (".h5", ".hdf5") for fn in peak_filenames]
-    )
-    if peak_is_index and len(peak_filenames) > 1:
-        logger.error("Multiple HDF5 spectrum indexes specified")
-        raise ValueError("Multiple HDF5 spectrum indexes specified")
-    tmp_dir = tempfile.TemporaryDirectory()
-    if peak_is_index:
-        idx_filename, peak_filenames = peak_filenames[0], None
-    else:
-        idx_filename = os.path.join(tmp_dir.name, f"{uuid.uuid4().hex}.hdf5")
-    SpectrumIdx = AnnotatedSpectrumIndex if annotated else SpectrumIndex
-    valid_charge = np.arange(1, config["max_charge"] + 1)
-    index = SpectrumIdx(
-        idx_filename, peak_filenames, valid_charge=valid_charge
-    )
-    # Initialize the data loader.
-    loaders = DeNovoDataModule(
-        test_index=index,
-        n_peaks=config["n_peaks"],
-        min_mz=config["min_mz"],
-        max_mz=config["max_mz"],
-        min_intensity=config["min_intensity"],
-        remove_precursor_tol=config["remove_precursor_tol"],
-        n_workers=config["n_workers"],
-        batch_size=config["predict_batch_size"],
-    )
-    loaders.setup(stage="test", annotated=annotated)
 
-    # Create the Trainer object.
-    trainer = pl.Trainer(
-        accelerator="auto",
-        auto_select_gpus=True,
-        devices=_get_devices(config["no_gpu"]),
-        logger=config["logger"],
-        max_epochs=config["max_epochs"],
-        num_sanity_val_steps=config["num_sanity_val_steps"],
-        strategy=_get_strategy(),
-    )
-    # Run the model with/without validation.
-    run_trainer = trainer.validate if annotated else trainer.predict
-    run_trainer(model, loaders.test_dataloader())
-    # Clean up temporary files.
-    tmp_dir.cleanup()
+    def evaluate(self, peak_path: Iterable[str]) -> None:
+        """Evaluate peptide sequence preditions from a trained Casanovo model.
 
+        Parameters
+        ----------
+        peak_path : iterable of str
+            The path with MS data files for predicting peptide sequences.
 
-def train(
-    peak_path: str,
-    peak_path_val: str,
-    model_filename: str,
-    config: Dict[str, Any],
-) -> None:
-    """
-    Train a Casanovo model.
+        Returns
+        -------
+        self
+        """
+        self.initialize_trainer(train=False)
+        self.initialize_model(train=False)
 
-    The model can be trained from scratch or by continuing training an existing
-    model.
+        test_index = self._get_index(peak_path, True, "evaluation")
+        self.initialize_data_module(test_index=test_index)
+        self.loaders.setup(stage="test", annotated=True)
 
-    Parameters
-    ----------
-    peak_path : str
-        The path with peak files to be used as training data.
-    peak_path_val : str
-        The path with peak files to be used as validation data.
-    model_filename : str
-        The file name of the model weights (.ckpt file).
-    config : Dict[str, Any]
-        The configuration options.
-    """
-    # Read the MS/MS spectra to use for training and validation.
-    ext = (".mgf", ".h5", ".hdf5")
-    if len(train_filenames := _get_peak_filenames(peak_path, ext)) == 0:
-        logger.error("Could not find training peak files from %s", peak_path)
-        raise FileNotFoundError("Could not find training peak files")
-    train_is_index = any(
-        [os.path.splitext(fn)[1] in (".h5", ".hdf5") for fn in train_filenames]
-    )
-    if train_is_index and len(train_filenames) > 1:
-        logger.error("Multiple training HDF5 spectrum indexes specified")
-        raise ValueError("Multiple training HDF5 spectrum indexes specified")
-    if (
-        peak_path_val is None
-        or len(val_filenames := _get_peak_filenames(peak_path_val, ext)) == 0
-    ):
-        logger.error(
-            "Could not find validation peak files from %s", peak_path_val
+        self.trainer.validate(self.model, self.loaders.test_dataloader())
+
+    def predict(self, peak_path: Iterable[str], output: str) -> None:
+        """Predict peptide sequences with a trained Casanovo model.
+
+        Parameters
+        ----------
+        peak_path : iterable of str
+            The path with the MS data files for predicting peptide sequences.
+        output : str
+            Where should the output be saved?
+
+        Returns
+        -------
+        self
+        """
+        self.writer = ms_io.MztabWriter(f"{output}.mztab")
+        self.writer.set_metadata(
+            self.config,
+            model=str(self.model_filename),
+            config_filename=self.config.file,
         )
-        raise FileNotFoundError("Could not find validation peak files")
-    val_is_index = any(
-        [os.path.splitext(fn)[1] in (".h5", ".hdf5") for fn in val_filenames]
-    )
-    if val_is_index and len(val_filenames) > 1:
-        logger.error("Multiple validation HDF5 spectrum indexes specified")
-        raise ValueError("Multiple validation HDF5 spectrum indexes specified")
-    tmp_dir = tempfile.TemporaryDirectory()
-    if train_is_index:
-        train_idx_fn, train_filenames = train_filenames[0], None
-    else:
-        train_idx_fn = os.path.join(tmp_dir.name, f"{uuid.uuid4().hex}.hdf5")
-    valid_charge = np.arange(1, config["max_charge"] + 1)
-    train_index = AnnotatedSpectrumIndex(
-        train_idx_fn, train_filenames, valid_charge=valid_charge
-    )
-    if val_is_index:
-        val_idx_fn, val_filenames = val_filenames[0], None
-    else:
-        val_idx_fn = os.path.join(tmp_dir.name, f"{uuid.uuid4().hex}.hdf5")
-    val_index = AnnotatedSpectrumIndex(
-        val_idx_fn, val_filenames, valid_charge=valid_charge
-    )
-    # Initialize the data loaders.
-    dataloader_params = dict(
-        batch_size=config["train_batch_size"],
-        n_peaks=config["n_peaks"],
-        min_mz=config["min_mz"],
-        max_mz=config["max_mz"],
-        min_intensity=config["min_intensity"],
-        remove_precursor_tol=config["remove_precursor_tol"],
-        n_workers=config["n_workers"],
-    )
-    train_loader = DeNovoDataModule(
-        train_index=train_index, **dataloader_params
-    )
-    train_loader.setup()
-    val_loader = DeNovoDataModule(valid_index=val_index, **dataloader_params)
-    val_loader.setup()
-    # Initialize the model.
-    model_params = dict(
-        dim_model=config["dim_model"],
-        n_head=config["n_head"],
-        dim_feedforward=config["dim_feedforward"],
-        n_layers=config["n_layers"],
-        dropout=config["dropout"],
-        dim_intensity=config["dim_intensity"],
-        custom_encoder=config["custom_encoder"],
-        max_length=config["max_length"],
-        residues=config["residues"],
-        max_charge=config["max_charge"],
-        precursor_mass_tol=config["precursor_mass_tol"],
-        isotope_error_range=config["isotope_error_range"],
-        n_beams=config["n_beams"],
-        top_match=config["top_match"],
-        n_log=config["n_log"],
-        tb_summarywriter=config["tb_summarywriter"],
-        warmup_iters=config["warmup_iters"],
-        max_iters=config["max_iters"],
-        lr=config["learning_rate"],
-        weight_decay=config["weight_decay"],
-    )
-    if config["train_from_scratch"]:
-        model = Spec2Pep(**model_params)
-    else:
-        if not os.path.isfile(model_filename):
+
+        self.initialize_trainer(train=False)
+        self.initialize_model(train=False)
+
+        test_index = self._get_index(peak_path, False, "")
+        self.writer.set_ms_run(test_index.ms_files)
+        self.initialize_data_module(test_index=test_index)
+        self.loaders.setup(stage="test", annotated=False)
+
+        self.trainer.predict(self.model, self.loaders.test_dataloader())
+
+    def initialize_trainer(self, train: bool) -> None:
+        """Initialize the lightning Trainer.
+
+        Parameters
+        ----------
+        train : bool
+            Determines whether to set the trainer up for model training
+            or evaluation / inference.
+        """
+        trainer_cfg = dict(
+            accelerator=self.config.accelerator,
+            devices=1,
+            logger=self.config.logger,
+        )
+
+        if self.train:
+            if self.config.devices is None:
+                devices = "auto"
+            else:
+                devices = self.config.devices
+
+            additional_cfg = dict(
+                devices=devices,
+                callbacks=self.callbacks,
+                enable_checkpointing=self.config.save_model,
+                max_epochs=self.config.max_epochs,
+                num_sanity_val_steps=self.config.num_sanity_val_steps,
+                strategy=self._get_strategy(),
+                val_check_interval=self.config.every_n_train_steps,
+            )
+            trainer_cfg.update(additional_cfg)
+
+        self.trainer = pl.Trainer(**trainer_cfg)
+
+    def initialize_model(self, train: bool) -> None:
+        """Initialize the Casanovo model.
+
+        Parameters
+        ----------
+        train : bool
+            Determines whether to set the model up for model training
+            or evaluation / inference.
+        """
+        model_params = dict(
+            dim_model=self.config.dim_model,
+            n_head=self.config.n_head,
+            dim_feedforward=self.config.dim_feedforward,
+            n_layers=self.config.n_layers,
+            dropout=self.config.dropout,
+            dim_intensity=self.config.dim_intensity,
+            custom_encoder=self.config.custom_encoder,
+            max_length=self.config.max_length,
+            residues=self.config.residues,
+            max_charge=self.config.max_charge,
+            precursor_mass_tol=self.config.precursor_mass_tol,
+            isotope_error_range=self.config.isotope_error_range,
+            n_beams=self.config.n_beams,
+            top_match=self.config.top_match,
+            n_log=self.config.n_log,
+            tb_summarywriter=self.config.tb_summarywriter,
+            warmup_iters=self.config.warmup_iters,
+            max_iters=self.config.max_iters,
+            lr=self.config.learning_rate,
+            weight_decay=self.config.weight_decay,
+            out_writer=self.writer,
+        )
+
+        from_scratch = (
+            self.config.train_from_scratch,
+            self.model_filename is None,
+        )
+        if train and any(from_scratch):
+            self.model = Spec2Pep(**model_params)
+            return
+        elif self.model_filename is None:
+            logger.error("A model file must be proided")
+            raise ValueError("A model file must be provided")
+
+        if not self.model_filename.exists():
             logger.error(
-                "Could not find the model weights at file %s to continue "
-                "training",
+                "Could not find the model weights at file %s",
                 model_filename,
             )
-            raise FileNotFoundError(
-                "Could not find the model weights to continue training"
-            )
-        model = Spec2Pep().load_from_checkpoint(model_filename, **model_params)
-    # Create the Trainer object and (optionally) a checkpoint callback to
-    # periodically save the model.
-    if config["save_model"]:
-        callbacks = [
-            pl.callbacks.ModelCheckpoint(
-                dirpath=config["model_save_folder_path"],
-                save_top_k=-1,
-                save_weights_only=config["save_weights_only"],
-                every_n_train_steps=config["every_n_train_steps"],
-            )
-        ]
-    else:
-        callbacks = None
+            raise FileNotFoundError("Could not find the model weights file")
 
-    trainer = pl.Trainer(
-        accelerator="auto",
-        auto_select_gpus=True,
-        callbacks=callbacks,
-        devices=_get_devices(config["no_gpu"]),
-        enable_checkpointing=config["save_model"],
-        logger=config["logger"],
-        max_epochs=config["max_epochs"],
-        num_sanity_val_steps=config["num_sanity_val_steps"],
-        strategy=_get_strategy(),
-        val_check_interval=config["every_n_train_steps"],
-    )
-    # Train the model.
-    trainer.fit(
-        model, train_loader.train_dataloader(), val_loader.val_dataloader()
-    )
-    # Clean up temporary files.
-    tmp_dir.cleanup()
+        self.model = Spec2Pep().load_from_checkpoint(
+            self.model_filename,
+            **model_params,
+        )
+
+    def initialize_data_module(
+        self,
+        train_index: Optional[AnnotatedSpectrumIndex] = None,
+        valid_index: Optional[AnnotatedSpectrumIndex] = None,
+        test_index: (
+            Optional[Union[AnnotatedSpectrumIndex, SpectrumIndex]]
+        ) = None,
+    ) -> None:
+        """Initialize the data module
+
+        Parameters
+        ----------
+        train_index : AnnotatedSpectrumIndex, optional
+            A spectrum index for model training.
+        valid_index : AnnotatedSpectrumIndex, optional
+            A spectrum index for validation.
+        test_index : AnnotatedSpectrumIndex or SpectrumIndex, optional
+            A spectrum index for evaluation or inference.
+        """
+        try:
+            n_devices = self.trainer.num_devices
+            train_bs = self.config.train_batch_size // n_devices
+            eval_bs = self.config.predict_batch_size // n_devices
+        except AttributeError as err:
+            raise RuntimeError("Please use `initialize_trainer()` first.")
+
+        self.loaders = DeNovoDataModule(
+            train_index=train_index,
+            valid_index=valid_index,
+            test_index=test_index,
+            min_mz=self.config.min_mz,
+            max_mz=self.config.max_mz,
+            min_intensity=self.config.min_intensity,
+            remove_precursor_tol=self.config.remove_precursor_tol,
+            n_workers=self.config.n_workers,
+            train_batch_size=train_bs,
+            eval_batch_size=eval_bs,
+        )
+
+    def _get_index(
+        self,
+        peak_path: str,
+        annotated: bool,
+        msg: str = "",
+    ) -> Union[SpectrumIndex, AnnotatedSpectrumIndex]:
+        """Get the spectrum index.
+
+        If the file is a SpectrumIndex, only one is allowed. Otherwise multiple
+        may be specified.
+
+        Parameters
+        ----------
+        peak_path : str
+            The peak file/directory to check.
+        annotated : bool
+            Are the spectra expected to be annotated?
+        msg : str, optional
+            A string to insert into the error message.
+
+        Returns
+        -------
+        SpectrumIndex or AnnotatedSpectrumIndex
+            The spectrum index for training, evaluation, or inference.
+        """
+        ext = (".mgf", ".h5", ".hdf5")
+        if not annotated:
+            ext += (".mzml", ".mzxml")
+
+        if msg and msg[-1] != " ":
+            msg += " "
+
+        filenames = _get_peak_filenames(peak_path, ext)
+        if not filenames:
+            not_found_err = f"Cound not find {msg}peak files"
+            logger.error(not_found_err + " from %s", peak_path)
+            raise FileNotFoundError(not_found_err)
+
+        is_index = any([Path(f).suffix in (".h5", ".hdf5") for f in filenames])
+        if is_index:
+            if len(filenames) > 1:
+                h5_err = f"Multiple {msg}HDF5 spectrum indexes specified"
+                logger.error(h5_err)
+                raise ValueError(h5_err)
+
+            index_fname, filenames = filenames[0], None
+        else:
+            index_fname = Path(self.tmp_dir.name) / f"{uuid.uuid4().hex}.hdf5"
+
+        Index = AnnotatedSpectrumIndex if annotated else SpectrumIndex
+        valid_charge = np.arange(1, self.config.max_charge + 1)
+        return Index(index_fname, filenames, valid_charge=valid_charge)
+
+    def _get_strategy(self) -> Optional[DDPStrategy]:
+        """Get the strategy for the Trainer.
+
+        The DDP strategy works best when multiple GPUs are used. It can work
+        for CPU-only, but definitely fails using MPS (the Apple Silicon chip)
+        due to Gloo.
+
+        Returns
+        -------
+        Optional[DDPStrategy]
+            The strategy parameter for the Trainer.
+
+        """
+        if self.config.accelerator in ("cpu", "mps"):
+            return "auto"
+
+        if self.config.devices == 1:
+            return "auto"
+
+        if torch.cuda.device_count() > 1:
+            return DDPStrategy(find_unused_parameters=False, static_graph=True)
+
+        return "auto"
 
 
 def _get_peak_filenames(
-    path: str, supported_ext: Iterable[str] = (".mgf",)
+    paths: Iterable[str], supported_ext: Iterable[str]
 ) -> List[str]:
     """
     Get all matching peak file names from the path pattern.
@@ -333,65 +378,22 @@ def _get_peak_filenames(
 
     Parameters
     ----------
-    path : str
-        The path pattern.
+    paths : Iterable[str]
+        The path pattern(s).
     supported_ext : Iterable[str]
-        Extensions of supported peak file formats. Default: MGF.
+        Extensions of supported peak file formats.
 
     Returns
     -------
     List[str]
         The peak file names matching the path pattern.
     """
-    path = os.path.expanduser(path)
-    path = os.path.expandvars(path)
-    return [
-        os.path.abspath(fn)
-        for fn in glob.glob(path, recursive=True)
-        if os.path.splitext(fn.lower())[1] in supported_ext
-    ]
+    found_files = set()
+    for path in paths:
+        path = os.path.expanduser(path)
+        path = os.path.expandvars(path)
+        for fname in glob.glob(path, recursive=True):
+            if Path(fname).suffix.lower() in supported_ext:
+                found_files.add(fname)
 
-
-def _get_strategy() -> Optional[DDPStrategy]:
-    """
-    Get the strategy for the Trainer.
-
-    The DDP strategy works best when multiple GPUs are used. It can work for
-    CPU-only, but definitely fails using MPS (the Apple Silicon chip) due to
-    Gloo.
-
-    Returns
-    -------
-    Optional[DDPStrategy]
-        The strategy parameter for the Trainer.
-    """
-    if torch.cuda.device_count() > 1:
-        return DDPStrategy(find_unused_parameters=False, static_graph=True)
-
-    return None
-
-
-def _get_devices(no_gpu: bool) -> Union[int, str]:
-    """
-    Get the number of GPUs/CPUs for the Trainer to use.
-
-    Parameters
-    ----------
-    no_gpu : bool
-        If true, disable all GPU usage.
-
-    Returns
-    -------
-    Union[int, str]
-        The number of GPUs/CPUs to use, or "auto" to let PyTorch Lightning
-        determine the appropriate number of devices.
-    """
-    if not no_gpu and any(
-        operator.attrgetter(device + ".is_available")(torch)()
-        for device in ("cuda",)
-    ):
-        return -1
-    elif not (n_workers := utils.n_workers()):
-        return "auto"
-    else:
-        return n_workers
+    return sorted(list(found_files))
