@@ -69,7 +69,7 @@ def test_split_version():
     assert version == ("3", "0", "1")
 
 
-@pytest.mark.skip(msg="Hit rate limit during CI/CD")
+@pytest.mark.skip(reason="Hit rate limit during CI/CD")
 def test_get_model_weights(monkeypatch):
     """
     Test that model weights can be downloaded from GitHub or used from the
