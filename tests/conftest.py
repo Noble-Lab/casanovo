@@ -192,7 +192,7 @@ def tiny_config(tmp_path):
         "n_layers": 1,
         "warmup_iters": 1,
         "max_iters": 10,
-        "max_epochs": 10,
+        "max_epochs": 30,
         "every_n_train_steps": 1,
         "model_save_folder_path": str(tmp_path),
         "accelerator": "cpu",

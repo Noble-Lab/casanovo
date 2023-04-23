@@ -106,7 +106,7 @@ top_match: 1
 # Object for logging training progress
 logger:
 # Max number of training epochs
-max_epochs: 1000
+max_epochs: 30
 # Number of validation steps to run before training begins
 num_sanity_val_steps: 0
 # Set to "False" to further train a pre-trained Casanovo model
