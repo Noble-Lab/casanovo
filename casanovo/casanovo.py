@@ -165,7 +165,6 @@ def main(
         if mode == "denovo":
             logger.info("Predict peptide sequences with Casanovo.")
             model_runner.predict(peak_path, output)
-            model_runner.writer.save()
         elif mode == "eval":
             logger.info("Evaluate a trained Casanovo model.")
             model_runner.evaluate(peak_path)

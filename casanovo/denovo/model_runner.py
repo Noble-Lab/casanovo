@@ -9,11 +9,11 @@ import uuid
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Union
 
+import lightning.pytorch as pl
 import numpy as np
 import torch
-import lightning.pytorch as pl
-from lightning.pytorch.strategies import DDPStrategy
 from depthcharge.data import AnnotatedSpectrumIndex, SpectrumIndex
+from lightning.pytorch.strategies import DDPStrategy
 
 from .. import utils
 from ..config import Config
@@ -75,6 +75,8 @@ class ModelRunner:
         """Cleanup on exit"""
         self.tmp_dir.cleanup()
         self.tmp_dir = None
+        if self.writer is not None:
+            self.writer.save()
 
     def train(
         self,
@@ -175,7 +177,7 @@ class ModelRunner:
             logger=self.config.logger,
         )
 
-        if self.train:
+        if train:
             if self.config.devices is None:
                 devices = "auto"
             else:
@@ -235,10 +237,10 @@ class ModelRunner:
             self.model = Spec2Pep(**model_params)
             return
         elif self.model_filename is None:
-            logger.error("A model file must be proided")
+            logger.error("A model file must be provided")
             raise ValueError("A model file must be provided")
 
-        if not self.model_filename.exists():
+        if not Path(self.model_filename).exists():
             logger.error(
                 "Could not find the model weights at file %s",
                 self.model_filename,
@@ -318,19 +320,17 @@ class ModelRunner:
         if not annotated:
             ext += (".mzml", ".mzxml")
 
-        if msg and msg[-1] != " ":
-            msg += " "
-
+        msg = msg.strip()
         filenames = _get_peak_filenames(peak_path, ext)
         if not filenames:
-            not_found_err = f"Cound not find {msg}peak files"
+            not_found_err = f"Cound not find {msg} peak files"
             logger.error(not_found_err + " from %s", peak_path)
             raise FileNotFoundError(not_found_err)
 
         is_index = any([Path(f).suffix in (".h5", ".hdf5") for f in filenames])
         if is_index:
             if len(filenames) > 1:
-                h5_err = f"Multiple {msg}HDF5 spectrum indexes specified"
+                h5_err = f"Multiple {msg} HDF5 spectrum indexes specified"
                 logger.error(h5_err)
                 raise ValueError(h5_err)
 

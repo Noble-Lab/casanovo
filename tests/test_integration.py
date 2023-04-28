@@ -1,7 +1,8 @@
 import functools
-import pyteomics.mztab
 
+import pyteomics.mztab
 from click.testing import CliRunner
+
 from casanovo import casanovo
 
 

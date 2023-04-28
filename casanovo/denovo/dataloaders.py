@@ -3,9 +3,9 @@ import functools
 import os
 from typing import List, Optional, Tuple
 
-import torch
-import numpy as np
 import lightning.pytorch as pl
+import numpy as np
+import torch
 from depthcharge.data import AnnotatedSpectrumIndex
 
 from ..data.datasets import AnnotatedSpectrumDataset, SpectrumDataset
@@ -23,8 +23,10 @@ class DeNovoDataModule(pl.LightningDataModule):
         The spectrum index file corresponding to the validation data.
     test_index : Optional[AnnotatedSpectrumIndex]
         The spectrum index file corresponding to the testing data.
-    batch_size : int
-        The batch size to use for training and evaluating.
+    train_batch_size : int
+        The batch size to use for training.
+    eval_batch_size : int
+        The batch size to use for inference.
     n_peaks : Optional[int]
         The number of top-n most intense peaks to keep in each spectrum. `None`
         retains all peaks.
