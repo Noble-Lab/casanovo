@@ -10,6 +10,7 @@ from typing import Any, Dict, List
 import natsort
 
 from .. import __version__
+from ..config import Config
 
 
 class MztabWriter:

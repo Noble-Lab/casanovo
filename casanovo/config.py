@@ -4,7 +4,6 @@ from pathlib import Path
 from typing import Optional, Dict, Callable, Tuple, Union
 
 import yaml
-import torch
 
 from . import utils
 

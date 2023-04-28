@@ -20,12 +20,10 @@ import click
 import github
 import requests
 import tqdm
-import yaml
 from lightning.pytorch import seed_everything
 
 from . import __version__
 from . import utils
-from .data import ms_io
 from .denovo import ModelRunner
 from .config import Config
 
