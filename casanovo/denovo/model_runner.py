@@ -289,7 +289,7 @@ class ModelRunner:
 
     def _get_index(
         self,
-        peak_path: str,
+        peak_path: Iterable[str],
         annotated: bool,
         msg: str = "",
     ) -> Union[SpectrumIndex, AnnotatedSpectrumIndex]:
@@ -300,8 +300,8 @@ class ModelRunner:
 
         Parameters
         ----------
-        peak_path : str
-            The peak file/directory to check.
+        peak_path : Iterable[str]
+            The peak files/directories to check.
         annotated : bool
             Are the spectra expected to be annotated?
         msg : str, optional

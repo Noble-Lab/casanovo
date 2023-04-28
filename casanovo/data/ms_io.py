@@ -43,13 +43,13 @@ class MztabWriter:
         self._run_map = {}
         self.psms = []
 
-    def set_metadata(self, config: Dict[str, Any], **kwargs) -> None:
+    def set_metadata(self, config: Config, **kwargs) -> None:
         """
         Specify metadata information to write to the mzTab header.
 
         Parameters
         ----------
-        config : Dict[str, Any]
+        config : Config
             The active configuration options.
         kwargs
             Additional configuration options (i.e. from command-line arguments).
