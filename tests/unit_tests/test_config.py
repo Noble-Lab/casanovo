@@ -9,7 +9,7 @@ def test_default():
     config = Config()
     assert config.random_seed == 454
     assert config["random_seed"] == 454
-    assert not config.no_gpu
+    assert config.accelerator == "auto"
     assert config.file == "default"
 
 
@@ -22,6 +22,6 @@ def test_override(tmp_path):
     config = Config(yml)
     assert config.random_seed == 42
     assert config["random_seed"] == 42
-    assert not config.no_gpu
+    assert config.accelerator == "auto"
     assert config.top_match == 3
     assert config.file == str(yml)

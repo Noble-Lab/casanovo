@@ -20,12 +20,13 @@ import click
 import github
 import requests
 import tqdm
-from pytorch_lightning.lite import LightningLite
+import yaml
+from lightning.pytorch import seed_everything
 
 from . import __version__
 from . import utils
 from .data import ms_io
-from .denovo import model_runner
+from .denovo import ModelRunner
 from .config import Config
 
 logger = logging.getLogger("casanovo")
@@ -54,11 +55,13 @@ logger = logging.getLogger("casanovo")
     required=True,
     help="The file path with peak files for predicting peptide sequences or "
     "training Casanovo.",
+    multiple=True,
 )
 @click.option(
     "--peak_path_val",
     help="The file path with peak files to be used as validation data during "
     "training.",
+    multiple=True,
 )
 @click.option(
     "--config",
@@ -69,7 +72,7 @@ logger = logging.getLogger("casanovo")
 @click.option(
     "--output",
     help="The base output file name to store logging (extension: .log) and "
-    "(optionally) prediction results (extension: .csv).",
+    "(optionally) prediction results (extension: .mztab).",
     type=click.Path(dir_okay=False),
 )
 def main(
@@ -98,7 +101,8 @@ def main(
             f"casanovo_{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}",
         )
     else:
-        output = os.path.splitext(os.path.abspath(output))[0]
+        basename, ext = os.path.splitext(os.path.abspath(output))
+        output = basename if ext.lower() in (".log", ".mztab") else output
 
     # Configure logging.
     logging.captureWarnings(True)
@@ -129,7 +133,7 @@ def main(
     # Read parameters from the config file.
     config = Config(config)
 
-    LightningLite.seed_everything(seed=config["random_seed"], workers=True)
+    seed_everything(seed=config["random_seed"], workers=True)
 
     # Download model weights if these were not specified (except when training).
     if model is None and mode != "train":
@@ -161,18 +165,17 @@ def main(
         logger.debug("%s = %s", str(key), str(value))
 
     # Run Casanovo in the specified mode.
-    if mode == "denovo":
-        logger.info("Predict peptide sequences with Casanovo.")
-        writer = ms_io.MztabWriter(f"{output}.mztab")
-        writer.set_metadata(config, model=model, config_filename=config.file)
-        model_runner.predict(peak_path, model, config, writer)
-        writer.save()
-    elif mode == "eval":
-        logger.info("Evaluate a trained Casanovo model.")
-        model_runner.evaluate(peak_path, model, config)
-    elif mode == "train":
-        logger.info("Train the Casanovo model.")
-        model_runner.train(peak_path, peak_path_val, model, config)
+    with ModelRunner(config, model) as model_runner:
+        if mode == "denovo":
+            logger.info("Predict peptide sequences with Casanovo.")
+            model_runner.predict(peak_path, output)
+            model_runner.writer.save()
+        elif mode == "eval":
+            logger.info("Evaluate a trained Casanovo model.")
+            model_runner.evaluate(peak_path)
+        elif mode == "train":
+            logger.info("Train the Casanovo model.")
+            model_runner.train(peak_path, peak_path_val)
 
 
 def _get_model_weights() -> str:

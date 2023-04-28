@@ -27,13 +27,13 @@ dependencies = [
     "pandas",
     "psutil",
     "PyGithub",
-    "pytorch-lightning>=1.9.4,<2.0",
+    "lightning>=2.0",
     "PyYAML",
     "requests",
     "scikit-learn",
     "spectrum_utils",
     "tensorboard",
-    "torch>=1.9",
+    "torch>=2.0",
     "tqdm",
 ]
 dynamic = ["version"]

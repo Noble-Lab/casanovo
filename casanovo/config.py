@@ -67,13 +67,14 @@ class Config:
         model_save_folder_path=str,
         save_weights_only=bool,
         every_n_train_steps=int,
-        no_gpu=bool,
+        accelerator=str,
+        devices=int,
     )
 
     def __init__(self, config_file: Optional[str] = None):
         """Initialize a Config object."""
         self.file = str(config_file) if config_file is not None else "default"
-        with self._default_config.open() as f_in:
+        with self._default_config.open(encoding="utf-8") as f_in:
             self._params = yaml.safe_load(f_in)
 
         if config_file is None:
@@ -86,13 +87,7 @@ class Config:
         for key, val in self._config_types.items():
             self.validate_param(key, val)
 
-        # Add extra configuration options and scale by the number of GPUs.
-        n_gpus = 0 if self["no_gpu"] else torch.cuda.device_count()
         self._params["n_workers"] = utils.n_workers()
-        if n_gpus > 1:
-            self._params["train_batch_size"] = (
-                self["train_batch_size"] // n_gpus
-            )
 
     def __getitem__(self, param: str) -> Union[int, bool, str, Tuple, Dict]:
         """Retrieve a parameter"""
