@@ -120,7 +120,7 @@ save_weights_only: True
 # Model validation and checkpointing frequency in training steps
 every_n_train_steps: 50_000
 # The hardware accelerator to use. Must be one of:
-# “cpu”, “gpu”, “tpu”, “ipu”, “hpu”, “mps”, or “auto”
+# "cpu", "gpu", "tpu", "ipu", "hpu", "mps", or "auto"
 accelerator: "auto"
 # The devices to use. Can be set to a positive number int,
 # or the value -1 to indicate all available devices should be used,
