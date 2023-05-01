@@ -14,6 +14,14 @@ warnings.filterwarnings(
     "ignore",
     ".*Consider increasing the value of the `num_workers` argument*",
 )
+warnings.filterwarnings(
+    "ignore",
+    ".*The PyTorch API of nested tensors is in prototype stage*",
+)
+warnings.filterwarnings(
+    "ignore",
+    ".*Converting mask without torch.bool dtype to bool*",
+)
 
 import appdirs
 import click
