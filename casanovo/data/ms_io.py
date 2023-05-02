@@ -5,7 +5,7 @@ import operator
 import os
 import re
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import List
 
 import natsort
 

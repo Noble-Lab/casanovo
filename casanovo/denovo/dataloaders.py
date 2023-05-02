@@ -1,5 +1,4 @@
 """Data loaders for the de novo sequencing task."""
-import functools
 import os
 from typing import List, Optional, Tuple
 
@@ -27,20 +26,6 @@ class DeNovoDataModule(pl.LightningDataModule):
         The batch size to use for training.
     eval_batch_size : int
         The batch size to use for inference.
-    n_peaks : Optional[int]
-        The number of top-n most intense peaks to keep in each spectrum. `None`
-        retains all peaks.
-    min_mz : float
-        The minimum m/z to include. The default is 140 m/z, in order to exclude
-        TMT and iTRAQ reporter ions.
-    max_mz : float
-        The maximum m/z to include.
-    min_intensity : float
-        Remove peaks whose intensity is below `min_intensity` percentage of the
-        base peak intensity.
-    remove_precursor_tol : float
-        Remove peaks within the given mass tolerance in Dalton around the
-        precursor mass.
     n_workers : int, optional
         The number of workers to use for data loading. By default, the number of
         available CPU cores on the current machine is used.
@@ -56,11 +41,6 @@ class DeNovoDataModule(pl.LightningDataModule):
         test_index: Optional[AnnotatedSpectrumIndex] = None,
         train_batch_size: int = 128,
         eval_batch_size: int = 1028,
-        n_peaks: Optional[int] = 150,
-        min_mz: float = 50.0,
-        max_mz: float = 2500.0,
-        min_intensity: float = 0.01,
-        remove_precursor_tol: float = 2.0,
         n_workers: Optional[int] = None,
         random_state: Optional[int] = None,
     ):
@@ -70,11 +50,6 @@ class DeNovoDataModule(pl.LightningDataModule):
         self.test_index = test_index
         self.train_batch_size = train_batch_size
         self.eval_batch_size = eval_batch_size
-        self.n_peaks = n_peaks
-        self.min_mz = min_mz
-        self.max_mz = max_mz
-        self.min_intensity = min_intensity
-        self.remove_precursor_tol = remove_precursor_tol
         self.n_workers = n_workers if n_workers is not None else os.cpu_count()
         self.rng = np.random.default_rng(random_state)
         self.train_dataset = None
@@ -95,29 +70,15 @@ class DeNovoDataModule(pl.LightningDataModule):
             data.
         """
         if stage in (None, "fit", "validate"):
-            make_dataset = functools.partial(
-                AnnotatedSpectrumDataset,
-                n_peaks=self.n_peaks,
-                min_mz=self.min_mz,
-                max_mz=self.max_mz,
-                min_intensity=self.min_intensity,
-                remove_precursor_tol=self.remove_precursor_tol,
-            )
             if self.train_index is not None:
-                self.train_dataset = make_dataset(
-                    self.train_index,
-                    random_state=self.rng,
+                self.train_dataset = AnnotatedSpectrumDataset(
+                    self.train_index, random_state=self.rng
                 )
             if self.valid_index is not None:
-                self.valid_dataset = make_dataset(self.valid_index)
+                self.valid_dataset = AnnotatedSpectrumDataset(self.valid_index)
         if stage in (None, "test"):
-            make_dataset = functools.partial(
-                AnnotatedSpectrumDataset if annotated else SpectrumDataset,
-                n_peaks=self.n_peaks,
-                min_mz=self.min_mz,
-                max_mz=self.max_mz,
-                min_intensity=self.min_intensity,
-                remove_precursor_tol=self.remove_precursor_tol,
+            make_dataset = (
+                AnnotatedSpectrumDataset if annotated else SpectrumDataset
             )
             if self.test_index is not None:
                 self.test_dataset = make_dataset(self.test_index)

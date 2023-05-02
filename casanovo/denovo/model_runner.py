@@ -280,10 +280,6 @@ class ModelRunner:
             train_index=train_index,
             valid_index=valid_index,
             test_index=test_index,
-            min_mz=self.config.min_mz,
-            max_mz=self.config.max_mz,
-            min_intensity=self.config.min_intensity,
-            remove_precursor_tol=self.config.remove_precursor_tol,
             n_workers=self.config.n_workers,
             train_batch_size=train_bs,
             eval_batch_size=eval_bs,
@@ -338,7 +334,16 @@ class ModelRunner:
 
         Index = AnnotatedSpectrumIndex if annotated else SpectrumIndex
         valid_charge = np.arange(1, self.config.max_charge + 1)
-        return Index(index_fname, filenames, valid_charge=valid_charge)
+        return Index(
+            index_fname,
+            filenames,
+            valid_charge=valid_charge,
+            min_mz=self.config.min_mz,
+            max_mz=self.config.max_mz,
+            min_intensity=self.config.min_intensity,
+            max_n_peaks=self.config.n_peaks,
+            remove_precursor_tol=self.config.remove_precursor_tol,
+        )
 
     def _get_strategy(self) -> Optional[DDPStrategy]:
         """Get the strategy for the Trainer.
