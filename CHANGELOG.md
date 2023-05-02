@@ -15,11 +15,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - We now log steps rather than epochs as units of progress during training.
 - Validation performance metrics are logged (and added to tensorboard) at the validation epoch, and training loss is logged at the end of training epoch, i.e. training and validation metrics are logged asynchronously.
 - Irrelevant warning messages on the console output and in the log file are no longer shown.
+- Spectrum preprocessing is performed by Depthcharge instead of Casanovo.
 
 ### Fixed
 
 - Upgrade to Depthcharge v0.2.0 to fix sinusoidal encoding.
 - Correctly refer to input peak files by their full file path.
+- Invalid spectra are discarded rather than making invalid predictions for them.
 
 ## [3.3.0] - 2023-04-04
 
