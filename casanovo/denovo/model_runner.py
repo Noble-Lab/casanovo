@@ -246,9 +246,23 @@ class ModelRunner:
                 self.model_filename,
             )
             raise FileNotFoundError("Could not find the model weights file")
-
+        
+        accelerator_class = str(type(self.trainer.accelerator))
+        if "CUDA" in accelerator_class:
+            map_location_device = "cuda"
+        elif "TPU" in accelerator_class:
+            map_location_device = "xla"
+        elif "HPU" in accelerator_class:
+            map_location_device = "hpu" 
+        elif "IPU" in accelerator_class:
+            map_location_device = "ipu"             
+        #FIXME: Handle the case for mps separately?
+        else:
+            map_location_device = "cpu"
+            
         self.model = Spec2Pep().load_from_checkpoint(
             self.model_filename,
+            map_location=torch.device(map_location_device),
             **model_params,
         )
 
