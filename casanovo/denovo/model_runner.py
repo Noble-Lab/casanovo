@@ -61,7 +61,6 @@ class ModelRunner:
                     monitor="valid_CELoss",
                     mode="min",
                     save_top_k=config.save_top_k,
-                    every_n_train_steps=config.every_n_train_steps,
                 )
             ]
         else:
@@ -248,10 +247,20 @@ class ModelRunner:
             )
             raise FileNotFoundError("Could not find the model weights file")
 
-        self.model = Spec2Pep.load_from_checkpoint(
-            self.model_filename,
-            map_location=torch.empty(1).device,  # Use the default device.
-        )
+        # First try loading model details from the weithgs file,
+        # otherwise use the provided configuration.
+        device = torch.empty(1).device  # Use the default device.
+        try:
+            self.model = Spec2Pep.load_from_checkpoint(
+                self.model_filename,
+                map_location=device,
+            )
+        except RuntimeError:
+            self.model = Spec2Pep.load_from_checkpoint(
+                self.model_filename,
+                map_location=device,
+                **model_params,
+            )
 
     def initialize_data_module(
         self,
