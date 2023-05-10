@@ -61,7 +61,6 @@ class ModelRunner:
                     monitor="valid_CELoss",
                     mode="min",
                     save_top_k=config.save_top_k,
-                    every_n_train_steps=config.every_n_train_steps,
                 )
             ]
         else:
