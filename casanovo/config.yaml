@@ -111,13 +111,18 @@ max_epochs: 30
 num_sanity_val_steps: 0
 # Set to "False" to further train a pre-trained Casanovo model
 train_from_scratch: True
-# Save model checkpoints during training
-save_model: True
+# Save the top k model checkpoints during training. -1 saves all and
+# leaving this field empty saves none.
+save_top_k: 5
 # Path to saved checkpoints
 model_save_folder_path: ""
-# Set to "False" to save the PyTorch model instance
-save_weights_only: True
 # Model validation and checkpointing frequency in training steps
 every_n_train_steps: 50_000
-# Disable usage of a GPU (including Apple MPS):
-no_gpu: False
+# The hardware accelerator to use. Must be one of:
+# "cpu", "gpu", "tpu", "ipu", "hpu", "mps", or "auto"
+accelerator: "auto"
+# The devices to use. Can be set to a positive number int,
+# or the value -1 to indicate all available devices should be used,
+# If left empty, the appropriate number will be automatically
+# selected for automatic selected on the chosen accelerator.
+devices:

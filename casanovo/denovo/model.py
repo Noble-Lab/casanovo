@@ -7,9 +7,9 @@ from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
 
 import depthcharge.masses
 import einops
-import numpy as np
-import pytorch_lightning as pl
 import torch
+import numpy as np
+import lightning.pytorch as pl
 from torch.utils.tensorboard import SummaryWriter
 from depthcharge.components import ModelMixin, PeptideDecoder, SpectrumEncoder
 
@@ -114,6 +114,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         **kwargs: Dict,
     ):
         super().__init__()
+        self.save_hyperparameters()
 
         # Build the model.
         if custom_encoder is not None:
@@ -724,8 +725,8 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         pred = pred[:, :-1, :].reshape(-1, self.decoder.vocab_size + 1)
         loss = self.celoss(pred, truth.flatten())
         self.log(
-            "CELoss",
-            {mode: loss.detach()},
+            f"{mode}_CELoss",
+            loss.detach(),
             on_step=False,
             on_epoch=True,
             sync_dist=True,
@@ -766,12 +767,10 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         log_args = dict(on_step=False, on_epoch=True, sync_dist=True)
         self.log(
             "Peptide precision at coverage=1",
-            {"valid": pep_precision},
+            pep_precision,
             **log_args,
         )
-        self.log(
-            "AA precision at coverage=1", {"valid": aa_precision}, **log_args
-        )
+        self.log("AA precision at coverage=1", aa_precision, **log_args)
 
         return loss
 
@@ -824,7 +823,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         """
         Log the training loss at the end of each epoch.
         """
-        train_loss = self.trainer.callback_metrics["CELoss"]["train"].detach()
+        train_loss = self.trainer.callback_metrics["train_CELoss"].detach()
         metrics = {
             "step": self.trainer.global_step,
             "train": train_loss,
@@ -839,19 +838,21 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         callback_metrics = self.trainer.callback_metrics
         metrics = {
             "step": self.trainer.global_step,
-            "valid": callback_metrics["CELoss"]["valid"].detach(),
+            "valid": callback_metrics["valid_CELoss"].detach(),
             "valid_aa_precision": callback_metrics[
                 "AA precision at coverage=1"
-            ]["valid"].detach(),
+            ].detach(),
             "valid_pep_precision": callback_metrics[
                 "Peptide precision at coverage=1"
-            ]["valid"].detach(),
+            ].detach(),
         }
         self._history.append(metrics)
         self._log_history()
 
-    def on_predict_epoch_end(
-        self, results: List[List[Tuple[np.ndarray, List[str], torch.Tensor]]]
+    def on_predict_batch_end(
+        self,
+        outputs: List[Tuple[np.ndarray, List[str], torch.Tensor]],
+        *args,
     ) -> None:
         """
         Write the predicted peptide sequences and amino acid scores to the
@@ -867,9 +868,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
             peptide,
             peptide_score,
             aa_scores,
-        ) in itertools.chain.from_iterable(
-            itertools.chain.from_iterable(results)
-        ):
+        ) in outputs:
             if len(peptide) == 0:
                 continue
             self.out_writer.psms.append(
