@@ -58,22 +58,37 @@ def test_save_and_load_weights(tmp_path, mgf_small, tiny_config):
         runner.trainer.save_checkpoint(ckpt)
 
     # Try changing model arch:
-    config.n_layers = 50  # lol
+    other_config = Config(tiny_config)
+    other_config.n_layers = 50  # lol
     with torch.device("meta"):
         # Now load the weights into a new model
         # The device should be meta for all the weights.
-        runner = ModelRunner(config=config, model_filename=ckpt)
+        runner = ModelRunner(config=other_config, model_filename=ckpt)
         runner.initialize_model(train=False)
 
     obs_layers = runner.model.encoder.transformer_encoder.num_layers
-    assert obs_layers == 1  # Mach the original arch.
+    assert obs_layers == 1  # Match the original arch.
     assert next(runner.model.parameters()).device == torch.device("meta")
 
     # If the Trainer correctly moves the weights to the accelerator,
     # then it should fail if the weights are on the "meta" device.
     with torch.device("meta"):
-        with ModelRunner(config=config, model_filename=ckpt) as runner:
+        with ModelRunner(other_config, model_filename=ckpt) as runner:
             with pytest.raises(NotImplementedError) as err:
                 runner.evaluate([mgf_small])
 
     assert "meta tensor; no data!" in str(err.value)
+
+    # Try without arch:
+    ckpt_data = torch.load(ckpt)
+    del ckpt_data["hyper_parameters"]
+    torch.save(ckpt_data, ckpt)
+
+    # Shouldn't work:
+    with ModelRunner(other_config, model_filename=ckpt) as runner:
+        with pytest.raises(RuntimeError):
+            runner.evaluate([mgf_small])
+
+    # Should work:
+    with ModelRunner(config=config, model_filename=ckpt) as runner:
+        runner.evaluate([mgf_small])
