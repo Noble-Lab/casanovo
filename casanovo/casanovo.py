@@ -7,6 +7,7 @@ import re
 import shutil
 import sys
 import warnings
+from pathlib import Path
 from typing import Optional, Tuple
 
 warnings.filterwarnings("ignore", category=DeprecationWarning)
@@ -29,77 +30,125 @@ from .config import Config
 logger = logging.getLogger("casanovo")
 
 
-@click.command()
-@click.option(
-    "--mode",
-    required=True,
-    default="denovo",
-    help="\b\nThe mode in which to run Casanovo:\n"
-    '- "denovo" will predict peptide sequences for\nunknown MS/MS spectra.\n'
-    '- "train" will train a model (from scratch or by\ncontinuing training a '
-    "previously trained model).\n"
-    '- "eval" will evaluate the performance of a\ntrained model using '
-    "previously acquired spectrum\nannotations.",
-    type=click.Choice(["denovo", "train", "eval"]),
-)
-@click.option(
-    "--model",
-    help="The file name of the model weights (.ckpt file).",
-    type=click.Path(exists=True, dir_okay=False),
-)
-@click.option(
-    "--peak_path",
-    required=True,
-    help="The file path with peak files for predicting peptide sequences or "
-    "training Casanovo.",
-    multiple=True,
-)
-@click.option(
-    "--peak_path_val",
-    help="The file path with peak files to be used as validation data during "
-    "training.",
-    multiple=True,
-)
-@click.option(
-    "--config",
-    help="The file name of the configuration file with custom options. If not "
-    "specified, a default configuration will be used.",
-    type=click.Path(exists=True, dir_okay=False),
-)
-@click.option(
-    "--output",
-    help="The base output file name to store logging (extension: .log) and "
-    "(optionally) prediction results (extension: .mztab).",
-    type=click.Path(dir_okay=False),
-)
-def main(
-    mode: str,
-    model: Optional[str],
-    peak_path: str,
-    peak_path_val: Optional[str],
-    config: Optional[str],
-    output: Optional[str],
-):
+class _SharedParams(click.Command):
+    """Options shared between most Casanovo commands"""
+
+    def __init__(self, *args, **kwargs) -> None:
+        """Define shared options."""
+        self.params = [
+            click.Option(
+                ("-m", "--model"),
+                help="""
+                The model weights (.ckpt file). If not provided, Casanovo
+                will try to download the latest release.
+                """,
+                type=click.Path(exists=True, dir_okay=False),
+            ),
+            click.Option(
+                ("-o", "--output"),
+                help="The mzTab file to which results will be written.",
+                type=click.Path(dir_okay=False),
+            ),
+            click.Option(
+                ("-c", "--config"),
+                help="""
+                The YAML configuration file overriding the default options.
+                """,
+                type=click.Path(exists=True, dir_okay=False),
+            ),
+            click.Option(
+                ("-v", "--verbosity"),
+                help="""
+                Set the verbosity of console logging messages. Log files are
+                always set to 'debug'.
+                """,
+                type=click.Choice(
+                    ["error", "warning", "info", "debug"],
+                    case_sensitive=False,
+                ),
+                default="info",
+            ),
+            click.Argument(
+                ("peak_path",),
+                help="""
+                One or more mzML, mzXML, or MGF files from which to sequence
+                peptides.
+                """,
+                required=True,
+                nargs=-1,
+            ),
+        ]
+
+
+@click.group()
+def main() -> None:
     """
     \b
-    Casanovo: De novo mass spectrometry peptide sequencing with a transformer model.
-    ================================================================================
+    Casanovo
+    ========
 
+    Casanovo de novo sequences peptide from tandem mass spectra using a
+    Transformer model. Casanovo currently supports mzML, mzXML, and MGF files
+    for de novo sequencing and annotated MGF files, such as those from MassIVE-KB,
+    for training new models.
+
+    Learn more: https://casanovo.readthedocs.io
+    Official code website: https://github.com/Noble-Lab/casanovo
+
+    If you use Casanovo in your work, please cite:
     Yilmaz, M., Fondrie, W. E., Bittremieux, W., Oh, S. & Noble, W. S. De novo
     mass spectrometry peptide sequencing with a transformer model. Proceedings
     of the 39th International Conference on Machine Learning - ICML '22 (2022)
     doi:10.1101/2022.02.07.479481.
+    """
+    return
 
-    Official code website: https://github.com/Noble-Lab/casanovo
+
+@main.command(cls=_SharedParams)
+def sequence(
+    peak_path: str,
+    model: Optional[str],
+    config: Optional[str],
+    output: Optional[str],
+    verbosity: str,
+) -> None:
+    """De novo sequence peptides from tandem mass spectra."""
+
+
+def setup(
+    model: Optional[str],
+    config: Optional[str],
+    output: Optional[str],
+    train: bool = False,
+) -> None:
+    """Setup Casanovo for most commands.
+
+    Parameters
+    ----------
+    config : Optional[str]
+        The provided configuration file.
+    output : Optional[str]
+        The provided output file name.
+    train : bool
+        Are we training? If not, we need to retreive weights when the model
+        is None.
+
+    Return
+    ------
+    Path
+        The output file path.
     """
     if output is None:
-        output = os.path.join(
-            os.getcwd(),
-            f"casanovo_{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}",
-        )
-    else:
-        basename, ext = os.path.splitext(os.path.abspath(output))
-        output = basename if ext.lower() in (".log", ".mztab") else output
+        output = f"casanovo_{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}"
+
+    output = Path(output).expanduser().resolve()
+
+    logging_levels = {
+        "debug": logging.DEBUG,
+        "info": logging.INFO,
+        "warning": logging.WARNING,
+        "error": logging.ERROR,
+    }
 
     # Configure logging.
     logging.captureWarnings(True)
@@ -111,7 +160,7 @@ def main(
         style="{",
     )
     console_handler = logging.StreamHandler(sys.stderr)
-    console_handler.setLevel(logging.DEBUG)
+    console_handler.setLevel(logging_levels[verbosity.lower()])
     console_handler.setFormatter(log_formatter)
     root.addHandler(console_handler)
     file_handler = logging.FileHandler(f"{output}.log")
@@ -160,6 +209,64 @@ def main(
     for key, value in config.items():
         logger.debug("%s = %s", str(key), str(value))
 
+
+@click.option(
+    "--model",
+    help="The file name of the model weights (.ckpt file).",
+    type=click.Path(exists=True, dir_okay=False),
+)
+@click.option(
+    "--peak_path",
+    required=True,
+    help="The file path with peak files for predicting peptide sequences or "
+    "training Casanovo.",
+    multiple=True,
+)
+@click.option(
+    "--peak_path_val",
+    help="The file path with peak files to be used as validation data during "
+    "training.",
+    multiple=True,
+)
+@click.option(
+    "--config",
+    help="The file name of the configuration file with custom options. If not "
+    "specified, a default configuration will be used.",
+    type=click.Path(exists=True, dir_okay=False),
+)
+@click.option(
+    "--output",
+    help="The base output file name to store logging (extension: .log) and "
+    "(optionally) prediction results (extension: .mztab).",
+    type=click.Path(dir_okay=False),
+)
+def main(
+    mode: str,
+    model: Optional[str],
+    peak_path: str,
+    peak_path_val: Optional[str],
+    config: Optional[str],
+    output: Optional[str],
+):
+    """
+    \b
+    Casanovo
+    ========
+
+    Casanovo de novo sequences peptide from tandem mass spectra using a
+    Transformer model. Casanovo currently supports mzML, mzXML, and MGF files
+    for de novo sequencing and annotated MGF files, such as those from MassIVE-KB,
+    for training new models.
+
+    Learn more: https://casanovo.readthedocs.io
+    Official code website: https://github.com/Noble-Lab/casanovo
+
+    If you use Casanovo in your work, please cite:
+    Yilmaz, M., Fondrie, W. E., Bittremieux, W., Oh, S. & Noble, W. S. De novo
+    mass spectrometry peptide sequencing with a transformer model. Proceedings
+    of the 39th International Conference on Machine Learning - ICML '22 (2022)
+    doi:10.1101/2022.02.07.479481.
+    """
     # Run Casanovo in the specified mode.
     with ModelRunner(config, model) as model_runner:
         if mode == "denovo":
