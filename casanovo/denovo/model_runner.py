@@ -59,7 +59,6 @@ class ModelRunner:
                 pl.callbacks.ModelCheckpoint(
                     dirpath=config.model_save_folder_path,
                     save_top_k=-1,
-                    save_weights_only=config.save_weights_only,
                     every_n_train_steps=config.every_n_train_steps,
                 )
             ]
@@ -247,23 +246,9 @@ class ModelRunner:
             )
             raise FileNotFoundError("Could not find the model weights file")
 
-        accelerator_class = str(type(self.trainer.accelerator))
-        if "CUDA" in accelerator_class:
-            map_location_device = "cuda"
-        elif "TPU" in accelerator_class:
-            map_location_device = "xla"
-        elif "HPU" in accelerator_class:
-            map_location_device = "hpu"
-        elif "IPU" in accelerator_class:
-            map_location_device = "ipu"
-        # FIXME: Handle the case for mps separately.
-        else:
-            map_location_device = "cpu"
-
-        self.model = Spec2Pep().load_from_checkpoint(
+        self.model = Spec2Pep.load_from_checkpoint(
             self.model_filename,
-            map_location=torch.device(map_location_device),
-            **model_params,
+            map_location=torch.empty(1).device,  # Use the default device.
         )
 
     def initialize_data_module(
@@ -289,7 +274,7 @@ class ModelRunner:
             n_devices = self.trainer.num_devices
             train_bs = self.config.train_batch_size // n_devices
             eval_bs = self.config.predict_batch_size // n_devices
-        except AttributeError as err:
+        except AttributeError:
             raise RuntimeError("Please use `initialize_trainer()` first.")
 
         self.loaders = DeNovoDataModule(

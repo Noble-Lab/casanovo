@@ -65,7 +65,6 @@ class Config:
         train_from_scratch=bool,
         save_model=bool,
         model_save_folder_path=str,
-        save_weights_only=bool,
         every_n_train_steps=int,
         accelerator=str,
         devices=int,
