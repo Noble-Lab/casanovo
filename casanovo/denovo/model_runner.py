@@ -54,11 +54,13 @@ class ModelRunner:
         self.writer = None
 
         # Configure checkpoints.
-        if config.save_model:
+        if config.save_top_k is not None:
             self.callbacks = [
                 pl.callbacks.ModelCheckpoint(
                     dirpath=config.model_save_folder_path,
-                    save_top_k=-1,
+                    monitor="valid_CELoss",
+                    mode="min",
+                    save_top_k=config.save_top_k,
                     every_n_train_steps=config.every_n_train_steps,
                 )
             ]
@@ -153,12 +155,12 @@ class ModelRunner:
 
         self.initialize_trainer(train=False)
         self.initialize_model(train=False)
+        self.model.out_writer = self.writer
 
         test_index = self._get_index(peak_path, False, "")
         self.writer.set_ms_run(test_index.ms_files)
         self.initialize_data_module(test_index=test_index)
         self.loaders.setup(stage="test", annotated=False)
-
         self.trainer.predict(self.model, self.loaders.test_dataloader())
 
     def initialize_trainer(self, train: bool) -> None:
@@ -185,7 +187,7 @@ class ModelRunner:
             additional_cfg = dict(
                 devices=devices,
                 callbacks=self.callbacks,
-                enable_checkpointing=self.config.save_model,
+                enable_checkpointing=self.config.save_top_k is not None,
                 max_epochs=self.config.max_epochs,
                 num_sanity_val_steps=self.config.num_sanity_val_steps,
                 strategy=self._get_strategy(),

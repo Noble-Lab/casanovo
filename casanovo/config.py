@@ -63,7 +63,7 @@ class Config:
         max_epochs=int,
         num_sanity_val_steps=int,
         train_from_scratch=bool,
-        save_model=bool,
+        save_top_k=int,
         model_save_folder_path=str,
         every_n_train_steps=int,
         accelerator=str,
