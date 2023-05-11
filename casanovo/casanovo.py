@@ -309,7 +309,7 @@ def setup(
     seed_everything(seed=config["random_seed"], workers=True)
 
     # Download model weights if these were not specified (except when training).
-    if model is None and is_train:
+    if model is None and not is_train:
         try:
             model = _get_model_weights()
         except github.RateLimitExceededException:
