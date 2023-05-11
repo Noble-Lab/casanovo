@@ -1,4 +1,5 @@
 import functools
+from pathlib import Path
 
 import pyteomics.mztab
 from click.testing import CliRunner
@@ -85,3 +86,20 @@ def test_train_and_run(
     assert psms.loc[3, "spectra_ref"] == "ms_run[2]:scan=17"
     assert psms.loc[4, "sequence"] == "PEPTLDEK"
     assert psms.loc[4, "spectra_ref"] == "ms_run[2]:scan=111"
+
+
+def test_auxilliary_cli(tmp_path, monkeypatch):
+    """Test the secondary CLI commands"""
+    run = functools.partial(
+        CliRunner().invoke, casanovo.main, catch_exceptions=False
+    )
+
+    monkeypatch.chdir(tmp_path)
+    run("configure")
+    assert Path("casanovo.yaml").exists()
+
+    run(["configure", "-o", "test.yaml"])
+    assert Path("test.yaml").exists()
+
+    res = run("version")
+    assert res.output
