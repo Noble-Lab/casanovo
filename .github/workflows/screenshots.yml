@@ -7,7 +7,6 @@ on:
 
 jobs:
   rich_codex:
-    if: "contains(github.event.head_commit.message, '[screenshots]')"
     runs-on: ubuntu-latest
     steps:
       - name: Check out the repo
