@@ -52,13 +52,13 @@ class ModelRunner:
         self.writer = None
 
         # Configure checkpoints.
-        if config.save_model:
+        if config.save_top_k is not None:
             self.callbacks = [
                 pl.callbacks.ModelCheckpoint(
                     dirpath=config.model_save_folder_path,
-                    save_top_k=-1,
-                    save_weights_only=config.save_weights_only,
-                    every_n_train_steps=config.every_n_train_steps,
+                    monitor="valid_CELoss",
+                    mode="min",
+                    save_top_k=config.save_top_k,
                 )
             ]
         else:
@@ -152,6 +152,7 @@ class ModelRunner:
 
         self.initialize_trainer(train=False)
         self.initialize_model(train=False)
+        self.model.out_writer = self.writer
 
         test_index = self._get_index(peak_path, False, "")
         self.writer.set_ms_run(test_index.ms_files)
@@ -184,7 +185,7 @@ class ModelRunner:
             additional_cfg = dict(
                 devices=devices,
                 callbacks=self.callbacks,
-                enable_checkpointing=self.config.save_model,
+                enable_checkpointing=self.config.save_top_k is not None,
                 max_epochs=self.config.max_epochs,
                 num_sanity_val_steps=self.config.num_sanity_val_steps,
                 strategy=self._get_strategy(),
@@ -245,10 +246,20 @@ class ModelRunner:
             )
             raise FileNotFoundError("Could not find the model weights file")
 
-        self.model = Spec2Pep().load_from_checkpoint(
-            self.model_filename,
-            **model_params,
-        )
+        # First try loading model details from the weithgs file,
+        # otherwise use the provided configuration.
+        device = torch.empty(1).device  # Use the default device.
+        try:
+            self.model = Spec2Pep.load_from_checkpoint(
+                self.model_filename,
+                map_location=device,
+            )
+        except RuntimeError:
+            self.model = Spec2Pep.load_from_checkpoint(
+                self.model_filename,
+                map_location=device,
+                **model_params,
+            )
 
     def initialize_data_module(
         self,
@@ -273,7 +284,7 @@ class ModelRunner:
             n_devices = self.trainer.num_devices
             train_bs = self.config.train_batch_size // n_devices
             eval_bs = self.config.predict_batch_size // n_devices
-        except AttributeError as err:
+        except AttributeError:
             raise RuntimeError("Please use `initialize_trainer()` first.")
 
         self.loaders = DeNovoDataModule(
@@ -340,7 +351,7 @@ class ModelRunner:
         valid_charge = np.arange(1, self.config.max_charge + 1)
         return Index(index_fname, filenames, valid_charge=valid_charge)
 
-    def _get_strategy(self) -> Optional[DDPStrategy]:
+    def _get_strategy(self) -> Union[str, DDPStrategy]:
         """Get the strategy for the Trainer.
 
         The DDP strategy works best when multiple GPUs are used. It can work
@@ -349,20 +360,18 @@ class ModelRunner:
 
         Returns
         -------
-        Optional[DDPStrategy]
+        Union[str, DDPStrategy]
             The strategy parameter for the Trainer.
 
         """
         if self.config.accelerator in ("cpu", "mps"):
             return "auto"
-
-        if self.config.devices == 1:
+        elif self.config.devices == 1:
             return "auto"
-
-        if torch.cuda.device_count() > 1:
+        elif torch.cuda.device_count() > 1:
             return DDPStrategy(find_unused_parameters=False, static_graph=True)
-
-        return "auto"
+        else:
+            return "auto"
 
 
 def _get_peak_filenames(

@@ -114,6 +114,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         **kwargs: Dict,
     ):
         super().__init__()
+        self.save_hyperparameters()
 
         # Build the model.
         if custom_encoder is not None:
