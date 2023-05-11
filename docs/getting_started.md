@@ -58,7 +58,7 @@ After installation, test that it was successful by viewing the Casanovo command 
 ```sh
 casanovo --help
 ```
-![`casanovo --help`](img/help.svg)
+![`casanovo --help`](images/help.svg)
 
 
 All auxiliary data, model, and training-related parameters can be specified in a YAML configuration file. 
