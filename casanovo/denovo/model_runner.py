@@ -158,7 +158,6 @@ class ModelRunner:
         self.writer.set_ms_run(test_index.ms_files)
         self.initialize_data_module(test_index=test_index)
         self.loaders.setup(stage="test", annotated=False)
-
         self.trainer.predict(self.model, self.loaders.test_dataloader())
 
     def initialize_trainer(self, train: bool) -> None:
