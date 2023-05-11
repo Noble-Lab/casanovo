@@ -1,5 +1,6 @@
 """Parse the YAML configuration."""
 import logging
+import shutil
 from pathlib import Path
 from typing import Optional, Dict, Callable, Tuple, Union
 
@@ -126,3 +127,14 @@ class Config:
     def items(self) -> Tuple[str, ...]:
         """Return the parameters"""
         return self._params.items()
+
+    @classmethod
+    def copy_default(cls, output: str) -> None:
+        """Copy the default YAML configuration.
+
+        Parameters
+        ----------
+        output : str
+            The output file.
+        """
+        shutil.copyfile(cls._default_config, output)

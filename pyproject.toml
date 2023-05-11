@@ -20,7 +20,7 @@ classifiers = [
 requires-python = ">=3.8"
 dependencies = [
     "appdirs",
-    "click",
+    "rich-click>=1.6.1",
     "depthcharge-ms>=0.2.0",
     "natsort",
     "numpy",
