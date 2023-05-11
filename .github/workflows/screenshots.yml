@@ -1,10 +1,5 @@
 name: Screenshots with rich-codex
 on:
-  push:
-    branches: [main]
-    paths:
-      - "docs/*.md"
-      - "casanovo/casanovo.py"
   pull_request:
     paths:
       - "docs/*.md"
@@ -18,7 +13,7 @@ jobs:
       - name: Check out the repo
         uses: actions/checkout@v3
         with:
-          ref: ${{ github.ref_name }}
+          ref: ${{ github.head_ref }}
 
       - name: Set up Python
         uses: actions/setup-python@v3
