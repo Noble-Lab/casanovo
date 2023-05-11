@@ -145,7 +145,7 @@ class ModelRunner:
         -------
         self
         """
-        self.writer = ms_io.MztabWriter(f"{output}.mztab")
+        self.writer = ms_io.MztabWriter(Path(output).with_suffix(".mztab"))
         self.writer.set_metadata(
             self.config,
             model=str(self.model_filename),
