@@ -16,8 +16,8 @@ Once you have conda installed, you can use this helpful [cheat sheet](https://do
 
 ### Create a conda environment
 
-Fist, open the terminal (MacOS and Linux) or the Anaconda Prompt (Windows).
-All of the commands that follow should be entered this terminal or Anaconda Prompt window---that is, your *shell*.
+First, open the terminal (MacOS and Linux) or the Anaconda Prompt (Windows).
+All of the commands that follow should be entered into this terminal or Anaconda Prompt window---that is, your *shell*.
 To create a new conda environment for Casanovo, run the following:
 
 ```sh
@@ -58,8 +58,15 @@ After installation, test that it was successful by viewing the Casanovo command 
 ```sh
 casanovo --help
 ```
+![`casanovo --help`](img/help.svg)
 
-All auxiliary data, model, and training-related parameters can be specified in a user created `.yaml` configuration file.
+
+All auxiliary data, model, and training-related parameters can be specified in a YAML configuration file. 
+To generate a YAML file containing the current Casanovo defaults, run:
+```sh
+casanovo configure
+```
+
 See [`casanovo/config.yaml`](https://github.com/Noble-Lab/casanovo/blob/main/casanovo/config.yaml) for the default configuration that was used to obtain the reported results. When running Casanovo in eval or denovo mode, you can change some of the parameters in this file, indicated with "(I)" in the file. You should not change other parameters unless you are training a new Casanovo model.
 
 
