@@ -1,7 +1,6 @@
 """A de novo peptide sequencing model."""
 import collections
 import heapq
-import itertools
 import logging
 from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
 
