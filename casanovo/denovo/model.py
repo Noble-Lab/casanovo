@@ -922,7 +922,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
             ]
 
             if self.calculate_precision:
-                msg += "\t%.6f\t0.6f"
+                msg += "\t%.6f\t%.6f"
                 vals += [
                     metrics.get("valid_pep_precision", np.nan),
                     metrics.get("valid_aa_precision", np.nan),
