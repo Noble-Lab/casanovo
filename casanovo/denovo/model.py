@@ -776,12 +776,12 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
             log_args = dict(on_step=False, on_epoch=True, sync_dist=True)
             self.log(
                 "Peptide precision at coverage=1",
-                pep_precision.astype(np.float32),
+                pep_precision.item(),
                 **log_args,
             )
             self.log(
                 "AA precision at coverage=1",
-                aa_precision.astype(np.float32),
+                aa_precision.item(),
                 **log_args,
             )
         return loss
@@ -838,7 +838,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         train_loss = self.trainer.callback_metrics["train_CELoss"].detach()
         metrics = {
             "step": self.trainer.global_step,
-            "train": train_loss,
+            "train": train_loss.item(),
         }
         self._history.append(metrics)
         self._log_history()
@@ -850,16 +850,18 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         callback_metrics = self.trainer.callback_metrics
         metrics = {
             "step": self.trainer.global_step,
-            "valid": callback_metrics["valid_CELoss"].detach(),
+            "valid": callback_metrics["valid_CELoss"].detach().item(),
         }
 
         if self.calculate_precision:
-            metrics["valid_aa_precision"] = callback_metrics[
-                "AA precision at coverage=1"
-            ].detach()
-            metrics["valid_pep_precision"] = callback_metrics[
-                "Peptide precision at coverage=1"
-            ].detach()
+            metrics["valid_aa_precision"] = (
+                callback_metrics["AA precision at coverage=1"].detach().item()
+            )
+            metrics["valid_pep_precision"] = (
+                callback_metrics["Peptide precision at coverage=1"]
+                .detach()
+                .item()
+            )
         self._history.append(metrics)
         self._log_history()
 
@@ -905,9 +907,11 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         if len(self._history) == 0:
             return
         if len(self._history) == 1:
-            logger.info(
-                "Step\tTrain loss\tValid loss\tPeptide precision\tAA precision"
-            )
+            header = "Step\tTrain loss\tValid loss\t"
+            if self.calculate_precision:
+                header += "Peptide precision\tAA precision"
+
+            logger.info(header)
         metrics = self._history[-1]
         if metrics["step"] % self.n_log == 0:
             msg = "%i\t%.6f\t%.6f"
@@ -932,12 +936,10 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
                     ("eval/val_pep_precision", "valid_pep_precision"),
                     ("eval/val_aa_precision", "valid_aa_precision"),
                 ]:
-                    metric_value = metrics.get(
-                        key, torch.tensor([np.nan])
-                    ).cpu()
-                    if not torch.isnan(metric_value):
+                    metric_value = metrics.get(key, np.nan)
+                    if not np.isnan(metric_value):
                         self.tb_summarywriter.add_scalar(
-                            descr, metric_value.item(), metrics["step"]
+                            descr, metric_value, metrics["step"]
                         )
 
     def configure_optimizers(

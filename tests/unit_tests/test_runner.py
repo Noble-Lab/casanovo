@@ -100,6 +100,7 @@ def test_calculate_precision(tmp_path, mgf_small, tiny_config):
     config.n_layers = 1
     config.max_epochs = 1
     config.calculate_precision = False
+    config.tb_summarywriter = str(tmp_path)
 
     runner = ModelRunner(config=config)
     with runner:
