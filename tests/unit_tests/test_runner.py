@@ -92,3 +92,26 @@ def test_save_and_load_weights(tmp_path, mgf_small, tiny_config):
     # Should work:
     with ModelRunner(config=config, model_filename=ckpt) as runner:
         runner.evaluate([mgf_small])
+
+
+def test_calculate_precision(tmp_path, mgf_small, tiny_config):
+    """Test that this parameter is working correctly."""
+    config = Config(tiny_config)
+    config.n_layers = 1
+    config.max_epochs = 1
+    config.calculate_precision = False
+
+    runner = ModelRunner(config=config)
+    with runner:
+        runner.train([mgf_small], [mgf_small])
+
+    assert "valid_aa_precision" not in runner.model.history.columns
+    assert "valid_pep_precision" not in runner.model.history.columns
+
+    config.calculate_precision = True
+    runner = ModelRunner(config=config)
+    with runner:
+        runner.train([mgf_small], [mgf_small])
+
+    assert "valid_aa_precision" in runner.model.history.columns
+    assert "valid_pep_precision" in runner.model.history.columns

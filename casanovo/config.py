@@ -69,6 +69,7 @@ class Config:
         every_n_train_steps=int,
         accelerator=str,
         devices=int,
+        calculate_precision=bool,
     )
 
     def __init__(self, config_file: Optional[str] = None):

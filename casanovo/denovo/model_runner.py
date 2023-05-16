@@ -14,6 +14,7 @@ import numpy as np
 import torch
 from depthcharge.data import AnnotatedSpectrumIndex, SpectrumIndex
 from lightning.pytorch.strategies import DDPStrategy
+from lightning.pytorch.callbacks import ModelCheckpoint
 
 from .. import utils
 from ..config import Config
@@ -56,7 +57,7 @@ class ModelRunner:
         # Configure checkpoints.
         if config.save_top_k is not None:
             self.callbacks = [
-                pl.callbacks.ModelCheckpoint(
+                ModelCheckpoint(
                     dirpath=config.model_save_folder_path,
                     monitor="valid_CELoss",
                     mode="min",
@@ -227,6 +228,7 @@ class ModelRunner:
             lr=self.config.learning_rate,
             weight_decay=self.config.weight_decay,
             out_writer=self.writer,
+            calculate_precision=self.config.calculate_precision,
         )
 
         from_scratch = (
