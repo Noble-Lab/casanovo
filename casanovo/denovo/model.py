@@ -757,6 +757,8 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         """
         # Record the loss.
         loss = self.training_step(batch, mode="valid")
+        if not self.calculate_precision:
+            return loss
 
         # Calculate and log amino acid and peptide match evaluation metrics from
         # the predicted peptides.
@@ -765,25 +767,24 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
             for _, _, pred in spectrum_preds:
                 peptides_pred.append(pred)
 
-        if self.calculate_precision:
-            aa_precision, _, pep_precision = evaluate.aa_match_metrics(
-                *evaluate.aa_match_batch(
-                    peptides_pred,
-                    peptides_true,
-                    self.decoder._peptide_mass.masses,
-                )
+        aa_precision, _, pep_precision = evaluate.aa_match_metrics(
+            *evaluate.aa_match_batch(
+                peptides_pred,
+                peptides_true,
+                self.decoder._peptide_mass.masses,
             )
-            log_args = dict(on_step=False, on_epoch=True, sync_dist=True)
-            self.log(
-                "Peptide precision at coverage=1",
-                pep_precision.item(),
-                **log_args,
-            )
-            self.log(
-                "AA precision at coverage=1",
-                aa_precision.item(),
-                **log_args,
-            )
+        )
+        log_args = dict(on_step=False, on_epoch=True, sync_dist=True)
+        self.log(
+            "Peptide precision at coverage=1",
+            pep_precision.item(),
+            **log_args,
+        )
+        self.log(
+            "AA precision at coverage=1",
+            aa_precision.item(),
+            **log_args,
+        )
         return loss
 
     def predict_step(
