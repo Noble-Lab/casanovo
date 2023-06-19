@@ -20,16 +20,16 @@ classifiers = [
 requires-python = ">=3.8"
 dependencies = [
     "appdirs",
-    "rich-click>=1.6.1",
     "depthcharge-ms>=0.2.0,<=0.3.0",
+    "lightning>=2.0",
     "natsort",
     "numpy",
     "pandas",
     "psutil",
     "PyGithub",
-    "lightning>=2.0",
     "PyYAML",
     "requests",
+    "rich-click>=1.6.1",
     "scikit-learn",
     "spectrum_utils",
     "tensorboard",

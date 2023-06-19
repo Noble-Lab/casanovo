@@ -2,12 +2,11 @@
 model."""
 import glob
 import logging
-import operator
 import os
 import tempfile
 import uuid
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional, Union
+from typing import Iterable, List, Optional, Union
 
 import lightning.pytorch as pl
 import numpy as np
@@ -16,7 +15,6 @@ from depthcharge.data import AnnotatedSpectrumIndex, SpectrumIndex
 from lightning.pytorch.strategies import DDPStrategy
 from lightning.pytorch.callbacks import ModelCheckpoint
 
-from .. import utils
 from ..config import Config
 from ..data import ms_io
 from ..denovo.dataloaders import DeNovoDataModule

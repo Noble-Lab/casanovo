@@ -90,7 +90,7 @@ We recommend a Linux system with a dedicated GPU to achieve optimal runtime perf
 
 ### Sequence new mass spectra
 
-To sequence your own mass spectra with Casanovo, use the `casanovo sequence`:
+To sequence your own mass spectra with Casanovo, use the `casanovo sequence` command:
 
 ```sh
 casanovo sequence -o results.mztab spectra.mgf
@@ -126,10 +126,9 @@ Training and validation MS/MS data need to be provided as annotated MGF files, w
 
 If a training is continued for a previously trained model, specify the starting model weights using `--model`.
 
-
 ## Try Casanovo on a small example
 
-Let's use Casanovo to sequence peptides from small collection of mass spectra in an MGF file (~100 MS/MS spectra).
+Let's use Casanovo to sequence peptides from a small collection of mass spectra in an MGF file (~100 MS/MS spectra).
 The example MGF file is available at [`sample_data/sample_preprocessed_spectra.mgf`](https://github.com/Noble-Lab/casanovo/blob/main/sample_data/sample_preprocessed_spectra.mgf).
 
 To obtain *de novo* sequencing predictions for these spectra:
