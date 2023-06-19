@@ -21,7 +21,6 @@ import rich_click as click
 import torch
 import tqdm
 from lightning.pytorch import seed_everything
-from rich_click import RichCommand
 
 from . import __version__
 from . import utils
@@ -34,7 +33,7 @@ click.rich_click.STYLE_HELPTEXT = ""
 click.rich_click.SHOW_ARGUMENTS = True
 
 
-class _SharedParams(RichCommand):
+class _SharedParams(click.RichCommand):
     """Options shared between most Casanovo commands"""
 
     def __init__(self, *args, **kwargs) -> None:
@@ -118,7 +117,8 @@ def sequence(
     PEAK_PATH must be one or more mzMl, mzXML, or MGF files from which
     to sequence peptides.
     """
-    output, config = setup(model, config, output, verbosity, False)
+    output = setup_logging(output, verbosity)
+    config = setup_model(model, config, output, False)
     with ModelRunner(config, model) as runner:
         logger.info("Sequencing peptides from:")
         for peak_file in peak_path:
@@ -148,7 +148,8 @@ def evaluate(
     ANNOTATED_PEAK_PATH must be one or more annoated MGF files,
     such as those provided by MassIVE-KB.
     """
-    output, config = setup(model, config, output, verbosity, False)
+    output = setup_logging(output, verbosity)
+    config = setup_model(model, config, output, False)
     with ModelRunner(config, model) as runner:
         logger.info("Sequencing and evaluating peptides from:")
         for peak_file in annotated_peak_path:
@@ -190,7 +191,8 @@ def train(
     TRAIN_PEAK_PATH must be one or more annoated MGF files, such as those
     provided by MassIVE-KB, from which to train a new Casnovo model.
     """
-    output, config = setup(model, config, output, verbosity, True)
+    output = setup_logging(output, verbosity)
+    config = setup_model(model, config, output, True)
     with ModelRunner(config, model) as runner:
         logger.info("Training a model from:")
         for peak_file in train_peak_path:
@@ -231,36 +233,29 @@ def configure(output: str) -> None:
     The casanovo configuration file is in the YAML format.
     """
     Config.copy_default(output)
-    sys.stdout.write(f"Wrote {output}\n")
+    output = setup_logging(output, "info")
+    logger.info(f"Wrote {output}\n")
 
 
-def setup(
-    model: Optional[str],
-    config: Optional[str],
+def setup_logging(
     output: Optional[str],
     verbosity: str,
-    is_train: bool,
-) -> Tuple[Path, Config]:
-    """Setup Casanovo for most commands.
+) -> Path:
+    """Set up the logger.
+
+    Logging occurs to the command-line and to the given log file.
 
     Parameters
     ----------
-    config : Optional[str]
-        The provided configuration file.
     output : Optional[str]
         The provided output file name.
     verbosity : str
         The logging level to use in the console.
-    train : bool
-        Are we training? If not, we need to retreive weights when the model
-        is None.
 
     Return
     ------
     output : Path
         The output file path.
-    config : Config
-        The parsed configuration
     """
     if output is None:
         output = f"casanovo_{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}"
@@ -304,6 +299,34 @@ def setup(
     logging.getLogger("torch").setLevel(logging.WARNING)
     logging.getLogger("urllib3").setLevel(logging.WARNING)
 
+    return output
+
+
+def setup_model(
+    model: Optional[str],
+    config: Optional[str],
+    output: Optional[Path],
+    is_train: bool,
+) -> Config:
+    """Setup Casanovo for most commands.
+
+    Parameters
+    ----------
+    model : Optional[str]
+        The provided model weights file.
+    config : Optional[str]
+        The provided configuration file.
+    output : Optional[Path]
+        The provided output file name.
+    is_train : bool
+        Are we training? If not, we need to retrieve weights when the model is
+        None.
+
+    Return
+    ------
+    config : Config
+        The parsed configuration
+    """
     # Read parameters from the config file.
     config = Config(config)
     seed_everything(seed=config["random_seed"], workers=True)
@@ -334,7 +357,7 @@ def setup(
     for key, value in config.items():
         logger.debug("%s = %s", str(key), str(value))
 
-    return output, config
+    return config
 
 
 def _get_model_weights() -> str:
