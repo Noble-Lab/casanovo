@@ -171,10 +171,12 @@ class ModelRunner:
             Determines whether to set the trainer up for model training
             or evaluation / inference.
         """
+        logger = self.config.logger if self.config.logger is not None else False
         trainer_cfg = dict(
             accelerator=self.config.accelerator,
             devices=1,
-            logger=self.config.logger,
+            enable_checkpointing=False,
+            logger=logger,
         )
 
         if train:
