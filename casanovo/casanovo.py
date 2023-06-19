@@ -214,7 +214,7 @@ def version() -> None:
         f"Lightning: {lightning.__version__}",
         f"PyTorch: {torch.__version__}",
     ]
-    sys.stderr.write("\n".join(versions) + "\n")
+    sys.stdout.write("\n".join(versions) + "\n")
 
 
 @main.command()
@@ -231,7 +231,7 @@ def configure(output: str) -> None:
     The casanovo configuration file is in the YAML format.
     """
     Config.copy_default(output)
-    sys.stderr.write(f"Wrote {output}\n")
+    sys.stdout.write(f"Wrote {output}\n")
 
 
 def setup(
