@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+## [3.4.0] - 2023-06-19
+
 ### Added
 
 - `every_n_train_steps` parameter now controls the frequency of both validation epochs and model checkpointing during training.
@@ -17,7 +19,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Fixed
 
-- Upgrade to Depthcharge v0.2.0 to fix sinusoidal encoding.
 - Correctly refer to input peak files by their full file path.
 
 ## [3.3.0] - 2023-04-04
@@ -173,7 +174,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 - Initial Casanovo version.
 
-[Unreleased]: https://github.com/Noble-Lab/casanovo/compare/v3.3.0...HEAD
+[Unreleased]: https://github.com/Noble-Lab/casanovo/compare/v3.4.0...HEAD
+[3.4.0]: https://github.com/Noble-Lab/casanovo/compare/v3.3.0...v3.4.0
 [3.3.0]: https://github.com/Noble-Lab/casanovo/compare/v3.2.0...v3.3.0
 [3.2.0]: https://github.com/Noble-Lab/casanovo/compare/v3.1.0...v3.2.0
 [3.1.0]: https://github.com/Noble-Lab/casanovo/compare/v3.0.0...v3.1.0
