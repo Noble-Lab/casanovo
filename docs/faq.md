@@ -69,14 +69,21 @@ After your training job is finished, you can identify the best performing model 
 
 **Even though I added new post-translational modifications to the configuration file, Casanovo didn't identify those peptides.**
 
-The [`config.yaml` configuration file](https://github.com/Noble-Lab/casanovo/blob/main/casanovo/config.yaml) contains all amino acids and post-translational modifications (PTMs) that Casanovo knows.
+Casanovo can only make predictions using post-translational modifications (PTMs) that were included when training the model.
+If you want to add new types of PTMs, then you will need to retrain the model.
+
+The [`config.yaml` configuration file](https://github.com/Noble-Lab/casanovo/blob/main/casanovo/config.yaml) contains all amino acids and PTMs that Casanovo knows.
 By default, this includes oxidation of methionine, deamidation of asparagine and glutamine, N-terminal acetylation, N-terminal carbamylation, and an N-terminal loss of ammonia.
 (Additionally, cysteines are _always_ considered to be carbamidomethylated.)
-Simply making changes to the `residues` alphabet in the configuration file is insufficient to identify new PTMs with Casanovo, however.
-This is indicated by the fact that this option is not marked with `(I)` in the configuration file, which indicates options that can be modified during inference, whereas all remaining options require training a new Casanovo model.
+Simply making changes to the `residues` alphabet in the configuration file is insufficient to identify new types of PTMs with Casanovo, however.
+This is indicated by the fact that this option is not marked with `(I)` in the configuration file, which indicates options that can be modified during inference.
+Al remaining options require training a new Casanovo model.
 
 Therefore, to learn the spectral signature of previously unknown PTMs, a new Casanovo version needs to be _trained_.
 To include new PTMs in Casanovo, you need to:
 1. Update the `residues` alphabet in the configuration file accordingly.
-2. Compile a large training dataset that includes those PTMs and format this as an annotated MGF file.
+2. Compile a large training dataset that includes those PTMs and format this as an annotated MGF file. Note that you can include some or all of the data that was originally used to train Casanovo (see above), in addition to the data that includes your new types of PTMs.
 3. Train a new version of Casanovo on this dataset.
+
+It is unfortunately not possible to finetune a pre-trained Casanovo model to add new types of PTMs.
+Instead, such a model must be trained from scratch.
