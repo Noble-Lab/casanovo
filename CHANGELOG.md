@@ -14,6 +14,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 - We now log steps rather than epochs as units of progress during training.
 - Validation performance metrics are logged (and added to tensorboard) at the validation epoch, and training loss is logged at the end of training epoch, i.e. training and validation metrics are logged asynchronously.
+- Irrelevant warning messages on the console output and in the log file are no longer shown.
 
 ### Fixed
 

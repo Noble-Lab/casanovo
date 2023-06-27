@@ -10,19 +10,28 @@ import warnings
 from typing import Optional, Tuple
 
 warnings.filterwarnings("ignore", category=DeprecationWarning)
+warnings.filterwarnings(
+    "ignore",
+    ".*Consider increasing the value of the `num_workers` argument*",
+)
+warnings.filterwarnings(
+    "ignore",
+    ".*The PyTorch API of nested tensors is in prototype stage*",
+)
+warnings.filterwarnings(
+    "ignore",
+    ".*Converting mask without torch.bool dtype to bool*",
+)
 
 import appdirs
 import click
 import github
 import requests
-import torch
 import tqdm
-import yaml
 from lightning.pytorch import seed_everything
 
 from . import __version__
 from . import utils
-from .data import ms_io
 from .denovo import ModelRunner
 from .config import Config
 
@@ -119,6 +128,7 @@ def main(
     root.addHandler(file_handler)
     # Disable dependency non-critical log messages.
     logging.getLogger("depthcharge").setLevel(logging.INFO)
+    logging.getLogger("fsspec").setLevel(logging.WARNING)
     logging.getLogger("github").setLevel(logging.WARNING)
     logging.getLogger("h5py").setLevel(logging.WARNING)
     logging.getLogger("numba").setLevel(logging.WARNING)

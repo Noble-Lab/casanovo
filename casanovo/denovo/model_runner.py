@@ -2,12 +2,11 @@
 model."""
 import glob
 import logging
-import operator
 import os
 import tempfile
 import uuid
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional, Union
+from typing import Iterable, List, Optional, Union
 
 import lightning.pytorch as pl
 import numpy as np
@@ -15,7 +14,6 @@ import torch
 from depthcharge.data import AnnotatedSpectrumIndex, SpectrumIndex
 from lightning.pytorch.strategies import DDPStrategy
 
-from .. import utils
 from ..config import Config
 from ..data import ms_io
 from ..denovo.dataloaders import DeNovoDataModule
@@ -305,7 +303,7 @@ class ModelRunner:
 
     def _get_index(
         self,
-        peak_path: str,
+        peak_path: Iterable[str],
         annotated: bool,
         msg: str = "",
     ) -> Union[SpectrumIndex, AnnotatedSpectrumIndex]:
@@ -316,8 +314,8 @@ class ModelRunner:
 
         Parameters
         ----------
-        peak_path : str
-            The peak file/directory to check.
+        peak_path : Iterable[str]
+            The peak files/directories to check.
         annotated : bool
             Are the spectra expected to be annotated?
         msg : str, optional
@@ -354,7 +352,7 @@ class ModelRunner:
         valid_charge = np.arange(1, self.config.max_charge + 1)
         return Index(index_fname, filenames, valid_charge=valid_charge)
 
-    def _get_strategy(self) -> Optional[DDPStrategy]:
+    def _get_strategy(self) -> Union[str, DDPStrategy]:
         """Get the strategy for the Trainer.
 
         The DDP strategy works best when multiple GPUs are used. It can work
@@ -363,20 +361,18 @@ class ModelRunner:
 
         Returns
         -------
-        Optional[DDPStrategy]
+        Union[str, DDPStrategy]
             The strategy parameter for the Trainer.
 
         """
         if self.config.accelerator in ("cpu", "mps"):
             return "auto"
-
-        if self.config.devices == 1:
+        elif self.config.devices == 1:
             return "auto"
-
-        if torch.cuda.device_count() > 1:
+        elif torch.cuda.device_count() > 1:
             return DDPStrategy(find_unused_parameters=False, static_graph=True)
-
-        return "auto"
+        else:
+            return "auto"
 
 
 def _get_peak_filenames(
