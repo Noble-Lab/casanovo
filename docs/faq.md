@@ -87,3 +87,76 @@ To include new PTMs in Casanovo, you need to:
 
 It is unfortunately not possible to finetune a pre-trained Casanovo model to add new types of PTMs.
 Instead, such a model must be trained from scratch.
+
+**How can I generate a precision–coverage curve?**
+
+You can evaluate a trained Casanovo model compared to ground-truth peptide labels using a precision–coverage curve.
+
+1. Run Casanovo in sequencing or evaluation mode on your MS/MS data, [as described here](https://casanovo.readthedocs.io/en/latest/getting_started.html#running-casanovo).
+2. Collect the ground-truth peptide labels as well as the peptide labels predicted by Casanovo. Note that Casanovo might not report a peptide for every spectrum if the spectra are invalid (e.g. not enough peaks), so make sure that both pieces of information are correctly linked to each other (using the `spectra_ref` column in the mzTab output file produced by Casanovo).
+3. Use the following script to plot a precision–coverage curve:
+```python
+import depthcharge
+import matplotlib.pyplot as plt
+import numpy as np
+from sklearn.metrics import auc
+
+from casanovo.denovo import evaluate
+
+
+# `psm_sequences` is assumed to be a DataFrame with at least the following
+# three columns:
+#   - "sequence": The ground-truth peptide labels.
+#   - "sequence_pred": The predicted peptide labels.
+#   - "search_engine_score[1]": The prediction scores.
+psm_sequences = ...  # TODO: Get the PSM information.
+
+# Sort the PSMs by descreasing prediction score.
+psm_sequences = psm_sequences.sort_values(
+    "search_engine_score[1]", ascending=False
+)
+# Find matches between the true and predicted peptide sequences.
+aa_matches_batch = evaluate.aa_match_batch(
+    psm_sequences["sequence"],
+    psm_sequences["sequence_pred"],
+    depthcharge.masses.PeptideMass("massivekb").masses,
+)
+# Calculate the peptide precision and coverage.
+peptide_matches = np.asarray([aa_match[1] for aa_match in aa_matches_batch[0]])
+precision = np.cumsum(peptide_matches) / np.arange(1, len(peptide_matches) + 1)
+coverage = np.arange(1, len(peptide_matches) + 1) / len(peptide_matches)
+# Calculate the score threshold at which peptide predictions don't fit the
+# precursor m/z tolerance anymore.
+threshold = np.argmax(psm_sequences["search_engine_score[1]"] < 0)
+
+# Print the performance values.
+print(f"Peptide precision = {precision[threshold]:.3f}")
+print(f"Coverage = {coverage[threshold]:.3f}")
+print(f"Peptide precision @ coverage=1 = {precision[-1]:.3f}")
+
+# Plot the precision–coverage curve.
+width = 4
+height = width / 1.618
+fig, ax = plt.subplots(figsize=(width, width))
+
+ax.plot(
+    coverage, precision, label=f"Casanovo AUC = {auc(coverage, precision):.3f}"
+)
+ax.scatter(
+    coverage[threshold],
+    precision[threshold],
+    s=50,
+    marker="D",
+    edgecolors="black",
+    zorder=10,
+)
+ax.set_xlim(0, 1)
+ax.set_ylim(0, 1)
+
+ax.set_xlabel("Coverage")
+ax.set_ylabel("Peptide precision")
+ax.legend(loc="lower left")
+
+plt.savefig("prec_cov.png", dpi=300, bbox_inches="tight")
+plt.close()
+```
