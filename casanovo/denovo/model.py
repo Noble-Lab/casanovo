@@ -914,14 +914,13 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
                 ]:
                     metric_value = metrics.get(key, np.nan)
                     if metric_value is not None:
-                        if torch.is_tensor(
-                            metric_value
-                        ):  # Check if metric_value is a torch tensor
+                        # Check if metric_value is a torch tensor
+                        if torch.is_tensor(metric_value):
                             metric_value_np = (
                                 metric_value.clone().cpu().numpy()
-                            )  # tensor losses
+                            )
                         else:
-                            metric_value_np = metric_value  # float pep and aa precision (I think)
+                            metric_value_np = metric_value
                         if not np.isnan(metric_value_np):
                             self.tb_summarywriter.add_scalar(
                                 descr, metric_value_np, metrics["step"]
