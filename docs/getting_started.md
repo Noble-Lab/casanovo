@@ -16,8 +16,8 @@ Once you have conda installed, you can use this helpful [cheat sheet](https://do
 
 ### Create a conda environment
 
-Fist, open the terminal (MacOS and Linux) or the Anaconda Prompt (Windows).
-All of the commands that follow should be entered this terminal or Anaconda Prompt window---that is, your *shell*.
+First, open the terminal (MacOS and Linux) or the Anaconda Prompt (Windows).
+All of the commands that follow should be entered into this terminal or Anaconda Prompt window---that is, your *shell*.
 To create a new conda environment for Casanovo, run the following:
 
 ```sh
@@ -58,63 +58,69 @@ After installation, test that it was successful by viewing the Casanovo command 
 ```sh
 casanovo --help
 ```
+![`casanovo --help`](images/help.svg)
 
-All auxiliary data, model, and training-related parameters can be specified in a user created `.yaml` configuration file.
-See [`casanovo/config.yaml`](https://github.com/Noble-Lab/casanovo/blob/main/casanovo/config.yaml) for the default configuration that was used to obtain the reported results. When running Casanovo in eval or denovo mode, you can change some of the parameters in this file, indicated with "(I)" in the file. You should not change other parameters unless you are training a new Casanovo model.
+
+All auxiliary data, model, and training-related parameters can be specified in a YAML configuration file. 
+To generate a YAML file containing the current Casanovo defaults, run:
+```sh
+casanovo configure
+```
+![`casanovo configure --help`](images/configure-help.svg)
+
+When using Casanovo to sequence peptides from mass spectra or evaluate a previous model's performance, you can change some of the parameters in this file, indicated with "(I)" in the file. 
+The other parameters will not have an effect unless you are training a new Casanovo model.
 
 
 ### Download model weights
 
-When running Casanovo in `denovo` or `eval` mode, Casanovo needs compatible pretrained model weights to make predictions.
-Our model weights are uploaded with new Casanovo versions on the [Releases page](https://github.com/Noble-Lab/casanovo/releases) under the "Assets" for each release (file extension: .ckpt).
-The model file can then be specified using the `--model` command-line parameter when executing Casanovo.
-To assist users, if no model file is specified Casanovo will try to download and use a compatible model file automatically.
+Using Casanovo to sequence peptides from new mass spectra, Casanovo needs compatible pretrained model weights to make its predictions.
+By default, Casanovo will try to download the latest compatible model weights from GitHub when it is run. 
 
-Not all releases might have a model file included on the [Releases page](https://github.com/Noble-Lab/casanovo/releases), in which case model weights for alternative releases with the same major version number can be used.
+However, our model weights are uploaded with new Casanovo versions on the [Releases page](https://github.com/Noble-Lab/casanovo/releases) under the "Assets" for each release (file extension: `.ckpt`).
+This model file or a custom one can then be specified using the `--model` command-line parameter when executing Casanovo.
+
+Not all releases will have a model file included on the [Releases page](https://github.com/Noble-Lab/casanovo/releases), in which case model weights for alternative releases with the same major version number can be used.
 
 ## Running Casanovo
 
 ```{note}
 We recommend a Linux system with a dedicated GPU to achieve optimal runtime performance.
-Notably, Casanovo is restricted to single-threaded execution only on Windows and MacOS.
 ```
-
-> **Warning**
-> Casanovo can currently crash if no GPU is available.
-> We are actively trying to fix this known issue.
 
 ### Sequence new mass spectra
 
-To sequence your own mass spectra with Casanovo, use the `denovo` mode:
+To sequence your own mass spectra with Casanovo, use the `casanovo sequence` command:
 
 ```sh
-casanovo --mode=denovo --peak_path=path/to/predict/spectra.mgf --output=path/to/output
+casanovo sequence -o results.mztab spectra.mgf
 ```
+![`casanovo sequence --help`](images/sequence-help.svg)
 
 Casanovo can predict peptide sequences for MS/MS spectra in mzML, mzXML, and MGF files.
 This will write peptide predictions for the given MS/MS spectra to the specified output file in mzTab format.
 
-> **Warning**
-> If you are running inference with Casanovo on a system that has multiple GPUs, it is necessary to restrict Casanovo to (maximum) a single GPU.
-> For example, for CUDA-capable GPUs, GPU visibility can be controlled by setting the `CUDA_VISIBLE_DEVICES` shell variable.
-
 ### Evaluate *de novo* sequencing performance
 
-To evaluate _de novo_ sequencing performance based on known mass spectrum annotations, run:
+To evaluate _de novo_ sequencing performance based on known mass spectrum annotations, use the `casanovo evaluate` command:
 
 ```sh
-casanovo --mode=eval --peak_path=path/to/test/annotated_spectra.mgf
+casanovo evaluate annotated_spectra.mgf
 ```
+![`casanovo evaluate --help`](images/evaluate-help.svg)
 
-To evaluate the peptide predictions, ground truth peptide labels must to be provided as an annotated MGF file where the peptide sequence is denoted in the `SEQ` field.
+
+To evaluate the peptide predictions, ground truth peptide labels must to be provided as an annotated MGF file where the peptide sequence is denoted in the `SEQ` field. 
+Compatible MGF files are available from [MassIVE-KB](https://massive.ucsd.edu/ProteoSAFe/static/massive-kb-libraries.jsp).
 
 ### Train a new model
 
 To train a model from scratch, run:
 
 ```sh
-casanovo --mode=train --peak_path=path/to/train/annotated_spectra.mgf --peak_path_val=path/to/validation/annotated_spectra.mgf
+casanovo train --validation_peak_path validation_spectra.mgf training_spectra.mgf
 ```
+![`casanovo train --help`](images/train-help.svg)
 
 Training and validation MS/MS data need to be provided as annotated MGF files, where the peptide sequence is denoted in the `SEQ` field.
 
@@ -122,7 +128,7 @@ If a training is continued for a previously trained model, specify the starting 
 
 ## Try Casanovo on a small example
 
-Here, we demonstrate how to use Casanovo using a small collection of mass spectra in an MGF file (~100 MS/MS spectra).
+Let's use Casanovo to sequence peptides from a small collection of mass spectra in an MGF file (~100 MS/MS spectra).
 The example MGF file is available at [`sample_data/sample_preprocessed_spectra.mgf`](https://github.com/Noble-Lab/casanovo/blob/main/sample_data/sample_preprocessed_spectra.mgf).
 
 To obtain *de novo* sequencing predictions for these spectra:
@@ -131,7 +137,7 @@ To obtain *de novo* sequencing predictions for these spectra:
 3. Ensure your Casanovo conda environment is activated by typing `conda activate casanovo_env`. (If you named your environment differently, type in that name instead.)
 4. Sequence the mass spectra with Casanovo, replacing `[PATH_TO]` with the path to the example MGF file that you downloaded:
 ```sh
-casanovo --mode=denovo --peak_path=[PATH_TO]/sample_preprocessed_spectra.mgf
+casanovo sequence [PATH_TO]/sample_preprocessed_spectra.mgf
 ```
 
 ```{note}

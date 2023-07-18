@@ -118,6 +118,9 @@ save_top_k: 5
 model_save_folder_path: ""
 # Model validation and checkpointing frequency in training steps
 every_n_train_steps: 50_000
+# Calculate peptide and amino acid precision during training. this
+# is expensive, so we recommend against it.
+calculate_precision: False
 # The hardware accelerator to use. Must be one of:
 # "cpu", "gpu", "tpu", "ipu", "hpu", "mps", or "auto"
 accelerator: "auto"

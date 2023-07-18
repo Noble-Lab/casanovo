@@ -1,5 +1,6 @@
 """Parse the YAML configuration."""
 import logging
+import shutil
 from pathlib import Path
 from typing import Optional, Dict, Callable, Tuple, Union
 
@@ -67,6 +68,7 @@ class Config:
         every_n_train_steps=int,
         accelerator=str,
         devices=int,
+        calculate_precision=bool,
     )
 
     def __init__(self, config_file: Optional[str] = None):
@@ -125,3 +127,14 @@ class Config:
     def items(self) -> Tuple[str, ...]:
         """Return the parameters"""
         return self._params.items()
+
+    @classmethod
+    def copy_default(cls, output: str) -> None:
+        """Copy the default YAML configuration.
+
+        Parameters
+        ----------
+        output : str
+            The output file.
+        """
+        shutil.copyfile(cls._default_config, output)

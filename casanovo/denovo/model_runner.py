@@ -13,6 +13,7 @@ import numpy as np
 import torch
 from depthcharge.data import AnnotatedSpectrumIndex, SpectrumIndex
 from lightning.pytorch.strategies import DDPStrategy
+from lightning.pytorch.callbacks import ModelCheckpoint
 
 from ..config import Config
 from ..data import ms_io
@@ -54,7 +55,7 @@ class ModelRunner:
         # Configure checkpoints.
         if config.save_top_k is not None:
             self.callbacks = [
-                pl.callbacks.ModelCheckpoint(
+                ModelCheckpoint(
                     dirpath=config.model_save_folder_path,
                     monitor="valid_CELoss",
                     mode="min",
@@ -143,7 +144,7 @@ class ModelRunner:
         -------
         self
         """
-        self.writer = ms_io.MztabWriter(f"{output}.mztab")
+        self.writer = ms_io.MztabWriter(Path(output).with_suffix(".mztab"))
         self.writer.set_metadata(
             self.config,
             model=str(self.model_filename),
@@ -169,7 +170,9 @@ class ModelRunner:
             Determines whether to set the trainer up for model training
             or evaluation / inference.
         """
-        logger = self.config.logger if self.config.logger is not None else False
+        logger = (
+            self.config.logger if self.config.logger is not None else False
+        )
         trainer_cfg = dict(
             accelerator=self.config.accelerator,
             devices=1,
@@ -227,6 +230,7 @@ class ModelRunner:
             lr=self.config.learning_rate,
             weight_decay=self.config.weight_decay,
             out_writer=self.writer,
+            calculate_precision=self.config.calculate_precision,
         )
 
         from_scratch = (

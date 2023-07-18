@@ -82,6 +82,9 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         The total number of iterations for the learning rate scheduler.
     out_writer: Optional[str]
         The output writer for the prediction results.
+    calculate_precision: bool
+        Calculate the validation set precision during training.
+        This is expensive.
     **kwargs : Dict
         Additional keyword arguments passed to the Adam optimizer.
     """
@@ -110,6 +113,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         warmup_iters: int = 100_000,
         max_iters: int = 600_000,
         out_writer: Optional[ms_io.MztabWriter] = None,
+        calculate_precision: bool = False,
         **kwargs: Dict,
     ):
         super().__init__()
@@ -157,6 +161,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         self.stop_token = self.decoder._aa2idx["$"]
 
         # Logging.
+        self.calculate_precision = calculate_precision
         self.n_log = n_log
         self._history = []
         if tb_summarywriter is not None:
@@ -754,6 +759,8 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         """
         # Record the loss.
         loss = self.training_step(batch, mode="valid")
+        if not self.calculate_precision:
+            return loss
 
         # Calculate and log amino acid and peptide match evaluation metrics from
         # the predicted peptides.
@@ -761,9 +768,12 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         for spectrum_preds in self.forward(batch[0], batch[1]):
             for _, _, pred in spectrum_preds:
                 peptides_pred.append(pred)
+
         aa_precision, _, pep_precision = evaluate.aa_match_metrics(
             *evaluate.aa_match_batch(
-                peptides_pred, peptides_true, self.decoder._peptide_mass.masses
+                peptides_pred,
+                peptides_true,
+                self.decoder._peptide_mass.masses,
             )
         )
         log_args = dict(on_step=False, on_epoch=True, sync_dist=True)
@@ -772,8 +782,11 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
             pep_precision,
             **log_args,
         )
-        self.log("AA precision at coverage=1", aa_precision, **log_args)
-
+        self.log(
+            "AA precision at coverage=1",
+            aa_precision,
+            **log_args,
+        )
         return loss
 
     def predict_step(
@@ -828,7 +841,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         train_loss = self.trainer.callback_metrics["train_CELoss"].detach()
         metrics = {
             "step": self.trainer.global_step,
-            "train": train_loss,
+            "train": train_loss.item(),
         }
         self._history.append(metrics)
         self._log_history()
@@ -840,14 +853,18 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         callback_metrics = self.trainer.callback_metrics
         metrics = {
             "step": self.trainer.global_step,
-            "valid": callback_metrics["valid_CELoss"].detach(),
-            "valid_aa_precision": callback_metrics[
-                "AA precision at coverage=1"
-            ].detach(),
-            "valid_pep_precision": callback_metrics[
-                "Peptide precision at coverage=1"
-            ].detach(),
+            "valid": callback_metrics["valid_CELoss"].detach().item(),
         }
+
+        if self.calculate_precision:
+            metrics["valid_aa_precision"] = (
+                callback_metrics["AA precision at coverage=1"].detach().item()
+            )
+            metrics["valid_pep_precision"] = (
+                callback_metrics["Peptide precision at coverage=1"]
+                .detach()
+                .item()
+            )
         self._history.append(metrics)
         self._log_history()
 
@@ -893,19 +910,28 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         if len(self._history) == 0:
             return
         if len(self._history) == 1:
-            logger.info(
-                "Step\tTrain loss\tValid loss\tPeptide precision\tAA precision"
-            )
+            header = "Step\tTrain loss\tValid loss\t"
+            if self.calculate_precision:
+                header += "Peptide precision\tAA precision"
+
+            logger.info(header)
         metrics = self._history[-1]
         if metrics["step"] % self.n_log == 0:
-            logger.info(
-                "%i\t%.6f\t%.6f\t%.6f\t%.6f",
+            msg = "%i\t%.6f\t%.6f"
+            vals = [
                 metrics["step"],
                 metrics.get("train", np.nan),
                 metrics.get("valid", np.nan),
-                metrics.get("valid_pep_precision", np.nan),
-                metrics.get("valid_aa_precision", np.nan),
-            )
+            ]
+
+            if self.calculate_precision:
+                msg += "\t%.6f\t%.6f"
+                vals += [
+                    metrics.get("valid_pep_precision", np.nan),
+                    metrics.get("valid_aa_precision", np.nan),
+                ]
+
+            logger.info(msg, *vals)
             if self.tb_summarywriter is not None:
                 for descr, key in [
                     ("loss/train_crossentropy_loss", "train"),

@@ -6,8 +6,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+### Changed
+
+- The CLI has been overhauled to use subcommands.
+- Upgraded to Lightning >=2.0
+- Checkpointing is now configured to save the top-k models instead of all.
+
+### Fixed
+
+- Casanovo now runs on CPU and can passes all tests.
+
 ### Added
 
+-  Checkpoints now include model parameters, allowing for mismatches with the provided configuration file.
+- `accelerator` parameter now controls the accelerator (CPU, GPU, etc) that is used.
+- `devices` parameter controls the number of accelerators used.
 - `every_n_train_steps` parameter now controls the frequency of both validation epochs and model checkpointing during training.
 
 ### Changed

@@ -1,4 +1,5 @@
 import functools
+from pathlib import Path
 
 import pyteomics.mztab
 from click.testing import CliRunner
@@ -19,35 +20,31 @@ def test_train_and_run(
 
     # Train a tiny model:
     train_args = [
-        "--mode",
         "train",
-        "--peak_path",
-        mgf_small,
-        "--peak_path_val",
-        mgf_small,
+        "--validation_peak_path",
+        str(mgf_small),
         "--config",
         tiny_config,
         "--output",
         str(tmp_path / "train"),
+        str(mgf_small),  # The training files.
     ]
 
     result = run(train_args)
-    model_file = tmp_path / "epoch=9-step=10.ckpt"
+    model_file = tmp_path / "epoch=19-step=20.ckpt"
     assert result.exit_code == 0
     assert model_file.exists()
 
     # Try evaluating:
     eval_args = [
-        "--mode",
-        "eval",
-        "--peak_path",
-        mgf_small,
+        "evaluate",
         "--model",
-        model_file,
+        str(model_file),
         "--config",
-        tiny_config,
+        str(tiny_config),
         "--output",
         str(tmp_path / "eval"),
+        str(mgf_small),
     ]
 
     result = run(eval_args)
@@ -56,18 +53,15 @@ def test_train_and_run(
     # Finally try predicting:
     output_filename = tmp_path / "test.mztab"
     predict_args = [
-        "--mode",
-        "denovo",
-        "--peak_path",
-        mgf_small,
-        "--peak_path",
-        mzml_small,
+        "sequence",
         "--model",
-        model_file,
+        str(model_file),
         "--config",
         tiny_config,
         "--output",
         str(output_filename),
+        str(mgf_small),
+        str(mzml_small),
     ]
 
     result = run(predict_args)
@@ -91,3 +85,20 @@ def test_train_and_run(
     assert psms.loc[3, "spectra_ref"] == "ms_run[2]:scan=17"
     assert psms.loc[4, "sequence"] == "PEPTLDEK"
     assert psms.loc[4, "spectra_ref"] == "ms_run[2]:scan=111"
+
+
+def test_auxilliary_cli(tmp_path, monkeypatch):
+    """Test the secondary CLI commands"""
+    run = functools.partial(
+        CliRunner().invoke, casanovo.main, catch_exceptions=False
+    )
+
+    monkeypatch.chdir(tmp_path)
+    run("configure")
+    assert Path("casanovo.yaml").exists()
+
+    run(["configure", "-o", "test.yaml"])
+    assert Path("test.yaml").exists()
+
+    res = run("version")
+    assert res.output

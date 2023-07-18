@@ -7,6 +7,7 @@ import re
 import shutil
 import sys
 import warnings
+from pathlib import Path
 from typing import Optional, Tuple
 
 warnings.filterwarnings("ignore", category=DeprecationWarning)
@@ -24,9 +25,12 @@ warnings.filterwarnings(
 )
 
 import appdirs
-import click
+import depthcharge
 import github
+import lightning
 import requests
+import rich_click as click
+import torch
 import tqdm
 from lightning.pytorch import seed_everything
 
@@ -36,96 +40,268 @@ from .denovo import ModelRunner
 from .config import Config
 
 logger = logging.getLogger("casanovo")
+click.rich_click.USE_MARKDOWN = True
+click.rich_click.STYLE_HELPTEXT = ""
+click.rich_click.SHOW_ARGUMENTS = True
 
 
-@click.command()
-@click.option(
-    "--mode",
-    required=True,
-    default="denovo",
-    help="\b\nThe mode in which to run Casanovo:\n"
-    '- "denovo" will predict peptide sequences for\nunknown MS/MS spectra.\n'
-    '- "train" will train a model (from scratch or by\ncontinuing training a '
-    "previously trained model).\n"
-    '- "eval" will evaluate the performance of a\ntrained model using '
-    "previously acquired spectrum\nannotations.",
-    type=click.Choice(["denovo", "train", "eval"]),
-)
-@click.option(
-    "--model",
-    help="The file name of the model weights (.ckpt file).",
-    type=click.Path(exists=True, dir_okay=False),
-)
-@click.option(
-    "--peak_path",
-    required=True,
-    help="The file path with peak files for predicting peptide sequences or "
-    "training Casanovo.",
-    multiple=True,
-)
-@click.option(
-    "--peak_path_val",
-    help="The file path with peak files to be used as validation data during "
-    "training.",
-    multiple=True,
-)
-@click.option(
-    "--config",
-    help="The file name of the configuration file with custom options. If not "
-    "specified, a default configuration will be used.",
-    type=click.Path(exists=True, dir_okay=False),
-)
-@click.option(
-    "--output",
-    help="The base output file name to store logging (extension: .log) and "
-    "(optionally) prediction results (extension: .mztab).",
-    type=click.Path(dir_okay=False),
-)
-def main(
-    mode: str,
-    model: Optional[str],
-    peak_path: str,
-    peak_path_val: Optional[str],
-    config: Optional[str],
-    output: Optional[str],
-):
-    """
-    \b
-    Casanovo: De novo mass spectrometry peptide sequencing with a transformer model.
-    ================================================================================
+class _SharedParams(click.RichCommand):
+    """Options shared between most Casanovo commands"""
 
-    Yilmaz, M., Fondrie, W. E., Bittremieux, W., Oh, S. & Noble, W. S. De novo
+    def __init__(self, *args, **kwargs) -> None:
+        """Define shared options."""
+        super().__init__(*args, **kwargs)
+        self.params += [
+            click.Option(
+                ("-m", "--model"),
+                help="""
+                The model weights (.ckpt file). If not provided, Casanovo
+                will try to download the latest release.
+                """,
+                type=click.Path(exists=True, dir_okay=False),
+            ),
+            click.Option(
+                ("-o", "--output"),
+                help="The mzTab file to which results will be written.",
+                type=click.Path(dir_okay=False),
+            ),
+            click.Option(
+                ("-c", "--config"),
+                help="""
+                The YAML configuration file overriding the default options.
+                """,
+                type=click.Path(exists=True, dir_okay=False),
+            ),
+            click.Option(
+                ("-v", "--verbosity"),
+                help="""
+                Set the verbosity of console logging messages. Log files are
+                always set to 'debug'.
+                """,
+                type=click.Choice(
+                    ["debug", "info", "warning", "error"],
+                    case_sensitive=False,
+                ),
+                default="info",
+            ),
+        ]
+
+
+@click.group(context_settings=dict(help_option_names=["-h", "--help"]))
+def main() -> None:
+    """# Casanovo
+
+    Casanovo de novo sequences peptides from tandem mass spectra using a
+    Transformer model. Casanovo currently supports mzML, mzXML, and MGF files
+    for de novo sequencing and annotated MGF files, such as those from
+    MassIVE-KB, for training new models.
+
+    Links:
+    - Documentation: [https://casanovo.readthedocs.io]()
+    - Official code repository: [https://github.com/Noble-Lab/casanovo]()
+
+    If you use Casanovo in your work, please cite:
+    - Yilmaz, M., Fondrie, W. E., Bittremieux, W., Oh, S. & Noble, W. S. De novo
     mass spectrometry peptide sequencing with a transformer model. Proceedings
     of the 39th International Conference on Machine Learning - ICML '22 (2022)
     doi:10.1101/2022.02.07.479481.
 
-    Official code website: https://github.com/Noble-Lab/casanovo
+    """
+    return
+
+
+@main.command(cls=_SharedParams)
+@click.argument(
+    "peak_path",
+    required=True,
+    nargs=-1,
+    type=click.Path(exists=True, dir_okay=False),
+)
+def sequence(
+    peak_path: Tuple[str],
+    model: Optional[str],
+    config: Optional[str],
+    output: Optional[str],
+    verbosity: str,
+) -> None:
+    """De novo sequence peptides from tandem mass spectra.
+
+    PEAK_PATH must be one or more mzMl, mzXML, or MGF files from which
+    to sequence peptides.
+    """
+    output = setup_logging(output, verbosity)
+    config = setup_model(model, config, output, False)
+    with ModelRunner(config, model) as runner:
+        logger.info("Sequencing peptides from:")
+        for peak_file in peak_path:
+            logger.info("  %s", peak_file)
+
+        runner.predict(peak_path, output)
+
+    logger.info("DONE!")
+
+
+@main.command(cls=_SharedParams)
+@click.argument(
+    "annotated_peak_path",
+    required=True,
+    nargs=-1,
+    type=click.Path(exists=True, dir_okay=False),
+)
+def evaluate(
+    annotated_peak_path: Tuple[str],
+    model: Optional[str],
+    config: Optional[str],
+    output: Optional[str],
+    verbosity: str,
+) -> None:
+    """Evaluate de novo peptide sequencing performance.
+
+    ANNOTATED_PEAK_PATH must be one or more annoated MGF files,
+    such as those provided by MassIVE-KB.
+    """
+    output = setup_logging(output, verbosity)
+    config = setup_model(model, config, output, False)
+    with ModelRunner(config, model) as runner:
+        logger.info("Sequencing and evaluating peptides from:")
+        for peak_file in annotated_peak_path:
+            logger.info("  %s", peak_file)
+
+        runner.evaluate(annotated_peak_path)
+
+    logger.info("DONE!")
+
+
+@main.command(cls=_SharedParams)
+@click.argument(
+    "train_peak_path",
+    required=True,
+    nargs=-1,
+    type=click.Path(exists=True, dir_okay=False),
+)
+@click.option(
+    "-p",
+    "--validation_peak_path",
+    help="""
+    An annotated MGF file for validation, like from MassIVE-KB. Use this
+    option multiple times to specify multiple files.
+    """,
+    required=True,
+    multiple=True,
+    type=click.Path(exists=True, dir_okay=False),
+)
+def train(
+    train_peak_path: Tuple[str],
+    validation_peak_path: Tuple[str],
+    model: Optional[str],
+    config: Optional[str],
+    output: Optional[str],
+    verbosity: str,
+) -> None:
+    """Train a Casanovo model on your own data.
+
+    TRAIN_PEAK_PATH must be one or more annoated MGF files, such as those
+    provided by MassIVE-KB, from which to train a new Casnovo model.
+    """
+    output = setup_logging(output, verbosity)
+    config = setup_model(model, config, output, True)
+    with ModelRunner(config, model) as runner:
+        logger.info("Training a model from:")
+        for peak_file in train_peak_path:
+            logger.info("  %s", peak_file)
+
+        logger.info("Using the following validation files:")
+        for peak_file in validation_peak_path:
+            logger.info("  %s", peak_file)
+
+        runner.train(train_peak_path, validation_peak_path)
+
+    logger.info("DONE!")
+
+
+@main.command()
+def version() -> None:
+    """Get the Casanovo version information"""
+    versions = [
+        f"Casanovo: {__version__}",
+        f"Depthcharge: {depthcharge.__version__}",
+        f"Lightning: {lightning.__version__}",
+        f"PyTorch: {torch.__version__}",
+    ]
+    sys.stdout.write("\n".join(versions) + "\n")
+
+
+@main.command()
+@click.option(
+    "-o",
+    "--output",
+    help="The output configuration file.",
+    default="casanovo.yaml",
+    type=click.Path(dir_okay=False),
+)
+def configure(output: str) -> None:
+    """Generate a Casanovo configuration file to customize.
+
+    The casanovo configuration file is in the YAML format.
+    """
+    Config.copy_default(output)
+    output = setup_logging(output, "info")
+    logger.info(f"Wrote {output}\n")
+
+
+def setup_logging(
+    output: Optional[str],
+    verbosity: str,
+) -> Path:
+    """Set up the logger.
+
+    Logging occurs to the command-line and to the given log file.
+
+    Parameters
+    ----------
+    output : Optional[str]
+        The provided output file name.
+    verbosity : str
+        The logging level to use in the console.
+
+    Return
+    ------
+    output : Path
+        The output file path.
     """
     if output is None:
-        output = os.path.join(
-            os.getcwd(),
-            f"casanovo_{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}",
-        )
-    else:
-        basename, ext = os.path.splitext(os.path.abspath(output))
-        output = basename if ext.lower() in (".log", ".mztab") else output
+        output = f"casanovo_{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}"
+
+    output = Path(output).expanduser().resolve()
+
+    logging_levels = {
+        "debug": logging.DEBUG,
+        "info": logging.INFO,
+        "warning": logging.WARNING,
+        "error": logging.ERROR,
+    }
 
     # Configure logging.
     logging.captureWarnings(True)
     root = logging.getLogger()
     root.setLevel(logging.DEBUG)
+
+    # Formatters for file vs console:
+    console_formatter = logging.Formatter("{levelname}: {message}", style="{")
     log_formatter = logging.Formatter(
         "{asctime} {levelname} [{name}/{processName}] {module}.{funcName} : "
         "{message}",
         style="{",
     )
+
     console_handler = logging.StreamHandler(sys.stderr)
-    console_handler.setLevel(logging.DEBUG)
-    console_handler.setFormatter(log_formatter)
+    console_handler.setLevel(logging_levels[verbosity.lower()])
+    console_handler.setFormatter(console_formatter)
     root.addHandler(console_handler)
-    file_handler = logging.FileHandler(f"{output}.log")
+    file_handler = logging.FileHandler(output.with_suffix(".log"))
     file_handler.setFormatter(log_formatter)
     root.addHandler(file_handler)
+
     # Disable dependency non-critical log messages.
     logging.getLogger("depthcharge").setLevel(logging.INFO)
     logging.getLogger("fsspec").setLevel(logging.WARNING)
@@ -136,13 +312,40 @@ def main(
     logging.getLogger("torch").setLevel(logging.WARNING)
     logging.getLogger("urllib3").setLevel(logging.WARNING)
 
+    return output
+
+
+def setup_model(
+    model: Optional[str],
+    config: Optional[str],
+    output: Optional[Path],
+    is_train: bool,
+) -> Config:
+    """Setup Casanovo for most commands.
+
+    Parameters
+    ----------
+    model : Optional[str]
+        The provided model weights file.
+    config : Optional[str]
+        The provided configuration file.
+    output : Optional[Path]
+        The provided output file name.
+    is_train : bool
+        Are we training? If not, we need to retrieve weights when the model is
+        None.
+
+    Return
+    ------
+    config : Config
+        The parsed configuration
+    """
     # Read parameters from the config file.
     config = Config(config)
-
     seed_everything(seed=config["random_seed"], workers=True)
 
     # Download model weights if these were not specified (except when training).
-    if model is None and mode != "train":
+    if model is None and not is_train:
         try:
             model = _get_model_weights()
         except github.RateLimitExceededException:
@@ -161,26 +364,13 @@ def main(
 
     # Log the active configuration.
     logger.info("Casanovo version %s", str(__version__))
-    logger.debug("mode = %s", mode)
     logger.debug("model = %s", model)
-    logger.debug("peak_path = %s", peak_path)
-    logger.debug("peak_path_val = %s", peak_path_val)
     logger.debug("config = %s", config.file)
     logger.debug("output = %s", output)
     for key, value in config.items():
         logger.debug("%s = %s", str(key), str(value))
 
-    # Run Casanovo in the specified mode.
-    with ModelRunner(config, model) as model_runner:
-        if mode == "denovo":
-            logger.info("Predict peptide sequences with Casanovo.")
-            model_runner.predict(peak_path, output)
-        elif mode == "eval":
-            logger.info("Evaluate a trained Casanovo model.")
-            model_runner.evaluate(peak_path)
-        elif mode == "train":
-            logger.info("Train the Casanovo model.")
-            model_runner.train(peak_path, peak_path_val)
+    return config
 
 
 def _get_model_weights() -> str:

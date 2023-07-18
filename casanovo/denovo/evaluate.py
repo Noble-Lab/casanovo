@@ -278,7 +278,7 @@ def aa_match_metrics(
     pep_precision = sum([aa_matches[1] for aa_matches in aa_matches_batch]) / (
         len(aa_matches_batch) + 1e-8
     )
-    return aa_precision, aa_recall, pep_precision
+    return float(aa_precision), float(aa_recall), float(pep_precision)
 
 
 def aa_precision_recall(
