@@ -779,12 +779,12 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         log_args = dict(on_step=False, on_epoch=True, sync_dist=True)
         self.log(
             "Peptide precision at coverage=1",
-            pep_precision.item(),
+            pep_precision,
             **log_args,
         )
         self.log(
             "AA precision at coverage=1",
-            aa_precision.item(),
+            aa_precision,
             **log_args,
         )
         return loss
