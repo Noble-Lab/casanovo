@@ -20,8 +20,9 @@ classifiers = [
 requires-python = ">=3.8"
 dependencies = [
     "appdirs",
-    "depthcharge-ms>=0.2.0,<=0.3.0",
     "lightning>=2.0",
+    "click",
+    "depthcharge-ms>=0.2.0,<0.3.0",
     "natsort",
     "numpy",
     "pandas",

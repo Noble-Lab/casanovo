@@ -1,7 +1,6 @@
 """A de novo peptide sequencing model."""
 import collections
 import heapq
-import itertools
 import logging
 from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
 
@@ -105,7 +104,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         precursor_mass_tol: float = 50,
         isotope_error_range: Tuple[int, int] = (0, 1),
         min_peptide_len: int = 6,
-        n_beams: int = 5,
+        n_beams: int = 1,
         top_match: int = 1,
         n_log: int = 10,
         tb_summarywriter: Optional[
@@ -610,9 +609,12 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
 
         # Mask out terminated beams. Include precursor m/z tolerance induced
         # termination.
+        # TODO: `clone()` is necessary to get the correct output with n_beams=1.
+        #   An alternative implementation using base PyTorch instead of einops
+        #   might be more efficient.
         finished_mask = einops.repeat(
             finished_beams, "(B S) -> B (V S)", S=beam, V=vocab
-        )
+        ).clone()
         # Mask out the index '0', i.e. padding token, by default.
         finished_mask[:, :beam] = True
 

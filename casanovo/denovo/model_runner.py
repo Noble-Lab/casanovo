@@ -170,10 +170,14 @@ class ModelRunner:
             Determines whether to set the trainer up for model training
             or evaluation / inference.
         """
+        logger = (
+            self.config.logger if self.config.logger is not None else False
+        )
         trainer_cfg = dict(
             accelerator=self.config.accelerator,
             devices=1,
-            logger=self.config.logger,
+            enable_checkpointing=False,
+            logger=logger,
         )
 
         if train:
@@ -303,7 +307,7 @@ class ModelRunner:
 
     def _get_index(
         self,
-        peak_path: str,
+        peak_path: Iterable[str],
         annotated: bool,
         msg: str = "",
     ) -> Union[SpectrumIndex, AnnotatedSpectrumIndex]:
@@ -314,8 +318,8 @@ class ModelRunner:
 
         Parameters
         ----------
-        peak_path : str
-            The peak file/directory to check.
+        peak_path : Iterable[str]
+            The peak files/directories to check.
         annotated : bool
             Are the spectra expected to be annotated?
         msg : str, optional
@@ -352,7 +356,7 @@ class ModelRunner:
         valid_charge = np.arange(1, self.config.max_charge + 1)
         return Index(index_fname, filenames, valid_charge=valid_charge)
 
-    def _get_strategy(self) -> Optional[DDPStrategy]:
+    def _get_strategy(self) -> Union[str, DDPStrategy]:
         """Get the strategy for the Trainer.
 
         The DDP strategy works best when multiple GPUs are used. It can work
@@ -361,20 +365,18 @@ class ModelRunner:
 
         Returns
         -------
-        Optional[DDPStrategy]
+        Union[str, DDPStrategy]
             The strategy parameter for the Trainer.
 
         """
         if self.config.accelerator in ("cpu", "mps"):
             return "auto"
-
-        if self.config.devices == 1:
+        elif self.config.devices == 1:
             return "auto"
-
-        if torch.cuda.device_count() > 1:
+        elif torch.cuda.device_count() > 1:
             return DDPStrategy(find_unused_parameters=False, static_graph=True)
-
-        return "auto"
+        else:
+            return "auto"
 
 
 def _get_peak_filenames(

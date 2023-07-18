@@ -75,8 +75,7 @@ def test_train_and_run(
         assert mztab.metadata[f"ms_run[{i}]-location"].endswith(filename)
 
     # Verify that the spectrum predictions are correct
-    # and indexed according to
-    # the peak input file type.
+    # and indexed according to the peak input file type.
     psms = mztab.spectrum_match_table
     assert psms.loc[1, "sequence"] == "LESLLEK"
     assert psms.loc[1, "spectra_ref"] == "ms_run[1]:index=0"

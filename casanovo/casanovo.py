@@ -11,6 +11,18 @@ from pathlib import Path
 from typing import Optional, Tuple
 
 warnings.filterwarnings("ignore", category=DeprecationWarning)
+warnings.filterwarnings(
+    "ignore",
+    ".*Consider increasing the value of the `num_workers` argument*",
+)
+warnings.filterwarnings(
+    "ignore",
+    ".*The PyTorch API of nested tensors is in prototype stage*",
+)
+warnings.filterwarnings(
+    "ignore",
+    ".*Converting mask without torch.bool dtype to bool*",
+)
 
 import appdirs
 import depthcharge
@@ -292,6 +304,7 @@ def setup_logging(
 
     # Disable dependency non-critical log messages.
     logging.getLogger("depthcharge").setLevel(logging.INFO)
+    logging.getLogger("fsspec").setLevel(logging.WARNING)
     logging.getLogger("github").setLevel(logging.WARNING)
     logging.getLogger("h5py").setLevel(logging.WARNING)
     logging.getLogger("numba").setLevel(logging.WARNING)

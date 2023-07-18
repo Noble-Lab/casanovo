@@ -1,10 +1,6 @@
 """Unit tests specifically for the model_runner module."""
-from typing import Union, Any, Dict
-
-import lightning.pytorch as pl
 import pytest
 import torch
-from lightning.pytorch.accelerators import Accelerator
 
 from casanovo.config import Config
 from casanovo.denovo.model_runner import ModelRunner
@@ -63,7 +59,7 @@ def test_save_and_load_weights(tmp_path, mgf_small, tiny_config):
     with torch.device("meta"):
         # Now load the weights into a new model
         # The device should be meta for all the weights.
-        runner = ModelRunner(config=other_config, model_filename=ckpt)
+        runner = ModelRunner(config=other_config, model_filename=str(ckpt))
         runner.initialize_model(train=False)
 
     obs_layers = runner.model.encoder.transformer_encoder.num_layers
@@ -73,7 +69,7 @@ def test_save_and_load_weights(tmp_path, mgf_small, tiny_config):
     # If the Trainer correctly moves the weights to the accelerator,
     # then it should fail if the weights are on the "meta" device.
     with torch.device("meta"):
-        with ModelRunner(other_config, model_filename=ckpt) as runner:
+        with ModelRunner(other_config, model_filename=str(ckpt)) as runner:
             with pytest.raises(NotImplementedError) as err:
                 runner.evaluate([mgf_small])
 
@@ -85,12 +81,12 @@ def test_save_and_load_weights(tmp_path, mgf_small, tiny_config):
     torch.save(ckpt_data, ckpt)
 
     # Shouldn't work:
-    with ModelRunner(other_config, model_filename=ckpt) as runner:
+    with ModelRunner(other_config, model_filename=str(ckpt)) as runner:
         with pytest.raises(RuntimeError):
             runner.evaluate([mgf_small])
 
     # Should work:
-    with ModelRunner(config=config, model_filename=ckpt) as runner:
+    with ModelRunner(config=config, model_filename=str(ckpt)) as runner:
         runner.evaluate([mgf_small])
 
 
