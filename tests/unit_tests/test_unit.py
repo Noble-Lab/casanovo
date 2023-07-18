@@ -341,36 +341,35 @@ def test_beam_search_decode():
     )
 
     assert torch.equal(pred_cache[0][0][-1], torch.tensor([4, 14, 4, 13]))
-    
+
     # Test _get_topk_beams().
-    step=1
+    step = 1
     scores = torch.full(
         size=(batch, length, vocab, beam), fill_value=torch.nan
-    )    
+    )
     scores = einops.rearrange(scores, "B L V S -> (B S) L V")
     tokens = torch.zeros(batch * beam, length, dtype=torch.int64)
-    tokens[0,0] = 4
+    tokens[0, 0] = 4
     scores[0, step, :] = 0
-    scores[0, step, 14] = torch.tensor([1]) 
+    scores[0, step, 14] = torch.tensor([1])
     test_finished_beams = torch.tensor([False])
-    
+
     new_tokens, new_scores = model._get_topk_beams(
         tokens, scores, test_finished_beams, batch, step
     )
-    
+
     expected_tokens = torch.tensor(
         [
             [4, 14],
         ]
-    )   
-    
+    )
+
     expected_scores = torch.zeros(beam, vocab)
-    expected_scores[:, 14] = torch.tensor([1])   
-    
-    assert torch.equal(new_scores[:, step, :], expected_scores) 
+    expected_scores[:, 14] = torch.tensor([1])
+
+    assert torch.equal(new_scores[:, step, :], expected_scores)
     assert torch.equal(new_tokens[:, : step + 1], expected_tokens)
-    
-    
+
     # Test _finish_beams() for tokens with a negative mass.
     model = Spec2Pep(n_beams=2, residues="massivekb")
     beam = model.n_beams  # S
