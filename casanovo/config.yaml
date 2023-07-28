@@ -103,8 +103,6 @@ predict_batch_size: 1024
 n_beams: 1
 # Number of PSMs for each spectrum (I)
 top_match: 1
-# Object for logging training progress
-logger:
 # Max number of training epochs
 max_epochs: 30
 # Number of validation steps to run before training begins
