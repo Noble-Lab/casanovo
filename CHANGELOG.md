@@ -6,16 +6,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
-### Changed
-
-- The CLI has been overhauled to use subcommands.
-- Upgraded to Lightning >=2.0
-- Checkpointing is now configured to save the top-k models instead of all.
-
-### Fixed
-
-- Casanovo now runs on CPU and can passes all tests.
-
 ### Added
 
 -  Checkpoints now include model parameters, allowing for mismatches with the provided configuration file.
@@ -25,12 +15,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Changed
 
+- The CLI has been overhauled to use subcommands.
+- Upgraded to Lightning >=2.0
+- Checkpointing is now configured to save the top-k models instead of all.
 - We now log steps rather than epochs as units of progress during training.
 - Validation performance metrics are logged (and added to tensorboard) at the validation epoch, and training loss is logged at the end of training epoch, i.e. training and validation metrics are logged asynchronously.
 - Irrelevant warning messages on the console output and in the log file are no longer shown.
 
+### Removed
+
+- Remove config option for a custom Pytorch Lightning logger
+
 ### Fixed
 
+- Casanovo now runs on CPU and can passes all tests.
 - Upgrade to Depthcharge v0.2.0 to fix sinusoidal encoding.
 - Correctly refer to input peak files by their full file path.
 
