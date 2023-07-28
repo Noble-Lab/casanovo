@@ -124,7 +124,7 @@ def _execute_existing(
     if len(peak_filenames := _get_peak_filenames(peak_path, peak_ext)) == 0:
         logger.error("Could not find peak files from %s", peak_path)
         raise FileNotFoundError("Could not find peak files")
-    else:
+    elif out_writer is not None:
         out_writer.set_ms_run(peak_filenames)
     peak_is_index = any(
         [os.path.splitext(fn)[1] in (".h5", ".hdf5") for fn in peak_filenames]
