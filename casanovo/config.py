@@ -65,7 +65,7 @@ class Config:
         train_from_scratch=bool,
         save_top_k=int,
         model_save_folder_path=str,
-        every_n_train_steps=int,
+        val_check_interval=int,
         accelerator=str,
         devices=int,
         calculate_precision=bool,
