@@ -309,7 +309,9 @@ def setup_logging(
     warnings_logger.addHandler(file_handler)
 
     # Disable dependency non-critical log messages.
-    logging.getLogger("depthcharge").setLevel(logging_levels[verbosity.lower()])
+    logging.getLogger("depthcharge").setLevel(
+        logging_levels[verbosity.lower()]
+    )
     logging.getLogger("fsspec").setLevel(logging.WARNING)
     logging.getLogger("github").setLevel(logging.WARNING)
     logging.getLogger("h5py").setLevel(logging.WARNING)
