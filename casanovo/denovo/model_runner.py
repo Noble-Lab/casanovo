@@ -194,6 +194,7 @@ class ModelRunner:
                 num_sanity_val_steps=self.config.num_sanity_val_steps,
                 strategy=self._get_strategy(),
                 val_check_interval=self.config.val_check_interval,
+                check_val_every_n_epoch=None,
             )
             trainer_cfg.update(additional_cfg)
 
