@@ -11,6 +11,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - The CLI has been overhauled to use subcommands.
 - Upgraded to Lightning >=2.0
 - Checkpointing is now configured to save the top-k models instead of all.
+- Nicely format logged warnings.
 
 ### Fixed
 
