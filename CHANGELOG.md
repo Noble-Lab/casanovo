@@ -11,6 +11,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - The CLI has been overhauled to use subcommands.
 - Upgraded to Lightning >=2.0
 - Checkpointing is now configured to save the top-k models instead of all.
+- `every_n_train_steps` has been renamed to `val_check_interval` in accordance to the corresponding Pytorch Lightning parameter.
 
 ### Fixed
 
@@ -21,7 +22,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 -  Checkpoints now include model parameters, allowing for mismatches with the provided configuration file.
 - `accelerator` parameter now controls the accelerator (CPU, GPU, etc) that is used.
 - `devices` parameter controls the number of accelerators used.
-- `every_n_train_steps` parameter now controls the frequency of both validation epochs and model checkpointing during training.
+- `val_check_interval` parameter now controls the frequency of both validation epochs and model checkpointing during training.
 
 ### Changed
 
