@@ -83,7 +83,7 @@ residues:
   "+43.006-17.027": 25.980265      # Carbamylation and NH3 loss
 # Logging frequency in training steps
 n_log: 1
-# Tensorboard object to keep track of training metrics
+# Tensorboard directory to use for keeping track of training metrics
 tb_summarywriter:
 # Number of warmup iterations for learning rate scheduler
 warmup_iters: 100_000
