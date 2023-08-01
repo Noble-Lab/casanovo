@@ -72,6 +72,8 @@ To assist users, if no model file is specified Casanovo will try to download and
 
 Not all releases might have a model file included on the [Releases page](https://github.com/Noble-Lab/casanovo/releases), in which case model weights for alternative releases with the same major version number can be used.
 
+If you're analysing data generated with a non-tryptic mode of digestion, it is recommended to download and use a model file obtained with non-enzymatic fine-tuning, e.g. `casanovo_non-enzy.checkpt` in release [v3.0.0](https://github.com/Noble-Lab/casanovo/releases/tag/v3.0.0). These weights are not downloaded automatically.
+
 ## Running Casanovo
 
 ```{note}
