@@ -72,7 +72,9 @@ To assist users, if no model file is specified Casanovo will try to download and
 
 Not all releases might have a model file included on the [Releases page](https://github.com/Noble-Lab/casanovo/releases), in which case model weights for alternative releases with the same major version number can be used.
 
-If you're analysing data generated with a non-tryptic mode of digestion, it is recommended to download and use a model file obtained with non-enzymatic fine-tuning, e.g. `casanovo_non-enzy.checkpt` in release [v3.0.0](https://github.com/Noble-Lab/casanovo/releases/tag/v3.0.0). These weights are not downloaded automatically.
+The most recent model weights for Casanovo version 3.x are currently provided under [Casanovo v3.0.0](https://github.com/Noble-Lab/casanovo/releases/tag/v3.0.0):
+- `casanovo_massivekb.ckpt`: Default Casanovo weights to use when analyzing tryptic data. These weights will be downloaded automatically if no weights are explicitly specified.
+- `casanovo_non-enzy.checkpt`: Casanovo weights to use when analyzing non-tryptic data, obtained by fine-tuning the tryptic model on multi-enzyme data. These weights need to be downloaded manually.
 
 ## Running Casanovo
 
