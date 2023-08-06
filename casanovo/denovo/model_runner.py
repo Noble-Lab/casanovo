@@ -14,6 +14,8 @@ import torch
 from depthcharge.data import AnnotatedSpectrumIndex, SpectrumIndex
 from pytorch_lightning.strategies import DDPStrategy
 
+from lightning.pytorch.accelerators import find_usable_cuda_devices
+
 from .. import utils
 from ..data import ms_io
 from ..denovo.dataloaders import DeNovoDataModule
@@ -96,8 +98,12 @@ def _execute_existing(
             model_filename,
         )
         raise FileNotFoundError("Could not find the trained model weights")
+    map_location = None
+    if torch.cuda.device_count() == 0:
+        map_location = "cpu"
     model = Spec2Pep().load_from_checkpoint(
         model_filename,
+        map_location=map_location,
         dim_model=config["dim_model"],
         n_head=config["n_head"],
         dim_feedforward=config["dim_feedforward"],
@@ -158,7 +164,6 @@ def _execute_existing(
     # Create the Trainer object.
     trainer = pl.Trainer(
         accelerator="auto",
-        auto_select_gpus=True,
         devices=_get_devices(config["no_gpu"]),
         logger=config["logger"],
         max_epochs=config["max_epochs"],
@@ -304,7 +309,6 @@ def train(
 
     trainer = pl.Trainer(
         accelerator="auto",
-        auto_select_gpus=True,
         callbacks=callbacks,
         devices=_get_devices(config["no_gpu"]),
         enable_checkpointing=config["save_model"],
@@ -352,7 +356,7 @@ def _get_peak_filenames(
     ]
 
 
-def _get_strategy() -> Optional[DDPStrategy]:
+def _get_strategy() -> Union[DDPStrategy, str]:
     """
     Get the strategy for the Trainer.
 
@@ -362,16 +366,16 @@ def _get_strategy() -> Optional[DDPStrategy]:
 
     Returns
     -------
-    Optional[DDPStrategy]
+    Union[DDPStrategy,str]
         The strategy parameter for the Trainer.
     """
     if torch.cuda.device_count() > 1:
         return DDPStrategy(find_unused_parameters=False, static_graph=True)
 
-    return None
+    return "auto"
 
 
-def _get_devices(no_gpu: bool) -> Union[int, str]:
+def _get_devices(no_gpu: bool) -> Union[List[int], str]:
     """
     Get the number of GPUs/CPUs for the Trainer to use.
 
@@ -382,16 +386,14 @@ def _get_devices(no_gpu: bool) -> Union[int, str]:
 
     Returns
     -------
-    Union[int, str]
-        The number of GPUs/CPUs to use, or "auto" to let PyTorch Lightning
-        determine the appropriate number of devices.
+    Union[List[int], str]
+        A list of CUDA GPU devices to use, or "auto" to let PyTorch Lightning determine
+        the appropriate number of devices.
     """
     if not no_gpu and any(
         operator.attrgetter(device + ".is_available")(torch)()
         for device in ("cuda",)
     ):
-        return -1
-    elif not (n_workers := utils.n_workers()):
-        return "auto"
+        return find_usable_cuda_devices()
     else:
-        return n_workers
+        return "auto"
