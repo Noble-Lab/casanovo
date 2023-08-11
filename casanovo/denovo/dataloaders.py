@@ -195,7 +195,12 @@ def prepare_batch(
         The spectrum identifiers (during de novo sequencing) or peptide
         sequences (during training).
     """
-    spectra, precursor_mzs, precursor_charges, spectrum_ids = list(zip(*batch))
+    spectra, precursor_mzs, precursor_charges, enzymes, spectrum_ids = list(zip(*batch))
+    enzymes = torch.tensor(enzymes)
+#    print(f'Enzymes shape before casting to long: {enzymes.shape}, Enzymes dtype before casting to long: {enzymes.dtype}')
+    enzymes = enzymes.long()
+#    print(f'Enzymes shape: {enzymes.shape}, Enzymes dtype after casting to long: {enzymes.dtype}')
+    enzymes = torch.nn.functional.one_hot(enzymes, 4)
     spectra = torch.nn.utils.rnn.pad_sequence(spectra, batch_first=True)
     precursor_mzs = torch.tensor(precursor_mzs)
     precursor_charges = torch.tensor(precursor_charges)
@@ -203,4 +208,4 @@ def prepare_batch(
     precursors = torch.vstack(
         [precursor_masses, precursor_charges, precursor_mzs]
     ).T.float()
-    return spectra, precursors, np.asarray(spectrum_ids)
+    return spectra, precursors, enzymes, np.asarray(spectrum_ids)

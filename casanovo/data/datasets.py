@@ -82,7 +82,7 @@ class SpectrumDataset(Dataset):
             The unique spectrum identifier, formed by its original peak file and
             identifier (index or scan number) therein.
         """
-        mz_array, int_array, precursor_mz, precursor_charge = self.index[idx]
+        mz_array, int_array, precursor_mz, precursor_charge, enzyme = self.index[idx]
         spectrum = self._process_peaks(
             mz_array, int_array, precursor_mz, precursor_charge
         )
@@ -90,6 +90,7 @@ class SpectrumDataset(Dataset):
             spectrum,
             precursor_mz,
             precursor_charge,
+            enzyme,
             self.get_spectrum_id(idx),
         )
 
@@ -250,6 +251,8 @@ class AnnotatedSpectrumDataset(SpectrumDataset):
             The precursor m/z.
         precursor_charge : int
             The precursor charge.
+        enzyme: torch.Tensor of shape (1)
+            A tensor of the enzyme for a given spectrum.
         annotation : str
             The peptide annotation of the spectrum.
         """
@@ -258,9 +261,10 @@ class AnnotatedSpectrumDataset(SpectrumDataset):
             int_array,
             precursor_mz,
             precursor_charge,
+            enzyme,
             peptide,
         ) = self.index[idx]
         spectrum = self._process_peaks(
             mz_array, int_array, precursor_mz, precursor_charge
         )
-        return spectrum, precursor_mz, precursor_charge, peptide
+        return spectrum, precursor_mz, precursor_charge, enzyme, peptide
