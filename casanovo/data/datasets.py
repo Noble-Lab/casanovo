@@ -1,5 +1,5 @@
 """A PyTorch Dataset class for annotated spectra."""
-from typing import Optional, Tuple
+from typing import Optional, Tuple, List
 
 import depthcharge
 import numpy as np
@@ -212,17 +212,20 @@ class AnnotatedSpectrumDataset(SpectrumDataset):
     random_state : Optional[int]
         The NumPy random state. ``None`` leaves mass spectra in the order they
         were parsed.
+    enzyme_vocab: List[str]
+        A list of all the enzymes used for digestion.
     """
 
     def __init__(
         self,
-        annotated_spectrum_index: depthcharge.data.SpectrumIndex,
+        annotated_spectrum_index: depthcharge.data.AnnotatedSpectrumIndex,
         n_peaks: int = 150,
         min_mz: float = 140.0,
         max_mz: float = 2500.0,
         min_intensity: float = 0.01,
         remove_precursor_tol: float = 2.0,
         random_state: Optional[int] = None,
+        enzyme_vocab: List[str] = None,
     ):
         super().__init__(
             annotated_spectrum_index,
@@ -233,6 +236,8 @@ class AnnotatedSpectrumDataset(SpectrumDataset):
             remove_precursor_tol=remove_precursor_tol,
             random_state=random_state,
         )
+        self.enzyme_vocab = enzyme_vocab
+        self.stoi = {enzyme: idx for idx, enzyme in enumerate(self.enzyme_vocab)}
 
     def __getitem__(self, idx: int) -> Tuple[torch.Tensor, float, int, str]:
         """
@@ -251,8 +256,8 @@ class AnnotatedSpectrumDataset(SpectrumDataset):
             The precursor m/z.
         precursor_charge : int
             The precursor charge.
-        enzyme: torch.Tensor of shape (1)
-            A tensor of the enzyme for a given spectrum.
+        enzyme_idx: int
+            An int representing the index of the enzyme in the vocabulary.
         annotation : str
             The peptide annotation of the spectrum.
         """
@@ -267,4 +272,5 @@ class AnnotatedSpectrumDataset(SpectrumDataset):
         spectrum = self._process_peaks(
             mz_array, int_array, precursor_mz, precursor_charge
         )
-        return spectrum, precursor_mz, precursor_charge, enzyme, peptide
+        enzyme_idx = self.stoi[enzyme]
+        return spectrum, precursor_mz, precursor_charge, enzyme_idx, peptide

@@ -47,6 +47,8 @@ class DeNovoDataModule(pl.LightningDataModule):
     random_state : Optional[int]
         The NumPy random state. ``None`` leaves mass spectra in the order they
         were parsed.
+    enzyme_vocab: List[str]
+        A list of strings representing the complete enzyme vocabulary for the dataset.
     """
 
     def __init__(
@@ -63,6 +65,7 @@ class DeNovoDataModule(pl.LightningDataModule):
         remove_precursor_tol: float = 2.0,
         n_workers: Optional[int] = None,
         random_state: Optional[int] = None,
+        enzyme_vocab: List[str] = None,
     ):
         super().__init__()
         self.train_index = train_index
@@ -80,6 +83,7 @@ class DeNovoDataModule(pl.LightningDataModule):
         self.train_dataset = None
         self.valid_dataset = None
         self.test_dataset = None
+        self.enzyme_vocab = enzyme_vocab
 
     def setup(self, stage: str = None, annotated: bool = True) -> None:
         """
@@ -102,6 +106,7 @@ class DeNovoDataModule(pl.LightningDataModule):
                 max_mz=self.max_mz,
                 min_intensity=self.min_intensity,
                 remove_precursor_tol=self.remove_precursor_tol,
+                enzyme_vocab=self.enzyme_vocab,
             )
             if self.train_index is not None:
                 self.train_dataset = make_dataset(
@@ -118,6 +123,7 @@ class DeNovoDataModule(pl.LightningDataModule):
                 max_mz=self.max_mz,
                 min_intensity=self.min_intensity,
                 remove_precursor_tol=self.remove_precursor_tol,
+                enzyme_vocab = self.enzyme_vocab,
             )
             if self.test_index is not None:
                 self.test_dataset = make_dataset(self.test_index)
@@ -168,8 +174,8 @@ class DeNovoDataModule(pl.LightningDataModule):
 
 
 def prepare_batch(
-    batch: List[Tuple[torch.Tensor, float, int, str]]
-) -> Tuple[torch.Tensor, torch.Tensor, np.ndarray]:
+    batch: List[Tuple[torch.Tensor, float, int, str, str]]
+) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, np.ndarray]:
     """
     Collate MS/MS spectra into a batch.
 
@@ -191,16 +197,13 @@ def prepare_batch(
     precursors : torch.Tensor of shape (batch_size, 3)
         A tensor with the precursor neutral mass, precursor charge, and
         precursor m/z.
+    enzymes: torch.Tensor of shape (batch_size, 1)
+        A tensor containing the enzymes for each batch entry in the dataset.
     spectrum_ids : np.ndarray
         The spectrum identifiers (during de novo sequencing) or peptide
         sequences (during training).
     """
     spectra, precursor_mzs, precursor_charges, enzymes, spectrum_ids = list(zip(*batch))
-    enzymes = torch.tensor(enzymes)
-#    print(f'Enzymes shape before casting to long: {enzymes.shape}, Enzymes dtype before casting to long: {enzymes.dtype}')
-    enzymes = enzymes.long()
-#    print(f'Enzymes shape: {enzymes.shape}, Enzymes dtype after casting to long: {enzymes.dtype}')
-    enzymes = torch.nn.functional.one_hot(enzymes, 4)
     spectra = torch.nn.utils.rnn.pad_sequence(spectra, batch_first=True)
     precursor_mzs = torch.tensor(precursor_mzs)
     precursor_charges = torch.tensor(precursor_charges)
@@ -208,4 +211,5 @@ def prepare_batch(
     precursors = torch.vstack(
         [precursor_masses, precursor_charges, precursor_mzs]
     ).T.float()
+    enzymes = torch.tensor(enzymes, dtype=torch.long)
     return spectra, precursors, enzymes, np.asarray(spectrum_ids)
