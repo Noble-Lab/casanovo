@@ -303,6 +303,7 @@ class ModelRunner:
             n_workers=self.config.n_workers,
             train_batch_size=train_bs,
             eval_batch_size=eval_bs,
+            enzyme_vocab=self.config.enzyme_vocab,
         )
 
     def _get_index(
@@ -354,7 +355,8 @@ class ModelRunner:
 
         Index = AnnotatedSpectrumIndex if annotated else SpectrumIndex
         valid_charge = np.arange(1, self.config.max_charge + 1)
-        return Index(index_fname, filenames, valid_charge=valid_charge)
+        digest = self.config.digest
+        return Index(index_fname, filenames, valid_charge=valid_charge, digest=digest)
 
     def _get_strategy(self) -> Union[str, DDPStrategy]:
         """Get the strategy for the Trainer.

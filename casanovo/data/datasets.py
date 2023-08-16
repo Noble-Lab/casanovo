@@ -225,7 +225,7 @@ class AnnotatedSpectrumDataset(SpectrumDataset):
         min_intensity: float = 0.01,
         remove_precursor_tol: float = 2.0,
         random_state: Optional[int] = None,
-        enzyme_vocab: List[str] = None,
+#        enzyme_vocab: List[str] = None,
     ):
         super().__init__(
             annotated_spectrum_index,
@@ -236,8 +236,8 @@ class AnnotatedSpectrumDataset(SpectrumDataset):
             remove_precursor_tol=remove_precursor_tol,
             random_state=random_state,
         )
-        self.enzyme_vocab = enzyme_vocab
-        self.stoi = {enzyme: idx for idx, enzyme in enumerate(self.enzyme_vocab)}
+#        self.enzyme_vocab = enzyme_vocab
+#        self.stoi = {enzyme: idx for idx, enzyme in enumerate(self.enzyme_vocab)}
 
     def __getitem__(self, idx: int) -> Tuple[torch.Tensor, float, int, str]:
         """
@@ -272,5 +272,5 @@ class AnnotatedSpectrumDataset(SpectrumDataset):
         spectrum = self._process_peaks(
             mz_array, int_array, precursor_mz, precursor_charge
         )
-        enzyme_idx = self.stoi[enzyme]
+#        enzyme_idx = self.stoi[enzyme]
         return spectrum, precursor_mz, precursor_charge, enzyme_idx, peptide
