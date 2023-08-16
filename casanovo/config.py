@@ -50,6 +50,7 @@ class Config:
         dropout=float,
         dim_intensity=int,
         max_length=int,
+        residues=dict,
         n_log=int,
         tb_summarywriter=str,
         warmup_iters=int,

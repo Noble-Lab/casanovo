@@ -24,6 +24,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ### Fixed
 
 - Correctly refer to input peak files by their full file path.
+- Specifying custom residues to retrain Casanovo is now possible.
 
 ## [3.3.0] - 2023-04-04
 
