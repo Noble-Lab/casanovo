@@ -6,9 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+## [3.5.0] - 2023-08-16
+
 ### Fixed
 
 - Don't try to assign non-existing output writer during eval mode.
+- Specifying custom residues to retrain Casanovo is now possible.
 
 ## [3.4.0] - 2023-06-19
 
@@ -24,7 +27,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ### Fixed
 
 - Correctly refer to input peak files by their full file path.
-- Specifying custom residues to retrain Casanovo is now possible.
 
 ## [3.3.0] - 2023-04-04
 
@@ -179,7 +181,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 - Initial Casanovo version.
 
-[Unreleased]: https://github.com/Noble-Lab/casanovo/compare/v3.4.0...HEAD
+[Unreleased]: https://github.com/Noble-Lab/casanovo/compare/v3.5.0...HEAD
+[3.5.0]: https://github.com/Noble-Lab/casanovo/compare/v3.4.0...v3.5.0
 [3.4.0]: https://github.com/Noble-Lab/casanovo/compare/v3.3.0...v3.4.0
 [3.3.0]: https://github.com/Noble-Lab/casanovo/compare/v3.2.0...v3.3.0
 [3.2.0]: https://github.com/Noble-Lab/casanovo/compare/v3.1.0...v3.2.0
