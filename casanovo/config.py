@@ -50,6 +50,7 @@ class Config:
         dropout=float,
         dim_intensity=int,
         max_length=int,
+        residues=dict,
         n_log=int,
         tb_summarywriter=str,
         warmup_iters=int,
@@ -66,9 +67,9 @@ class Config:
         save_top_k=int,
         model_save_folder_path=str,
         val_check_interval=int,
+        calculate_precision=bool,
         accelerator=str,
         devices=int,
-        calculate_precision=bool,
     )
 
     def __init__(self, config_file: Optional[str] = None):
