@@ -201,8 +201,10 @@ def prepare_batch(
     precursors : torch.Tensor of shape (batch_size, 3)
         A tensor with the precursor neutral mass, precursor charge, and
         precursor m/z.
-    enzymes: torch.Tensor of shape (batch_size, 1)
+    enzyme_idxs: torch.Tensor of shape (batch_size, max_len)
         A tensor containing the enzymes for each batch entry in the dataset.
+        The max_len dimension where max_len = (maximum length of enzyme combinations)
+        is filled with a padding index value just out of range of the enzyme_vocab.
     spectrum_ids : np.ndarray
         The spectrum identifiers (during de novo sequencing) or peptide
         sequences (during training).
@@ -215,5 +217,7 @@ def prepare_batch(
     precursors = torch.vstack(
         [precursor_masses, precursor_charges, precursor_mzs]
     ).T.float()
-    enzymes = torch.tensor(enzymes, dtype=torch.long)
-    return spectra, precursors, enzymes, np.asarray(spectrum_ids)
+    max_length = 9 
+    padded_enzyme_indices = [inner_list + [9] * (max_length - len(inner_list)) for inner_list in enzymes]
+    enzyme_idxs = torch.tensor(padded_enzyme_indices, dtype=torch.long)
+    return spectra, precursors, enzyme_idxs, np.asarray(spectrum_ids)
