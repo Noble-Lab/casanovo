@@ -83,7 +83,7 @@ residues:
   "+43.006-17.027": 25.980265      # Carbamylation and NH3 loss
 # Logging frequency in training steps
 n_log: 1
-# Tensorboard object to keep track of training metrics
+# Tensorboard directory to use for keeping track of training metrics
 tb_summarywriter:
 # Number of warmup iterations for learning rate scheduler
 warmup_iters: 100_000
@@ -103,8 +103,6 @@ predict_batch_size: 1024
 n_beams: 1
 # Number of PSMs for each spectrum (I)
 top_match: 1
-# Object for logging training progress
-logger:
 # Max number of training epochs
 max_epochs: 30
 # Number of validation steps to run before training begins
@@ -117,7 +115,7 @@ save_top_k: 5
 # Path to saved checkpoints
 model_save_folder_path: ""
 # Model validation and checkpointing frequency in training steps
-every_n_train_steps: 50_000
+val_check_interval: 50_000
 # Calculate peptide and amino acid precision during training. this
 # is expensive, so we recommend against it.
 calculate_precision: False

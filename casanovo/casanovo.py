@@ -10,6 +10,9 @@ import warnings
 from pathlib import Path
 from typing import Optional, Tuple
 
+warnings.formatwarning = lambda message, category, *args, **kwargs: (
+    f"{category.__name__}: {message}"
+)
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 warnings.filterwarnings(
     "ignore",
@@ -283,8 +286,9 @@ def setup_logging(
 
     # Configure logging.
     logging.captureWarnings(True)
-    root = logging.getLogger()
-    root.setLevel(logging.DEBUG)
+    root_logger = logging.getLogger()
+    root_logger.setLevel(logging.DEBUG)
+    warnings_logger = logging.getLogger("py.warnings")
 
     # Formatters for file vs console:
     console_formatter = logging.Formatter("{levelname}: {message}", style="{")
@@ -297,13 +301,17 @@ def setup_logging(
     console_handler = logging.StreamHandler(sys.stderr)
     console_handler.setLevel(logging_levels[verbosity.lower()])
     console_handler.setFormatter(console_formatter)
-    root.addHandler(console_handler)
+    root_logger.addHandler(console_handler)
+    warnings_logger.addHandler(console_handler)
     file_handler = logging.FileHandler(output.with_suffix(".log"))
     file_handler.setFormatter(log_formatter)
-    root.addHandler(file_handler)
+    root_logger.addHandler(file_handler)
+    warnings_logger.addHandler(file_handler)
 
     # Disable dependency non-critical log messages.
-    logging.getLogger("depthcharge").setLevel(logging.INFO)
+    logging.getLogger("depthcharge").setLevel(
+        logging_levels[verbosity.lower()]
+    )
     logging.getLogger("fsspec").setLevel(logging.WARNING)
     logging.getLogger("github").setLevel(logging.WARNING)
     logging.getLogger("h5py").setLevel(logging.WARNING)

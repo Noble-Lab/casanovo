@@ -60,8 +60,8 @@ Using the filename (column "filename") you can then retrieve the corresponding p
 
 By default, Casanovo saves a snapshot of the model weights after every 50,000 training steps.
 Note that the number of samples that are processed during a single training step depends on the batch size.
-Therefore, when using the default training batch size of 32, this correspond to saving a model snapshot after every 1.6 million training samples.
-You can optionally modify the snapshot frequency in the [config file](https://github.com/Noble-Lab/casanovo/blob/main/casanovo/config.yaml) (parameter `every_n_train_steps`), depending on your dataset size.
+Therefore, when using the default training batch size of 32, this corresponds to saving a model snapshot after every 1.6 million training samples.
+You can optionally modify the snapshot (and validation) frequency in the [config file](https://github.com/Noble-Lab/casanovo/blob/main/casanovo/config.yaml) (parameter `val_check_interval`), depending on your dataset size.
 Note that taking very frequent model snapshots will result in somewhat slower training time because Casanovo will evaluate its performance on the validation data for every snapshot.
 
 When saving a model snapshot, Casanovo will use the validation data to compute performance measures (training loss, validation loss, amino acid precision, and peptide precision) and print this information to the console and log file.

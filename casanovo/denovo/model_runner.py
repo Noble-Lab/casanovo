@@ -170,14 +170,10 @@ class ModelRunner:
             Determines whether to set the trainer up for model training
             or evaluation / inference.
         """
-        logger = (
-            self.config.logger if self.config.logger is not None else False
-        )
         trainer_cfg = dict(
             accelerator=self.config.accelerator,
             devices=1,
             enable_checkpointing=False,
-            logger=logger,
         )
 
         if train:
@@ -193,7 +189,8 @@ class ModelRunner:
                 max_epochs=self.config.max_epochs,
                 num_sanity_val_steps=self.config.num_sanity_val_steps,
                 strategy=self._get_strategy(),
-                val_check_interval=self.config.every_n_train_steps,
+                val_check_interval=self.config.val_check_interval,
+                check_val_every_n_epoch=None,
             )
             trainer_cfg.update(additional_cfg)
 

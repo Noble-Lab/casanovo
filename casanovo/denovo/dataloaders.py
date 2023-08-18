@@ -126,6 +126,7 @@ class DeNovoDataModule(pl.LightningDataModule):
         self,
         dataset: torch.utils.data.Dataset,
         batch_size: int,
+        shuffle: bool = False,
     ) -> torch.utils.data.DataLoader:
         """
         Create a PyTorch DataLoader.
@@ -136,6 +137,8 @@ class DeNovoDataModule(pl.LightningDataModule):
             A PyTorch Dataset.
         batch_size : int
             The batch size to use.
+        shuffle : bool
+            Option to shuffle the batches.
 
         Returns
         -------
@@ -148,11 +151,14 @@ class DeNovoDataModule(pl.LightningDataModule):
             collate_fn=prepare_batch,
             pin_memory=True,
             num_workers=self.n_workers,
+            shuffle=shuffle,
         )
 
     def train_dataloader(self) -> torch.utils.data.DataLoader:
         """Get the training DataLoader."""
-        return self._make_loader(self.train_dataset, self.train_batch_size)
+        return self._make_loader(
+            self.train_dataset, self.train_batch_size, shuffle=True
+        )
 
     def val_dataloader(self) -> torch.utils.data.DataLoader:
         """Get the validation DataLoader."""

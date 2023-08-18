@@ -22,18 +22,29 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 -  Checkpoints now include model parameters, allowing for mismatches with the provided configuration file.
 - `accelerator` parameter now controls the accelerator (CPU, GPU, etc) that is used.
 - `devices` parameter controls the number of accelerators used.
-- `every_n_train_steps` parameter now controls the frequency of both validation epochs and model checkpointing during training.
+- `val_check_interval` parameter now controls the frequency of both validation epochs and model checkpointing during training.
 
 ### Changed
 
+- The CLI has been overhauled to use subcommands.
+- Upgraded to Lightning >=2.0
+- Checkpointing is now configured to save the top-k models instead of all.
 - We now log steps rather than epochs as units of progress during training.
 - Validation performance metrics are logged (and added to tensorboard) at the validation epoch, and training loss is logged at the end of training epoch, i.e. training and validation metrics are logged asynchronously.
 - Irrelevant warning messages on the console output and in the log file are no longer shown.
+- Nicely format logged warnings.
+- `every_n_train_steps` has been renamed to `val_check_interval` in accordance to the corresponding Pytorch Lightning parameter.
+
+### Removed
+
+- Remove config option for a custom Pytorch Lightning logger
 
 ### Fixed
 
+- Casanovo now runs on CPU and can passes all tests.
 - Upgrade to Depthcharge v0.2.0 to fix sinusoidal encoding.
 - Correctly refer to input peak files by their full file path.
+- Specifying custom residues to retrain Casanovo is now possible.
 
 ## [3.3.0] - 2023-04-04
 
