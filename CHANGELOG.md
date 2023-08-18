@@ -6,38 +6,33 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
-### Changed
-
-- The CLI has been overhauled to use subcommands.
-- Upgraded to Lightning >=2.0
-- Checkpointing is now configured to save the top-k models instead of all.
-
-### Fixed
-
-- Casanovo now runs on CPU and can passes all tests.
-- Enable gradients during prediction and validation to avoid NaNs from occuring as a temporary workaround until a new Pytorch version is available.
-
 ### Added
 
--  Checkpoints now include model parameters, allowing for mismatches with the provided configuration file.
-- `accelerator` parameter now controls the accelerator (CPU, GPU, etc) that is used.
+-  Checkpoints include model parameters, allowing for mismatches with the provided configuration file.
+- `accelerator` parameter controls the accelerator (CPU, GPU, etc) that is used.
 - `devices` parameter controls the number of accelerators used.
-- `val_check_interval` parameter now controls the frequency of both validation epochs and model checkpointing during training.
+- `val_check_interval` parameter controls the frequency of both validation epochs and model checkpointing during training.
 
 ### Changed
 
 - The CLI has been overhauled to use subcommands.
 - Upgraded to Lightning >=2.0
-- Checkpointing is now configured to save the top-k models instead of all.
-- We now log steps rather than epochs as units of progress during training.
+- Checkpointing is configured to save the top-k models instead of all.
+- Log steps rather than epochs as units of progress during training.
 - Validation performance metrics are logged (and added to tensorboard) at the validation epoch, and training loss is logged at the end of training epoch, i.e. training and validation metrics are logged asynchronously.
 - Irrelevant warning messages on the console output and in the log file are no longer shown.
 - Nicely format logged warnings.
 - `every_n_train_steps` has been renamed to `val_check_interval` in accordance to the corresponding Pytorch Lightning parameter.
+- Training batches are randomly shuffled.
+
+### Fixed
+
+- Casanovo runs on CPU and can passes all tests.
+- Enable gradients during prediction and validation to avoid NaNs from occuring as a temporary workaround until a new Pytorch version is available.
 
 ### Removed
 
-- Remove config option for a custom Pytorch Lightning logger
+- Remove config option for a custom Pytorch Lightning logger.
 
 ### Fixed
 
