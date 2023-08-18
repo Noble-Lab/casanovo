@@ -15,6 +15,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ### Fixed
 
 - Casanovo now runs on CPU and can passes all tests.
+- Enable gradients during prediction and validation to avoid NaNs from occuring as a temporary workaround until a new Pytorch version is available.
 
 ### Added
 
