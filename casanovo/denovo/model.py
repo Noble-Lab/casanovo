@@ -758,6 +758,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
             The loss of the validation step.
         """
         # Record the loss.
+        # FIXME: Temporary workaround to avoid the NaN bug.
         with torch.set_grad_enabled(True):
             loss = self.training_step(batch, mode="valid")
         if not self.calculate_precision:
@@ -810,6 +811,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
             and amino acid-level confidence scores.
         """
         predictions = []
+        # FIXME: Temporary workaround to avoid the NaN bug.
         with torch.set_grad_enabled(True):
             for (
                 precursor_charge,
