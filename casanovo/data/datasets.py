@@ -266,12 +266,12 @@ class AnnotatedSpectrumDataset(SpectrumDataset):
             int_array,
             precursor_mz,
             precursor_charge,
-            enzyme,
+            enzyme_str,
             peptide,
         ) = self.index[idx]
         spectrum = self._process_peaks(
             mz_array, int_array, precursor_mz, precursor_charge
         )
 #        enzyme_idx = self.stoi[enzyme]
-        enzyme_idxs = [self.stoi[enzyme_item] for enzyme_item in enzyme]
+        enzyme_idxs = [self.stoi[enzyme_item] for enzyme_item in enzyme_str.split('-')]
         return spectrum, precursor_mz, precursor_charge, enzyme_idxs, peptide
