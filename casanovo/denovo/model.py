@@ -173,7 +173,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         self.out_writer = out_writer
 
     def forward(
-        self, spectra: torch.Tensor, precursors: torch.Tensor
+        self, spectra: torch.Tensor, precursors: torch.Tensor, enzymes: torch.Tensor
     ) -> List[List[Tuple[float, np.ndarray, str]]]:
         """
         Predict peptide sequences for a batch of MS/MS spectra.
@@ -189,6 +189,9 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         precursors : torch.Tensor of size (n_spectra, 3)
             The measured precursor mass (axis 0), precursor charge (axis 1), and
             precursor m/z (axis 2) of each MS/MS spectrum.
+        enzymes: torch.Tensor of size (n_spectra, max_len)
+            The enzymes used for digestion; max length is just the maximum number
+            of combinations of enzymes used (8).
 
         Returns
         -------
@@ -200,10 +203,11 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         return self.beam_search_decode(
             spectra.to(self.encoder.device),
             precursors.to(self.decoder.device),
+            enzymes.to(self.decoder.device)
         )
 
     def beam_search_decode(
-        self, spectra: torch.Tensor, precursors: torch.Tensor
+        self, spectra: torch.Tensor, precursors: torch.Tensor, enzymes: torch.Tensor
     ) -> List[List[Tuple[float, np.ndarray, str]]]:
         """
         Beam search decoding of the spectrum predictions.
@@ -219,6 +223,9 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         precursors : torch.Tensor of size (n_spectra, 3)
             The measured precursor mass (axis 0), precursor charge (axis 1), and
             precursor m/z (axis 2) of each MS/MS spectrum.
+        enzymes: torch.Tensor of size (n_spectra, max_len)
+            The enzymes used for digestion; max length is just the maximum number
+            of combinations of enzymes used (8).
 
         Returns
         -------
@@ -247,12 +254,13 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         pred_cache = collections.OrderedDict((i, []) for i in range(batch))
 
         # Get the first prediction.
-        pred, _ = self.decoder(None, precursors, memories, mem_masks)
+        pred, _ = self.decoder(None, precursors, enzymes, memories, mem_masks)
         tokens[:, 0, :] = torch.topk(pred[:, 0, :], beam, dim=1)[1]
         scores[:, :1, :, :] = einops.repeat(pred, "B L V -> B L V S", S=beam)
 
         # Make all tensors the right shape for decoding.
         precursors = einops.repeat(precursors, "B L -> (B S) L", S=beam)
+        enzymes = einops.repeat(enzymes, "B L -> (B S) L", S=beam)
         mem_masks = einops.repeat(mem_masks, "B L -> (B S) L", S=beam)
         memories = einops.repeat(memories, "B L V -> (B S) L V", S=beam)
         tokens = einops.rearrange(tokens, "B L S -> (B S) L")
@@ -287,6 +295,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
             scores[~finished_beams, : step + 2, :], _ = self.decoder(
                 tokens[~finished_beams, : step + 1],
                 precursors[~finished_beams, :],
+                enzymes[~finished_beams, :],
                 memories[~finished_beams, :, :],
                 mem_masks[~finished_beams, :],
             )
@@ -678,6 +687,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         self,
         spectra: torch.Tensor,
         precursors: torch.Tensor,
+        enzymes: torch.Tensor,
         sequences: List[str],
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """
@@ -694,6 +704,9 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         precursors : torch.Tensor of size (n_spectra, 3)
             The measured precursor mass (axis 0), precursor charge (axis 1), and
             precursor m/z (axis 2) of each MS/MS spectrum.
+        enzymes: torch.Tensor of size (n_spectra, max_len)
+            The enzymes used for digestion; max length is just the maximum number
+            of combinations of enzymes used (8).
         sequences : List[str] of length n_spectra
             The partial peptide sequences to predict.
 
@@ -704,11 +717,11 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         tokens : torch.Tensor of shape (n_spectra, length)
             The predicted tokens for each spectrum.
         """
-        return self.decoder(sequences, precursors, *self.encoder(spectra))
+        return self.decoder(sequences, precursors, enzymes, *self.encoder(spectra))
 
     def training_step(
         self,
-        batch: Tuple[torch.Tensor, torch.Tensor, List[str]],
+        batch: Tuple[torch.Tensor, torch.Tensor, torch.Tensor, List[str]],
         *args,
         mode: str = "train",
     ) -> torch.Tensor:
@@ -718,7 +731,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         Parameters
         ----------
         batch : Tuple[torch.Tensor, torch.Tensor, List[str]]
-            A batch of (i) MS/MS spectra, (ii) precursor information, (iii)
+            A batch of (i) MS/MS spectra, (ii), enzymes (iii), precursor information, (iv)
             peptide sequences as torch Tensors.
         mode : str
             Logging key to describe the current stage.
@@ -741,7 +754,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         return loss
 
     def validation_step(
-        self, batch: Tuple[torch.Tensor, torch.Tensor, List[str]], *args
+        self, batch: Tuple[torch.Tensor, torch.Tensor, torch.Tensor, List[str]], *args
     ) -> torch.Tensor:
         """
         A single validation step.
@@ -749,7 +762,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         Parameters
         ----------
         batch : Tuple[torch.Tensor, torch.Tensor, List[str]]
-            A batch of (i) MS/MS spectra, (ii) precursor information, (iii)
+            A batch of (i) MS/MS spectra, (ii)  precursor information, enzymes (iii), (iv)
             peptide sequences.
 
         Returns
@@ -764,8 +777,8 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
 
         # Calculate and log amino acid and peptide match evaluation metrics from
         # the predicted peptides.
-        peptides_pred, peptides_true = [], batch[2]
-        for spectrum_preds in self.forward(batch[0], batch[1]):
+        peptides_pred, peptides_true = [], batch[-1]
+        for spectrum_preds in self.forward(batch[0], batch[1], batch[2]):
             for _, _, pred in spectrum_preds:
                 peptides_pred.append(pred)
 
@@ -790,7 +803,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         return loss
 
     def predict_step(
-        self, batch: Tuple[torch.Tensor, torch.Tensor, torch.Tensor], *args
+        self, batch: Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor], *args
     ) -> List[Tuple[np.ndarray, float, float, str, float, np.ndarray]]:
         """
         A single prediction step.
@@ -798,7 +811,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         Parameters
         ----------
         batch : Tuple[torch.Tensor, torch.Tensor, torch.Tensor]
-            A batch of (i) MS/MS spectra, (ii) precursor information, (iii)
+            A batch of (i) MS/MS spectra, (ii) precursor information, enzymes (iii), (iv)
             spectrum identifiers as torch Tensors.
 
         Returns
@@ -812,13 +825,15 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         for (
             precursor_charge,
             precursor_mz,
+            enzyme,
             spectrum_i,
             spectrum_preds,
         ) in zip(
             batch[1][:, 1].cpu().detach().numpy(),
             batch[1][:, 2].cpu().detach().numpy(),
-            batch[2],
-            self.forward(batch[0], batch[1]),
+            batch[2][:].cpu().detach().numpy(),
+            batch[3],
+            self.forward(batch[0], batch[1], batch[2]),
         ):
             for peptide_score, aa_scores, peptide in spectrum_preds:
                 predictions.append(
@@ -826,6 +841,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
                         spectrum_i,
                         precursor_charge,
                         precursor_mz,
+                        enzyme,
                         peptide,
                         peptide_score,
                         aa_scores,
@@ -884,6 +900,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
             spectrum_i,
             charge,
             precursor_mz,
+            enzyme,
             peptide,
             peptide_score,
             aa_scores,
@@ -897,6 +914,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
                     peptide_score,
                     charge,
                     precursor_mz,
+                    enzyme,
                     self.peptide_mass_calculator.mass(peptide, charge),
                     ",".join(list(map("{:.5f}".format, aa_scores))),
                 ),

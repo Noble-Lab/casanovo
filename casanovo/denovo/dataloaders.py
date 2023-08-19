@@ -132,7 +132,7 @@ class DeNovoDataModule(pl.LightningDataModule):
         self,
         dataset: torch.utils.data.Dataset,
         batch_size: int,
-        shuffle: bool,
+        shuffle: bool = False,
     ) -> torch.utils.data.DataLoader:
         """
         Create a PyTorch DataLoader.
@@ -217,7 +217,7 @@ def prepare_batch(
     precursors = torch.vstack(
         [precursor_masses, precursor_charges, precursor_mzs]
     ).T.float()
-    max_length = 9 
+    max_length = 9
     padded_enzyme_indices = [inner_list + [9] * (max_length - len(inner_list)) for inner_list in enzymes]
     enzyme_idxs = torch.tensor(padded_enzyme_indices, dtype=torch.long)
     return spectra, precursors, enzyme_idxs, np.asarray(spectrum_ids)
