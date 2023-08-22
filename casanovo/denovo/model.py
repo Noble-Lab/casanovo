@@ -139,6 +139,8 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
             dropout=dropout,
             residues=residues,
             max_charge=max_charge,
+            enzyme_size=9,
+            padding_idx=9,
         )
         self.softmax = torch.nn.Softmax(2)
         self.celoss = torch.nn.CrossEntropyLoss(ignore_index=0)
@@ -731,7 +733,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         Parameters
         ----------
         batch : Tuple[torch.Tensor, torch.Tensor, List[str]]
-            A batch of (i) MS/MS spectra, (ii), enzymes (iii), precursor information, (iv)
+            A batch of (i) MS/MS spectra, (ii) precursor information, (iii) enzymes, (iv)
             peptide sequences as torch Tensors.
         mode : str
             Logging key to describe the current stage.
@@ -761,7 +763,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
 
         Parameters
         ----------
-        batch : Tuple[torch.Tensor, torch.Tensor, List[str]]
+        batch : Tuple[torch.Tensor, torch.Tensor, torch.Tensor, List[str]]
             A batch of (i) MS/MS spectra, (ii)  precursor information, enzymes (iii), (iv)
             peptide sequences.
 
