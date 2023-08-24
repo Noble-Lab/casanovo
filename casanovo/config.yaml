@@ -1,16 +1,57 @@
 ###
 # Casanovo configuration.
 # Blank entries are interpreted as "None".
-# Parameters that can be modified when running inference with Casanovo,
-# i.e. denovo and eval modes in the command line interface, are marked with
-# "(I)". Other parameters shouldn't be changed unless a new Casanovo model
-# is being trained.
 ###
 
-# Random seed to ensure reproducible results.
+###
+# The following parameters can be modified when running inference or
+# when fine-tuning an existing Casanovo model.
+###
+
+# Max absolute difference allowed with respect to observed precursor m/z
+# Predictions outside the tolerance range are assigned a negative peptide score.
+precursor_mass_tol: 50  # ppm
+# Isotopes to consider when comparing predicted and observed precursor m/z's
+isotope_error_range: [0, 1]
+# The minimum length of predicted peptides
+min_peptide_len: 6
+# Number of spectra in one inference batch
+predict_batch_size: 1024
+# Number of beams used in beam search
+n_beams: 1
+# Number of PSMs for each spectrum
+top_match: 1
+# The hardware accelerator to use. Must be one of:
+# "cpu", "gpu", "tpu", "ipu", "hpu", "mps", or "auto"
+accelerator: "auto"
+# The devices to use. Can be set to a positive number int,
+# or the value -1 to indicate all available devices should be used,
+# If left empty, the appropriate number will be automatically
+# selected for automatic selected on the chosen accelerator.
+devices:
+
+###
+# The following parameters should only be modified if you are training a new
+# Casanovo model from scratch.
+###
+
+# Random seed to ensure reproducible results
 random_seed: 454
 
-# Spectrum processing options.
+# OUTPUT OPTIONS
+# Logging frequency in training steps
+n_log: 1
+# Tensorboard directory to use for keeping track of training metrics
+tb_summarywriter:
+# Save the top k model checkpoints during training. -1 saves all, and
+# leaving this field empty saves none.
+save_top_k: 5
+# Path to saved checkpoints
+model_save_folder_path: ""
+# Model validation and checkpointing frequency in training steps
+val_check_interval: 50_000
+
+# SPECTRUM PROCESSING OPTIONS
 # Number of the most intense peaks to retain, any remaining peaks are discarded
 n_peaks: 150
 # Min peak m/z allowed, peaks with smaller m/z are discarded
@@ -23,15 +64,8 @@ min_intensity: 0.01
 remove_precursor_tol: 2.0  # Da
 # Max precursor charge allowed, spectra with larger charge are skipped
 max_charge: 10
-# Max absolute difference allowed with respect to observed precursor m/z (I)
-# Predictions outside the tolerance range are assinged a negative peptide score
-precursor_mass_tol: 50  # ppm
-# Isotopes to consider when comparing predicted and observed precursor m/z's (I)
-isotope_error_range: [0, 1]
-# The minimum length of predicted peptides (I).
-min_peptide_len: 6
 
-# Model architecture options.
+# MODEL ARCHITECTURE OPTIONS
 # Dimensionality of latent representations, i.e. peak embeddings
 dim_model: 512
 # Number of attention heads
@@ -50,7 +84,29 @@ dim_intensity:
 custom_encoder:
 # Max decoded peptide length
 max_length: 100
-# Amino acid and modification vocabulary to use
+# Number of warmup iterations for learning rate scheduler
+warmup_iters: 100_000
+# Max number of iterations for learning rate scheduler
+max_iters: 600_000
+# Learning rate for weight updates during training
+learning_rate: 5e-4
+# Regularization term for weight updates
+weight_decay: 1e-5
+
+# TRAINING/INFERENCE OPTIONS
+# Number of spectra in one training batch
+train_batch_size: 32
+# Max number of training epochs
+max_epochs: 30
+# Number of validation steps to run before training begins
+num_sanity_val_steps: 0
+# Set to "False" to further train a pre-trained Casanovo model
+train_from_scratch: True
+# Calculate peptide and amino acid precision during training. this
+# is expensive, so we recommend against it.
+calculate_precision: False
+
+# AMINO ACID AND MODIFICATION VOCABULARY
 residues:
   "G": 57.021464
   "A": 71.037114
@@ -81,49 +137,3 @@ residues:
   "+43.006": 43.005814      # Carbamylation
   "-17.027": -17.026549     # NH3 loss
   "+43.006-17.027": 25.980265      # Carbamylation and NH3 loss
-# Logging frequency in training steps
-n_log: 1
-# Tensorboard directory to use for keeping track of training metrics
-tb_summarywriter:
-# Number of warmup iterations for learning rate scheduler
-warmup_iters: 100_000
-# Max number of iterations for learning rate scheduler
-max_iters: 600_000
-# Learning rate for weight updates during training
-learning_rate: 5e-4
-# Regularization term for weight updates
-weight_decay: 1e-5
-
-# Training/inference options.
-# Number of spectra in one training batch
-train_batch_size: 32
-# Number of spectra in one inference batch (I)
-predict_batch_size: 1024
-# Number of beams used in beam search (I)
-n_beams: 1
-# Number of PSMs for each spectrum (I)
-top_match: 1
-# Max number of training epochs
-max_epochs: 30
-# Number of validation steps to run before training begins
-num_sanity_val_steps: 0
-# Set to "False" to further train a pre-trained Casanovo model
-train_from_scratch: True
-# Save the top k model checkpoints during training. -1 saves all and
-# leaving this field empty saves none.
-save_top_k: 5
-# Path to saved checkpoints
-model_save_folder_path: ""
-# Model validation and checkpointing frequency in training steps
-val_check_interval: 50_000
-# Calculate peptide and amino acid precision during training. this
-# is expensive, so we recommend against it.
-calculate_precision: False
-# The hardware accelerator to use. Must be one of:
-# "cpu", "gpu", "tpu", "ipu", "hpu", "mps", or "auto"
-accelerator: "auto"
-# The devices to use. Can be set to a positive number int,
-# or the value -1 to indicate all available devices should be used,
-# If left empty, the appropriate number will be automatically
-# selected for automatic selected on the chosen accelerator.
-devices:
