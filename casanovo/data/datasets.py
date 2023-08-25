@@ -44,6 +44,7 @@ class SpectrumDataset(Dataset):
         min_intensity: float = 0.01,
         remove_precursor_tol: float = 2.0,
         random_state: Optional[int] = None,
+        enzyme_vocab: List[str] = None,
     ):
         """Initialize a SpectrumDataset"""
         super().__init__()
@@ -54,6 +55,8 @@ class SpectrumDataset(Dataset):
         self.remove_precursor_tol = remove_precursor_tol
         self.rng = np.random.default_rng(random_state)
         self._index = spectrum_index
+        self.enzyme_vocab = enzyme_vocab
+        self.stoi = {enzyme: idx for idx, enzyme in enumerate(self.enzyme_vocab)}
 
     def __len__(self) -> int:
         """The number of spectra."""
@@ -82,15 +85,16 @@ class SpectrumDataset(Dataset):
             The unique spectrum identifier, formed by its original peak file and
             identifier (index or scan number) therein.
         """
-        mz_array, int_array, precursor_mz, precursor_charge, enzyme = self.index[idx]
+        mz_array, int_array, precursor_mz, precursor_charge, enzyme_str = self.index[idx]
         spectrum = self._process_peaks(
             mz_array, int_array, precursor_mz, precursor_charge
         )
+        enzyme_idxs = [self.stoi[enzyme_item] for enzyme_item in enzyme_str.split('-')]
         return (
             spectrum,
             precursor_mz,
             precursor_charge,
-            enzyme,
+            enzyme_idxs,
             self.get_spectrum_id(idx),
         )
 
@@ -235,8 +239,8 @@ class AnnotatedSpectrumDataset(SpectrumDataset):
             min_intensity=min_intensity,
             remove_precursor_tol=remove_precursor_tol,
             random_state=random_state,
+            enzyme_vocab=enzyme_vocab,
         )
-        self.enzyme_vocab = enzyme_vocab
         self.stoi = {enzyme: idx for idx, enzyme in enumerate(self.enzyme_vocab)}
 
     def __getitem__(self, idx: int) -> Tuple[torch.Tensor, float, int, str]:

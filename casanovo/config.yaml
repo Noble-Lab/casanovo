@@ -81,6 +81,19 @@ residues:
   "+43.006": 43.005814      # Carbamylation
   "-17.027": -17.026549     # NH3 loss
   "+43.006-17.027": 25.980265      # Carbamylation and NH3 loss
+# enzyme vocabulary
+enzyme_vocab:
+  - Trypsin
+  - GluC
+  - LysC
+  - Chymotrypsin
+  - AspN
+  - ArgC
+  - LysargiNase
+  - LysN
+  - Elastase
+# digestion
+digest: True
 # Logging frequency in training steps
 n_log: 1
 # Tensorboard object to keep track of training metrics

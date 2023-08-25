@@ -123,7 +123,7 @@ class DeNovoDataModule(pl.LightningDataModule):
                 max_mz=self.max_mz,
                 min_intensity=self.min_intensity,
                 remove_precursor_tol=self.remove_precursor_tol,
-                enzyme_vocab = self.enzyme_vocab,
+                enzyme_vocab=self.enzyme_vocab,
             )
             if self.test_index is not None:
                 self.test_dataset = make_dataset(self.test_index)

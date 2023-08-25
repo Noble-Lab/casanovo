@@ -779,7 +779,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
 
         # Calculate and log amino acid and peptide match evaluation metrics from
         # the predicted peptides.
-        peptides_pred, peptides_true = [], batch[-1]
+        peptides_pred, peptides_true = [], batch[3]
         for spectrum_preds in self.forward(batch[0], batch[1], batch[2]):
             for _, _, pred in spectrum_preds:
                 peptides_pred.append(pred)
@@ -820,7 +820,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         -------
         predictions: List[Tuple[np.ndarray, float, float, str, float, np.ndarray]]
             Model predictions for the given batch of spectra containing spectrum
-            ids, precursor information, peptide sequences as well as peptide
+            ids, precursor information, enzymes, peptide sequences as well as peptide
             and amino acid-level confidence scores.
         """
         predictions = []
