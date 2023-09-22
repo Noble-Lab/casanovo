@@ -133,7 +133,7 @@ def sequence(
     to sequence peptides.
     """
     output = setup_logging(output, verbosity)
-    config = setup_model(model, config, output, False)
+    config, model = setup_model(model, config, output, False)
     with ModelRunner(config, model) as runner:
         logger.info("Sequencing peptides from:")
         for peak_file in peak_path:
@@ -164,7 +164,7 @@ def evaluate(
     such as those provided by MassIVE-KB.
     """
     output = setup_logging(output, verbosity)
-    config = setup_model(model, config, output, False)
+    config, model = setup_model(model, config, output, False)
     with ModelRunner(config, model) as runner:
         logger.info("Sequencing and evaluating peptides from:")
         for peak_file in annotated_peak_path:
@@ -378,7 +378,7 @@ def setup_model(
     for key, value in config.items():
         logger.debug("%s = %s", str(key), str(value))
 
-    return config
+    return config, model
 
 
 def _get_model_weights() -> str:
