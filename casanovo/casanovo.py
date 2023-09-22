@@ -207,7 +207,7 @@ def train(
     provided by MassIVE-KB, from which to train a new Casnovo model.
     """
     output = setup_logging(output, verbosity)
-    config = setup_model(model, config, output, True)
+    config, model = setup_model(model, config, output, True)
     with ModelRunner(config, model) as runner:
         logger.info("Training a model from:")
         for peak_file in train_peak_path:
