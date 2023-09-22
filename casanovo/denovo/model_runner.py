@@ -255,13 +255,10 @@ class ModelRunner:
             self.model = Spec2Pep.load_from_checkpoint(
                 self.model_filename,
                 map_location=device,
-            )
-        except RuntimeError:
-            self.model = Spec2Pep.load_from_checkpoint(
-                self.model_filename,
-                map_location=device,
                 **model_params,
             )
+        except RuntimeError:
+            raise RuntimeError("Mismatching parameters between loaded model and config file")
 
     def initialize_data_module(
         self,
