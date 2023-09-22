@@ -258,7 +258,9 @@ class ModelRunner:
                 **model_params,
             )
         except RuntimeError:
-            raise RuntimeError("Mismatching parameters between loaded model and config file")
+            raise RuntimeError(
+                "Mismatching parameters between loaded model and config file"
+            )
 
     def initialize_data_module(
         self,
