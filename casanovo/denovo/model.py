@@ -110,6 +110,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         tb_summarywriter: Optional[
             torch.utils.tensorboard.SummaryWriter
         ] = None,
+        lr_schedule = None,
         warmup_iters: int = 100_000,
         max_iters: int = 600_000,
         out_writer: Optional[ms_io.MztabWriter] = None,
@@ -143,6 +144,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         self.softmax = torch.nn.Softmax(2)
         self.celoss = torch.nn.CrossEntropyLoss(ignore_index=0)
         # Optimizer settings.
+        self.lr_schedule = lr_schedule
         self.warmup_iters = warmup_iters
         self.max_iters = max_iters
         self.opt_kwargs = kwargs
@@ -964,13 +966,35 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         """
         optimizer = torch.optim.Adam(self.parameters(), **self.opt_kwargs)
         # Apply learning rate scheduler per step.
-        lr_scheduler = CosineWarmupScheduler(
-            optimizer, warmup=self.warmup_iters, max_iters=self.max_iters
-        )
+        lr_schedulers = [
+            torch.optim.lr_scheduler.LinearLR(
+                optimizer, 
+                start_factor=1e-10, 
+                total_iters=self.warmup_iters)
+            ]
+        if self.lr_schedule == 'cosine':
+            lr_schedulers.append(
+                CosineScheduler(
+                    optimizer, 
+                    warmup=self.warmup_iters, 
+                    max_iters=self.max_iters
+                    )
+            )
+        elif self.lr_schedule == 'linear':
+            lr_schedulers.append(
+                torch.optim.lr_scheduler.LinearLR(
+                    optimizer, 
+                    start_factor=1, 
+                    end_factor=0,
+                    total_iters=self.max_iters
+                    )
+            )
+        
+        lr_scheduler = torch.optim.lr_scheduler.ChainedScheduler(lr_schedulers)
         return [optimizer], {"scheduler": lr_scheduler, "interval": "step"}
 
 
-class CosineWarmupScheduler(torch.optim.lr_scheduler._LRScheduler):
+class CosineScheduler(torch.optim.lr_scheduler._LRScheduler):
     """
     Learning rate scheduler with linear warm up followed by cosine shaped decay.
 
@@ -985,9 +1009,9 @@ class CosineWarmupScheduler(torch.optim.lr_scheduler._LRScheduler):
     """
 
     def __init__(
-        self, optimizer: torch.optim.Optimizer, warmup: int, max_iters: int
+        self, optimizer: torch.optim.Optimizer, max_iters: int
     ):
-        self.warmup, self.max_iters = warmup, max_iters
+        self.max_iters = max_iters
         super().__init__(optimizer)
 
     def get_lr(self):
@@ -996,8 +1020,6 @@ class CosineWarmupScheduler(torch.optim.lr_scheduler._LRScheduler):
 
     def get_lr_factor(self, epoch):
         lr_factor = 0.5 * (1 + np.cos(np.pi * epoch / self.max_iters))
-        if epoch <= self.warmup:
-            lr_factor *= epoch / self.warmup
         return lr_factor
 
 
