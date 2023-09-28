@@ -955,7 +955,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         self,
     ) -> Tuple[torch.optim.Optimizer, Dict[str, Any]]:
         """
-        Initialize the optimizer.
+        Initialize the optimizer and lr_scheduler.
 
         This is used by pytorch-lightning when preparing the model for training.
 
@@ -965,7 +965,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
             The initialized Adam optimizer and its learning rate scheduler.
         """
         optimizer = torch.optim.Adam(self.parameters(), **self.opt_kwargs)
-        # Apply learning rate scheduler per step.
+        # Add linear learning rate scheduler for warmup
         lr_schedulers = [
             torch.optim.lr_scheduler.LinearLR(
                 optimizer, 
@@ -976,7 +976,6 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
             lr_schedulers.append(
                 CosineScheduler(
                     optimizer, 
-                    warmup=self.warmup_iters, 
                     max_iters=self.max_iters
                     )
             )
@@ -989,14 +988,15 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
                     total_iters=self.max_iters
                     )
             )
-        
+        #Combine learning rate schedulers
         lr_scheduler = torch.optim.lr_scheduler.ChainedScheduler(lr_schedulers)
+        # Apply learning rate scheduler per step.
         return [optimizer], {"scheduler": lr_scheduler, "interval": "step"}
 
 
 class CosineScheduler(torch.optim.lr_scheduler._LRScheduler):
     """
-    Learning rate scheduler with linear warm up followed by cosine shaped decay.
+    Learning rate scheduler with cosine shaped decay.
 
     Parameters
     ----------

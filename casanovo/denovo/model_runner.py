@@ -222,7 +222,7 @@ class ModelRunner:
             top_match=self.config.top_match,
             n_log=self.config.n_log,
             tb_summarywriter=self.config.tb_summarywriter,
-            lr_schedule=self.config.tb_summarywriter,
+            lr_schedule=self.config.lr_schedule,
             warmup_iters=self.config.warmup_iters,
             max_iters=self.config.max_iters,
             lr=self.config.learning_rate,
