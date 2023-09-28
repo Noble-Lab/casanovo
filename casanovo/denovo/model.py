@@ -110,7 +110,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         tb_summarywriter: Optional[
             torch.utils.tensorboard.SummaryWriter
         ] = None,
-        lr_schedule = None,
+        lr_schedule=None,
         warmup_iters: int = 100_000,
         max_iters: int = 600_000,
         out_writer: Optional[ms_io.MztabWriter] = None,
@@ -968,27 +968,23 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         # Add linear learning rate scheduler for warmup
         lr_schedulers = [
             torch.optim.lr_scheduler.LinearLR(
-                optimizer, 
-                start_factor=1e-10, 
-                total_iters=self.warmup_iters)
-            ]
-        if self.lr_schedule == 'cosine':
-            lr_schedulers.append(
-                CosineScheduler(
-                    optimizer, 
-                    max_iters=self.max_iters
-                    )
+                optimizer, start_factor=1e-10, total_iters=self.warmup_iters
             )
-        elif self.lr_schedule == 'linear':
+        ]
+        if self.lr_schedule == "cosine":
+            lr_schedulers.append(
+                CosineScheduler(optimizer, max_iters=self.max_iters)
+            )
+        elif self.lr_schedule == "linear":
             lr_schedulers.append(
                 torch.optim.lr_scheduler.LinearLR(
-                    optimizer, 
-                    start_factor=1, 
+                    optimizer,
+                    start_factor=1,
                     end_factor=0,
-                    total_iters=self.max_iters
-                    )
+                    total_iters=self.max_iters,
+                )
             )
-        #Combine learning rate schedulers
+        # Combine learning rate schedulers
         lr_scheduler = torch.optim.lr_scheduler.ChainedScheduler(lr_schedulers)
         # Apply learning rate scheduler per step.
         return [optimizer], {"scheduler": lr_scheduler, "interval": "step"}
@@ -1008,9 +1004,7 @@ class CosineScheduler(torch.optim.lr_scheduler._LRScheduler):
         The total number of iterations.
     """
 
-    def __init__(
-        self, optimizer: torch.optim.Optimizer, max_iters: int
-    ):
+    def __init__(self, optimizer: torch.optim.Optimizer, max_iters: int):
         self.max_iters = max_iters
         super().__init__(optimizer)
 
