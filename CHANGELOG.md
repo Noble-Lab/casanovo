@@ -30,6 +30,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Casanovo runs on CPU and can passes all tests.
 - Enable gradients during prediction and validation to avoid NaNs from occuring as a temporary workaround until a new Pytorch version is available.
 - Upgrade to depthcharge v0.2.3 for `PeptideTransformerDecoder` hotfix.
+- Correctly report amino acid precision and recall during validation.
 
 ### Removed
 
