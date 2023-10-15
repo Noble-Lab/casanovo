@@ -948,7 +948,7 @@ class DBSpec2Pep(Spec2Pep):
     Hijacks teacher-forcing implemented in Spec2Pep and uses it to predict scores between a spectra and associated peptide
     """
 
-    num_pairs = 2
+    num_pairs = 1024
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -963,8 +963,9 @@ class DBSpec2Pep(Spec2Pep):
             encoded_ms,
         ) in self.smart_batch_gen(batch):
             with torch.set_grad_enabled(True):  # Fixes NaN!?
-                pred, truth = self.decoder(peptides, precursors, *encoded_ms)
-                print(truth)
+                pred, truth = self.decoder(
+                    peptides, precursors, *encoded_ms
+                )  #! get detailed breakdown of this speed
                 sm = torch.nn.Softmax(dim=2)  # dim=2 is very important!
                 pred = sm(pred)
                 score_result, per_aa_score = calc_match_score(
@@ -975,7 +976,6 @@ class DBSpec2Pep(Spec2Pep):
                 )
         return batch_res
 
-    @torch.compile
     def smart_batch_gen(self, batch):
         all_psm = []
         enc = self.encoder(batch[0])
@@ -1018,16 +1018,26 @@ class DBSpec2Pep(Spec2Pep):
     def on_predict_epoch_end(self, results) -> None:
         if self.out_writer is None:
             return
-        results = np.array(results, dtype=object).squeeze((0, 1))
+        results = np.array(results, dtype=object).squeeze((0))
         with open(self.out_writer.filename, "a") as out_f:
             csv_writer = csv.writer(out_f)
-            for batch in results:
-                for index, t_or_d, peptide, score, per_aa_scores in list(
-                    zip(*batch)
-                ):
-                    csv_writer.writerow(
-                        (index, peptide, bool(t_or_d), score, per_aa_scores)
-                    )
+            for group in results:
+                for batch in group:
+                    for index, t_or_d, peptide, score, per_aa_scores in list(
+                        zip(*batch)
+                    ):
+                        per_aa_scores = per_aa_scores.numpy()
+                        per_aa_scores = per_aa_scores[per_aa_scores != 0]
+                        score = score.numpy()
+                        csv_writer.writerow(
+                            (
+                                index,
+                                peptide,
+                                bool(t_or_d),
+                                score,
+                                per_aa_scores,
+                            )
+                        )
         out_f.close()
 
 
@@ -1047,8 +1057,9 @@ def calc_match_score(
 
         Returns
         -------
-        score : list[float]
+        score : list[float], list[list[float]]
             The score between the input spectra and associated peptide (for an entire batch)
+            a list of lists of per amino acid scores (for an entire batch)
     """
     batch_all_aa_scores = batch_all_aa_scores[
         :, :-1, :  # -2
@@ -1056,26 +1067,15 @@ def calc_match_score(
     truth_aa_indicies = truth_aa_indicies[
         :, :  # -1
     ]  # Remove trailing tokens from label, remove -1 to keep stop token
-    all_scores = []
-    per_aa_scores = []
-    for all_aa_pred, truth_indicies in zip(
-        batch_all_aa_scores, truth_aa_indicies
-    ):
-        assert len(all_aa_pred) == len(
-            truth_indicies
-        )  # Ensure that length of score list and indexes to pull from are the same length
-        for (
-            preds
-        ) in all_aa_pred:  # Ensure softmax distribution along correct axis
-            assert round(sum(preds).item()) == 1
-        aa_scores = []
-        for scores, true_index in zip(all_aa_pred, truth_indicies):
-            if true_index != 0:
-                aa_scores.append(scores[true_index].item())
-        normalized_score = sum(aa_scores) / len(aa_scores)
-        all_scores.append(normalized_score)
-        per_aa_scores.append(aa_scores)
-    return all_scores, per_aa_scores
+    per_aa_scores = batch_all_aa_scores[
+        torch.arange(batch_all_aa_scores.shape[0])[:, None],
+        torch.arange(0, batch_all_aa_scores.shape[1]),
+        truth_aa_indicies,
+    ]
+    score_mask = truth_aa_indicies != 0
+    masked_per_aa_scores = per_aa_scores * score_mask
+    all_scores = masked_per_aa_scores.sum(dim=1) / score_mask.sum(dim=1)
+    return all_scores, masked_per_aa_scores
 
 
 class CosineWarmupScheduler(torch.optim.lr_scheduler._LRScheduler):
