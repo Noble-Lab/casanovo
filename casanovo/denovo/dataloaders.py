@@ -158,9 +158,14 @@ class DeNovoDataModule(pl.LightningDataModule):
         torch.utils.data.DataLoader
             A PyTorch DataLoader.
         """
+        # Calculate new batch size to saturate previous batch size with PSMs
+        pep_per_spec = []
+        for i in range(min(10, len(dataset))):
+            pep_per_spec.append(len(dataset[i][3].split(",")))
+        new_batch_size = int(self.batch_size // np.mean(pep_per_spec))
         return torch.utils.data.DataLoader(
             dataset,
-            batch_size=self.batch_size,
+            batch_size=new_batch_size,
             collate_fn=prepare_db_batch,
             pin_memory=True,
             num_workers=self.n_workers,

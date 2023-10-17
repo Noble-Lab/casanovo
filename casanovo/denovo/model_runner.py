@@ -394,7 +394,7 @@ def db_search(
     abs_experiment_dirpath = "/net/noble/vol2/home/vananth3/2023_vananth_denovo-dbsearch/results/2023-08-21_speedup"
     profiler = AdvancedProfiler(
         dirpath=abs_experiment_dirpath,
-        filename="test_remove_cms",
+        filename="placeholder",
     )
     trainer = pl.Trainer(
         accelerator="auto",
