@@ -43,9 +43,6 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         (``dim_model - dim_intensity``) are reserved for encoding the m/z value.
         If ``None``, the intensity will be projected up to ``dim_model`` using a
         linear layer, then summed with the m/z encoding for each peak.
-    custom_encoder : Optional[Union[SpectrumEncoder, PairedSpectrumEncoder]]
-        A pretrained encoder to use. The ``dim_model`` of the encoder must be
-        the same as that specified by the ``dim_model`` parameter here.
     max_length : int
         The maximum peptide length to decode.
     residues: Union[Dict[str, float], str]
@@ -97,7 +94,6 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         n_layers: int = 9,
         dropout: float = 0.0,
         dim_intensity: Optional[int] = None,
-        custom_encoder: Optional[SpectrumEncoder] = None,
         max_length: int = 100,
         residues: Union[Dict[str, float], str] = "canonical",
         max_charge: int = 5,
@@ -119,17 +115,13 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         super().__init__()
         self.save_hyperparameters()
 
-        # Build the model.
-        if custom_encoder is not None:
-            self.encoder = custom_encoder
-        else:
-            self.encoder = SpectrumEncoder(
-                dim_model=dim_model,
-                n_head=n_head,
-                dim_feedforward=dim_feedforward,
-                n_layers=n_layers,
-                dropout=dropout,
-                dim_intensity=dim_intensity,
+        self.encoder = SpectrumEncoder(
+            dim_model=dim_model,
+            n_head=n_head,
+            dim_feedforward=dim_feedforward,
+            n_layers=n_layers,
+            dropout=dropout,
+            dim_intensity=dim_intensity,
             )
         self.decoder = PeptideDecoder(
             dim_model=dim_model,
