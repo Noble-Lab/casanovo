@@ -131,7 +131,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
             dropout=dropout,
             residues=residues,
             max_charge=max_charge,
-        )
+            )
         self.softmax = torch.nn.Softmax(2)
         self.celoss = torch.nn.CrossEntropyLoss(ignore_index=0)
         # Optimizer settings.
