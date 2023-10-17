@@ -122,7 +122,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
             n_layers=n_layers,
             dropout=dropout,
             dim_intensity=dim_intensity,
-            )
+        )
         self.decoder = PeptideDecoder(
             dim_model=dim_model,
             n_head=n_head,
@@ -131,7 +131,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
             dropout=dropout,
             residues=residues,
             max_charge=max_charge,
-            )
+        )
         self.softmax = torch.nn.Softmax(2)
         self.celoss = torch.nn.CrossEntropyLoss(ignore_index=0)
         # Optimizer settings.
@@ -839,6 +839,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
             "step": self.trainer.global_step,
             "train": train_loss.item(),
         }
+        print("training info:", metrics)
         self._history.append(metrics)
         self._log_history()
 
@@ -861,6 +862,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
                 .detach()
                 .item()
             )
+        print("validation info:", metrics)
         self._history.append(metrics)
         self._log_history()
 
