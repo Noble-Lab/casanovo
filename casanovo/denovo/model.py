@@ -839,7 +839,6 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
             "step": self.trainer.global_step,
             "train": train_loss.item(),
         }
-        print("training info:", metrics)
         self._history.append(metrics)
         self._log_history()
 
@@ -862,7 +861,6 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
                 .detach()
                 .item()
             )
-        print("validation info:", metrics)
         self._history.append(metrics)
         self._log_history()
 
