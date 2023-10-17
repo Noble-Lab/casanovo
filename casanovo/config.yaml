@@ -81,7 +81,7 @@ dropout: 0.0
 dim_intensity:
 # Option to provide a pre-trained spectrum encoder when training
 # Trained from scratch by default
-custom_encoder:
+#custom_encoder:
 # Max decoded peptide length
 max_length: 100
 # Number of warmup iterations for learning rate scheduler
