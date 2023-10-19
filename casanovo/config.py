@@ -83,21 +83,21 @@ class Config:
         else:
             with Path(config_file).open() as f_in:
                 self._user_config = yaml.safe_load(f_in)
-                # check for missing entries in config file 
+                # check for missing entries in config file
                 if len(self._user_config.keys()) < len(self._params.keys()):
                     keys_set = set(self._params.keys())
                     users_set = set(self._user_config.keys())
-                    missing = str(keys_set - users_set)
+                    missing = list(keys_set - users_set)
                     raise KeyError(
-                        f"Missing config file entry {missing}"
+                        f"Missing expected entry {missing}"
                     )
-        # detect unrecognized config file entries
-        keys = list(self._params.keys())
-        for key in self._user_config.keys():
-            if key not in keys:
-                raise KeyError(
-                    f"Unrecognized config file entry {key}"
-                )
+                # detect unrecognized config file entries
+                keys = list(self._params.keys())
+                for key,val in self._user_config.items():
+                    if key not in keys:
+                        raise KeyError(
+                            f"Unrecognized config file entry {key}"
+                        )
     
         # Validate:
         for key, val in self._config_types.items():
