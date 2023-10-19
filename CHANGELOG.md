@@ -6,8 +6,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
-### Removed
-- removed custom_encoder option from config.yaml and in model_runner
 ### Added
 
 -  Checkpoints include model parameters, allowing for mismatches with the provided configuration file.
@@ -27,22 +25,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - `every_n_train_steps` has been renamed to `val_check_interval` in accordance to the corresponding Pytorch Lightning parameter.
 - Training batches are randomly shuffled.
 
-### Fixed
-
-- Casanovo runs on CPU and can passes all tests.
-- Enable gradients during prediction and validation to avoid NaNs from occuring as a temporary workaround until a new Pytorch version is available.
-- Upgrade to depthcharge v0.2.3 for `PeptideTransformerDecoder` hotfix.
-
 ### Removed
 
 - Remove config option for a custom Pytorch Lightning logger.
+- Remove superfluous `custom_encoder` config option.
 
 ### Fixed
 
-- Casanovo now runs on CPU and can passes all tests.
-- Upgrade to Depthcharge v0.2.0 to fix sinusoidal encoding.
+- Casanovo runs on CPU and can pass all tests.
 - Correctly refer to input peak files by their full file path.
 - Specifying custom residues to retrain Casanovo is now possible.
+- Upgrade to depthcharge v0.2.3 to fix sinusoidal encoding and for the `PeptideTransformerDecoder` hotfix.
+- Enable gradients during prediction and validation to avoid NaNs from occuring as a temporary workaround until a new Pytorch version is available.
 
 ## [3.3.0] - 2023-04-04
 

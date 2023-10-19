@@ -115,6 +115,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         super().__init__()
         self.save_hyperparameters()
 
+        # Build the model.
         self.encoder = SpectrumEncoder(
             dim_model=dim_model,
             n_head=n_head,
