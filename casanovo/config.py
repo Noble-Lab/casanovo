@@ -98,7 +98,7 @@ class Config:
                         raise KeyError(
                             f"Unrecognized config file entry {key}"
                         )
-    
+
         # Validate:
         for key, val in self._config_types.items():
             self.validate_param(key, val)
