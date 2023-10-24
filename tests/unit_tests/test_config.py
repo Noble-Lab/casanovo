@@ -1,5 +1,7 @@
 """Test configuration loading"""
 from casanovo.config import Config
+import pytest
+import yaml
 
 
 def test_default():
@@ -11,7 +13,7 @@ def test_default():
     assert config.file == "default"
 
 
-def test_override(tmp_path):
+def test_override(tmp_path, tiny_config):
     """Test overriding the default"""
     yml = tmp_path / "test.yml"
     with yml.open("w+") as f_out:
@@ -26,12 +28,16 @@ residues:
 """
         )
 
-    config = Config(yml)
-    assert config.random_seed == 42
-    assert config["random_seed"] == 42
-    assert config.accelerator == "auto"
-    assert config.top_match == 3
-    assert len(config.residues) == 4
-    for i, residue in enumerate("WOUT", 1):
-        assert config["residues"][residue] == i
-    assert config.file == str(yml)
+    with open (tiny_config, 'r') as read_file:
+        contents = yaml.safe_load(read_file)
+        contents['random_seed_'] = 354
+        print(contents)
+
+    with open('output.yml', 'w') as write_file:
+        yaml.safe_dump(contents, write_file)
+    with pytest.raises(KeyError):
+        config = Config('output.yml')
+    
+    with pytest.raises(KeyError):
+        config = Config(yml)
+    
