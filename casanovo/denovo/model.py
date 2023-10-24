@@ -751,9 +751,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
             The loss of the validation step.
         """
         # Record the loss.
-        # FIXME: Temporary workaround to avoid the NaN bug.
-        with torch.set_grad_enabled(True):
-            loss = self.training_step(batch, mode="valid")
+        loss = self.training_step(batch, mode="valid")
         if not self.calculate_precision:
             return loss
 
@@ -804,30 +802,28 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
             and amino acid-level confidence scores.
         """
         predictions = []
-        # FIXME: Temporary workaround to avoid the NaN bug.
-        with torch.set_grad_enabled(True):
-            for (
-                precursor_charge,
-                precursor_mz,
-                spectrum_i,
-                spectrum_preds,
-            ) in zip(
-                batch[1][:, 1].cpu().detach().numpy(),
-                batch[1][:, 2].cpu().detach().numpy(),
-                batch[2],
-                self.forward(batch[0], batch[1]),
-            ):
-                for peptide_score, aa_scores, peptide in spectrum_preds:
-                    predictions.append(
-                        (
-                            spectrum_i,
-                            precursor_charge,
-                            precursor_mz,
-                            peptide,
-                            peptide_score,
-                            aa_scores,
-                        )
+        for (
+            precursor_charge,
+            precursor_mz,
+            spectrum_i,
+            spectrum_preds,
+        ) in zip(
+            batch[1][:, 1].cpu().detach().numpy(),
+            batch[1][:, 2].cpu().detach().numpy(),
+            batch[2],
+            self.forward(batch[0], batch[1]),
+        ):
+            for peptide_score, aa_scores, peptide in spectrum_preds:
+                predictions.append(
+                    (
+                        spectrum_i,
+                        precursor_charge,
+                        precursor_mz,
+                        peptide,
+                        peptide_score,
+                        aa_scores,
                     )
+                )
 
         return predictions
 
