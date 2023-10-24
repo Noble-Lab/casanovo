@@ -16,7 +16,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ### Changed
 
 - The CLI has been overhauled to use subcommands.
-- Upgraded to Lightning >=2.0
+- Upgraded to Lightning >=2.0.
 - Checkpointing is configured to save the top-k models instead of all.
 - Log steps rather than epochs as units of progress during training.
 - Validation performance metrics are logged (and added to tensorboard) at the validation epoch, and training loss is logged at the end of training epoch, i.e. training and validation metrics are logged asynchronously.
@@ -24,7 +24,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Nicely format logged warnings.
 - `every_n_train_steps` has been renamed to `val_check_interval` in accordance to the corresponding Pytorch Lightning parameter.
 - Training batches are randomly shuffled.
-- Upgraded to Torch >=2.10
+- Upgraded to Torch >=2.1.
 
 ### Removed
 
