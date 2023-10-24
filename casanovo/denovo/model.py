@@ -766,8 +766,8 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
 
         aa_precision, _, pep_precision = evaluate.aa_match_metrics(
             *evaluate.aa_match_batch(
-                peptides_pred,
                 peptides_true,
+                peptides_pred,
                 self.decoder._peptide_mass.masses,
             )
         )

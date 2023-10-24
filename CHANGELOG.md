@@ -37,6 +37,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Specifying custom residues to retrain Casanovo is now possible.
 - Upgrade to depthcharge v0.2.3 to fix sinusoidal encoding and for the `PeptideTransformerDecoder` hotfix.
 - Enable gradients during prediction and validation to avoid NaNs from occuring as a temporary workaround until a new Pytorch version is available.
+- Correctly report amino acid precision and recall during validation.
 
 ## [3.3.0] - 2023-04-04
 
