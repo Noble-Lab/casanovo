@@ -27,6 +27,25 @@ However, the GitHub API is limited to maximum 60 requests per hour per IP addres
 Consequently, if Casanovo has been executed multiple times already, it might temporarily not be able to communicate with GitHub.
 You can avoid this error by explicitly specifying the model file using the `--model` parameter.
 
+**Casanovo is very slow even when running on the GPU. How can I speed it up?**
+
+It is highly recommended to run Casanovo on the GPU to get the maximum performance.
+If Casanovo is slow despite that your system has a GPU, the GPU might not be configured correctly for Casanovo.
+A quick test to verify that Casanovo is using your (CUDA-enabled) GPU is to run `watch nvidia-smi` in your terminal.
+If Casanovo has access to the GPU, you should see it listed in the bottom process table and the "Volatile GPU-Util" column at the top right should show activity while Casanovo is processing the data.
+
+If Casanovo is not listed in the `nvidia-smi` output, it is not using your GPU.
+This is commonly caused by an incompatibility between your NVIDIA drivers and Pytorch.
+Although Pytorch is installed automatically when installing Casanovo, in this case we recommend to reinstall it manually according to the following steps:
+
+1. Uninstall the current version of Pytorch: `pip uninstall torch`
+2. Install the latest version of the NVIDIA drivers using the [official CUDA Toolkit](https://developer.nvidia.com/cuda-downloads). If supported by your system, an easy alternative can be conda using `conda install -c nvidia cuda-toolkit`.
+3. Install the latest version of Pytorch according to the [instructions on the Pytorch website](https://pytorch.org/get-started/locally/).
+
+Try to run Casanovo again and use `watch nvidia-smi` to inspect whether it can use the GPU now.
+If this is still not yet the case, please [open an issue on GitHub](https://github.com/Noble-Lab/casanovo/issues/new).
+Include full information about your system set-up, the installed CUDA toolkit and Pytorch versions, and the troubleshooting steps you have performed.
+
 **I get a "CUDA out of memory" error when trying to run Casanovo. Help!**
 
 This means that there was not enough (free) memory available on your GPU to run Casanovo, which is especially likely to happen when you are using a smaller, consumer-grade GPU.
