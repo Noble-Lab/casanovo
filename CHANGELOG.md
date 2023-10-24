@@ -24,6 +24,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Nicely format logged warnings.
 - `every_n_train_steps` has been renamed to `val_check_interval` in accordance to the corresponding Pytorch Lightning parameter.
 - Training batches are randomly shuffled.
+- Upgraded to Torch >=2.10
 
 ### Removed
 
