@@ -88,16 +88,12 @@ class Config:
                     keys_set = set(self._params.keys())
                     users_set = set(self._user_config.keys())
                     missing = list(keys_set - users_set)
-                    raise KeyError(
-                        f"Missing expected entry {missing}"
-                    )
+                    raise KeyError(f"Missing expected entry {missing}")
                 # detect unrecognized config file entries
                 keys = list(self._params.keys())
-                for key,val in self._user_config.items():
+                for key, val in self._user_config.items():
                     if key not in keys:
-                        raise KeyError(
-                            f"Unrecognized config file entry {key}"
-                        )
+                        raise KeyError(f"Unrecognized config file entry {key}")
         # Validate:
         for key, val in self._config_types.items():
             self.validate_param(key, val)

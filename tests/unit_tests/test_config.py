@@ -28,16 +28,14 @@ residues:
 """
         )
 
-    with open (tiny_config, 'r') as read_file:
+    with open(tiny_config, "r") as read_file:
         contents = yaml.safe_load(read_file)
-        contents['random_seed_'] = 354
-        print(contents)
+        contents["random_seed_"] = 354
 
-    with open('output.yml', 'w') as write_file:
+    with open("output.yml", "w") as write_file:
         yaml.safe_dump(contents, write_file)
     with pytest.raises(KeyError):
-        config = Config('output.yml')
+        config = Config("output.yml")
     
     with pytest.raises(KeyError):
         config = Config(yml)
-    

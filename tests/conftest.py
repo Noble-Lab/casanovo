@@ -197,7 +197,7 @@ def tiny_config(tmp_path):
         "model_save_folder_path": str(tmp_path),
         "accelerator": "cpu",
         "precursor_mass_tol": 5,
-        "isotope_error_range": [0,1],
+        "isotope_error_range": [0, 1],
         "min_peptide_len": 6,
         "predict_batch_size": 1024,
         "n_beams": 1,
@@ -252,8 +252,8 @@ def tiny_config(tmp_path):
             "+42.011": 42.010565,      
             "+43.006": 43.005814,      
             "-17.027": -17.026549,     
-            "+43.006-17.027": 25.980265
-        }      
+            "+43.006-17.027": 25.980265,
+        },      
     }
 
     cfg_file = tmp_path / "config.yml"
