@@ -357,7 +357,6 @@ def setup_model(
         try:
             model = _get_model_weights()
         except github.RateLimitExceededException:
-
             logger.error(
                 "GitHub API rate limit exceeded while trying to download the "
                 "model weights. Please download compatible model weights "
