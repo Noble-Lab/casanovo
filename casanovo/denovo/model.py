@@ -137,7 +137,9 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
             max_charge=max_charge,
         )
         self.softmax = torch.nn.Softmax(2)
-        self.celoss = torch.nn.CrossEntropyLoss(ignore_index=0, label_smoothing=train_label_smoothing)
+        self.celoss = torch.nn.CrossEntropyLoss(
+            ignore_index=0, label_smoothing=train_label_smoothing
+        )
         self.val_celoss = torch.nn.CrossEntropyLoss(ignore_index=0)
         # Optimizer settings.
         self.warmup_iters = warmup_iters
@@ -727,7 +729,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         """
         pred, truth = self._forward_step(*batch)
         pred = pred[:, :-1, :].reshape(-1, self.decoder.vocab_size + 1)
-        if mode=="train":
+        if mode == "train":
             loss = self.celoss(pred, truth.flatten())
         else:
             loss = self.val_celoss(pred, truth.flatten())

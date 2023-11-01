@@ -50,6 +50,7 @@ class ModelRunner:
         self.trainer = None
         self.model = None
         self.loaders = None
+
         self.writer = None
 
         # Configure checkpoints.
