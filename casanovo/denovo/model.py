@@ -43,9 +43,6 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         (``dim_model - dim_intensity``) are reserved for encoding the m/z value.
         If ``None``, the intensity will be projected up to ``dim_model`` using a
         linear layer, then summed with the m/z encoding for each peak.
-    custom_encoder : Optional[Union[SpectrumEncoder, PairedSpectrumEncoder]]
-        A pretrained encoder to use. The ``dim_model`` of the encoder must be
-        the same as that specified by the ``dim_model`` parameter here.
     max_length : int
         The maximum peptide length to decode.
     residues: Union[Dict[str, float], str]
@@ -76,6 +73,8 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
     tb_summarywriter: Optional[str]
         Folder path to record performance metrics during training. If ``None``,
         don't use a ``SummaryWriter``.
+    train_label_smoothing: float
+        Smoothing factor when calculating the training loss.
     warmup_iters: int
         The number of warm up iterations for the learning rate scheduler.
     max_iters: int
@@ -97,7 +96,6 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         n_layers: int = 9,
         dropout: float = 0.0,
         dim_intensity: Optional[int] = None,
-        custom_encoder: Optional[SpectrumEncoder] = None,
         max_length: int = 100,
         residues: Union[Dict[str, float], str] = "canonical",
         max_charge: int = 5,
@@ -110,6 +108,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         tb_summarywriter: Optional[
             torch.utils.tensorboard.SummaryWriter
         ] = None,
+        train_label_smoothing: float = 0.01,
         lr_schedule=None,
         warmup_iters: int = 100_000,
         max_iters: int = 600_000,
@@ -121,17 +120,14 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         self.save_hyperparameters()
 
         # Build the model.
-        if custom_encoder is not None:
-            self.encoder = custom_encoder
-        else:
-            self.encoder = SpectrumEncoder(
-                dim_model=dim_model,
-                n_head=n_head,
-                dim_feedforward=dim_feedforward,
-                n_layers=n_layers,
-                dropout=dropout,
-                dim_intensity=dim_intensity,
-            )
+        self.encoder = SpectrumEncoder(
+            dim_model=dim_model,
+            n_head=n_head,
+            dim_feedforward=dim_feedforward,
+            n_layers=n_layers,
+            dropout=dropout,
+            dim_intensity=dim_intensity,
+        )
         self.decoder = PeptideDecoder(
             dim_model=dim_model,
             n_head=n_head,
@@ -142,7 +138,10 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
             max_charge=max_charge,
         )
         self.softmax = torch.nn.Softmax(2)
-        self.celoss = torch.nn.CrossEntropyLoss(ignore_index=0)
+        self.celoss = torch.nn.CrossEntropyLoss(
+            ignore_index=0, label_smoothing=train_label_smoothing
+        )
+        self.val_celoss = torch.nn.CrossEntropyLoss(ignore_index=0)
         # Optimizer settings.
         self.lr_schedule = lr_schedule
         self.warmup_iters = warmup_iters
@@ -732,7 +731,10 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         """
         pred, truth = self._forward_step(*batch)
         pred = pred[:, :-1, :].reshape(-1, self.decoder.vocab_size + 1)
-        loss = self.celoss(pred, truth.flatten())
+        if mode == "train":
+            loss = self.celoss(pred, truth.flatten())
+        else:
+            loss = self.val_celoss(pred, truth.flatten())
         self.log(
             f"{mode}_CELoss",
             loss.detach(),
@@ -760,9 +762,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
             The loss of the validation step.
         """
         # Record the loss.
-        # FIXME: Temporary workaround to avoid the NaN bug.
-        with torch.set_grad_enabled(True):
-            loss = self.training_step(batch, mode="valid")
+        loss = self.training_step(batch, mode="valid")
         if not self.calculate_precision:
             return loss
 
@@ -775,8 +775,8 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
 
         aa_precision, _, pep_precision = evaluate.aa_match_metrics(
             *evaluate.aa_match_batch(
-                peptides_pred,
                 peptides_true,
+                peptides_pred,
                 self.decoder._peptide_mass.masses,
             )
         )
@@ -813,30 +813,28 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
             and amino acid-level confidence scores.
         """
         predictions = []
-        # FIXME: Temporary workaround to avoid the NaN bug.
-        with torch.set_grad_enabled(True):
-            for (
-                precursor_charge,
-                precursor_mz,
-                spectrum_i,
-                spectrum_preds,
-            ) in zip(
-                batch[1][:, 1].cpu().detach().numpy(),
-                batch[1][:, 2].cpu().detach().numpy(),
-                batch[2],
-                self.forward(batch[0], batch[1]),
-            ):
-                for peptide_score, aa_scores, peptide in spectrum_preds:
-                    predictions.append(
-                        (
-                            spectrum_i,
-                            precursor_charge,
-                            precursor_mz,
-                            peptide,
-                            peptide_score,
-                            aa_scores,
-                        )
+        for (
+            precursor_charge,
+            precursor_mz,
+            spectrum_i,
+            spectrum_preds,
+        ) in zip(
+            batch[1][:, 1].cpu().detach().numpy(),
+            batch[1][:, 2].cpu().detach().numpy(),
+            batch[2],
+            self.forward(batch[0], batch[1]),
+        ):
+            for peptide_score, aa_scores, peptide in spectrum_preds:
+                predictions.append(
+                    (
+                        spectrum_i,
+                        precursor_charge,
+                        precursor_mz,
+                        peptide,
+                        peptide_score,
+                        aa_scores,
                     )
+                )
 
         return predictions
 

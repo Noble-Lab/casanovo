@@ -50,6 +50,7 @@ class ModelRunner:
         self.trainer = None
         self.model = None
         self.loaders = None
+
         self.writer = None
 
         # Configure checkpoints.
@@ -212,7 +213,6 @@ class ModelRunner:
             n_layers=self.config.n_layers,
             dropout=self.config.dropout,
             dim_intensity=self.config.dim_intensity,
-            custom_encoder=self.config.custom_encoder,
             max_length=self.config.max_length,
             residues=self.config.residues,
             max_charge=self.config.max_charge,
@@ -222,6 +222,7 @@ class ModelRunner:
             top_match=self.config.top_match,
             n_log=self.config.n_log,
             tb_summarywriter=self.config.tb_summarywriter,
+            train_label_smoothing=self.config.train_label_smoothing,
             lr_schedule=self.config.lr_schedule,
             warmup_iters=self.config.warmup_iters,
             max_iters=self.config.max_iters,

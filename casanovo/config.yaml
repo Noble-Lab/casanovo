@@ -79,9 +79,6 @@ dropout: 0.0
 # Number of dimensions to use for encoding peak intensity
 # Projected up to ``dim_model`` by default and summed with the peak m/z encoding
 dim_intensity:
-# Option to provide a pre-trained spectrum encoder when training
-# Trained from scratch by default
-custom_encoder:
 # Max decoded peptide length
 max_length: 100
 # Type of learning rate schedule to use. One of {constant, linear, cosine}.
@@ -94,6 +91,8 @@ max_iters: 600_000
 learning_rate: 5e-4
 # Regularization term for weight updates
 weight_decay: 1e-5
+# Amount of label smoothing when computing the training loss
+train_label_smoothing: 0.01
 
 # TRAINING/INFERENCE OPTIONS
 # Number of spectra in one training batch
