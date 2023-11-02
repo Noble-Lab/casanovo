@@ -54,6 +54,7 @@ class Config:
         n_log=int,
         tb_summarywriter=str,
         train_label_smoothing=float,
+        lr_schedule=str,
         warmup_iters=int,
         max_iters=int,
         learning_rate=float,

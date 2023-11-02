@@ -81,6 +81,8 @@ dropout: 0.0
 dim_intensity:
 # Max decoded peptide length
 max_length: 100
+# Type of learning rate schedule to use. One of {constant, linear, cosine}.
+lr_schedule: "cosine"
 # Number of warmup iterations for learning rate scheduler
 warmup_iters: 100_000
 # Max number of iterations for learning rate scheduler

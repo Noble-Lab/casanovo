@@ -535,3 +535,45 @@ def test_run_map(mgf_small):
     out_writer.set_ms_run([os.path.abspath(mgf_small.name)])
     assert os.path.basename(mgf_small.name) not in out_writer._run_map
     assert os.path.abspath(mgf_small.name) in out_writer._run_map
+
+
+def test_lr_schedule():
+    """Test that the learning rate schedule is setup correctly"""
+
+    # Constant lr schedule is setup correctly
+    model = Spec2Pep(lr_schedule="constant")
+    assert model.lr_schedule is not None
+    assert model.lr_schedule == "constant"
+
+    # Learning rate schedule is applied every step rather than epoch
+    _, schedule = model.configure_optimizers()
+    assert schedule["interval"] == "step"
+
+    # Constant lr schedule includes only a warmup period
+    schedulers = schedule["scheduler"].state_dict()["_schedulers"]
+    assert len(schedulers) == 1
+
+    # Default warmup period lasts correct number of iters
+    assert schedulers[0]["start_factor"] == 1e-10
+    assert schedulers[0]["end_factor"] == 1
+    assert schedulers[0]["total_iters"] == 100000
+
+    # Linear lr schedule with custom warmup and max iters
+    model = Spec2Pep(lr_schedule="linear", warmup_iters=10, max_iters=100)
+    _, schedule = model.configure_optimizers()
+    schedulers = schedule["scheduler"].state_dict()["_schedulers"]
+
+    assert len(schedulers) == 2
+    assert schedulers[0]["total_iters"] == 10
+
+    assert schedulers[1]["start_factor"] == 1
+    assert schedulers[1]["end_factor"] == 0
+    assert schedulers[1]["total_iters"] == 100
+
+    # Cosine lr schedule
+    model = Spec2Pep(lr_schedule="cosine")
+    _, schedule = model.configure_optimizers()
+    schedulers = schedule["scheduler"].state_dict()["_schedulers"]
+
+    assert len(schedulers) == 2
+    assert schedulers[1]["_last_lr"][0] == [0.001]
