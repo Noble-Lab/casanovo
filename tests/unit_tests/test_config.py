@@ -36,6 +36,5 @@ residues:
         yaml.safe_dump(contents, write_file)
     with pytest.raises(KeyError):
         config = Config("output.yml")
-    
     with pytest.raises(KeyError):
         config = Config(yml)
