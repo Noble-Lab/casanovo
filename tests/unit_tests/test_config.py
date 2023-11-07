@@ -27,7 +27,7 @@ residues:
   T: 4
 """
         )
-    """
+
     with open(tiny_config, "r") as read_file:
         contents = yaml.safe_load(read_file)
         contents["random_seed_"] = 354
@@ -39,13 +39,3 @@ residues:
     
     with pytest.raises(KeyError):
         config = Config(yml)
-    """
-    config = Config(yml)
-    assert config.random_seed == 42
-    assert config["random_seed"] == 42
-    assert config.accelerator == "auto"
-    assert config.top_match == 3
-    assert len(config.residues) == 4
-    for i, residue in enumerate("WOUT", 1):
-        assert config["residues"][residue] == i
-    assert config.file == str(yml)
