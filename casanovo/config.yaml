@@ -52,6 +52,8 @@ model_save_folder_path: ""
 val_check_interval: 50_000
 
 # SPECTRUM PROCESSING OPTIONS
+# Min number of peaks allowed in a spectrum
+min_n_peaks: 20
 # Number of the most intense peaks to retain, any remaining peaks are discarded
 n_peaks: 150
 # Min peak m/z allowed, peaks with smaller m/z are discarded

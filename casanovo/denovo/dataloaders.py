@@ -27,6 +27,9 @@ class DeNovoDataModule(pl.LightningDataModule):
         The batch size to use for training.
     eval_batch_size : int
         The batch size to use for inference.
+    min_n_peaks : int
+        Minimum number of peaks allowed in each spectrum. Spectra with fewer
+        peaks are discarded.
     n_peaks : Optional[int]
         The number of top-n most intense peaks to keep in each spectrum. `None`
         retains all peaks.
@@ -56,6 +59,7 @@ class DeNovoDataModule(pl.LightningDataModule):
         test_index: Optional[AnnotatedSpectrumIndex] = None,
         train_batch_size: int = 128,
         eval_batch_size: int = 1028,
+        min_n_peaks: int = 20,
         n_peaks: Optional[int] = 150,
         min_mz: float = 50.0,
         max_mz: float = 2500.0,
@@ -70,6 +74,7 @@ class DeNovoDataModule(pl.LightningDataModule):
         self.test_index = test_index
         self.train_batch_size = train_batch_size
         self.eval_batch_size = eval_batch_size
+        self.min_n_peaks = min_n_peaks
         self.n_peaks = n_peaks
         self.min_mz = min_mz
         self.max_mz = max_mz
@@ -97,6 +102,7 @@ class DeNovoDataModule(pl.LightningDataModule):
         if stage in (None, "fit", "validate"):
             make_dataset = functools.partial(
                 AnnotatedSpectrumDataset,
+                min_n_peaks=self.min_n_peaks,
                 n_peaks=self.n_peaks,
                 min_mz=self.min_mz,
                 max_mz=self.max_mz,
@@ -113,6 +119,7 @@ class DeNovoDataModule(pl.LightningDataModule):
         if stage in (None, "test"):
             make_dataset = functools.partial(
                 AnnotatedSpectrumDataset if annotated else SpectrumDataset,
+                min_n_peaks=self.min_n_peaks,
                 n_peaks=self.n_peaks,
                 min_mz=self.min_mz,
                 max_mz=self.max_mz,
@@ -201,6 +208,7 @@ def prepare_batch(
         The spectrum identifiers (during de novo sequencing) or peptide
         sequences (during training).
     """
+    batch = [spectrum for spectrum in batch if spectrum is not None]
     spectra, precursor_mzs, precursor_charges, spectrum_ids = list(zip(*batch))
     spectra = torch.nn.utils.rnn.pad_sequence(spectra, batch_first=True)
     precursor_mzs = torch.tensor(precursor_mzs)
