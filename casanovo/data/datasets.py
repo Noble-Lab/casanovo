@@ -16,6 +16,9 @@ class SpectrumDataset(Dataset):
     ----------
     spectrum_index : depthcharge.data.SpectrumIndex
         The MS/MS spectra to use as a dataset.
+    min_n_peaks : int
+        Minimum number of peaks allowed in each spectrum. Spectra with fewer
+        peaks are discarded.
     n_peaks : Optional[int]
         The number of top-n most intense peaks to keep in each spectrum. `None`
         retains all peaks.
@@ -38,6 +41,7 @@ class SpectrumDataset(Dataset):
     def __init__(
         self,
         spectrum_index: depthcharge.data.SpectrumIndex,
+        min_n_peaks: int = 20,
         n_peaks: int = 150,
         min_mz: float = 140.0,
         max_mz: float = 2500.0,
@@ -47,6 +51,7 @@ class SpectrumDataset(Dataset):
     ):
         """Initialize a SpectrumDataset"""
         super().__init__()
+        self.min_n_peaks = min_n_peaks
         self.n_peaks = n_peaks
         self.min_mz = min_mz
         self.max_mz = max_mz
@@ -86,12 +91,13 @@ class SpectrumDataset(Dataset):
         spectrum = self._process_peaks(
             mz_array, int_array, precursor_mz, precursor_charge
         )
-        return (
-            spectrum,
-            precursor_mz,
-            precursor_charge,
-            self.get_spectrum_id(idx),
-        )
+        if spectrum is not None:
+            return (
+                spectrum,
+                precursor_mz,
+                precursor_charge,
+                self.get_spectrum_id(idx),
+            )
 
     def get_spectrum_id(self, idx: int) -> Tuple[str, str]:
         """
@@ -148,13 +154,13 @@ class SpectrumDataset(Dataset):
         )
         try:
             spectrum.set_mz_range(self.min_mz, self.max_mz)
-            if len(spectrum.mz) == 0:
+            if len(spectrum.mz) < self.min_n_peaks:
                 raise ValueError
             spectrum.remove_precursor_peak(self.remove_precursor_tol, "Da")
-            if len(spectrum.mz) == 0:
+            if len(spectrum.mz) < self.min_n_peaks:
                 raise ValueError
             spectrum.filter_intensity(self.min_intensity, self.n_peaks)
-            if len(spectrum.mz) == 0:
+            if len(spectrum.mz) < self.min_n_peaks:
                 raise ValueError
             spectrum.scale_intensity("root", 1)
             intensities = spectrum.intensity / np.linalg.norm(
@@ -163,7 +169,7 @@ class SpectrumDataset(Dataset):
             return torch.tensor(np.array([spectrum.mz, intensities])).T.float()
         except ValueError:
             # Replace invalid spectra by a dummy spectrum.
-            return torch.tensor([[0, 1]]).float()
+            return None  # torch.tensor([[3, 3]]).float()
 
     @property
     def n_spectra(self) -> int:
@@ -194,6 +200,9 @@ class AnnotatedSpectrumDataset(SpectrumDataset):
     ----------
     annotated_spectrum_index : depthcharge.data.SpectrumIndex
         The MS/MS spectra to use as a dataset.
+    min_n_peaks : int
+        Minimum number of peaks allowed in each spectrum. Spectra with fewer
+        peaks are discarded.
     n_peaks : Optional[int]
         The number of top-n most intense peaks to keep in each spectrum. `None`
         retains all peaks.
@@ -216,6 +225,7 @@ class AnnotatedSpectrumDataset(SpectrumDataset):
     def __init__(
         self,
         annotated_spectrum_index: depthcharge.data.SpectrumIndex,
+        min_n_peaks: int = 20,
         n_peaks: int = 150,
         min_mz: float = 140.0,
         max_mz: float = 2500.0,
@@ -225,6 +235,7 @@ class AnnotatedSpectrumDataset(SpectrumDataset):
     ):
         super().__init__(
             annotated_spectrum_index,
+            min_n_peaks=min_n_peaks,
             n_peaks=n_peaks,
             min_mz=min_mz,
             max_mz=max_mz,
@@ -263,4 +274,5 @@ class AnnotatedSpectrumDataset(SpectrumDataset):
         spectrum = self._process_peaks(
             mz_array, int_array, precursor_mz, precursor_charge
         )
-        return spectrum, precursor_mz, precursor_charge, peptide
+        if spectrum is not None:
+            return spectrum, precursor_mz, precursor_charge, peptide

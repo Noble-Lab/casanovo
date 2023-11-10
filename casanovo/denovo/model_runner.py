@@ -292,6 +292,7 @@ class ModelRunner:
             train_index=train_index,
             valid_index=valid_index,
             test_index=test_index,
+            min_n_peaks=self.config.min_n_peaks,
             min_mz=self.config.min_mz,
             max_mz=self.config.max_mz,
             min_intensity=self.config.min_intensity,

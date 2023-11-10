@@ -34,6 +34,7 @@ class Config:
     _default_config = Path(__file__).parent / "config.yaml"
     _config_types = dict(
         random_seed=int,
+        min_n_peaks=int,
         n_peaks=int,
         min_mz=float,
         max_mz=float,
