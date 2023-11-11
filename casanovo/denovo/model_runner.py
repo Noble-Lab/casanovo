@@ -103,11 +103,19 @@ class ModelRunner:
         self.initialize_data_module(train_index, valid_index)
         self.loaders.setup()
 
-        self.trainer.fit(
-            self.model,
-            self.loaders.train_dataloader(),
-            self.loaders.val_dataloader(),
-        )
+        if self.config.resume_training:
+            self.trainer.fit(
+                self.model,
+                self.loaders.train_dataloader(),
+                self.loaders.val_dataloader(),
+                ckpt_path=self.model_filename,
+            )
+        else:
+            self.trainer.fit(
+                self.model,
+                self.loaders.train_dataloader(),
+                self.loaders.val_dataloader(),
+            )
 
     def evaluate(self, peak_path: Iterable[str]) -> None:
         """Evaluate peptide sequence preditions from a trained Casanovo model.
@@ -221,6 +229,7 @@ class ModelRunner:
             top_match=self.config.top_match,
             n_log=self.config.n_log,
             tb_summarywriter=self.config.tb_summarywriter,
+            resume_training=self.config.resume_training,
             warmup_iters=self.config.warmup_iters,
             max_iters=self.config.max_iters,
             lr=self.config.learning_rate,
