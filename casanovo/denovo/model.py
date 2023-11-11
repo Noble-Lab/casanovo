@@ -73,6 +73,9 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
     tb_summarywriter: Optional[str]
         Folder path to record performance metrics during training. If ``None``,
         don't use a ``SummaryWriter``.
+    resume_training: bool
+        Resume training from checkpoint with fully restored optimizer state,
+        lr schedule, and weights.
     warmup_iters: int
         The number of warm up iterations for the learning rate scheduler.
     max_iters: int
@@ -106,6 +109,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         tb_summarywriter: Optional[
             torch.utils.tensorboard.SummaryWriter
         ] = None,
+        resume_training: bool = False,
         warmup_iters: int = 100_000,
         max_iters: int = 600_000,
         out_writer: Optional[ms_io.MztabWriter] = None,
@@ -164,6 +168,9 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
 
         # Output writer during predicting.
         self.out_writer = out_writer
+
+        # Resume training functionality
+        self.resume_training = resume_training
 
     def forward(
         self, spectra: torch.Tensor, precursors: torch.Tensor
@@ -831,13 +838,19 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         """
         Log the training loss at the end of each epoch.
         """
-        train_loss = self.trainer.callback_metrics["train_CELoss"].detach()
-        metrics = {
-            "step": self.trainer.global_step,
-            "train": train_loss.item(),
-        }
-        self._history.append(metrics)
-        self._log_history()
+        if (
+            self.resume_training
+            and "train_CELoss" not in self.trainer.callback_metrics.keys()
+        ):
+            pass
+        else:
+            train_loss = self.trainer.callback_metrics["train_CELoss"].detach()
+            metrics = {
+                "step": self.trainer.global_step,
+                "train": train_loss.item(),
+            }
+            self._history.append(metrics)
+            self._log_history()
 
     def on_validation_epoch_end(self) -> None:
         """
