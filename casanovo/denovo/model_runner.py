@@ -7,6 +7,7 @@ import tempfile
 import uuid
 from pathlib import Path
 from typing import Iterable, List, Optional, Union
+import warnings
 
 import lightning.pytorch as pl
 import numpy as np
@@ -217,7 +218,26 @@ class ModelRunner:
             max_charge=self.config.max_charge,
             precursor_mass_tol=self.config.precursor_mass_tol,
             isotope_error_range=self.config.isotope_error_range,
+            min_peptide_len=self.config.min_peptide_len,
             n_beams=self.config.n_beams,
+            top_match=self.config.top_match,
+            n_log=self.config.n_log,
+            tb_summarywriter=self.config.tb_summarywriter,
+            warmup_iters=self.config.warmup_iters,
+            max_iters=self.config.max_iters,
+            lr=self.config.learning_rate,
+            weight_decay=self.config.weight_decay,
+            out_writer=self.writer,
+            calculate_precision=self.config.calculate_precision,
+        )
+
+        # Reconfigurable non-architecture related parameters for a loaded model
+        loaded_model_params = dict(
+            max_length=self.config.max_length,
+            precursor_mass_tol=self.config.precursor_mass_tol,
+            isotope_error_range=self.config.isotope_error_range,
+            n_beams=self.config.n_beams,
+            min_peptide_len=self.config.min_peptide_len,
             top_match=self.config.top_match,
             n_log=self.config.n_log,
             tb_summarywriter=self.config.tb_summarywriter,
@@ -254,11 +274,23 @@ class ModelRunner:
             self.model = Spec2Pep.load_from_checkpoint(
                 self.model_filename,
                 map_location=device,
-                **model_params,
+                **loaded_model_params,
             )
+
+            architecture_params = set(model_params.keys()) - set(
+                loaded_model_params.keys()
+            )
+            for param in architecture_params:
+                if model_params[param] != self.model.hparams[param]:
+                    warnings.warn(
+                        f"Mismatching {param} parameter in "
+                        f"model checkpoint ({self.model.hparams[param]}) "
+                        f"vs. config file ({model_params[param]}), "
+                        f"using the checkpoint."
+                    )
         except RuntimeError:
             raise RuntimeError(
-                "Mismatching parameters between loaded model and config file"
+                "Weights file incompatible with the current version of Casanovo."
             )
 
     def initialize_data_module(
