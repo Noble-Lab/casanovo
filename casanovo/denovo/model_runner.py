@@ -212,7 +212,6 @@ class ModelRunner:
             n_layers=self.config.n_layers,
             dropout=self.config.dropout,
             dim_intensity=self.config.dim_intensity,
-            custom_encoder=self.config.custom_encoder,
             max_length=self.config.max_length,
             residues=self.config.residues,
             max_charge=self.config.max_charge,
