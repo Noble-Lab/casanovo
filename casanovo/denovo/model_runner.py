@@ -289,9 +289,18 @@ class ModelRunner:
                         f"using the checkpoint."
                     )
         except RuntimeError:
-            raise RuntimeError(
-                "Weights file incompatible with the current version of Casanovo."
-            )
+            # This only doesn't work if the weights are from an older version
+            try:
+                self.model = Spec2Pep.load_from_checkpoint(
+                    self.model_filename,
+                    map_location=device,
+                    **model_params,
+                )
+            except RuntimeError:
+                raise RuntimeError(
+                    "Weights file incompatible "
+                    "with the current version of Casanovo. "
+                )
 
     def initialize_data_module(
         self,
