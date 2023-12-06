@@ -387,11 +387,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
                 continue
             pred_tokens = tokens[i][: step + 1]
             # Omit stop token.
-            if self.decoder.reverse and pred_tokens[0] == self.stop_token:
-                pred_tokens = pred_tokens[1:]
-            elif (
-                not self.decoder.reverse and pred_tokens[-1] == self.stop_token
-            ):
+            if pred_tokens[-1] == self.stop_token:
                 pred_tokens = pred_tokens[:-1]
             peptide_len = len(pred_tokens)
             # Discard beams that were predicted to end but don't fit the minimum
