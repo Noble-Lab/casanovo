@@ -324,10 +324,9 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         ----------
         tokens : torch.Tensor of shape (n_spectra * n_beams, max_length)
             Predicted amino acid tokens for all beams and all spectra.
-         scores : torch.Tensor of shape
-         (n_spectra *  n_beams, max_length, n_amino_acids)
-            Scores for the predicted amino acid tokens for all beams and all
-            spectra.
+        precursors : torch.Tensor of size (n_spectra * n_beams, 3)
+            The measured precursor mass (axis 0), precursor charge (axis 1), and
+            precursor m/z (axis 2) of each MS/MS spectrum.
         step : int
             Index of the current decoding step.
 
@@ -380,6 +379,8 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
 
         # Check which beams should be terminated or discarded based on the
         # predicted peptide.
+        precursor_charges = precursors[:, 1].cpu().detach().numpy()
+        precursor_mzs = precursors[:, 2].cpu().detach().numpy()
         for i in range(len(finished_beams)):
             # Skip already discarded beams.
             if discarded_beams[i]:
@@ -402,8 +403,8 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
             # the peptide mass exceeds the precursor m/z to an extent that it
             # cannot be corrected anymore by a subsequently predicted AA with
             # negative mass.
-            precursor_charge = precursors[i, 1]
-            precursor_mz = precursors[i, 2]
+            precursor_charge = precursor_charges[i]
+            precursor_mz = precursor_mzs[i]
             matches_precursor_mz = exceeds_precursor_mz = False
             peptide = self.decoder.detokenize(pred_tokens)
             peptide_mz = self.peptide_mass_calculator.mass(
@@ -411,12 +412,14 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
             )
             for aa in [None] if finished_beams[i] else self.aa_neg_mass:
                 try:
-                    matches_precursor_mz, exceeds_precursor_mz = False, True
+                    any_matches_precursor_mz = False
+                    all_exceed_precursor_mz = True
                     calc_mz = (
                         peptide_mz
                         if aa is None
                         else peptide_mz
                         + self.peptide_mass_calculator.masses[aa]
+                        / precursor_charge
                     )
                     for isotope in range(
                         self.isotope_error_range[0],
@@ -433,18 +436,21 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
                             aa is None
                             and abs(delta_mass_ppm) < self.precursor_mass_tol
                         ):
-                            matches_precursor_mz = True
+                            any_matches_precursor_mz = True
                             break
-                        exceeds_precursor_mz &= (
+                        all_exceed_precursor_mz &= (
                             delta_mass_ppm > self.precursor_mass_tol
                         )
                     # Terminate the beam if the calculated m/z exceeds the
                     # precursor m/z + tolerance and hasn't been corrected by a
                     # subsequently predicted AA with negative mass.
-                    if matches_precursor_mz or (
-                        exceeds_precursor_mz
-                        and (finished_beams[i] or aa is not None)
-                    ):
+                    exceeds_precursor_mz = all_exceed_precursor_mz and (
+                        finished_beams[i] or aa is not None
+                    )
+                    if any_matches_precursor_mz:
+                        matches_precursor_mz = True
+                        exceeds_precursor_mz = False
+                    if matches_precursor_mz or exceeds_precursor_mz:
                         break
                 except KeyError:
                     matches_precursor_mz = exceeds_precursor_mz = False
@@ -990,6 +996,7 @@ class CosineWarmupScheduler(torch.optim.lr_scheduler._LRScheduler):
         return lr_factor
 
 
+@nb.njit
 def _calc_mass_error(
     calc_mz: float, obs_mz: float, charge: int, isotope: int = 0
 ) -> float:
