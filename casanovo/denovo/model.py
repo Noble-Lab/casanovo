@@ -268,6 +268,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         scores = einops.rearrange(scores, "B L V S -> (B S) L V")
 
         # The main decoding loop.
+        self.n_term = self.n_term.to(self.decoder.device)
         for step in range(0, self.max_length):
             # Terminate beams exceeding the precursor m/z tolerance and track
             # all finished beams (either terminated or stop token predicted).
