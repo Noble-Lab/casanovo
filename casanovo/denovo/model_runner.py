@@ -267,14 +267,12 @@ class ModelRunner:
             )
             raise FileNotFoundError("Could not find the model weights file")
 
-        # First try loading model details from the weithgs file,
-        # otherwise use the provided configuration.
+        # First try loading model details from the weights file, otherwise use
+        # the provided configuration.
         device = torch.empty(1).device  # Use the default device.
         try:
             self.model = Spec2Pep.load_from_checkpoint(
-                self.model_filename,
-                map_location=device,
-                **loaded_model_params,
+                self.model_filename, map_location=device, **loaded_model_params
             )
 
             architecture_params = set(model_params.keys()) - set(
@@ -285,8 +283,8 @@ class ModelRunner:
                     warnings.warn(
                         f"Mismatching {param} parameter in "
                         f"model checkpoint ({self.model.hparams[param]}) "
-                        f"vs. config file ({model_params[param]}), "
-                        f"using the checkpoint."
+                        f"vs config file ({model_params[param]}); "
+                        "using the checkpoint."
                     )
         except RuntimeError:
             # This only doesn't work if the weights are from an older version
@@ -298,8 +296,8 @@ class ModelRunner:
                 )
             except RuntimeError:
                 raise RuntimeError(
-                    "Weights file incompatible "
-                    "with the current version of Casanovo. "
+                    "Weights file incompatible with the current version of "
+                    "Casanovo. "
                 )
 
     def initialize_data_module(
