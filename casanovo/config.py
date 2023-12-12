@@ -53,6 +53,7 @@ class Config:
         residues=dict,
         n_log=int,
         tb_summarywriter=str,
+        train_label_smoothing=float,
         warmup_iters=int,
         max_iters=int,
         learning_rate=float,

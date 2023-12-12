@@ -89,6 +89,8 @@ max_iters: 600_000
 learning_rate: 5e-4
 # Regularization term for weight updates
 weight_decay: 1e-5
+# Amount of label smoothing when computing the training loss
+train_label_smoothing: 0.01
 
 # TRAINING/INFERENCE OPTIONS
 # Number of spectra in one training batch

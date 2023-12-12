@@ -12,6 +12,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - `accelerator` parameter controls the accelerator (CPU, GPU, etc) that is used.
 - `devices` parameter controls the number of accelerators used.
 - `val_check_interval` parameter controls the frequency of both validation epochs and model checkpointing during training.
+- `train_label_smoothing` parameter controls the amount of label smoothing applied when calculating the training loss.
 
 ### Changed
 

@@ -73,6 +73,8 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
     tb_summarywriter: Optional[str]
         Folder path to record performance metrics during training. If ``None``,
         don't use a ``SummaryWriter``.
+    train_label_smoothing: float
+        Smoothing factor when calculating the training loss.
     warmup_iters: int
         The number of warm up iterations for the learning rate scheduler.
     max_iters: int
@@ -106,6 +108,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         tb_summarywriter: Optional[
             torch.utils.tensorboard.SummaryWriter
         ] = None,
+        train_label_smoothing: float = 0.01,
         warmup_iters: int = 100_000,
         max_iters: int = 600_000,
         out_writer: Optional[ms_io.MztabWriter] = None,
@@ -134,7 +137,10 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
             max_charge=max_charge,
         )
         self.softmax = torch.nn.Softmax(2)
-        self.celoss = torch.nn.CrossEntropyLoss(ignore_index=0)
+        self.celoss = torch.nn.CrossEntropyLoss(
+            ignore_index=0, label_smoothing=train_label_smoothing
+        )
+        self.val_celoss = torch.nn.CrossEntropyLoss(ignore_index=0)
         # Optimizer settings.
         self.warmup_iters = warmup_iters
         self.max_iters = max_iters
@@ -723,7 +729,10 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         """
         pred, truth = self._forward_step(*batch)
         pred = pred[:, :-1, :].reshape(-1, self.decoder.vocab_size + 1)
-        loss = self.celoss(pred, truth.flatten())
+        if mode == "train":
+            loss = self.celoss(pred, truth.flatten())
+        else:
+            loss = self.val_celoss(pred, truth.flatten())
         self.log(
             f"{mode}_CELoss",
             loss.detach(),

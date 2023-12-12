@@ -190,6 +190,7 @@ def tiny_config(tmp_path):
         "n_head": 2,
         "dim_feedforward": 10,
         "n_layers": 1,
+        "train_label_smoothing": 0.01,
         "warmup_iters": 1,
         "max_iters": 1,
         "max_epochs": 20,
