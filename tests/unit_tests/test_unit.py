@@ -69,6 +69,7 @@ def test_split_version():
     assert version == ("3", "0", "1")
 
 
+@pytest.mark.skip(reason="Hit rate limit during CI/CD")
 def test_get_model_weights(monkeypatch):
     """
     Test that model weights can be downloaded from GitHub or used from the
@@ -341,6 +342,34 @@ def test_beam_search_decode():
 
     assert torch.equal(pred_cache[0][0][-1], torch.tensor([4, 14, 4, 13]))
 
+    # Test _get_topk_beams().
+    step = 1
+    scores = torch.full(
+        size=(batch, length, vocab, beam), fill_value=torch.nan
+    )
+    scores = einops.rearrange(scores, "B L V S -> (B S) L V")
+    tokens = torch.zeros(batch * beam, length, dtype=torch.int64)
+    tokens[0, 0] = 4
+    scores[0, step, :] = 0
+    scores[0, step, 14] = torch.tensor([1])
+    test_finished_beams = torch.tensor([False])
+
+    new_tokens, new_scores = model._get_topk_beams(
+        tokens, scores, test_finished_beams, batch, step
+    )
+
+    expected_tokens = torch.tensor(
+        [
+            [4, 14],
+        ]
+    )
+
+    expected_scores = torch.zeros(beam, vocab)
+    expected_scores[:, 14] = torch.tensor([1])
+
+    assert torch.equal(new_scores[:, step, :], expected_scores)
+    assert torch.equal(new_tokens[:, : step + 1], expected_tokens)
+
     # Test _finish_beams() for tokens with a negative mass.
     model = Spec2Pep(n_beams=2, residues="massivekb")
     beam = model.n_beams  # S
@@ -485,15 +514,28 @@ def test_spectrum_id_mzml(mzml_small, tmp_path):
 
 def test_train_val_step_functions():
     """Test train and validation step functions operating on batches."""
-    model = Spec2Pep(n_beams=1, residues="massivekb", min_peptide_len=4)
+    model = Spec2Pep(
+        n_beams=1,
+        residues="massivekb",
+        min_peptide_len=4,
+        train_label_smoothing=0.1,
+    )
     spectra = torch.zeros(1, 5, 2)
     precursors = torch.tensor([[469.25364, 2.0, 235.63410]])
     peptides = ["PEPK"]
     batch = (spectra, precursors, peptides)
 
+    train_step_loss = model.training_step(batch)
+    val_step_loss = model.validation_step(batch)
+
     # Check if valid loss value returned
-    assert model.training_step(batch) > 0
-    assert model.validation_step(batch) > 0
+    assert train_step_loss > 0
+    assert val_step_loss > 0
+
+    # Check if smoothing is applied in training and not in validation
+    assert model.celoss.label_smoothing == 0.1
+    assert model.val_celoss.label_smoothing == 0
+    assert val_step_loss != train_step_loss
 
 
 def test_run_map(mgf_small):

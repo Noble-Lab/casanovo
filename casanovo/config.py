@@ -1,10 +1,10 @@
 """Parse the YAML configuration."""
 import logging
+import shutil
 from pathlib import Path
 from typing import Optional, Dict, Callable, Tuple, Union
 
 import yaml
-import torch
 
 from . import utils
 
@@ -53,6 +53,7 @@ class Config:
         residues=dict,
         n_log=int,
         tb_summarywriter=str,
+        train_label_smoothing=float,
         warmup_iters=int,
         max_iters=int,
         learning_rate=float,
@@ -64,11 +65,12 @@ class Config:
         max_epochs=int,
         num_sanity_val_steps=int,
         train_from_scratch=bool,
-        save_model=bool,
+        save_top_k=int,
         model_save_folder_path=str,
-        save_weights_only=bool,
-        every_n_train_steps=int,
-        no_gpu=bool,
+        val_check_interval=int,
+        calculate_precision=bool,
+        accelerator=str,
+        devices=int,
     )
 
     def __init__(self, config_file: Optional[str] = None):
@@ -82,18 +84,25 @@ class Config:
         else:
             with Path(config_file).open() as f_in:
                 self._user_config = yaml.safe_load(f_in)
-
+                # Check for missing entries in config file.
+                config_missing = self._params.keys() - self._user_config.keys()
+                if len(config_missing) > 0:
+                    raise KeyError(
+                        "Missing expected config option(s): "
+                        f"{', '.join(config_missing)}"
+                    )
+                # Check for unrecognized config file entries.
+                config_unknown = self._user_config.keys() - self._params.keys()
+                if len(config_unknown) > 0:
+                    raise KeyError(
+                        "Unrecognized config option(s): "
+                        f"{', '.join(config_unknown)}"
+                    )
         # Validate:
         for key, val in self._config_types.items():
             self.validate_param(key, val)
 
-        # Add extra configuration options and scale by the number of GPUs.
-        n_gpus = 0 if self["no_gpu"] else torch.cuda.device_count()
         self._params["n_workers"] = utils.n_workers()
-        if n_gpus > 1:
-            self._params["train_batch_size"] = (
-                self["train_batch_size"] // n_gpus
-            )
 
     def __getitem__(self, param: str) -> Union[int, bool, str, Tuple, Dict]:
         """Retrieve a parameter"""
@@ -133,3 +142,14 @@ class Config:
     def items(self) -> Tuple[str, ...]:
         """Return the parameters"""
         return self._params.items()
+
+    @classmethod
+    def copy_default(cls, output: str) -> None:
+        """Copy the default YAML configuration.
+
+        Parameters
+        ----------
+        output : str
+            The output file.
+        """
+        shutil.copyfile(cls._default_config, output)

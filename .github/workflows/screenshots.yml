@@ -1,0 +1,33 @@
+name: Screenshots with rich-codex
+on:
+  pull_request:
+    paths:
+      - "docs/*.md"
+      - "casanovo/casanovo.py"
+  workflow_dispatch:
+
+jobs:
+  rich_codex:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the repo
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.10"
+
+      - name: Install your custom tools
+        run: |
+          python -m pip install --upgrade pip
+          pip install .
+
+      - name: Generate terminal images with rich-codex
+        uses: ewels/rich-codex@v1
+        with:
+          timeout: 10
+          commit_changes: "true"
+          clean_img_paths: docs/images/*.svg

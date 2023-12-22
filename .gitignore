@@ -1,5 +1,7 @@
 # Test stuff:
 test_path/
+lightning_logs/
+envs/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

@@ -6,6 +6,42 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+## [4.0.0] - 2023-12-22
+
+### Added
+
+-  Checkpoints include model parameters, allowing for mismatches with the provided configuration file.
+- `accelerator` parameter controls the accelerator (CPU, GPU, etc) that is used.
+- `devices` parameter controls the number of accelerators used.
+- `val_check_interval` parameter controls the frequency of both validation epochs and model checkpointing during training.
+- `train_label_smoothing` parameter controls the amount of label smoothing applied when calculating the training loss.
+
+### Changed
+
+- The CLI has been overhauled to use subcommands.
+- Upgraded to Lightning >=2.0.
+- Checkpointing is configured to save the top-k models instead of all.
+- Log steps rather than epochs as units of progress during training.
+- Validation performance metrics are logged (and added to tensorboard) at the validation epoch, and training loss is logged at the end of training epoch, i.e. training and validation metrics are logged asynchronously.
+- Irrelevant warning messages on the console output and in the log file are no longer shown.
+- Nicely format logged warnings.
+- `every_n_train_steps` has been renamed to `val_check_interval` in accordance to the corresponding Pytorch Lightning parameter.
+- Training batches are randomly shuffled.
+- Upgraded to Torch >=2.1.
+
+### Removed
+
+- Remove config option for a custom Pytorch Lightning logger.
+- Remove superfluous `custom_encoder` config option.
+
+### Fixed
+
+- Casanovo runs on CPU and can pass all tests.
+- Correctly refer to input peak files by their full file path.
+- Specifying custom residues to retrain Casanovo is now possible.
+- Upgrade to depthcharge v0.2.3 to fix sinusoidal encoding and for the `PeptideTransformerDecoder` hotfix.
+- Correctly report amino acid precision and recall during validation.
+
 ## [3.5.0] - 2023-08-16
 
 ### Fixed
@@ -181,7 +217,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 - Initial Casanovo version.
 
-[Unreleased]: https://github.com/Noble-Lab/casanovo/compare/v3.5.0...HEAD
+[Unreleased]: https://github.com/Noble-Lab/casanovo/compare/v4.0.0...HEAD
+[4.0.0]: https://github.com/Noble-Lab/casanovo/compare/v3.5.0...v4.0.0
 [3.5.0]: https://github.com/Noble-Lab/casanovo/compare/v3.4.0...v3.5.0
 [3.4.0]: https://github.com/Noble-Lab/casanovo/compare/v3.3.0...v3.4.0
 [3.3.0]: https://github.com/Noble-Lab/casanovo/compare/v3.2.0...v3.3.0

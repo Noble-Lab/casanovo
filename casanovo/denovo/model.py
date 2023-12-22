@@ -1,15 +1,14 @@
 """A de novo peptide sequencing model."""
 import collections
 import heapq
-import itertools
 import logging
 from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
 
 import depthcharge.masses
 import einops
-import numpy as np
-import pytorch_lightning as pl
 import torch
+import numpy as np
+import lightning.pytorch as pl
 from torch.utils.tensorboard import SummaryWriter
 from depthcharge.components import ModelMixin, PeptideDecoder, SpectrumEncoder
 
@@ -44,9 +43,6 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         (``dim_model - dim_intensity``) are reserved for encoding the m/z value.
         If ``None``, the intensity will be projected up to ``dim_model`` using a
         linear layer, then summed with the m/z encoding for each peak.
-    custom_encoder : Optional[Union[SpectrumEncoder, PairedSpectrumEncoder]]
-        A pretrained encoder to use. The ``dim_model`` of the encoder must be
-        the same as that specified by the ``dim_model`` parameter here.
     max_length : int
         The maximum peptide length to decode.
     residues: Union[Dict[str, float], str]
@@ -77,12 +73,17 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
     tb_summarywriter: Optional[str]
         Folder path to record performance metrics during training. If ``None``,
         don't use a ``SummaryWriter``.
+    train_label_smoothing: float
+        Smoothing factor when calculating the training loss.
     warmup_iters: int
         The number of warm up iterations for the learning rate scheduler.
     max_iters: int
         The total number of iterations for the learning rate scheduler.
     out_writer: Optional[str]
         The output writer for the prediction results.
+    calculate_precision: bool
+        Calculate the validation set precision during training.
+        This is expensive.
     **kwargs : Dict
         Additional keyword arguments passed to the Adam optimizer.
     """
@@ -95,38 +96,37 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         n_layers: int = 9,
         dropout: float = 0.0,
         dim_intensity: Optional[int] = None,
-        custom_encoder: Optional[SpectrumEncoder] = None,
         max_length: int = 100,
         residues: Union[Dict[str, float], str] = "canonical",
         max_charge: int = 5,
         precursor_mass_tol: float = 50,
         isotope_error_range: Tuple[int, int] = (0, 1),
         min_peptide_len: int = 6,
-        n_beams: int = 5,
+        n_beams: int = 1,
         top_match: int = 1,
         n_log: int = 10,
         tb_summarywriter: Optional[
             torch.utils.tensorboard.SummaryWriter
         ] = None,
+        train_label_smoothing: float = 0.01,
         warmup_iters: int = 100_000,
         max_iters: int = 600_000,
         out_writer: Optional[ms_io.MztabWriter] = None,
+        calculate_precision: bool = False,
         **kwargs: Dict,
     ):
         super().__init__()
+        self.save_hyperparameters()
 
         # Build the model.
-        if custom_encoder is not None:
-            self.encoder = custom_encoder
-        else:
-            self.encoder = SpectrumEncoder(
-                dim_model=dim_model,
-                n_head=n_head,
-                dim_feedforward=dim_feedforward,
-                n_layers=n_layers,
-                dropout=dropout,
-                dim_intensity=dim_intensity,
-            )
+        self.encoder = SpectrumEncoder(
+            dim_model=dim_model,
+            n_head=n_head,
+            dim_feedforward=dim_feedforward,
+            n_layers=n_layers,
+            dropout=dropout,
+            dim_intensity=dim_intensity,
+        )
         self.decoder = PeptideDecoder(
             dim_model=dim_model,
             n_head=n_head,
@@ -137,7 +137,10 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
             max_charge=max_charge,
         )
         self.softmax = torch.nn.Softmax(2)
-        self.celoss = torch.nn.CrossEntropyLoss(ignore_index=0)
+        self.celoss = torch.nn.CrossEntropyLoss(
+            ignore_index=0, label_smoothing=train_label_smoothing
+        )
+        self.val_celoss = torch.nn.CrossEntropyLoss(ignore_index=0)
         # Optimizer settings.
         self.warmup_iters = warmup_iters
         self.max_iters = max_iters
@@ -157,6 +160,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         self.stop_token = self.decoder._aa2idx["$"]
 
         # Logging.
+        self.calculate_precision = calculate_precision
         self.n_log = n_log
         self._history = []
         if tb_summarywriter is not None:
@@ -604,9 +608,12 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
 
         # Mask out terminated beams. Include precursor m/z tolerance induced
         # termination.
+        # TODO: `clone()` is necessary to get the correct output with n_beams=1.
+        #   An alternative implementation using base PyTorch instead of einops
+        #   might be more efficient.
         finished_mask = einops.repeat(
             finished_beams, "(B S) -> B (V S)", S=beam, V=vocab
-        )
+        ).clone()
         # Mask out the index '0', i.e. padding token, by default.
         finished_mask[:, :beam] = True
 
@@ -722,10 +729,13 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         """
         pred, truth = self._forward_step(*batch)
         pred = pred[:, :-1, :].reshape(-1, self.decoder.vocab_size + 1)
-        loss = self.celoss(pred, truth.flatten())
+        if mode == "train":
+            loss = self.celoss(pred, truth.flatten())
+        else:
+            loss = self.val_celoss(pred, truth.flatten())
         self.log(
-            "CELoss",
-            {mode: loss.detach()},
+            f"{mode}_CELoss",
+            loss.detach(),
             on_step=False,
             on_epoch=True,
             sync_dist=True,
@@ -751,6 +761,8 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         """
         # Record the loss.
         loss = self.training_step(batch, mode="valid")
+        if not self.calculate_precision:
+            return loss
 
         # Calculate and log amino acid and peptide match evaluation metrics from
         # the predicted peptides.
@@ -758,21 +770,25 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         for spectrum_preds in self.forward(batch[0], batch[1]):
             for _, _, pred in spectrum_preds:
                 peptides_pred.append(pred)
+
         aa_precision, _, pep_precision = evaluate.aa_match_metrics(
             *evaluate.aa_match_batch(
-                peptides_pred, peptides_true, self.decoder._peptide_mass.masses
+                peptides_true,
+                peptides_pred,
+                self.decoder._peptide_mass.masses,
             )
         )
         log_args = dict(on_step=False, on_epoch=True, sync_dist=True)
         self.log(
             "Peptide precision at coverage=1",
-            {"valid": pep_precision},
+            pep_precision,
             **log_args,
         )
         self.log(
-            "AA precision at coverage=1", {"valid": aa_precision}, **log_args
+            "AA precision at coverage=1",
+            aa_precision,
+            **log_args,
         )
-
         return loss
 
     def predict_step(
@@ -824,10 +840,10 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         """
         Log the training loss at the end of each epoch.
         """
-        train_loss = self.trainer.callback_metrics["CELoss"]["train"].detach()
+        train_loss = self.trainer.callback_metrics["train_CELoss"].detach()
         metrics = {
             "step": self.trainer.global_step,
-            "train": train_loss,
+            "train": train_loss.item(),
         }
         self._history.append(metrics)
         self._log_history()
@@ -839,19 +855,25 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         callback_metrics = self.trainer.callback_metrics
         metrics = {
             "step": self.trainer.global_step,
-            "valid": callback_metrics["CELoss"]["valid"].detach(),
-            "valid_aa_precision": callback_metrics[
-                "AA precision at coverage=1"
-            ]["valid"].detach(),
-            "valid_pep_precision": callback_metrics[
-                "Peptide precision at coverage=1"
-            ]["valid"].detach(),
+            "valid": callback_metrics["valid_CELoss"].detach().item(),
         }
+
+        if self.calculate_precision:
+            metrics["valid_aa_precision"] = (
+                callback_metrics["AA precision at coverage=1"].detach().item()
+            )
+            metrics["valid_pep_precision"] = (
+                callback_metrics["Peptide precision at coverage=1"]
+                .detach()
+                .item()
+            )
         self._history.append(metrics)
         self._log_history()
 
-    def on_predict_epoch_end(
-        self, results: List[List[Tuple[np.ndarray, List[str], torch.Tensor]]]
+    def on_predict_batch_end(
+        self,
+        outputs: List[Tuple[np.ndarray, List[str], torch.Tensor]],
+        *args,
     ) -> None:
         """
         Write the predicted peptide sequences and amino acid scores to the
@@ -867,9 +889,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
             peptide,
             peptide_score,
             aa_scores,
-        ) in itertools.chain.from_iterable(
-            itertools.chain.from_iterable(results)
-        ):
+        ) in outputs:
             if len(peptide) == 0:
                 continue
             self.out_writer.psms.append(
@@ -892,19 +912,28 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         if len(self._history) == 0:
             return
         if len(self._history) == 1:
-            logger.info(
-                "Step\tTrain loss\tValid loss\tPeptide precision\tAA precision"
-            )
+            header = "Step\tTrain loss\tValid loss\t"
+            if self.calculate_precision:
+                header += "Peptide precision\tAA precision"
+
+            logger.info(header)
         metrics = self._history[-1]
         if metrics["step"] % self.n_log == 0:
-            logger.info(
-                "%i\t%.6f\t%.6f\t%.6f\t%.6f",
+            msg = "%i\t%.6f\t%.6f"
+            vals = [
                 metrics["step"],
                 metrics.get("train", np.nan),
                 metrics.get("valid", np.nan),
-                metrics.get("valid_pep_precision", np.nan),
-                metrics.get("valid_aa_precision", np.nan),
-            )
+            ]
+
+            if self.calculate_precision:
+                msg += "\t%.6f\t%.6f"
+                vals += [
+                    metrics.get("valid_pep_precision", np.nan),
+                    metrics.get("valid_aa_precision", np.nan),
+                ]
+
+            logger.info(msg, *vals)
             if self.tb_summarywriter is not None:
                 for descr, key in [
                     ("loss/train_crossentropy_loss", "train"),
