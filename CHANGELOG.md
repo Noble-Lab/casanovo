@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+## [4.0.0] - 2023-12-22
+
 ### Added
 
 -  Checkpoints include model parameters, allowing for mismatches with the provided configuration file.
@@ -215,7 +217,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 - Initial Casanovo version.
 
-[Unreleased]: https://github.com/Noble-Lab/casanovo/compare/v3.5.0...HEAD
+[Unreleased]: https://github.com/Noble-Lab/casanovo/compare/v4.0.0...HEAD
+[4.0.0]: https://github.com/Noble-Lab/casanovo/compare/v3.5.0...v4.0.0
 [3.5.0]: https://github.com/Noble-Lab/casanovo/compare/v3.4.0...v3.5.0
 [3.4.0]: https://github.com/Noble-Lab/casanovo/compare/v3.3.0...v3.4.0
 [3.3.0]: https://github.com/Noble-Lab/casanovo/compare/v3.2.0...v3.3.0
