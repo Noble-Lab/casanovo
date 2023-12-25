@@ -6,35 +6,39 @@ from casanovo.config import Config
 from casanovo.denovo.model_runner import ModelRunner
 
 
-def test_initialize_model(tmp_path):
-    """Test that"""
+def test_initialize_model(tmp_path, mgf_small):
+    """Test initializing a new or existing model."""
     config = Config()
-    config.train_from_scratch = False
+    # No model filename given, so train from scratch.
     ModelRunner(config=config).initialize_model(train=True)
 
+    # No model filename given during inference = error.
     with pytest.raises(ValueError):
         ModelRunner(config=config).initialize_model(train=False)
 
-    with pytest.raises(FileNotFoundError):
-        runner = ModelRunner(config=config, model_filename="blah")
-        runner.initialize_model(train=True)
-
+    # Non-existing model filename given during inference = error.
     with pytest.raises(FileNotFoundError):
         runner = ModelRunner(config=config, model_filename="blah")
         runner.initialize_model(train=False)
 
-    # This should work now:
-    config.train_from_scratch = True
-    runner = ModelRunner(config=config, model_filename="blah")
+    # Train a quick model.
+    config.max_epochs = 1
+    config.n_layers = 1
+    ckpt = tmp_path / "existing.ckpt"
+    with ModelRunner(config=config) as runner:
+        runner.train([mgf_small], [mgf_small])
+        runner.trainer.save_checkpoint(ckpt)
+
+    # Resume training from previous model.
+    runner = ModelRunner(config=config, model_filename=str(ckpt))
     runner.initialize_model(train=True)
 
-    # But this should still fail:
-    with pytest.raises(FileNotFoundError):
-        runner = ModelRunner(config=config, model_filename="blah")
-        runner.initialize_model(train=False)
+    # Inference with previous model.
+    runner = ModelRunner(config=config, model_filename=str(ckpt))
+    runner.initialize_model(train=False)
 
     # If the model initialization throws and EOFError, then the Spec2Pep model
-    # has tried to load the weights:
+    # has tried to load the weights.
     weights = tmp_path / "blah"
     weights.touch()
     with pytest.raises(EOFError):
@@ -43,7 +47,7 @@ def test_initialize_model(tmp_path):
 
 
 def test_save_and_load_weights(tmp_path, mgf_small, tiny_config):
-    """Test saving aloading weights"""
+    """Test saving and loading weights"""
     config = Config(tiny_config)
     config.max_epochs = 1
     config.n_layers = 1
