@@ -58,14 +58,17 @@ class _SharedParams(click.RichCommand):
             click.Option(
                 ("-m", "--model"),
                 help="""
-                The model weights (.ckpt file). If not provided, Casanovo
-                will try to download the latest release.
+                The model weights (.ckpt file). If not provided, Casanovo will
+                try to download the latest release (during sequencing).
                 """,
                 type=click.Path(exists=True, dir_okay=False),
             ),
             click.Option(
                 ("-o", "--output"),
-                help="The mzTab file to which results will be written.",
+                help="The root file name to which results (i.e. the mzTab file "
+                     "during sequencing, as well as the log file during all "
+                     "modes) will be written. If not specified, a default "
+                     "timestamped file name will be used.",
                 type=click.Path(dir_okay=False),
             ),
             click.Option(
@@ -139,7 +142,7 @@ def sequence(
         for peak_file in peak_path:
             logger.info("  %s", peak_file)
 
-        runner.predict(peak_path, output)
+        runner.predict(peak_path, str(output))
 
     logger.info("DONE!")
 
@@ -328,7 +331,7 @@ def setup_model(
     config: Optional[str],
     output: Optional[Path],
     is_train: bool,
-) -> Config:
+) -> Tuple[Config, str]:
     """Setup Casanovo for most commands.
 
     Parameters
@@ -347,6 +350,8 @@ def setup_model(
     ------
     config : Config
         The parsed configuration
+    model : str
+        The name of the model weights.
     """
     # Read parameters from the config file.
     config = Config(config)
