@@ -66,9 +66,9 @@ class _SharedParams(click.RichCommand):
             click.Option(
                 ("-o", "--output"),
                 help="The root file name to which results (i.e. the mzTab file "
-                     "during sequencing, as well as the log file during all "
-                     "modes) will be written. If not specified, a default "
-                     "timestamped file name will be used.",
+                "during sequencing, as well as the log file during all modes) "
+                "will be written. If not specified, a default timestamped file "
+                "name will be used.",
                 type=click.Path(dir_okay=False),
             ),
             click.Option(
