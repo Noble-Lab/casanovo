@@ -99,8 +99,6 @@ train_batch_size: 32
 max_epochs: 30
 # Number of validation steps to run before training begins
 num_sanity_val_steps: 0
-# Set to "False" to further train a pre-trained Casanovo model
-train_from_scratch: True
 # Calculate peptide and amino acid precision during training. this
 # is expensive, so we recommend against it.
 calculate_precision: False

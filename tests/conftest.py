@@ -222,7 +222,6 @@ def tiny_config(tmp_path):
         "weight_decay": 1e-5,
         "train_batch_size": 32,
         "num_sanity_val_steps": 0,
-        "train_from_scratch": True,
         "calculate_precision": False,
         "residues": {
             "G": 57.021464,
