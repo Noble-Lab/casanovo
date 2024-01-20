@@ -32,6 +32,7 @@ dependencies = [
     "requests",
     "rich-click>=1.6.1",
     "scikit-learn",
+    "scipy",
     "spectrum_utils",
     "tensorboard",
     "torch>=2.1",

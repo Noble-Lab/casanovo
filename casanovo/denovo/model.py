@@ -6,6 +6,7 @@ from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
 
 import depthcharge.masses
 import einops
+import scipy.stats.mstats
 import torch
 import numpy as np
 import lightning.pytorch as pl
@@ -1032,8 +1033,11 @@ def _aa_pep_score(
     Calculate amino acid and peptide-level confidence score from the raw amino
     acid scores.
 
-    The peptide score is the mean of the raw amino acid scores. The amino acid
-    scores are the mean of the raw amino acid scores and the peptide score.
+    The peptide score is the geometric mean of the raw amino acid scores.
+    Peptide scores that don't fit the precursor m/z tolerance are penalized by
+    subtracting 1.
+    The amino acid scores are the arithmetic mean of the raw amino acid scores
+    and the peptide score.
 
     Parameters
     ----------
@@ -1049,7 +1053,7 @@ def _aa_pep_score(
     peptide_score : float
         The peptide score.
     """
-    peptide_score = np.mean(aa_scores)
+    peptide_score = scipy.stats.mstats.gmean(aa_scores)
     aa_scores = (aa_scores + peptide_score) / 2
     if not fits_precursor_mz:
         peptide_score -= 1
