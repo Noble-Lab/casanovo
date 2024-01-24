@@ -70,7 +70,7 @@ class Config:
         val_check_interval=int,
         calculate_precision=bool,
         accelerator=str,
-        devices=int,
+        devices=(int, list),
     )
 
     def __init__(self, config_file: Optional[str] = None):
@@ -129,6 +129,11 @@ class Config:
                     str(aa): float(mass) for aa, mass in param_val.items()
                 }
                 self._params["residues"] = residues
+            elif param == "devices":
+                if not isinstance(param_val, param_type):
+                    raise TypeError("Devices must be either list or str")
+                else:
+                    self._params[param] = param_val
             elif param_val is not None:
                 self._params[param] = param_type(param_val)
         except (TypeError, ValueError) as err:
