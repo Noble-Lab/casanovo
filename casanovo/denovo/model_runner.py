@@ -307,9 +307,9 @@ class ModelRunner:
         self,
         train_index: Optional[AnnotatedSpectrumIndex] = None,
         valid_index: Optional[AnnotatedSpectrumIndex] = None,
-        test_index: (
-            Optional[Union[AnnotatedSpectrumIndex, SpectrumIndex]]
-        ) = None,
+        test_index: Optional[
+            Union[AnnotatedSpectrumIndex, SpectrumIndex]
+        ] = None,
     ) -> None:
         """Initialize the data module
 
