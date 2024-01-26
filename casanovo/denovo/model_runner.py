@@ -1,5 +1,6 @@
 """Training and testing functionality for the de novo peptide sequencing
 model."""
+
 import glob
 import logging
 import os

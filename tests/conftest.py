@@ -1,4 +1,5 @@
 """Fixtures used for testing."""
+
 import numpy as np
 import psims
 import pytest

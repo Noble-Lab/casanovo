@@ -1,4 +1,5 @@
 """Parse the YAML configuration."""
+
 import logging
 import shutil
 from pathlib import Path
