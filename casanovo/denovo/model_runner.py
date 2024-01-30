@@ -257,10 +257,18 @@ class ModelRunner:
             self.model_filename is None,
         )
 
-        if train and (not self.config.train_from_scratch) and (self.model_filename is None):
-            logger.error("Training with `train_from_scratch: False` requires an input `--model`.")
-            raise ValueError("Training with `train_from_scratch: False` requires an input `--model`.")
-        
+        if (
+            train
+            and (not self.config.train_from_scratch)
+            and (self.model_filename is None)
+        ):
+            logger.error(
+                "Training with `train_from_scratch: False` requires an input `--model`."
+            )
+            raise ValueError(
+                "Training with `train_from_scratch: False` requires an input `--model`."
+            )
+
         if train and any(from_scratch):
             self.model = Spec2Pep(**model_params)
             return
