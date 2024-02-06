@@ -97,6 +97,9 @@ To compile this dataset yourself, on the [MassIVE website](https://massive.ucsd.
 This will give you a zipped TSV file with the metadata and peptide identifications for all 30 million PSMs.
 Using the filename (column "filename") you can then retrieve the corresponding peak files from the MassIVE FTP server and extract the desired spectra using their scan number (column "scan").
 
+The _non-enzymatic dataset_,used to train a non-tryptic version of Casanovo, was created by selecting PSMs with a uniform distribution of amino acids at the C-terminal peptide positions from two datasets: MassIVE-KB and PROSPECT.
+Training, validation and test splits for the non-enzymatic dataset are available as annotated MGF files [on MassIVE](https://doi.org/doi:10.25345/C5KS6JG0W).
+
 **How do I know which model to use after training Casanovo?**
 
 By default, Casanovo saves a snapshot of the model weights after every 50,000 training steps.
