@@ -616,10 +616,14 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         ).clone()
         # Mask out the index '0', i.e. padding token, by default.
         finished_mask[:, :beam] = True
+        # Reverse the mask zero out finished beams when applied.
+        finished_mask = (~finished_mask).float()
+        # Set non-zero value for index '0' to get only padding after stop token.
+        finished_mask[:, :beam] = 1e-8
 
         # Figure out the top K decodings.
         _, top_idx = torch.topk(
-            step_scores.nanmean(dim=1) * (~finished_mask).float(), beam
+            step_scores.nanmean(dim=1) * finished_mask.float(), beam
         )
         v_idx, s_idx = np.unravel_index(top_idx.cpu(), (vocab, beam))
         s_idx = einops.rearrange(s_idx, "B S -> (B S)")
