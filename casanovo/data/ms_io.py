@@ -1,4 +1,5 @@
 """Mass spectrometry file type input/output operations."""
+
 import collections
 import csv
 import operator
