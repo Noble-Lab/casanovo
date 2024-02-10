@@ -606,20 +606,17 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
             scores[:, step, :, :], "B V S -> B (V S)"
         )
 
-        # Mask out terminated beams. Include precursor m/z tolerance induced
-        # termination.
-        finished_mask = finished_beams.reshape(batch, beam).repeat(1, vocab)
+        # Find all still active beams by masking out terminated beams.
+        active_mask = (
+            ~finished_beams.reshape(batch, beam).repeat(1, vocab)
+        ).float()
         # Mask out the index '0', i.e. padding token, by default.
-        finished_mask[:, :beam] = True
-        # Reverse the mask and zero out finished beams when applied.
-        finished_mask = (~finished_mask).float()
-        # Set non-zero value for index '0' to get only padding after stop token.
-        finished_mask[:, :beam] = 1e-8
+        # Set this to a very small, yet non-zero value, to only get padding
+        # after stop token.
+        active_mask[:, :beam] = 1e-8
 
         # Figure out the top K decodings.
-        _, top_idx = torch.topk(
-            step_scores.nanmean(dim=1) * finished_mask.float(), beam
-        )
+        _, top_idx = torch.topk(step_scores.nanmean(dim=1) * active_mask, beam)
         v_idx, s_idx = np.unravel_index(top_idx.cpu(), (vocab, beam))
         s_idx = einops.rearrange(s_idx, "B S -> (B S)")
         b_idx = einops.repeat(torch.arange(batch), "B -> (B S)", S=beam)
