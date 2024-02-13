@@ -612,8 +612,8 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
             ~finished_beams.reshape(batch, beam).repeat(1, vocab)
         ).float()
         # Mask out the index '0', i.e. padding token, by default.
-        # Set this to a very small, yet non-zero value, to only get padding
-        # after stop token.
+        # FIXME: Set this to a very small, yet non-zero value, to only
+        # get padding after stop token.
         active_mask[:, :beam] = 1e-8
 
         # Figure out the top K decodings.
