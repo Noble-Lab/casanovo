@@ -1,4 +1,5 @@
 """Package version information."""
+
 from typing import Optional
 
 

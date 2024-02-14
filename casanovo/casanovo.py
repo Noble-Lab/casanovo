@@ -1,4 +1,5 @@
 """The command line entry point for Casanovo."""
+
 import datetime
 import functools
 import logging

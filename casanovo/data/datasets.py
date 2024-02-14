@@ -1,4 +1,5 @@
 """A PyTorch Dataset class for annotated spectra."""
+
 from typing import Optional, Tuple
 
 import depthcharge
