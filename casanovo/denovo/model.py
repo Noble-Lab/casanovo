@@ -1,4 +1,5 @@
 """A de novo peptide sequencing model."""
+
 import collections
 import heapq
 import logging
