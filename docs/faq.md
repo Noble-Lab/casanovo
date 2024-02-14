@@ -132,6 +132,17 @@ To include new PTMs in Casanovo, you need to:
 It is unfortunately not possible to finetune a pre-trained Casanovo model to add new types of PTMs.
 Instead, such a model must be trained from scratch.
 
+**How can I change the learning rate schedule used during training?**
+
+By default, Casanovo uses a learning rate schedule that combines linear warm up followed by a cosine wave shaped decay (as implemented in `CosineWarmupScheduler` in `casanovo/denovo/model.py`) during training.
+To use a different learning rate schedule, you can specify an alternative learning rate scheduler as follows (in the `lr_scheduler` variable in function `Spec2Pep.configure_optimizers` in `casanovo/denovo/model.py`):
+
+```
+lr_scheduler = torch.optim.lr_scheduler.LinearLR(optimizer, total_iters=self.warmup_iters)
+```
+
+You can use any of the scheduler classes available in [`torch.optim.lr_scheduler`](https://pytorch.org/docs/stable/optim.html#how-to-adjust-learning-rate) or implement your custom learning rate schedule similar to `CosineWarmupScheduler`.
+
 ## Miscellaneous
 
 **How can I generate a precision–coverage curve?**
