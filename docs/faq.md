@@ -134,10 +134,12 @@ Instead, such a model must be trained from scratch.
 
 **How can I change the learning rate schedule used during training?**
 
-By default, Casanovo uses a learning rate schedule that combines linear warm up followd by a cosine wave shaped decay as implemented in [`CosineWarmupScheduler`](https://github.com/Noble-Lab/casanovo/blob/c3d2bbac7cc2550c524e04accde4765cdf850bd4/casanovo/denovo/model.py#L972C7-L972C28) during training.
-To use a different learning rate schedule, the only thing you need to do is to set the [`lr_scheduler`](https://github.com/Noble-Lab/casanovo/blob/c3d2bbac7cc2550c524e04accde4765cdf850bd4/casanovo/denovo/model.py#L966) variable in the `model.py` file to the learning rate scheduler you wish to use, for example:
+By default, Casanovo uses a learning rate schedule that combines linear warm up followed by a cosine wave shaped decay (as implemented in `CosineWarmupScheduler` in `casanovo/denovo/model.py`) during training.
+To use a different learning rate schedule, you can specify an alternative learning rate scheduler as follows (in the `lr_scheduler` variable in function `Spec2Pep.configure_optimizers` in `casanovo/denovo/model.py`):
 
-`lr_scheduler = torch.optim.lr_scheduler.LinearLR(optimizer, total_iters=self.warmup_iters)`
+```
+lr_scheduler = torch.optim.lr_scheduler.LinearLR(optimizer, total_iters=self.warmup_iters)
+```
 
 You can use any of the scheduler classes available in [`torch.optim.lr_scheduler`](https://pytorch.org/docs/stable/optim.html#how-to-adjust-learning-rate) or implement your custom learning rate schedule similar to `CosineWarmupScheduler`.
                
