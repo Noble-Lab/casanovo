@@ -1,5 +1,7 @@
 # Frequently Asked Questions
 
+## Running Casanovo
+
 **I installed Casanovo and it worked before, but I after reopening Anaconda it says that Casanovo is not installed.**
 
 Make sure you are in the `casanovo_env` environment. You can ensure this by typing:
@@ -27,6 +29,8 @@ However, the GitHub API is limited to maximum 60 requests per hour per IP addres
 Consequently, if Casanovo has been executed multiple times already, it might temporarily not be able to communicate with GitHub.
 You can avoid this error by explicitly specifying the model file using the `--model` parameter.
 
+## GPU Troubleshooting
+
 **Casanovo is very slow even when running on the GPU. How can I speed it up?**
 
 It is highly recommended to run Casanovo on the GPU to get the maximum performance.
@@ -52,6 +56,22 @@ This means that there was not enough (free) memory available on your GPU to run 
 We recommend trying to decrease the `train_batch_size` or `predict_batch_size` options in the [config file](https://github.com/Noble-Lab/casanovo/blob/main/casanovo/config.yaml) (depending on whether the error occurred during `train` or `denovo` mode) to reduce the number of spectra that are processed simultaneously.
 Additionally, we recommend shutting down any other processes that may be running on the GPU, so that Casanovo can exclusively use the GPU.
 
+**How can I run Casanovo on a specific GPU device?**
+
+You can control which GPU(s) Casanovo uses by setting the `devices` option in the [configuration file](https://github.com/Noble-Lab/casanovo/blob/main/casanovo/config.yaml).
+Analogously, this setting also controls the number of cores to use when running on a CPU only (which can be specified using the `accelerator` option).
+
+By default, Casanovo will automatically try to use the maximum number of devices available.
+I.e., if your system has multiple GPUs, Casanovo will utilize all of those for maximum efficiency.
+Alternatively, you can select a specific GPU by specifying the GPU number as the value for `devices`.
+For example, if you have a four-GPU system, when specifying `devices: 1` in your config file Casanovo will only use the GPU with identifier `1`.
+
+The config file functionality only allows specifying a single GPU, by setting its id under `devices`, or all GPUs, by setting `devices: -1`.
+If you want more fine-grained control to use some but not all GPUs on a multi-GPU system, the `CUDA_VISIBLE_DEVICES` environment variable can be used instead.
+For example, by setting `CUDA_VISIBLE_DEVICES=1,3`, only GPUs `1` and `3` will be visible to Casanovo, and specifying `devices: -1` will allow it to utilize both of these.
+
+Note that when using `CUDA_VISIBLE_DEVICES`, the GPU numbers (potentially to be specified under `devices`) are reset to consecutively increase from `0`.
+
 **I see "NotImplementedError: The operator 'aten::index.Tensor'..." when using a Mac with an Apple Silicon chip.**
 
 Casanovo can leverage Apple's Metal Performance Shaders (MPS) on newer Mac computers, which requires that the `PYTORCH_ENABLE_MPS_FALLBACK` is set to `1`:
@@ -62,9 +82,11 @@ export PYTORCH_ENABLE_MPS_FALLBACK=1
 
 This will need to be set with each new shell session, or you can add it to your `.bashrc` / `.zshrc` to set this environment variable by default.
 
+## Training Casanovo
+
 **Where can I find the data that Casanovo was trained on?**
 
-The [Casanovo results reported ](https://doi.org/10.1101/2023.01.03.522621) were obtained by training on two different datasets: (i) a commonly used nine-species benchmark dataset, and (ii) a large-scale training dataset derived from the MassIVE Knowledge Base (MassIVE-KB).
+The [Casanovo results reported](https://doi.org/10.1101/2023.01.03.522621) were obtained by training on two different datasets: (i) a commonly used nine-species benchmark dataset, and (ii) a large-scale training dataset derived from the MassIVE Knowledge Base (MassIVE-KB).
 
 All data for the _nine-species benchmark_ is available as annotated MGF files [on MassIVE](https://doi.org/doi:10.25345/C52V2CK8J).
 Using these data, Casanovo was trained in a cross-validated fashion, training on eight species and testing on the remaining species.
@@ -74,6 +96,9 @@ These PSMs were obtained by collecting up to the top 100 PSMs for each of the pr
 To compile this dataset yourself, on the [MassIVE website](https://massive.ucsd.edu/ProteoSAFe/static/massive.jsp), go to [MassIVE Knowledge Base](https://massive.ucsd.edu/ProteoSAFe/static/massive-kb-libraries.jsp) > [Human HCD Spectral Library](https://massive.ucsd.edu/ProteoSAFe/status.jsp?task=82c0124b6053407fa41ba98f53fd8d89) > [All Candidate library spectra](https://massive.ucsd.edu/ProteoSAFe/result.jsp?task=82c0124b6053407fa41ba98f53fd8d89&view=candidate_library_spectra) > Download.
 This will give you a zipped TSV file with the metadata and peptide identifications for all 30 million PSMs.
 Using the filename (column "filename") you can then retrieve the corresponding peak files from the MassIVE FTP server and extract the desired spectra using their scan number (column "scan").
+
+The _non-enzymatic dataset_, used to train a non-tryptic version of Casanovo, was created by selecting PSMs with a uniform distribution of amino acids at the C-terminal peptide positions from two datasets: MassIVE-KB and PROSPECT.
+Training, validation, and test splits for the non-enzymatic dataset are available as annotated MGF files [on MassIVE](https://doi.org/doi:10.25345/C5KS6JG0W).
 
 **How do I know which model to use after training Casanovo?**
 
@@ -106,6 +131,19 @@ To include new PTMs in Casanovo, you need to:
 
 It is unfortunately not possible to finetune a pre-trained Casanovo model to add new types of PTMs.
 Instead, such a model must be trained from scratch.
+
+**How can I change the learning rate schedule used during training?**
+
+By default, Casanovo uses a learning rate schedule that combines linear warm up followed by a cosine wave shaped decay (as implemented in `CosineWarmupScheduler` in `casanovo/denovo/model.py`) during training.
+To use a different learning rate schedule, you can specify an alternative learning rate scheduler as follows (in the `lr_scheduler` variable in function `Spec2Pep.configure_optimizers` in `casanovo/denovo/model.py`):
+
+```
+lr_scheduler = torch.optim.lr_scheduler.LinearLR(optimizer, total_iters=self.warmup_iters)
+```
+
+You can use any of the scheduler classes available in [`torch.optim.lr_scheduler`](https://pytorch.org/docs/stable/optim.html#how-to-adjust-learning-rate) or implement your custom learning rate schedule similar to `CosineWarmupScheduler`.
+
+## Miscellaneous
 
 **How can I generate a precision–coverage curve?**
 

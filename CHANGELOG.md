@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+## [4.1.0] - 2024-02-16
+
 ### Changed
 
 - Instead of having to specify `train_from_scratch` in the config file, training will proceed from an existing model weights file if this is given as an argument to `casanovo train`.
@@ -13,6 +15,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ### Fixed
 
 - Fixed beam search decoding error due to non-deterministic selection of beams with equal scores.
+
+## [4.0.1] - 2023-12-25
+
+### Fixed
+
+- Fix automatic PyPI upload.
 
 ## [4.0.0] - 2023-12-22
 
@@ -225,7 +233,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 - Initial Casanovo version.
 
-[Unreleased]: https://github.com/Noble-Lab/casanovo/compare/v4.0.0...HEAD
+[Unreleased]: https://github.com/Noble-Lab/casanovo/compare/v4.1.0...HEAD
+[4.1.0]: https://github.com/Noble-Lab/casanovo/compare/v4.0.1...v4.1.0
+[4.0.1]: https://github.com/Noble-Lab/casanovo/compare/v4.0.0...v4.0.1
 [4.0.0]: https://github.com/Noble-Lab/casanovo/compare/v3.5.0...v4.0.0
 [3.5.0]: https://github.com/Noble-Lab/casanovo/compare/v3.4.0...v3.5.0
 [3.4.0]: https://github.com/Noble-Lab/casanovo/compare/v3.3.0...v3.4.0
