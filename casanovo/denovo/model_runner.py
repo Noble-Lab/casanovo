@@ -252,16 +252,16 @@ class ModelRunner:
             calculate_precision=self.config.calculate_precision,
         )
 
-        from_scratch = (
-            self.config.train_from_scratch,
-            self.model_filename is None,
-        )
-        if train and any(from_scratch):
-            self.model = Spec2Pep(**model_params)
-            return
-        elif self.model_filename is None:
-            logger.error("A model file must be provided")
-            raise ValueError("A model file must be provided")
+        if self.model_filename is None:
+            # Train a model from scratch if no model file is provided.
+            if train:
+                self.model = Spec2Pep(**model_params)
+                return
+            # Else we're not training, so a model file must be provided.
+            else:
+                logger.error("A model file must be provided")
+                raise ValueError("A model file must be provided")
+        # Else a model file is provided (to continue training or for inference).
 
         if not Path(self.model_filename).exists():
             logger.error(

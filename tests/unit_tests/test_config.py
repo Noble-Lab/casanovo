@@ -1,4 +1,4 @@
-"""Test configuration loading."""
+"""Test configuration loading"""
 
 import pytest
 import yaml
