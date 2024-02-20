@@ -99,6 +99,28 @@ def test_save_and_load_weights(tmp_path, mgf_small, tiny_config):
         runner.evaluate([mgf_small])
 
 
+def test_save_and_load_weights_deprecated(tmp_path, mgf_small, tiny_config):
+    """Test saving and loading weights with deprecated config options."""
+    config = Config(tiny_config)
+    config.max_epochs = 1
+    config.cosine_schedule_period_iters = 5
+    ckpt = tmp_path / "test.ckpt"
+
+    with ModelRunner(config=config) as runner:
+        runner.train([mgf_small], [mgf_small])
+        runner.trainer.save_checkpoint(ckpt)
+
+    # Replace the new config option with the deprecated one.
+    ckpt_data = torch.load(ckpt)
+    ckpt_data["hyper_parameters"]["max_iters"] = 5
+    del ckpt_data["hyper_parameters"]["cosine_schedule_period_iters"]
+    torch.save(ckpt_data, str(tmp_path / "test.ckpt"))
+
+    with ModelRunner(config=config, model_filename=str(ckpt)) as runner:
+        runner.initialize_model(train=False)
+        assert runner.model.cosine_schedule_period_iters == 5
+
+
 def test_calculate_precision(tmp_path, mgf_small, tiny_config):
     """Test that this parameter is working correctly."""
     config = Config(tiny_config)
