@@ -980,7 +980,8 @@ class CosineWarmupScheduler(torch.optim.lr_scheduler._LRScheduler):
     """
 
     def __init__(
-        self, optimizer: torch.optim.Optimizer,
+        self,
+        optimizer: torch.optim.Optimizer,
         warmup_iters: int,
         cosine_schedule_period_iters: int,
     ):
@@ -993,7 +994,9 @@ class CosineWarmupScheduler(torch.optim.lr_scheduler._LRScheduler):
         return [base_lr * lr_factor for base_lr in self.base_lrs]
 
     def get_lr_factor(self, epoch):
-        lr_factor = 0.5 * (1 + np.cos(np.pi * epoch / self.cosine_schedule_period_iters))
+        lr_factor = 0.5 * (
+            1 + np.cos(np.pi * epoch / self.cosine_schedule_period_iters)
+        )
         if epoch <= self.warmup_iters:
             lr_factor *= epoch / self.warmup_iters
         return lr_factor
