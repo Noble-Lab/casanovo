@@ -2,6 +2,7 @@
 
 import logging
 import shutil
+import warnings
 from pathlib import Path
 from typing import Optional, Dict, Callable, Tuple, Union
 
@@ -33,6 +34,11 @@ class Config:
     """
 
     _default_config = Path(__file__).parent / "config.yaml"
+    # FIXME: This contains deprecated config options to be removed in the next
+    #  major version update.
+    _config_deprecated_remap = dict(
+        max_iters="cosine_schedule_period_iters",
+    )
     _config_types = dict(
         random_seed=int,
         n_peaks=int,
@@ -56,7 +62,7 @@ class Config:
         tb_summarywriter=str,
         train_label_smoothing=float,
         warmup_iters=int,
-        max_iters=int,
+        cosine_schedule_period_iters=int,
         learning_rate=float,
         weight_decay=float,
         train_batch_size=int,
@@ -84,9 +90,22 @@ class Config:
         else:
             with Path(config_file).open() as f_in:
                 self._user_config = yaml.safe_load(f_in)
+                # Remap deprecated config entries.
+                for old, new in self._config_deprecated_remap.items():
+                    if old in self._user_config:
+                        self._user_config[new] = self._user_config.pop(old)
+                        warnings.warn(
+                            f"Deprecated config option '{old}' remapped to "
+                            f"'{new}'",
+                            DeprecationWarning,
+                        )
                 # Check for missing entries in config file.
                 config_missing = self._params.keys() - self._user_config.keys()
                 if len(config_missing) > 0:
+                    logger.error(
+                        "Missing expected config option(s): "
+                        f"{', '.join(config_missing)}"
+                    )
                     raise KeyError(
                         "Missing expected config option(s): "
                         f"{', '.join(config_missing)}"
@@ -94,6 +113,10 @@ class Config:
                 # Check for unrecognized config file entries.
                 config_unknown = self._user_config.keys() - self._params.keys()
                 if len(config_unknown) > 0:
+                    logger.error(
+                        "Unrecognized config option(s): "
+                        f"{', '.join(config_unknown)}"
+                    )
                     raise KeyError(
                         "Unrecognized config option(s): "
                         f"{', '.join(config_unknown)}"
