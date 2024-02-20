@@ -37,3 +37,15 @@ def test_override(tmp_path, tiny_config):
 
     with pytest.raises(KeyError):
         Config(filename)
+
+
+def test_deprecated(tmp_path, tiny_config):
+    filename = str(tmp_path / "config_deprecated.yml")
+    with open(tiny_config, "r") as f_in, open(filename, "w") as f_out:
+        cfg = yaml.safe_load(f_in)
+        # Insert deprecated config option.
+        cfg["max_iters"] = 1
+        yaml.safe_dump(cfg, f_out)
+
+    with pytest.warns(DeprecationWarning):
+        Config(filename)
