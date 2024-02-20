@@ -102,10 +102,6 @@ class Config:
                 # Check for missing entries in config file.
                 config_missing = self._params.keys() - self._user_config.keys()
                 if len(config_missing) > 0:
-                    logger.error(
-                        "Missing expected config option(s): "
-                        f"{', '.join(config_missing)}"
-                    )
                     raise KeyError(
                         "Missing expected config option(s): "
                         f"{', '.join(config_missing)}"
@@ -113,10 +109,6 @@ class Config:
                 # Check for unrecognized config file entries.
                 config_unknown = self._user_config.keys() - self._params.keys()
                 if len(config_unknown) > 0:
-                    logger.error(
-                        "Unrecognized config option(s): "
-                        f"{', '.join(config_unknown)}"
-                    )
                     raise KeyError(
                         "Unrecognized config option(s): "
                         f"{', '.join(config_unknown)}"
