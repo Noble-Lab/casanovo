@@ -114,7 +114,7 @@ def test_save_and_load_weights_deprecated(tmp_path, mgf_small, tiny_config):
     ckpt_data = torch.load(ckpt)
     ckpt_data["hyper_parameters"]["max_iters"] = 5
     del ckpt_data["hyper_parameters"]["cosine_schedule_period_iters"]
-    torch.save(ckpt_data, str(tmp_path / "test.ckpt"))
+    torch.save(ckpt_data, str(ckpt))
 
     with ModelRunner(config=config, model_filename=str(ckpt)) as runner:
         runner.initialize_model(train=False)
