@@ -82,7 +82,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
     warmup_iters : int
         The number of iterations for the linear warm-up of the learning rate.
     cosine_schedule_period_iters : int
-        The number of iterations for the cosine period of the learning rate.
+        The number of iterations for the cosine half period of the learning rate.
     out_writer : Optional[str]
         The output writer for the prediction results.
     calculate_precision : bool
@@ -987,7 +987,7 @@ class CosineWarmupScheduler(torch.optim.lr_scheduler._LRScheduler):
     warmup_iters : int
         The number of iterations for the linear warm-up of the learning rate.
     cosine_schedule_period_iters : int
-        The number of iterations for the cosine period of the learning rate.
+        The number of iterations for the cosine half period of the learning rate.
     """
 
     def __init__(

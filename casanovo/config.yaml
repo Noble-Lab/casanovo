@@ -82,7 +82,7 @@ dim_intensity:
 max_length: 100
 # The number of iterations for the linear warm-up of the learning rate.
 warmup_iters: 100_000
-# The number of iterations for the cosine period of the learning rate.
+# The number of iterations for the cosine half period of the learning rate.
 cosine_schedule_period_iters: 600_000
 # Learning rate for weight updates during training.
 learning_rate: 5e-4
