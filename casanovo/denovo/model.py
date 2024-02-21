@@ -18,6 +18,8 @@ from ..data import ms_io
 
 logger = logging.getLogger("casanovo")
 
+_kwargs_deprecated = ["max_iters"]
+
 
 class Spec2Pep(pl.LightningModule, ModelMixin):
     """
@@ -145,6 +147,10 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         # Optimizer settings.
         self.warmup_iters = warmup_iters
         self.cosine_schedule_period_iters = cosine_schedule_period_iters
+        # `kwargs` will contain additional arguments as well as unrecognized
+        # arguments, including deprecated ones. Remove the deprecated ones.
+        for k in _kwargs_deprecated:
+            kwargs.pop(k, None)
         self.opt_kwargs = kwargs
 
         # Data properties.

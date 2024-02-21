@@ -204,8 +204,8 @@ class ModelRunner:
         Parameters
         ----------
         train : bool
-            Determines whether to set the model up for model training
-            or evaluation / inference.
+            Determines whether to set the model up for model training or
+            evaluation / inference.
         """
         model_params = dict(
             dim_model=self.config.dim_model,
@@ -233,7 +233,7 @@ class ModelRunner:
             calculate_precision=self.config.calculate_precision,
         )
 
-        # Reconfigurable non-architecture related parameters for a loaded model
+        # Reconfigurable non-architecture related parameters for a loaded model.
         loaded_model_params = dict(
             max_length=self.config.max_length,
             precursor_mass_tol=self.config.precursor_mass_tol,
@@ -300,7 +300,7 @@ class ModelRunner:
             except RuntimeError:
                 raise RuntimeError(
                     "Weights file incompatible with the current version of "
-                    "Casanovo. "
+                    "Casanovo."
                 )
 
     def initialize_data_module(
