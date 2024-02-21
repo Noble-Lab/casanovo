@@ -116,9 +116,13 @@ def test_save_and_load_weights_deprecated(tmp_path, mgf_small, tiny_config):
     del ckpt_data["hyper_parameters"]["cosine_schedule_period_iters"]
     torch.save(ckpt_data, str(ckpt))
 
+    # Inference.
     with ModelRunner(config=config, model_filename=str(ckpt)) as runner:
         runner.initialize_model(train=False)
         assert runner.model.cosine_schedule_period_iters == 5
+    # Fine-tuning.
+    with ModelRunner(config=config, model_filename=str(ckpt)) as runner:
+        runner.train([mgf_small], [mgf_small])
 
 
 def test_calculate_precision(tmp_path, mgf_small, tiny_config):
