@@ -3,6 +3,7 @@
 import collections
 import heapq
 import logging
+import warnings
 from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
 
 import depthcharge.masses
@@ -151,6 +152,10 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         # arguments, including deprecated ones. Remove the deprecated ones.
         for k in _kwargs_deprecated:
             kwargs.pop(k, None)
+            warnings.warn(
+                f"Deprecated hyperparameter '{k}' removed from the model.",
+                DeprecationWarning,
+            )
         self.opt_kwargs = kwargs
 
         # Data properties.
