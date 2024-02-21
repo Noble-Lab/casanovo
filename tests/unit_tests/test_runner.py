@@ -124,6 +124,7 @@ def test_save_and_load_weights_deprecated(tmp_path, mgf_small, tiny_config):
     with ModelRunner(config=config, model_filename=str(ckpt)) as runner:
         with pytest.warns(DeprecationWarning):
             runner.train([mgf_small], [mgf_small])
+            assert "max_iters" not in runner.model.opt_kwargs
 
 
 def test_calculate_precision(tmp_path, mgf_small, tiny_config):
