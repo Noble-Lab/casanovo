@@ -13,6 +13,13 @@ from . import utils
 logger = logging.getLogger("casanovo")
 
 
+# FIXME: This contains deprecated config options to be removed in the next major
+#  version update.
+_config_deprecated = dict(
+    max_iters="cosine_schedule_period_iters",
+)
+
+
 class Config:
     """The Casanovo configuration options.
 
@@ -34,11 +41,6 @@ class Config:
     """
 
     _default_config = Path(__file__).parent / "config.yaml"
-    # FIXME: This contains deprecated config options to be removed in the next
-    #  major version update.
-    _config_deprecated_remap = dict(
-        max_iters="cosine_schedule_period_iters",
-    )
     _config_types = dict(
         random_seed=int,
         n_peaks=int,
@@ -91,7 +93,7 @@ class Config:
             with Path(config_file).open() as f_in:
                 self._user_config = yaml.safe_load(f_in)
                 # Remap deprecated config entries.
-                for old, new in self._config_deprecated_remap.items():
+                for old, new in _config_deprecated.items():
                     if old in self._user_config:
                         self._user_config[new] = self._user_config.pop(old)
                         warnings.warn(

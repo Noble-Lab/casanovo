@@ -15,11 +15,10 @@ from torch.utils.tensorboard import SummaryWriter
 from depthcharge.components import ModelMixin, PeptideDecoder, SpectrumEncoder
 
 from . import evaluate
+from .. import config
 from ..data import ms_io
 
 logger = logging.getLogger("casanovo")
-
-_kwargs_deprecated = ["max_iters"]
 
 
 class Spec2Pep(pl.LightningModule, ModelMixin):
@@ -150,7 +149,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         self.cosine_schedule_period_iters = cosine_schedule_period_iters
         # `kwargs` will contain additional arguments as well as unrecognized
         # arguments, including deprecated ones. Remove the deprecated ones.
-        for k in _kwargs_deprecated:
+        for k in config._config_deprecated:
             kwargs.pop(k, None)
             warnings.warn(
                 f"Deprecated hyperparameter '{k}' removed from the model.",
