@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+### Added
+
+- A deprecation warning will be issued when depecrated config options are used in the config file or in the model weights file.
+
+### Changed
+
+- Config option `max_iters` has been renamed to `cosine_schedule_period_iters` to better reflect that it controls the number of iterations for the cosine half period of the learning rate.
+
 ## [4.1.0] - 2024-02-16
 
 ### Changed
