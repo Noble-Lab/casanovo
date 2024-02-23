@@ -145,6 +145,10 @@ You can use any of the scheduler classes available in [`torch.optim.lr_scheduler
 
 ## Miscellaneous
 
+**Where can I find Casanovo model weights trained on the nine-species benchmark?**
+
+You can find the Casanovo weights from 9-species benchmark training [here](https://doi.org/10.5281/zenodo.10694984) on Zenodo, each set of weights are trained and validated on 8 species using the default configurations, with the remaining species held out for testing. You can use these weights with Casanovo v4.x.x.
+
 **How can I generate a precision–coverage curve?**
 
 You can evaluate a trained Casanovo model compared to ground-truth peptide labels using a precision–coverage curve.
