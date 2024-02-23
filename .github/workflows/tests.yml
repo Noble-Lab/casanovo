@@ -39,8 +39,9 @@ jobs:
         # exit-zero treats all errors as warnings. The GitHub editor is 127 chars wide
         flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
     - name: Run unit and system tests
-      run: |
-        pytest --cov=casanovo tests/
+      run: pytest --cov=casanovo tests/
+      env:
+        PYTORCH_MPS_HIGH_WATERMARK_RATIO: 0.0
     - name: Upload coverage to codecov
       uses: codecov/codecov-action@v3
       with:
