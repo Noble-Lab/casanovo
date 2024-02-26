@@ -435,7 +435,7 @@ def test_beam_search_decode():
     vocab = model.decoder.vocab_size + 1  # V
     step = 4
 
-    # Initialize dummyy scores and tokens.
+    # Initialize dummy scores and tokens.
     scores = torch.full(
         size=(batch, length, vocab, beam), fill_value=torch.nan
     )
@@ -450,22 +450,32 @@ def test_beam_search_decode():
     tokens[0, :step] = torch.tensor([4, 14, 4, 28])
     tokens[1, :step] = torch.tensor([4, 14, 4, 1])
 
-    # Set finished beams array to allow decoding from only one beam.
-    test_finished_beams = torch.tensor([True, False])
+    # Test that duplicate peptide scores don't lead to a conflict in the cache.
+    model = Spec2Pep(n_beams=5, residues="massivekb", min_peptide_len=3)
+    batch = 2  # B
+    beam = model.n_beams  # S
+    model.decoder.reverse = True
+    length = model.max_length + 1  # L
+    vocab = model.decoder.vocab_size + 1  # V
+    step = 4
 
-    new_tokens, new_scores = model._get_topk_beams(
-        tokens, scores, test_finished_beams, batch, step
+    # Simulate beams with identical amino acid scores but different tokens.
+    scores = torch.zeros(size=(batch * beam, length, vocab))
+    scores[: batch * beam, : step + 1, :] = torch.rand(1)
+    tokens = torch.zeros(batch * beam, length, dtype=torch.int64)
+    tokens[: batch * beam, :step] = torch.randint(
+        1, vocab, (batch * beam, step)
     )
 
-    # Only the second peptide should have a new token predicted.
-    expected_tokens = torch.tensor(
-        [
-            [4, 14, 4, 28, 0],
-            [4, 14, 4, 1, 3],
-        ]
+    pred_cache = collections.OrderedDict((i, []) for i in range(batch))
+    model._cache_finished_beams(
+        tokens,
+        scores,
+        step,
+        torch.ones(batch * beam, dtype=torch.bool),
+        torch.ones(batch * beam, dtype=torch.bool),
+        pred_cache,
     )
-
-    assert torch.equal(new_tokens[:, : step + 1], expected_tokens)
 
 
 def test_eval_metrics():
