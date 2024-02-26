@@ -14,6 +14,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 - Config option `max_iters` has been renamed to `cosine_schedule_period_iters` to better reflect that it controls the number of iterations for the cosine half period of the learning rate.
 
+### Fixed
+
+- Fix beam search caching failure when multiple beams have an equal predicted peptide score by breaking ties randomly.
+
 ## [4.1.0] - 2024-02-16
 
 ### Changed
