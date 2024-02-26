@@ -203,7 +203,7 @@ def test_beam_search_decode():
     )
     # Verify that the correct peptides have been cached.
     correct_cached = 0
-    for _, _, pep in pred_cache[0]:
+    for _, _, _, pep in pred_cache[0]:
         if torch.equal(pep, torch.tensor([4, 14, 4, 13])):
             correct_cached += 1
         elif torch.equal(pep, torch.tensor([4, 14, 4, 18])):
@@ -220,13 +220,13 @@ def test_beam_search_decode():
     # Return the candidate peptide with the highest score
     test_cache = collections.OrderedDict((i, []) for i in range(batch))
     heapq.heappush(
-        test_cache[0], (0.93, 4 * [0.93], torch.tensor([4, 14, 4, 19]))
+        test_cache[0], (0.93, 0.1, 4 * [0.93], torch.tensor([4, 14, 4, 19]))
     )
     heapq.heappush(
-        test_cache[0], (0.95, 4 * [0.95], torch.tensor([4, 14, 4, 13]))
+        test_cache[0], (0.95, 0.2, 4 * [0.95], torch.tensor([4, 14, 4, 13]))
     )
     heapq.heappush(
-        test_cache[0], (0.94, 4 * [0.94], torch.tensor([4, 14, 4, 4]))
+        test_cache[0], (0.94, 0.3, 4 * [0.94], torch.tensor([4, 14, 4, 4]))
     )
 
     assert list(model._get_top_peptide(test_cache))[0][0][-1] == "PEPK"
@@ -296,7 +296,7 @@ def test_beam_search_decode():
     )
     # Verify predictions with matching/non-matching precursor m/z.
     positive_score = negative_score = 0
-    for peptide_score, _, _ in pred_cache[0]:
+    for peptide_score, _, _, _ in pred_cache[0]:
         positive_score += peptide_score >= 0
         negative_score += peptide_score < 0
     assert positive_score == 2
@@ -476,6 +476,10 @@ def test_beam_search_decode():
         torch.ones(batch * beam, dtype=torch.bool),
         pred_cache,
     )
+    for beam_i, preds in pred_cache.items():
+        assert len(preds) == beam
+        peptide_scores = [pep[0] for pep in preds]
+        assert np.allclose(peptide_scores, peptide_scores[0])
 
 
 def test_eval_metrics():
