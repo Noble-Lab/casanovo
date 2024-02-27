@@ -482,7 +482,9 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         step: int,
         beams_to_cache: torch.Tensor,
         beam_fits_precursor: torch.Tensor,
-        pred_cache: Dict[int, List[Tuple[float, np.ndarray, torch.Tensor]]],
+        pred_cache: Dict[
+            int, List[Tuple[float, float, np.ndarray, torch.Tensor]]
+        ],
     ):
         """
         Cache terminated beams.
@@ -503,11 +505,13 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         beam_fits_precursor: torch.Tensor of shape (n_spectra * n_beams)
             Boolean tensor indicating whether the beams are within the
             precursor m/z tolerance.
-        pred_cache : Dict[int, List[Tuple[float, np.ndarray, torch.Tensor]]]
+        pred_cache : Dict[
+                int, List[Tuple[float, float, np.ndarray, torch.Tensor]]
+        ]
             Priority queue with finished beams for each spectrum, ordered by
             peptide score. For each finished beam, a tuple with the (negated)
-            peptide score, amino acid-level scores, and the predicted tokens is
-            stored.
+            peptide score, a random tie-breaking float, the amino acid-level
+            scores, and the predicted tokens is stored.
         """
         for i in range(len(beams_to_cache)):
             if not beams_to_cache[i]:
@@ -548,7 +552,12 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
                 heapadd = heapq.heappushpop
             heapadd(
                 pred_cache[spec_idx],
-                (peptide_score, aa_scores, torch.clone(pred_peptide)),
+                (
+                    peptide_score,
+                    np.random.random_sample(),
+                    aa_scores,
+                    torch.clone(pred_peptide),
+                ),
             )
 
     def _get_topk_beams(
@@ -646,17 +655,22 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
 
     def _get_top_peptide(
         self,
-        pred_cache: Dict[int, List[Tuple[float, np.ndarray, torch.Tensor]]],
+        pred_cache: Dict[
+            int, List[Tuple[float, float, np.ndarray, torch.Tensor]]
+        ],
     ) -> Iterable[List[Tuple[float, np.ndarray, str]]]:
         """
         Return the peptide with the highest confidence score for each spectrum.
 
         Parameters
         ----------
-        pred_cache : Dict[int, List[Tuple[float, np.ndarray, torch.Tensor]]]
+        pred_cache : Dict[
+                int, List[Tuple[float, float, np.ndarray, torch.Tensor]]
+        ]
             Priority queue with finished beams for each spectrum, ordered by
             peptide score. For each finished beam, a tuple with the peptide
-            score, amino acid-level scores, and the predicted tokens is stored.
+            score, a random tie-breaking float, the amino acid-level scores,
+            and the predicted tokens is stored.
 
         Returns
         -------
@@ -673,7 +687,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
                         aa_scores,
                         "".join(self.decoder.detokenize(pred_tokens)),
                     )
-                    for pep_score, aa_scores, pred_tokens in heapq.nlargest(
+                    for pep_score, _, aa_scores, pred_tokens in heapq.nlargest(
                         self.top_match, peptides
                     )
                 ]
