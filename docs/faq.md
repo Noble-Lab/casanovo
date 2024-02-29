@@ -145,6 +145,11 @@ You can use any of the scheduler classes available in [`torch.optim.lr_scheduler
 
 ## Miscellaneous
 
+**How can I track de novo peptides for spectra from MGF files in output mzTab?**
+
+You can use the `spectra_ref` column in output mzTab file to extract the MGF file index and positional index within an MGF file for the corresponding MS/MS spectrum.
+Entries in this column have the format `ms_run[FILE_INDEX]:index=POS_INDEX`, e.g. `ms_run[1]:index=0` refers to the first spectrum in the first MGF file.
+
 **Can I use Casanovo to sequence antibodies?**
 
 Yes, antibody sequencing is one of the popular uses for de novo sequencing technology.
