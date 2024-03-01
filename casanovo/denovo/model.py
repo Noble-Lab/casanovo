@@ -1075,7 +1075,14 @@ def calc_match_score(
 
     score_mask = truth_aa_indicies != 0
     masked_per_aa_scores = per_aa_scores * score_mask
-    all_scores = masked_per_aa_scores.sum(dim=1) / score_mask.sum(dim=1)
+    # all_scores = masked_per_aa_scores.sum(dim=1) / score_mask.sum(dim=1) # Calculated arithmetic score
+    all_scores = torch.where(
+        torch.log(masked_per_aa_scores) == float("-inf"),
+        torch.tensor(0.0),
+        torch.log(masked_per_aa_scores),
+    ).sum(dim=1) / score_mask.sum(
+        dim=1
+    )  # Calculates geometric score
     return all_scores, masked_per_aa_scores
 
 
