@@ -172,11 +172,9 @@ def main(
         logger.info("Train the Casanovo model.")
         model_runner.train(peak_path, peak_path_val, model, config)
     elif mode == "db":
-        logger.info("Database seach with casanovo")
+        logger.info("Database seach with casanovo.")
         writer = ms_io.MztabWriter(f"{output}.mztab")
-        #!writer.set_metadata(config, model=model, config_filename=config_fn)
         model_runner.db_search(peak_path, model, config, writer)
-        #!writer.save()
 
 
 def _get_model_weights() -> str:

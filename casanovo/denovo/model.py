@@ -949,6 +949,7 @@ class DBSpec2Pep(Spec2Pep):
     """
 
     num_pairs = 1024
+    decoy_prefix = "decoy_"
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -982,8 +983,18 @@ class DBSpec2Pep(Spec2Pep):
         enc = list(zip(*enc))
         for idx, _ in enumerate(batch[0]):
             spec_peptides = batch[2][idx].split(",")
-            t_or_d = np.zeros(len(spec_peptides))
-            t_or_d[range(0, len(t_or_d), 2)] = 1
+            # Check for decoy prefixes and create a bit-vector indicating targets (1) or decoys (0)
+            t_or_d = [
+                0 if p.startswith(self.decoy_prefix) else 1
+                for p in spec_peptides
+            ]
+            # Remove decoy prefix
+            spec_peptides = [
+                s[len(self.decoy_prefix) :]
+                if s.startswith(self.decoy_prefix)
+                else s
+                for s in spec_peptides
+            ]
             spec_precursors = [precursors[idx]] * len(spec_peptides)
             spec_enc = [enc[idx]] * len(spec_peptides)
             spec_idx = [indexes[idx]] * len(spec_peptides)
