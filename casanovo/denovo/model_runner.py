@@ -355,6 +355,7 @@ def db_search(
         n_beams=config["n_beams"],
         n_log=config["n_log"],
         out_writer=out_writer,
+        top_match=config["top_match"],
     )
     # Read the MS/MS spectra for which to predict peptide sequences.
     peak_ext = (".mgf", ".h5", ".hdf5")

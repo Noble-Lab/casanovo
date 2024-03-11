@@ -6,6 +6,7 @@ import logging
 import csv
 from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
 import operator
+import os
 
 import depthcharge.masses
 import einops
@@ -1031,16 +1032,18 @@ class DBSpec2Pep(Spec2Pep):
         results = np.array(results, dtype=object).squeeze((0))
         with open(self.out_writer.filename, "a") as out_f:
             csv_writer = csv.writer(out_f, delimiter="\t")
-            # Write a header
-            csv_writer.writerow(
-                (
-                    "index",
-                    "peptide",
-                    "target",
-                    "score",
-                    "per_aa_scores",
+            # Write a header IF THE FILE IS BLANK
+            if os.stat(self.out_writer.filename).st_size == 0:
+                csv_writer.writerow(
+                    (
+                        "index",
+                        "peptide",
+                        "target",
+                        "score",
+                        "per_aa_scores",
+                    )
                 )
-            )
+            # Write rows
             for group in results:
                 for batch in group:
                     for index, t_or_d, peptide, score, per_aa_scores in list(

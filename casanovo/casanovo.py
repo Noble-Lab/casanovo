@@ -388,12 +388,14 @@ def create_mgf_from_tide(
         scan_map[scan] = target_candidate_list + decoy_candidate_list
 
     all_spec = []
-    for idx, spec_dict in enumerate(
-        mgf.read(mgf_file)
-    ):  #! WILL NEED TO BE CHANGED FOR OTHER ENCODINGS OF SCAN
-        scan = int(
-            re.search(r"scan=(\d+)", spec_dict["params"]["title"]).group(1)
-        )
+    for idx, spec_dict in enumerate(mgf.read(mgf_file)):
+        try:
+            scan = int(spec_dict["params"]["scans"])
+        except KeyError as e:
+            logger.error(
+                "Could not find the scan number in the .mgf file. Please ensure that the .mgf file contains the scan number in the 'SCANS' field."
+            )
+            raise e
         try:
             spec_dict["params"]["seq"] = ",".join(list(scan_map[scan]))
             all_spec.append(spec_dict)
