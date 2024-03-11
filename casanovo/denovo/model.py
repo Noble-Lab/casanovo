@@ -945,7 +945,8 @@ class DBSpec2Pep(Spec2Pep):
     """
     Inherits Spec2Pep
 
-    Hijacks teacher-forcing implemented in Spec2Pep and uses it to predict scores between a spectra and associated peptide
+    Hijacks teacher-forcing implemented in Spec2Pep and uses it to predict scores between a spectra and associated peptide.
+    Input format is .mgf, with comma-separated targets and decoys in the SEQ field. Decoys should have a prefix of "decoy_".
     """
 
     num_pairs = 1024
@@ -1009,7 +1010,7 @@ class DBSpec2Pep(Spec2Pep):
                     )
                 )
             )
-        # continually grab n items from all_psm until list is exhausted
+        # continually grab num_pairs items from all_psm until list is exhausted
         while len(all_psm) > 0:
             batch = all_psm[: self.num_pairs]
             all_psm = all_psm[self.num_pairs :]
@@ -1029,7 +1030,17 @@ class DBSpec2Pep(Spec2Pep):
             return
         results = np.array(results, dtype=object).squeeze((0))
         with open(self.out_writer.filename, "a") as out_f:
-            csv_writer = csv.writer(out_f)
+            csv_writer = csv.writer(out_f, delimiter="\t")
+            # Write a header
+            csv_writer.writerow(
+                (
+                    "index",
+                    "peptide",
+                    "target",
+                    "score",
+                    "per_aa_scores",
+                )
+            )
             for group in results:
                 for batch in group:
                     for index, t_or_d, peptide, score, per_aa_scores in list(
@@ -1056,7 +1067,8 @@ def calc_match_score(
 ) -> List[float]:
     """
     Take in teacher-forced scoring of amino acids of the peptides (in a batch) and use the truth labels
-    to calculate a score between the input spectra and associated peptide.
+    to calculate a score between the input spectra and associated peptide. The score is the geometric
+    mean of the AA probabilities
 
         Parameters
         ----------

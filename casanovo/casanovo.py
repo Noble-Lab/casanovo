@@ -18,6 +18,8 @@ import requests
 import torch
 import tqdm
 import yaml
+import pandas as pd
+import pyteomics.mgf as mgf
 from pytorch_lightning.lite import LightningLite
 
 from . import __version__
@@ -39,8 +41,12 @@ logger = logging.getLogger("casanovo")
     '- "train" will train a model (from scratch or by\ncontinuing training a '
     "previously trained model).\n"
     '- "eval" will evaluate the performance of a\ntrained model using '
-    "previously acquired spectrum\nannotations.",
-    type=click.Choice(["denovo", "train", "eval", "db"]),
+    "previously acquired spectrum\nannotations.\n"
+    '- "db" will use Casanovo-DB to score\nspectra against a database of\n'
+    "candidates specified in an .mgf\ncreated with annotate mode.\n"
+    '- "annotate" will use tide-search results\nto annotate an .mgf '
+    "file with candidate peptides.",
+    type=click.Choice(["denovo", "train", "eval", "db", "annotate"]),
 )
 @click.option(
     "--model",
@@ -51,7 +57,9 @@ logger = logging.getLogger("casanovo")
     "--peak_path",
     required=True,
     help="The file path with peak files for predicting peptide sequences or "
-    "training Casanovo.",
+    "training Casanovo. If mode is 'db', this should be the path to the "
+    "annotated .mgf file. If mode is 'annotate', this should be the path to the "
+    ".mgf file you wish to annotate.",
 )
 @click.option(
     "--peak_path_val",
@@ -70,6 +78,12 @@ logger = logging.getLogger("casanovo")
     "(optionally) prediction results (extension: .mztab).",
     type=click.Path(dir_okay=False),
 )
+@click.option(
+    "--tide_dir_path",
+    help="The directory containing the results of a successful tide search. "
+    "Used in annotate mode to annotate an .mgf file with candidate peptides.",
+    type=click.Path(exists=True, file_okay=False),
+)
 def main(
     mode: str,
     model: Optional[str],
@@ -77,6 +91,7 @@ def main(
     peak_path_val: Optional[str],
     config: Optional[str],
     output: Optional[str],
+    tide_dir_path: Optional[str],
 ):
     """
     \b
@@ -155,6 +170,7 @@ def main(
     logger.debug("peak_path_val = %s", peak_path_val)
     logger.debug("config = %s", config.file)
     logger.debug("output = %s", output)
+    logger.debug("tide_dir_path = %s", tide_dir_path)
     for key, value in config.items():
         logger.debug("%s = %s", str(key), str(value))
 
@@ -175,6 +191,9 @@ def main(
         logger.info("Database seach with casanovo.")
         writer = ms_io.MztabWriter(f"{output}.mztab")
         model_runner.db_search(peak_path, model, config, writer)
+    elif mode == "annotate":
+        logger.info("Annotate .mgf file with candidate peptides.")
+        create_mgf_from_tide(tide_dir_path, peak_path, output)
 
 
 def _get_model_weights() -> str:
@@ -278,6 +297,117 @@ def _get_model_weights() -> str:
                 f"please specify your model weights explicitly using the "
                 f"`--model` parameter"
             )
+
+
+def _normalize_mods(seq: str) -> str:
+    """
+    Turns tide-style modifications into the format used by Casanovo-DB.
+
+        Parameters
+        ----------
+        seq : str
+            The peptide sequence with tide-style modifications.
+
+        Returns
+        -------
+        str
+            The peptide sequence with Casanovo-DB-style modifications.
+    """
+    seq = seq.replace("M[15.99]", "M+15.995")
+    seq = seq.replace("C", "C+57.021")
+    seq = seq.replace("N[0.98]", "N+0.984")
+    seq = seq.replace("Q[0.98]", "Q+0.984")
+    seq = re.sub(r"(.*)\[42\.01\]", r"+42.011\1", seq)
+    seq = re.sub(r"(.*)\[43\.01\]", r"+43.006\1", seq)
+    seq = re.sub(r"(.*)\[\-17\.03\]", r"-17.027\1", seq)
+    seq = re.sub(r"(.*)\[25\.98\]", r"+43.006-17.027\1", seq)
+    return seq
+
+
+def create_mgf_from_tide(
+    tide_dir_path: str, mgf_file: str, output_file: str
+) -> None:
+    """
+    Accepts a directory containing the results of a successful tide search, and an .mgf file containing MS/MS spectra.
+    The .mgf file is then annotated in the SEQ field with all of the candidate peptides for each spectrum, as well as their target/decoy status.
+    This annotated .mgf can be given directly to Casanovo-DB to perfrom a database search.
+
+        Parameters
+        ----------
+        tide_dir_path : str
+            Path to the directory containing the results of a successful tide search.
+        mgf_file : str
+            Path to the .mgf file containing MS/MS spectra.
+        output_file : str
+            Path to where the annotated .mgf will be written.
+
+    """
+    # Get paths to tide search text files
+    tdf_path = os.path.join(tide_dir_path, "tide-search.target.txt")
+    ddf_path = os.path.join(tide_dir_path, "tide-search.decoy.txt")
+    try:
+        target_df = pd.read_csv(
+            tdf_path, sep="\t", usecols=["scan", "sequence", "target/decoy"]
+        )
+        decoy_df = pd.read_csv(
+            ddf_path, sep="\t", usecols=["scan", "sequence", "target/decoy"]
+        )
+    except FileNotFoundError as e:
+        logger.error(
+            "Could not find tide search results in the specified directory. "
+            "Please ensure that the directory contains the following files: "
+            "tide-search.target.txt and tide-search.decoy.txt"
+        )
+        raise e
+
+    logger.info(
+        "Successfully read tide search results from %s.", tide_dir_path
+    )
+
+    df = pd.concat([target_df, decoy_df])
+    scan_groups = df.groupby("scan")[["sequence", "target/decoy"]]
+
+    scan_map = {}
+
+    for scan, item in scan_groups:
+        target_candidate_list = list(
+            map(
+                _normalize_mods,
+                item.groupby("target/decoy")["sequence"].apply(list)["target"],
+            )
+        )
+        decoy_candidate_list = list(
+            map(
+                _normalize_mods,
+                item.groupby("target/decoy")["sequence"].apply(list)["decoy"],
+            )
+        )
+        decoy_candidate_list = list(
+            map(lambda x: "decoy_" + str(x), decoy_candidate_list)
+        )
+        scan_map[scan] = target_candidate_list + decoy_candidate_list
+
+    all_spec = []
+    for idx, spec_dict in enumerate(
+        mgf.read(mgf_file)
+    ):  #! WILL NEED TO BE CHANGED FOR OTHER ENCODINGS OF SCAN
+        scan = int(
+            re.search(r"scan=(\d+)", spec_dict["params"]["title"]).group(1)
+        )
+        try:
+            spec_dict["params"]["seq"] = ",".join(list(scan_map[scan]))
+            all_spec.append(spec_dict)
+        except KeyError as e:
+            # No need to do anything if the scan is not found in the scan map
+            pass
+    try:
+        mgf.write(all_spec, output_file)
+        logger.info("Annotated .mgf file written to %s.", output_file)
+    except Exception as e:
+        print(
+            f"Write to {output_file} failed. Check if the file path is correct."
+        )
+        print(e)
 
 
 if __name__ == "__main__":
