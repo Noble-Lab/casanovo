@@ -16,14 +16,15 @@ Please note that your `.fasta` file cannot contain any 'U' amino acids because i
 3. Extract the candidate peptides from the search results into a format readable by Casanovo-DB (`annotated.mgf`).
 - `casanovo --mode=annotate --peak_path spectra.mgf --tide_dir_path search_results --output annotated.mgf`
 
-Please note that `spectra.mgf` must contain the `SCANS=` field. In this field all candidates are comma-separated, with the decoys having the "decoy" prefix.
+Please note that `spectra.mgf` must contain the `SCANS=` field for this to work properly. The output `annotated.mgf` will have a unique `SEQ=` field for each spectrum where all candidates are comma-separated, with the decoys having the "decoy" prefix.
 
 4. Run Casanovo-DB:
 - `casanovo --mode=db --peak_path annotated.mgf --output casanovo_db_result.mztab`
 
 The resulting file is in mztab format, similar to that produced by Casanovo's `sequence` command, except that there are scores for every candidate peptide against their respective spectrum (pairs as specified in `annotated.mgf`).
 
-**Minimal Example Files**
+**Minimal Example Files:**
+
 You may use these files to get comfortable with the current Casanovo-DB workflow (which will be improved significantly in the future).
 - E. Coli `.fasta`: [ecoli_ux.fasta](sample_data/ecoli_ux.fasta)
 - E. Coli `.mgf`: [minimal_example_ecoli.mgf](sample_data/minimal_example_ecoli.mgf)
