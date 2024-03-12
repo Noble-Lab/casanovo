@@ -1,7 +1,7 @@
-# Casanovo
+# PSM scoring with Casanovo-DB 
 
-This branch of the Casanovo project contains code that implements the Casanovo-DB database search procedure. The preprint version of the paper can be found [here](https://www.biorxiv.org/content/10.1101/2024.01.26.577425v2). Our eventual goal is to provide the full database search functionality as part of Casanovo.  For now, however, this branch allows for testing of the methodology by making use of some important functionality available in the Crux mass spectrometry toolkit (http://crux.ms).
-You can install this branch (ideally, in an appropriately named Conda environment) using the following command:
+This branch of the Casanovo project contains code that implements the Casanovo-DB score function for database search. The preprint version of the paper can be found [here](https://www.biorxiv.org/content/10.1101/2024.01.26.577425v2). Our eventual goal is to provide the full database search functionality as part of Casanovo.  For now, however, this branch allows for testing of the methodology by making use of some important functionality available in the Crux mass spectrometry toolkit (http://crux.ms).
+You can install this branch using the following command:
 ```
   pip install git+https://github.com/Noble-Lab/casanovo.git@db_search
 ```
@@ -11,7 +11,7 @@ To use Casanovo-DB, you must also install the Crux toolkit.  Given a set of spec
 
 Please note that your `.fasta` file cannot contain any 'U' amino acids because it is not in the vocabulary of Casanovo. Replace all occurrences of this character with 'X' to denote a missing amino acid. The minimal example attached has that done for you.
 
-2. Identify candidate peptides for each spectrum (be sure to set `top-match` to a very high number):
+2. Identify candidate peptides for each spectrum. Be sure to set `top-match` to a very high number so every candidate PSM is considered:
 - `crux tide-search --output-dir search_results --top-match 1000000 spectra.mgf my_proteome`
 3. Extract the candidate peptides from the search results into a format readable by Casanovo-DB (`annotated.mgf`).
 - `casanovo --mode=annotate --peak_path spectra.mgf --tide_dir_path search_results --output annotated.mgf`
