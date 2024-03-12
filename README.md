@@ -9,20 +9,24 @@ To use Casanovo-DB, you must also install the Crux toolkit.  Given a set of spec
 1. Build a peptide index in the directory `my_proteome`:
 - `crux tide-index proteome.fasta my_proteome`
 
-Please note that your `.fasta` file cannot contain any 'U' amino acids because it is not in the vocabulary of Casanovo. Replace all occurrences of this character with 'X' to denote a missing amino acid.
+Please note that your `.fasta` file cannot contain any 'U' amino acids because it is not in the vocabulary of Casanovo. Replace all occurrences of this character with 'X' to denote a missing amino acid. The minimal example attached has that done for you.
 
 2. Identify candidate peptides for each spectrum (be sure to set `top-match` to a very high number):
 - `crux tide-search --output-dir search_results --top-match 1000000 spectra.mgf my_proteome`
 3. Extract the candidate peptides from the search results into a format readable by Casanovo-DB (`annotated.mgf`).
 - `casanovo --mode=annotate --peak_path spectra.mgf --tide_dir_path search_results --output annotated.mgf`
 
-Please note that `spectra.mgf` must contain the `SCANS=` field.
+Please note that `spectra.mgf` must contain the `SCANS=` field. In this field all candidates are comma-separated, with the decoys having the "decoy" prefix.
 
 4. Run Casanovo-DB:
 - `casanovo --mode=db --peak_path annotated.mgf --output casanovo_db_result.mztab`
 
-
 The resulting file is in mztab format, similar to that produced by Casanovo's `sequence` command, except that there are scores for every candidate peptide against their respective spectrum (pairs as specified in `annotated.mgf`).
+
+**Minimal Example Files**
+You may use these files to get comfortable with the current Casanovo-DB workflow (which will be improved significantly in the future).
+- E. Coli `.fasta`: [ecoli_ux.fasta](sample_data/ecoli_ux.fasta)
+- E. Coli `.mgf`: [minimal_example_ecoli.mgf](sample_data/minimal_example_ecoli.mgf)
 
 **_De Novo_ Mass Spectrometry Peptide Sequencing with a Transformer Model**
 
