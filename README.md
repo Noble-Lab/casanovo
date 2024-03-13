@@ -1,6 +1,6 @@
 # PSM scoring with Casanovo-DB 
 
-This branch of the Casanovo project contains code that implements the Casanovo-DB score function for database search. The preprint version of the paper can be found [here](https://www.biorxiv.org/content/10.1101/2024.01.26.577425v2). Our eventual goal is to provide the full database search functionality as part of Casanovo.  For now, however, this branch allows for testing of the methodology by making use of some important functionality available in the Crux mass spectrometry toolkit (http://crux.ms).
+This branch of the Casanovo project contains code that implements the Casanovo-DB score function for database search. The preprint version of the paper can be found [here](https://www.biorxiv.org/content/10.1101/2024.01.26.577425v2). Note that this is currently only a proof-of-concept implementation for using Casanovo as a score function, and thus is not yet intended for use as a complete database search workflow. Our eventual goal is to add more comprehensive database search functionality as part of Casanovo.  For now, however, this branch allows for testing of the methodology by making use of some important functionality available in the Crux mass spectrometry toolkit (http://crux.ms).
 You can install this branch using the following command:
 ```
   pip install git+https://github.com/Noble-Lab/casanovo.git@db_search
@@ -25,7 +25,7 @@ The resulting file is in mztab format, similar to that produced by Casanovo's `s
 
 **Minimal Example Files:**
 
-You may use these files to get comfortable with the current Casanovo-DB workflow (which will be improved significantly in the future).
+Here are some demo files for testing the current Casanovo-DB workflow:
 - E. Coli `.fasta`: [ecoli_ux.fasta](sample_data/ecoli_ux.fasta)
 - E. Coli `.mgf`: [minimal_example_ecoli.mgf](sample_data/minimal_example_ecoli.mgf)
 
