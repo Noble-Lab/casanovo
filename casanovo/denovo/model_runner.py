@@ -20,11 +20,7 @@ from ..denovo.dataloaders import DeNovoDataModule
 from ..denovo.model import Spec2Pep
 from ..denovo.model import DBSpec2Pep
 
-from pytorch_lightning.profiler import SimpleProfiler, AdvancedProfiler
-
-
 logger = logging.getLogger("casanovo")
-
 
 def predict(
     peak_path: str,
@@ -393,10 +389,7 @@ def db_search(
 
     # Create the Trainer object.
     abs_experiment_dirpath = "/net/noble/vol2/home/vananth3/2023_vananth_denovo-dbsearch/results/2023-08-21_speedup"
-    profiler = AdvancedProfiler(
-        dirpath=abs_experiment_dirpath,
-        filename="placeholder",
-    )
+
     trainer = pl.Trainer(
         accelerator="auto",
         auto_select_gpus=True,
@@ -404,8 +397,7 @@ def db_search(
         logger=config["logger"],
         max_epochs=config["max_epochs"],
         num_sanity_val_steps=config["num_sanity_val_steps"],
-        strategy=_get_strategy(),
-        profiler=profiler,
+        strategy=_get_strategy()
     )
     # Run the model
     trainer.predict(model, loaders.db_dataloader())
