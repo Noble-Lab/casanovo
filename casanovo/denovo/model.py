@@ -1043,24 +1043,31 @@ class DBSpec2Pep(Spec2Pep):
                     )
                 )
             # Write rows
-            for group in results[0]:
-                for batch in group:
-                    for index, t_or_d, peptide, score, per_aa_scores in list(
-                        zip(*batch)
-                    ):
-                        # Remove scores of 0 (padding)
-                        per_aa_scores = per_aa_scores.numpy()
-                        per_aa_scores = list(per_aa_scores[per_aa_scores != 0])
-                        score = score.numpy()
-                        csv_writer.writerow(
-                            (
-                                index,
-                                peptide,
-                                bool(t_or_d),
-                                score,
-                                per_aa_scores,
+            for g1 in results:
+                for batch in g1:
+                    for pairs in batch:
+                        for (
+                            index,
+                            t_or_d,
+                            peptide,
+                            score,
+                            per_aa_scores,
+                        ) in list(zip(*pairs)):
+                            # Remove scores of 0 (padding)
+                            per_aa_scores = per_aa_scores.numpy()
+                            per_aa_scores = list(
+                                per_aa_scores[per_aa_scores != 0]
                             )
-                        )
+                            score = score.numpy()
+                            csv_writer.writerow(
+                                (
+                                    index,
+                                    peptide,
+                                    bool(t_or_d),
+                                    score,
+                                    per_aa_scores,
+                                )
+                            )
         out_f.close()
 
 

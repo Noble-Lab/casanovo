@@ -403,7 +403,7 @@ def create_mgf_from_tide(
             # No need to do anything if the scan is not found in the scan map
             pass
     try:
-        mgf.write(all_spec, output_file)
+        mgf.write(all_spec, output_file, file_mode="w")
         logger.info("Annotated .mgf file written to %s.", output_file)
     except Exception as e:
         print(
