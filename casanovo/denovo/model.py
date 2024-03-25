@@ -3,6 +3,7 @@
 import collections
 import heapq
 import logging
+import warnings
 from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
 
 import depthcharge.masses
@@ -14,6 +15,7 @@ from torch.utils.tensorboard import SummaryWriter
 from depthcharge.components import ModelMixin, PeptideDecoder, SpectrumEncoder
 
 from . import evaluate
+from .. import config
 from ..data import ms_io
 
 logger = logging.getLogger("casanovo")
@@ -46,7 +48,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         linear layer, then summed with the m/z encoding for each peak.
     max_length : int
         The maximum peptide length to decode.
-    residues: Union[Dict[str, float], str]
+    residues : Union[Dict[str, float], str]
         The amino acid dictionary and their masses. By default ("canonical) this
         is only the 20 canonical amino acids, with cysteine carbamidomethylated.
         If "massivekb", this dictionary will include the modifications found in
@@ -65,24 +67,24 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         < precursor_mass_tol`
     min_peptide_len : int
         The minimum length of predicted peptides.
-    n_beams: int
+    n_beams : int
         Number of beams used during beam search decoding.
-    top_match: int
+    top_match : int
         Number of PSMs to return for each spectrum.
     n_log : int
         The number of epochs to wait between logging messages.
-    tb_summarywriter: Optional[str]
+    tb_summarywriter : Optional[str]
         Folder path to record performance metrics during training. If ``None``,
         don't use a ``SummaryWriter``.
-    train_label_smoothing: float
+    train_label_smoothing : float
         Smoothing factor when calculating the training loss.
-    warmup_iters: int
-        The number of warm up iterations for the learning rate scheduler.
-    max_iters: int
-        The total number of iterations for the learning rate scheduler.
-    out_writer: Optional[str]
+    warmup_iters : int
+        The number of iterations for the linear warm-up of the learning rate.
+    cosine_schedule_period_iters : int
+        The number of iterations for the cosine half period of the learning rate.
+    out_writer : Optional[str]
         The output writer for the prediction results.
-    calculate_precision: bool
+    calculate_precision : bool
         Calculate the validation set precision during training.
         This is expensive.
     **kwargs : Dict
@@ -111,7 +113,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         ] = None,
         train_label_smoothing: float = 0.01,
         warmup_iters: int = 100_000,
-        max_iters: int = 600_000,
+        cosine_schedule_period_iters: int = 600_000,
         out_writer: Optional[ms_io.MztabWriter] = None,
         calculate_precision: bool = False,
         **kwargs: Dict,
@@ -144,7 +146,15 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         self.val_celoss = torch.nn.CrossEntropyLoss(ignore_index=0)
         # Optimizer settings.
         self.warmup_iters = warmup_iters
-        self.max_iters = max_iters
+        self.cosine_schedule_period_iters = cosine_schedule_period_iters
+        # `kwargs` will contain additional arguments as well as unrecognized
+        # arguments, including deprecated ones. Remove the deprecated ones.
+        for k in config._config_deprecated:
+            kwargs.pop(k, None)
+            warnings.warn(
+                f"Deprecated hyperparameter '{k}' removed from the model.",
+                DeprecationWarning,
+            )
         self.opt_kwargs = kwargs
 
         # Data properties.
@@ -472,7 +482,9 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         step: int,
         beams_to_cache: torch.Tensor,
         beam_fits_precursor: torch.Tensor,
-        pred_cache: Dict[int, List[Tuple[float, np.ndarray, torch.Tensor]]],
+        pred_cache: Dict[
+            int, List[Tuple[float, float, np.ndarray, torch.Tensor]]
+        ],
     ):
         """
         Cache terminated beams.
@@ -493,11 +505,13 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         beam_fits_precursor: torch.Tensor of shape (n_spectra * n_beams)
             Boolean tensor indicating whether the beams are within the
             precursor m/z tolerance.
-        pred_cache : Dict[int, List[Tuple[float, np.ndarray, torch.Tensor]]]
+        pred_cache : Dict[
+                int, List[Tuple[float, float, np.ndarray, torch.Tensor]]
+        ]
             Priority queue with finished beams for each spectrum, ordered by
             peptide score. For each finished beam, a tuple with the (negated)
-            peptide score, amino acid-level scores, and the predicted tokens is
-            stored.
+            peptide score, a random tie-breaking float, the amino acid-level
+            scores, and the predicted tokens is stored.
         """
         for i in range(len(beams_to_cache)):
             if not beams_to_cache[i]:
@@ -538,7 +552,12 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
                 heapadd = heapq.heappushpop
             heapadd(
                 pred_cache[spec_idx],
-                (peptide_score, aa_scores, torch.clone(pred_peptide)),
+                (
+                    peptide_score,
+                    np.random.random_sample(),
+                    aa_scores,
+                    torch.clone(pred_peptide),
+                ),
             )
 
     def _get_topk_beams(
@@ -636,17 +655,22 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
 
     def _get_top_peptide(
         self,
-        pred_cache: Dict[int, List[Tuple[float, np.ndarray, torch.Tensor]]],
+        pred_cache: Dict[
+            int, List[Tuple[float, float, np.ndarray, torch.Tensor]]
+        ],
     ) -> Iterable[List[Tuple[float, np.ndarray, str]]]:
         """
         Return the peptide with the highest confidence score for each spectrum.
 
         Parameters
         ----------
-        pred_cache : Dict[int, List[Tuple[float, np.ndarray, torch.Tensor]]]
+        pred_cache : Dict[
+                int, List[Tuple[float, float, np.ndarray, torch.Tensor]]
+        ]
             Priority queue with finished beams for each spectrum, ordered by
             peptide score. For each finished beam, a tuple with the peptide
-            score, amino acid-level scores, and the predicted tokens is stored.
+            score, a random tie-breaking float, the amino acid-level scores,
+            and the predicted tokens is stored.
 
         Returns
         -------
@@ -663,7 +687,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
                         aa_scores,
                         "".join(self.decoder.detokenize(pred_tokens)),
                     )
-                    for pep_score, aa_scores, pred_tokens in heapq.nlargest(
+                    for pep_score, _, aa_scores, pred_tokens in heapq.nlargest(
                         self.top_match, peptides
                     )
                 ]
@@ -960,29 +984,33 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         optimizer = torch.optim.Adam(self.parameters(), **self.opt_kwargs)
         # Apply learning rate scheduler per step.
         lr_scheduler = CosineWarmupScheduler(
-            optimizer, warmup=self.warmup_iters, max_iters=self.max_iters
+            optimizer, self.warmup_iters, self.cosine_schedule_period_iters
         )
         return [optimizer], {"scheduler": lr_scheduler, "interval": "step"}
 
 
 class CosineWarmupScheduler(torch.optim.lr_scheduler._LRScheduler):
     """
-    Learning rate scheduler with linear warm up followed by cosine shaped decay.
+    Learning rate scheduler with linear warm-up followed by cosine shaped decay.
 
     Parameters
     ----------
     optimizer : torch.optim.Optimizer
         Optimizer object.
-    warmup : int
-        The number of warm up iterations.
-    max_iters : torch.optim
-        The total number of iterations.
+    warmup_iters : int
+        The number of iterations for the linear warm-up of the learning rate.
+    cosine_schedule_period_iters : int
+        The number of iterations for the cosine half period of the learning rate.
     """
 
     def __init__(
-        self, optimizer: torch.optim.Optimizer, warmup: int, max_iters: int
+        self,
+        optimizer: torch.optim.Optimizer,
+        warmup_iters: int,
+        cosine_schedule_period_iters: int,
     ):
-        self.warmup, self.max_iters = warmup, max_iters
+        self.warmup_iters = warmup_iters
+        self.cosine_schedule_period_iters = cosine_schedule_period_iters
         super().__init__(optimizer)
 
     def get_lr(self):
@@ -990,9 +1018,11 @@ class CosineWarmupScheduler(torch.optim.lr_scheduler._LRScheduler):
         return [base_lr * lr_factor for base_lr in self.base_lrs]
 
     def get_lr_factor(self, epoch):
-        lr_factor = 0.5 * (1 + np.cos(np.pi * epoch / self.max_iters))
-        if epoch <= self.warmup:
-            lr_factor *= epoch / self.warmup
+        lr_factor = 0.5 * (
+            1 + np.cos(np.pi * epoch / self.cosine_schedule_period_iters)
+        )
+        if epoch <= self.warmup_iters:
+            lr_factor *= epoch / self.warmup_iters
         return lr_factor
 
 

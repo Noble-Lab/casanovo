@@ -152,13 +152,6 @@ Yes, antibody sequencing is one of the popular uses for de novo sequencing techn
 
 In practice, you may want to try providing your Casanovo output file to the [Stitch software](https://github.com/snijderlab/stitch), which performs template-based assembly of de novo peptide reads to reconstruct antibody sequences ([Schulte and Snyder 2024](https://www.biorxiv.org/content/10.1101/2024.02.20.581155v1)).
 
-**Where can I find Casanovo model weights trained on the nine-species benchmark?**
-
-You can find the Casanovo weights corresponding to the nine-species benchmark [on Zenodo](https://doi.org/10.5281/zenodo.10694984), compatible with Casanovo v4.x.x.
-These weights correspond to training and validation on eight species using the default configurations, with the remaining species held out for testing, as indicated by the file names.
-Note that these weights are only intended for evaluation purposes on this specific benchmark dataset.
-For general-purpose usage of Casanovo, use its [default weights](https://casanovo.readthedocs.io/en/latest/getting_started.html#download-model-weights) instead, as these will give significantly improved performance.
-
 **How can I generate a precision–coverage curve?**
 
 You can evaluate a trained Casanovo model compared to ground-truth peptide labels using a precision–coverage curve.
