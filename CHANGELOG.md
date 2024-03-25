@@ -6,6 +6,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+### Fixed
+- The mzTab output file now has proper line endings regardless of platform, fixing the extra `\r` found when run on Windows.
+
 ## [4.1.0] - 2024-02-16
 
 ### Changed
