@@ -68,9 +68,8 @@ casanovo configure
 ```
 ![`casanovo configure --help`](images/configure-help.svg)
 
-When using Casanovo to sequence peptides from mass spectra or evaluate a previous model's performance, you can change some of the parameters in this file, indicated with "(I)" in the file. 
-The other parameters will not have an effect unless you are training a new Casanovo model.
-
+When using Casanovo to sequence peptides from mass spectra or evaluate a previous model's performance, you can change some of the parameters in the first section of this file.
+Parameters in the second section will not have an effect unless you are training a new Casanovo model.
 
 ### Download model weights
 
