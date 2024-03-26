@@ -8,6 +8,7 @@ from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
 
 import depthcharge.masses
 import einops
+import numba as nb
 import torch
 import numpy as np
 import lightning.pytorch as pl
@@ -168,7 +169,22 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         self.peptide_mass_calculator = depthcharge.masses.PeptideMass(
             self.residues
         )
+
+        # Information used when finishing beams.
         self.stop_token = self.decoder._aa2idx["$"]
+        # Tokens with a negative mass (i.e. neutral loss).
+        self.aa_neg_mass = [None]
+        for aa, mass in self.peptide_mass_calculator.masses.items():
+            if mass < 0:
+                self.aa_neg_mass.append(aa)
+        # N-terminal residues.
+        self.n_term = torch.Tensor(
+            [
+                self.decoder._aa2idx[aa]
+                for aa in self.peptide_mass_calculator.masses
+                if aa.startswith(("+", "-"))
+            ]
+        ).to(self.decoder.device)
 
         # Logging.
         self.calculate_precision = calculate_precision
@@ -269,6 +285,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         scores = einops.rearrange(scores, "B L V S -> (B S) L V")
 
         # The main decoding loop.
+        self.n_term = self.n_term.to(self.decoder.device)
         for step in range(0, self.max_length):
             # Terminate beams exceeding the precursor m/z tolerance and track
             # all finished beams (either terminated or stop token predicted).
@@ -325,10 +342,9 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         ----------
         tokens : torch.Tensor of shape (n_spectra * n_beams, max_length)
             Predicted amino acid tokens for all beams and all spectra.
-         scores : torch.Tensor of shape
-         (n_spectra *  n_beams, max_length, n_amino_acids)
-            Scores for the predicted amino acid tokens for all beams and all
-            spectra.
+        precursors : torch.Tensor of size (n_spectra * n_beams, 3)
+            The measured precursor mass (axis 0), precursor charge (axis 1), and
+            precursor m/z (axis 2) of each MS/MS spectrum.
         step : int
             Index of the current decoding step.
 
@@ -345,20 +361,6 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
             discarded (e.g. because they were predicted to end but violate the
             minimum peptide length).
         """
-        # Check for tokens with a negative mass (i.e. neutral loss).
-        aa_neg_mass = [None]
-        for aa, mass in self.peptide_mass_calculator.masses.items():
-            if mass < 0:
-                aa_neg_mass.append(aa)
-        # Find N-terminal residues.
-        n_term = torch.Tensor(
-            [
-                self.decoder._aa2idx[aa]
-                for aa in self.peptide_mass_calculator.masses
-                if aa.startswith(("+", "-"))
-            ]
-        ).to(self.decoder.device)
-
         beam_fits_precursor = torch.zeros(
             tokens.shape[0], dtype=torch.bool
         ).to(self.encoder.device)
@@ -382,32 +384,30 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
             final_pos[ends_stop_token] = step - 1
             # Multiple N-terminal modifications.
             multiple_mods = torch.isin(
-                tokens[dim0, final_pos], n_term
-            ) & torch.isin(tokens[dim0, final_pos - 1], n_term)
+                tokens[dim0, final_pos], self.n_term
+            ) & torch.isin(tokens[dim0, final_pos - 1], self.n_term)
             # N-terminal modifications occur at an internal position.
             # Broadcasting trick to create a two-dimensional mask.
             mask = (final_pos - 1)[:, None] >= torch.arange(tokens.shape[1])
             internal_mods = torch.isin(
-                torch.where(mask.to(self.encoder.device), tokens, 0), n_term
+                torch.where(mask.to(self.encoder.device), tokens, 0),
+                self.n_term,
             ).any(dim=1)
             discarded_beams[multiple_mods | internal_mods] = True
 
         # Check which beams should be terminated or discarded based on the
         # predicted peptide.
+        precursor_charges = precursors[:, 1].cpu().detach().numpy()
+        precursor_mzs = precursors[:, 2].cpu().detach().numpy()
         for i in range(len(finished_beams)):
             # Skip already discarded beams.
             if discarded_beams[i]:
                 continue
             pred_tokens = tokens[i][: step + 1]
-            peptide_len = len(pred_tokens)
-            peptide = self.decoder.detokenize(pred_tokens)
             # Omit stop token.
-            if self.decoder.reverse and peptide[0] == "$":
-                peptide = peptide[1:]
-                peptide_len -= 1
-            elif not self.decoder.reverse and peptide[-1] == "$":
-                peptide = peptide[:-1]
-                peptide_len -= 1
+            if pred_tokens[-1] == self.stop_token:
+                pred_tokens = pred_tokens[:-1]
+            peptide_len = len(pred_tokens)
             # Discard beams that were predicted to end but don't fit the minimum
             # peptide length.
             if finished_beams[i] and peptide_len < self.min_peptide_len:
@@ -417,50 +417,53 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
             # the peptide mass exceeds the precursor m/z to an extent that it
             # cannot be corrected anymore by a subsequently predicted AA with
             # negative mass.
-            precursor_charge = precursors[i, 1]
-            precursor_mz = precursors[i, 2]
+            precursor_charge = precursor_charges[i]
+            precursor_mz = precursor_mzs[i]
             matches_precursor_mz = exceeds_precursor_mz = False
-            for aa in [None] if finished_beams[i] else aa_neg_mass:
-                if aa is None:
-                    calc_peptide = peptide
-                else:
-                    calc_peptide = peptide.copy()
-                    calc_peptide.append(aa)
+            peptide = self.decoder.detokenize(pred_tokens)
+            peptide_mz = self.peptide_mass_calculator.mass(
+                seq=peptide, charge=precursor_charge
+            )
+            for aa in [None] if finished_beams[i] else self.aa_neg_mass:
                 try:
-                    calc_mz = self.peptide_mass_calculator.mass(
-                        seq=calc_peptide, charge=precursor_charge
+                    any_matches_precursor_mz = False
+                    all_exceed_precursor_mz = True
+                    calc_mz = (
+                        peptide_mz
+                        if aa is None
+                        else peptide_mz
+                        + self.peptide_mass_calculator.masses[aa]
+                        / precursor_charge
                     )
-                    delta_mass_ppm = [
-                        _calc_mass_error(
-                            calc_mz,
-                            precursor_mz,
-                            precursor_charge,
-                            isotope,
+                    for isotope in range(
+                        self.isotope_error_range[0],
+                        self.isotope_error_range[1] + 1,
+                    ):
+                        delta_mass_ppm = _calc_mass_error(
+                            calc_mz, precursor_mz, precursor_charge, isotope
                         )
-                        for isotope in range(
-                            self.isotope_error_range[0],
-                            self.isotope_error_range[1] + 1,
+                        # Terminate the beam if the calculated m/z for the
+                        # predicted peptide (without potential additional AAs
+                        # with negative mass) is within the precursor m/z
+                        # tolerance.
+                        if (
+                            aa is None
+                            and abs(delta_mass_ppm) < self.precursor_mass_tol
+                        ):
+                            any_matches_precursor_mz = True
+                            break
+                        all_exceed_precursor_mz &= (
+                            delta_mass_ppm > self.precursor_mass_tol
                         )
-                    ]
-                    # Terminate the beam if the calculated m/z for the predicted
-                    # peptide (without potential additional AAs with negative
-                    # mass) is within the precursor m/z tolerance.
-                    matches_precursor_mz = aa is None and any(
-                        abs(d) < self.precursor_mass_tol
-                        for d in delta_mass_ppm
-                    )
                     # Terminate the beam if the calculated m/z exceeds the
                     # precursor m/z + tolerance and hasn't been corrected by a
                     # subsequently predicted AA with negative mass.
-                    if matches_precursor_mz:
+                    exceeds_precursor_mz = all_exceed_precursor_mz and (
+                        finished_beams[i] or aa is not None
+                    )
+                    if any_matches_precursor_mz:
+                        matches_precursor_mz = True
                         exceeds_precursor_mz = False
-                    else:
-                        exceeds_precursor_mz = all(
-                            d > self.precursor_mass_tol for d in delta_mass_ppm
-                        )
-                        exceeds_precursor_mz = (
-                            finished_beams[i] or aa is not None
-                        ) and exceeds_precursor_mz
                     if matches_precursor_mz or exceeds_precursor_mz:
                         break
                 except KeyError:
@@ -1026,6 +1029,7 @@ class CosineWarmupScheduler(torch.optim.lr_scheduler._LRScheduler):
         return lr_factor
 
 
+@nb.njit
 def _calc_mass_error(
     calc_mz: float, obs_mz: float, charge: int, isotope: int = 0
 ) -> float:
