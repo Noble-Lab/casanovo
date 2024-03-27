@@ -7,6 +7,11 @@ from click.testing import CliRunner
 from casanovo import casanovo
 
 
+def test_annotate(mgf_small_unannotated, tide_dir_small, tmp_path):
+    ## TODO
+    pass
+
+
 def test_train_and_run(
     mgf_small, mzml_small, tiny_config, tmp_path, monkeypatch
 ):

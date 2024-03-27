@@ -260,3 +260,100 @@ def tiny_config(tmp_path):
         yaml.dump(cfg, out_file)
 
     return cfg_file
+
+
+@pytest.fixture
+def mgf_small_unannotated(tmp_path):
+    """An MGF file with 2 unannotated spectra and scan numbers."""
+    peptides = ["LESLIEK", "PEPTIDEK"]
+    mgf_file = tmp_path / "small_unannotated.mgf"
+    return _create_unannotated_mgf(peptides, mgf_file)
+
+
+def _create_unannotated_mgf(peptides, mgf_file, random_state=999):
+    """
+    Create a fake MGF file from one or more peptides.
+    This file will have no SEQ= parameter, but will have a SCANS= parameter.
+
+    Parameters
+    ----------
+    peptides : str or list of str
+        The peptides for which to create spectra.
+    mgf_file : Path
+        The MGF file to create.
+    random_state : int or numpy.random.Generator, optional
+        The random seed. The charge states are chosen to be 2 or 3 randomly.
+
+    Returns
+    -------
+    mgf_file : Path
+    """
+    rng = np.random.default_rng(random_state)
+    entries = [
+        _create_unannotated_mgf_entry(p, idx, rng.choice([2, 3]))
+        for idx, p in enumerate(peptides)
+    ]
+    with mgf_file.open("w+") as mgf_ref:
+        mgf_ref.write("\n".join(entries))
+
+    return mgf_file
+
+
+def _create_unannotated_mgf_entry(peptide, scan_num, charge):
+    """
+    Create a MassIVE-KB style MGF entry for a single PSM.
+    Each entry will have no SEQ= parameter, but will have a SCANS= parameter.
+
+    Parameters
+    ----------
+    peptide : str
+        A peptide sequence.
+    scan_num : int
+        The scan number.
+    charge : int, optional
+        The peptide charge state.
+
+    Returns
+    -------
+    str
+        The PSM entry in an MGF file format.
+    """
+    precursor_mz = calculate_mass(peptide, charge=int(charge))
+    mzs, intensities = _peptide_to_peaks(peptide, charge)
+    frags = "\n".join([f"{m} {i}" for m, i in zip(mzs, intensities)])
+
+    mgf = [
+        "BEGIN IONS",
+        f"PEPMASS={precursor_mz}",
+        f"CHARGE={charge}+",
+        f"SCANS={scan_num}",
+        f"{frags}",
+        "END IONS",
+    ]
+    return "\n".join(mgf)
+
+
+@pytest.fixture
+def tide_dir_small(tmp_path):
+    """A directory with a very small TIDE search result."""
+    tide_dir = tmp_path / "tide_results"
+    tide_dir.mkdir()
+
+    _create_tide_results_target(tide_dir)
+    _create_tide_results_decoy(tide_dir)
+
+    return tide_dir
+
+
+def _create_tide_results_target(tide_dir):
+    """Create a fake TIDE search result file (target)."""
+    out_file = tide_dir / "tide-search.target.txt"
+    ## TODO
+    pass
+
+
+def _create_tide_results_decoy(tide_dir):
+    """Create a fake TIDE search result file (decoy)."""
+    out_file = tide_dir / "tide-search.decoy.txt"
+    ## TODO
+    pass

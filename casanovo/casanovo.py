@@ -42,6 +42,7 @@ from . import __version__
 from . import utils
 from .denovo import ModelRunner
 from .config import Config
+from .data.annotate_db import annotate_mgf
 
 logger = logging.getLogger("casanovo")
 click.rich_click.USE_MARKDOWN = True
@@ -141,6 +142,51 @@ def sequence(
             logger.info("  %s", peak_file)
 
         runner.predict(peak_path, output)
+
+    logger.info("DONE!")
+
+
+@main.command(cls=_SharedParams)
+@click.argument(
+    "peak_path",
+    required=True,
+    nargs=1,
+    type=click.Path(exists=True, dir_okay=False),
+)
+@click.argument(
+    "tide_path",
+    required=True,
+    nargs=1,
+    type=click.Path(exists=True, dir_okay=True),
+)
+def annotate(
+    peak_path: str,
+    tide_path: str,
+    model: Optional[str],
+    config: Optional[str],
+    output: Optional[str],
+    verbosity: str,
+) -> None:
+    """Annotate a given .mgf with candidates as selected by a Tide search for Casanovo-DB.
+
+    PEAK_PATH must be one MGF file from which to annotate spectra.
+
+    TIDE_PATH must be one directory containing the Tide search results of the <PEAK_PATH> .mgf.
+    This directory must contain tide-search.decoy.txt and tide-search.target.txt
+    """
+    for peak_file in peak_path:
+        logger.info("  %s", peak_file)
+
+    if output is None:
+        output = setup_logging(output, verbosity)
+        logger.info(
+            "Output file not specified. Annotated MGF will be saved in the same directory as the input MGF."
+        )
+        output = peak_path.replace(".mgf", "_annotated.mgf")
+    else:
+        output = setup_logging(output, verbosity)
+
+    annotate_mgf(peak_path, tide_path, output)
 
     logger.info("DONE!")
 
