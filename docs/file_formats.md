@@ -71,7 +71,7 @@ MTD	variable_mod[6]-site	N-term
 This indicates that cysteine carbamidomethylation was used as a static modification (this time defined by the [Unimod](https://www.unimod.org/) controlled vocabulary), and that deamidation of asparagine and glutamine, oxidation of methionine, N-terminal loss of ammonia, N-terminal acetylation, and N-terminal carbamylation were used as variable modifications.
 Different PTMs in Casanovo can only be enabled or disabled by training a new model.
 
-The final piece of information in the metadata section are the active configuration settings, allowing for replication or review of the analysis parameters:
+The final piece of information in the metadata section is the active configuration settings, allowing for replication or review of the analysis parameters:
 
 ```
 MTD	software[1]-setting[1]	model = casanovo_massivekb_v4_0_0.ckpt
@@ -134,10 +134,10 @@ PSM	GEYKLLPFNKLMLGEG	5	null	null	null	null	[MS, MS:1003281, Casanovo, 4.0.1]	-0.
 
 Key information for each PSM is as follows:
 - `sequence`: The predicted peptide sequence.
-- `PSM_ID`: A monotically increasing index, serving as a unique identifier for each PSM.
+- `PSM_ID`: A monotonically increasing index, serving as a unique identifier for each PSM.
 - `search_engine_score[1]`: The score of this PSM.
 - `spectra_ref`: Unique identifier linking the prediction back to the original spectrum in the input file(s).
-- `opt_ms_run[1]_aa_scores`: Casanovo predicts peptides in an autoregressive fashion, one amino acid at the time. This column contains comma-separated scores of the individual amino acid predictions.
+- `opt_ms_run[1]_aa_scores`: Casanovo predicts peptides in an autoregressive fashion, one amino acid at a time. This column contains comma-separated scores of the individual amino acid predictions.
 
 > [!NOTE]
 > Scores in Casanovo range from -1 to 1, where 1 indicates high confidence in the prediction.
@@ -147,18 +147,18 @@ Key information for each PSM is as follows:
 
 The `spectra_ref` column is essential for connecting predictions back to the corresponding MS/MS spectra in the input file(s).
 This column consists of two parts: the run index and the spectrum reference, separated by a colon.
-- The run index is of the form `ms_run[FILE_INDEX]`, with `FILE_INDEX` refering the corresponding run location in the metadata section. In the typical case when only a single input file was processed, this will be `1`.
+- The run index is of the form `ms_run[FILE_INDEX]`, with `FILE_INDEX` referring to the corresponding run location in the metadata section. In the typical case when only a single input file was processed, this will be `1`.
 - The spectrum reference can take the form of either a scan number or a spectrum index.
     - When using mzML or mzXML files as input, the spectrum reference will take the form of a scan number, encoded as `scan=SCAN`, with `SCAN` the scan number specified in the input file for this spectrum.
     - When using MGF files as input, the spectrum reference will be an index, encoded as `index=INDEX`, with `INDEX` the zero-based index of the spectrum in its input file. This is because MGF is not a standardized format that is not guaranteed to contain specific spectrum identifiers.
 
 > [!WARNING]
 > Be mindful of the input peak file format when linking Casanovo PSMs to their input spectra.
-> Even when the same raw file is converted to both mzML and MGF, scan numbers in the mzML file will generally not match spectrum indexes in the MGF file, as the former contains both MS and MS/MS spectra while the latter only contains MS/MS spectra.
+> Even when the same raw file is converted to both mzML and MGF, scan numbers in the mzML file will generally not match spectrum indices in the MGF file, as the former contains both MS and MS/MS spectra while the latter only contains MS/MS spectra.
 
 > [!NOTE]
 > The PSM identifier in the `PSM_ID` column is not necessarily identical to the spectrum index in the `spectra_ref` column, even for MGF files.
-> - `PSM_ID` is one-based, whereas spectrum indexes in `spectra_ref` are zero-based.
+> - `PSM_ID` is one-based, whereas spectrum indices in `spectra_ref` are zero-based.
 > - If multiple predictions are included per spectrum (configuration option `top_match`), each PSM will have a different identifier, but spectrum references will overlap.
 
 ## Casanovo configuration
@@ -183,7 +183,7 @@ For example, the `top_match` option in the first section makes it possible to fl
 In contrast, setting a different value for the `n_peaks` option in the second section is only possible when training a new model, and cannot be modified when predicting with a previously trained model that uses a different configuration.
 
 > [!TIP]
-> Each change in the configuration can lead to different outcomes in the peptide sequencing process, so it's beneficial to experiment with various settings to find the optimal configuration for your data.
+> Each change in the configuration can lead to different outcomes in the peptide sequencing process, so it may be beneficial to experiment with various settings to find the optimal configuration for your data.
 > Always consider your experimental design and the nature of your data when adjusting these settings.
 
 ## Logging
