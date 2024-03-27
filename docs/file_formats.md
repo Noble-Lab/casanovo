@@ -22,10 +22,11 @@ This file is divided into two main sections:
 mzTab files can contain additional sections to include protein identifications and quantification information as well.
 However, as these levels of information are not relevant for Casanovo, these are not included in its output mzTab files.
 
-> [!TIP]
-> mzTab is a human and machine readable format.
-> It can be inspected manually by opening it with a text editor or with spreadsheet software (specify tab as the delimiter).
-> Additionally, you can use tools like [Pyteomics](https://pyteomics.readthedocs.io/en/latest/api/mztab.html) for Python or [MSnbase](https://rdrr.io/bioc/MSnbase/man/readMzTabData.html) for R to programmatically read mzTab files.
+```{tip}
+mzTab is a human and machine readable format.
+It can be inspected manually by opening it with a text editor or with spreadsheet software (specify tab as the delimiter).
+Additionally, you can use tools like [Pyteomics](https://pyteomics.readthedocs.io/en/latest/api/mztab.html) for Python or [MSnbase](https://rdrr.io/bioc/MSnbase/man/readMzTabData.html) for R to programmatically read mzTab files.
+```
 
 **Metadata section**
 
@@ -139,11 +140,12 @@ Key information for each PSM is as follows:
 - `spectra_ref`: Unique identifier linking the prediction back to the original spectrum in the input file(s).
 - `opt_ms_run[1]_aa_scores`: Casanovo predicts peptides in an autoregressive fashion, one amino acid at a time. This column contains comma-separated scores of the individual amino acid predictions.
 
-> [!NOTE]
-> Scores in Casanovo range from -1 to 1, where 1 indicates high confidence in the prediction.
-> A score below 0 occurs for a predicted peptide sequence that mismatches the observed precursor mass, in which case the score is penalized by subtracting 1.
-> This will also be evident from a difference in the observed precursor _m_/_z_, in the `exp_mass_to_charge` column, and the precursor _m_/_z_ calculated from the predicted peptide sequence, in the `calc_mass_to_charge` column.
-> Hence, it is important to properly configure settings that impact the precursor mass filter, such as the precursor mass tolerance (option `precursor_mass_tol`) and the isotopes to consider (option `isotope_error_range`).
+```{note}
+Scores in Casanovo range from -1 to 1, where 1 indicates high confidence in the prediction.
+A score below 0 occurs for a predicted peptide sequence that mismatches the observed precursor mass, in which case the score is penalized by subtracting 1.
+This will also be evident from a difference in the observed precursor _m_/_z_, in the `exp_mass_to_charge` column, and the precursor _m_/_z_ calculated from the predicted peptide sequence, in the `calc_mass_to_charge` column.
+Hence, it is important to properly configure settings that impact the precursor mass filter, such as the precursor mass tolerance (option `precursor_mass_tol`) and the isotopes to consider (option `isotope_error_range`).
+```
 
 The `spectra_ref` column is essential for connecting predictions back to the corresponding MS/MS spectra in the input file(s).
 This column consists of two parts: the run index and the spectrum reference, separated by a colon.
@@ -152,14 +154,16 @@ This column consists of two parts: the run index and the spectrum reference, sep
     - When using mzML or mzXML files as input, the spectrum reference will take the form of a scan number, encoded as `scan=SCAN`, with `SCAN` the scan number specified in the input file for this spectrum.
     - When using MGF files as input, the spectrum reference will be an index, encoded as `index=INDEX`, with `INDEX` the zero-based index of the spectrum in its input file. This is because MGF is not a standardized format that is not guaranteed to contain specific spectrum identifiers.
 
-> [!WARNING]
-> Be mindful of the input peak file format when linking Casanovo PSMs to their input spectra.
-> Even when the same raw file is converted to both mzML and MGF, scan numbers in the mzML file will generally not match spectrum indices in the MGF file, as the former contains both MS and MS/MS spectra while the latter only contains MS/MS spectra.
+```{warning}
+Be mindful of the input peak file format when linking Casanovo PSMs to their input spectra.
+Even when the same raw file is converted to both mzML and MGF, scan numbers in the mzML file will generally not match spectrum indices in the MGF file, as the former contains both MS and MS/MS spectra while the latter only contains MS/MS spectra.
+```
 
-> [!NOTE]
-> The PSM identifier in the `PSM_ID` column is not necessarily identical to the spectrum index in the `spectra_ref` column, even for MGF files.
-> - `PSM_ID` is one-based, whereas spectrum indices in `spectra_ref` are zero-based.
-> - If multiple predictions are included per spectrum (configuration option `top_match`), each PSM will have a different identifier, but spectrum references will overlap.
+```{note}
+The PSM identifier in the `PSM_ID` column is not necessarily identical to the spectrum index in the `spectra_ref` column, even for MGF files.
+- `PSM_ID` is one-based, whereas spectrum indices in `spectra_ref` are zero-based.
+- If multiple predictions are included per spectrum (configuration option `top_match`), each PSM will have a different identifier, but spectrum references will overlap.
+```
 
 ## Casanovo configuration
 
@@ -182,9 +186,10 @@ The first section contains options used to configure Casanovo during *de novo* p
 For example, the `top_match` option in the first section makes it possible to flexibly report multiple PSMs per spectrum during _de novo_ peptide sequencing.
 In contrast, setting a different value for the `n_peaks` option in the second section is only possible when training a new model, and cannot be modified when predicting with a previously trained model that uses a different configuration.
 
-> [!TIP]
-> Each change in the configuration can lead to different outcomes in the peptide sequencing process, so it may be beneficial to experiment with various settings to find the optimal configuration for your data.
-> Always consider your experimental design and the nature of your data when adjusting these settings.
+```{tip}
+Each change in the configuration can lead to different outcomes in the peptide sequencing process, so it may be beneficial to experiment with various settings to find the optimal configuration for your data.
+Always consider your experimental design and the nature of your data when adjusting these settings.
+```
 
 ## Logging
 
@@ -197,10 +202,11 @@ Log files detail every step Casanovo takes, including:
 - Warnings or errors encountered during processing, providing clues for troubleshooting.
 - Summary statistics upon completion, offering a quick overview of the results.
 
-> [!TIP]
-> Tips for using log files:
-> - Bug reporting: When encountering issues, including the relevant log file in your bug report can significantly aid in diagnosing the problem.
-> - Performance monitoring: Log files can be used to monitor the efficiency of Casanovo's operation over time, identifying potential bottlenecks.
+```{tip}
+Tips for using log files:
+- Bug reporting: When encountering issues, including the relevant log file in your bug report can significantly aid in diagnosing the problem.
+- Performance monitoring: Log files can be used to monitor the efficiency of Casanovo's operation over time, identifying potential bottlenecks.
+```
 
 ## For advanced users: Training Casanovo
 
@@ -222,8 +228,9 @@ SEQ=HQGVM+15.995VGM+15.995GQK
 END IONS
 ```
 
-> [!NOTE]
-> In case the peptide sequence includes PTMs, ensure that these are formatted correctly and match the amino acid and modification vocabulary in the Casanovo configuration.
+```{note}
+In case the peptide sequence includes PTMs, ensure that these are formatted correctly and match the amino acid and modification vocabulary in the Casanovo configuration.
+```
 
 mzML or mzXML files are not supported as input during training, as these formats do not provide a mechanism to annotate their spectra with peptide sequences.
 Similarly, in Casanovo evaluation mode only annotated MGF files are supported.
