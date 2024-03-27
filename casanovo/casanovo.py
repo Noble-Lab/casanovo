@@ -313,14 +313,14 @@ def _normalize_mods(seq: str) -> str:
         str
             The peptide sequence with Casanovo-DB-style modifications.
     """
-    seq = seq.replace("M[15.99]", "M+15.995")
     seq = seq.replace("C", "C+57.021")
-    seq = seq.replace("N[0.98]", "N+0.984")
-    seq = seq.replace("Q[0.98]", "Q+0.984")
-    seq = re.sub(r"(.*)\[42\.01\]", r"+42.011\1", seq)
-    seq = re.sub(r"(.*)\[43\.01\]", r"+43.006\1", seq)
-    seq = re.sub(r"(.*)\[\-17\.03\]", r"-17.027\1", seq)
-    seq = re.sub(r"(.*)\[25\.98\]", r"+43.006-17.027\1", seq)
+    seq = re.sub(r"M\[15\..*\]", r"M+15.995", seq)
+    seq = re.sub(r"N\[0\.9.*\]", r"N+0.984", seq)
+    seq = re.sub(r"Q\[0\.9.*\]", r"Q+0.984", seq)
+    seq = re.sub(r"(.*)\[42\..*\]", r"+42.011\1", seq)
+    seq = re.sub(r"(.*)\[43\..*\]", r"+43.006\1", seq)
+    seq = re.sub(r"(.*)\[\-17\..*\]", r"-17.027\1", seq)
+    seq = re.sub(r"(.*)\[25\..*\]", r"+43.006-17.027\1", seq)
     return seq
 
 
@@ -365,26 +365,39 @@ def create_mgf_from_tide(
     )
 
     df = pd.concat([target_df, decoy_df])
+    print("---")
+    print(df.columns)
+    print("---")
     scan_groups = df.groupby("scan")[["sequence", "target/decoy"]]
 
     scan_map = {}
 
     for scan, item in scan_groups:
-        target_candidate_list = list(
-            map(
-                _normalize_mods,
-                item.groupby("target/decoy")["sequence"].apply(list)["target"],
+        td_group = item.groupby("target/decoy")["sequence"].apply(list)
+        if "target" in td_group.index:
+            target_candidate_list = list(
+                map(
+                    _normalize_mods,
+                    td_group["target"],
+                )
             )
-        )
-        decoy_candidate_list = list(
-            map(
-                _normalize_mods,
-                item.groupby("target/decoy")["sequence"].apply(list)["decoy"],
+        else:
+            target_candidate_list = []
+            logger.warn(f"No target peptides found for scan {scan}.")
+        if "decoy" in td_group.index:
+            decoy_candidate_list = list(
+                map(
+                    _normalize_mods,
+                    td_group["decoy"],
+                )
             )
-        )
-        decoy_candidate_list = list(
-            map(lambda x: "decoy_" + str(x), decoy_candidate_list)
-        )
+            decoy_candidate_list = list(
+                map(lambda x: "decoy_" + str(x), decoy_candidate_list)
+            )
+        else:
+            decoy_candidate_list = []
+            logger.warn(f"No decoy peptides found for scan {scan}.")
+
         scan_map[scan] = target_candidate_list + decoy_candidate_list
 
     all_spec = []
