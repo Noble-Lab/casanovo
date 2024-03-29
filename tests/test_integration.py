@@ -7,9 +7,31 @@ from click.testing import CliRunner
 from casanovo import casanovo
 
 
-def test_annotate(mgf_small_unannotated, tide_dir_small, tmp_path):
-    ## TODO
-    pass
+def test_annotate(
+    mgf_small_unannotated, tide_dir_small, tiny_config, tmp_path
+):
+
+    # Run a command:
+    run = functools.partial(
+        CliRunner().invoke, casanovo.main, catch_exceptions=False
+    )
+
+    annotate_args = [
+        "annotate",
+        str(mgf_small_unannotated),
+        str(tide_dir_small),
+        "--config",
+        tiny_config,
+        "--output",
+        str(tmp_path / "annotated_mgf.mgf"),
+    ]
+
+    result = run(annotate_args)
+
+    assert result.exit_code == 0
+    assert (tmp_path / "annotated_mgf.mgf").exists()
+
+    ## TODO: Write rest of test to verify the output file.
 
 
 def test_train_and_run(

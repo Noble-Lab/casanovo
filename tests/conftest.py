@@ -1,6 +1,7 @@
 """Fixtures used for testing."""
 
 import numpy as np
+import pandas as pd
 import psims
 import pytest
 import yaml
@@ -324,6 +325,7 @@ def _create_unannotated_mgf_entry(peptide, scan_num, charge):
 
     mgf = [
         "BEGIN IONS",
+        f"TITLE=title::{scan_num}",
         f"PEPMASS={precursor_mz}",
         f"CHARGE={charge}+",
         f"SCANS={scan_num}",
@@ -339,21 +341,51 @@ def tide_dir_small(tmp_path):
     tide_dir = tmp_path / "tide_results"
     tide_dir.mkdir()
 
-    _create_tide_results_target(tide_dir)
-    _create_tide_results_decoy(tide_dir)
+    # Key is the scan number
+    built_dict = {
+        0: {
+            "targets": ["LESLIEK", "PEPTIDEK"],
+            "decoys": ["KEILSEL", "KEDITEPP"],
+        },
+        1: {
+            "targets": ["LESLIEK", "PEPTIDEK"],
+            "decoys": ["KEILSEL", "KEDITEPP"],
+        },
+    }
+
+    _create_tide_results_target(tide_dir, built_dict)
+    _create_tide_results_decoy(tide_dir, built_dict)
 
     return tide_dir
 
 
-def _create_tide_results_target(tide_dir):
+def _create_tide_results_target(tide_dir, built_dict):
     """Create a fake TIDE search result file (target)."""
     out_file = tide_dir / "tide-search.target.txt"
-    ## TODO
-    pass
+    df = pd.DataFrame(columns=["scan", "sequence", "target/decoy"])
+    for scan, peptides in built_dict.items():
+        entry = pd.DataFrame.from_dict(
+            {
+                "scan": [scan] * len(peptides["targets"]),
+                "sequence": peptides["targets"],
+                "target/decoy": ["target"] * len(peptides["targets"]),
+            }
+        )
+        df = pd.concat([df, entry], ignore_index=True)
+    df.to_csv(out_file, sep="\t", index=True)
 
 
-def _create_tide_results_decoy(tide_dir):
+def _create_tide_results_decoy(tide_dir, built_dict):
     """Create a fake TIDE search result file (decoy)."""
     out_file = tide_dir / "tide-search.decoy.txt"
-    ## TODO
-    pass
+    df = pd.DataFrame(columns=["scan", "sequence", "target/decoy"])
+    for scan, peptides in built_dict.items():
+        entry = pd.DataFrame.from_dict(
+            {
+                "scan": [scan] * len(peptides["decoys"]),
+                "sequence": peptides["decoys"],
+                "target/decoy": ["decoy"] * len(peptides["decoys"]),
+            }
+        )
+        df = pd.concat([df, entry], ignore_index=True)
+    df.to_csv(out_file, sep="\t", index=True)
