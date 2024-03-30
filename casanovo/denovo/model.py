@@ -182,6 +182,8 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         # Output writer during predicting.
         self.out_writer = out_writer
 
+        self.embeddings = []
+
     def forward(
         self, spectra: torch.Tensor, precursors: torch.Tensor
     ) -> List[List[Tuple[float, np.ndarray, str]]]:
@@ -207,10 +209,10 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
             peptide predictions consists of a tuple with the peptide score,
             the amino acid scores, and the predicted peptide sequence.
         """
-        return self.beam_search_decode(
-            spectra.to(self.encoder.device),
-            precursors.to(self.decoder.device),
-        )
+
+        memories, _ = self.encoder(spectra)
+
+        return memories
 
     def beam_search_decode(
         self, spectra: torch.Tensor, precursors: torch.Tensor
@@ -836,24 +838,21 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
             precursor_charge,
             precursor_mz,
             spectrum_i,
-            spectrum_preds,
+            peak_embeddings,
         ) in zip(
             batch[1][:, 1].cpu().detach().numpy(),
             batch[1][:, 2].cpu().detach().numpy(),
             batch[2],
-            self.forward(batch[0], batch[1]),
+            self.forward(batch[0], batch[1]).cpu().detach(),
         ):
-            for peptide_score, aa_scores, peptide in spectrum_preds:
-                predictions.append(
-                    (
-                        spectrum_i,
-                        precursor_charge,
-                        precursor_mz,
-                        peptide,
-                        peptide_score,
-                        aa_scores,
-                    )
+            predictions.append(
+                (
+                    spectrum_i,
+                    precursor_charge,
+                    precursor_mz,
+                    peak_embeddings[0, :],
                 )
+            )
 
         return predictions
 
@@ -907,23 +906,26 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
             spectrum_i,
             charge,
             precursor_mz,
-            peptide,
-            peptide_score,
-            aa_scores,
+            spectrum_embedding,
         ) in outputs:
-            if len(peptide) == 0:
-                continue
+            self.embeddings.append(spectrum_embedding)
             self.out_writer.psms.append(
                 (
-                    peptide,
+                    " ",
                     tuple(spectrum_i),
-                    peptide_score,
+                    0,
                     charge,
                     precursor_mz,
-                    self.peptide_mass_calculator.mass(peptide, charge),
-                    ",".join(list(map("{:.5f}".format, aa_scores))),
+                    0,
+                    ",".join(list(map("{:.5f}".format, [0]))),
                 ),
             )
+
+    def on_predict_epoch_end(self):
+        torch.save(
+            torch.stack(self.embeddings, dim=0),
+            self.out_writer.filename.with_suffix(".pt"),
+        )
 
     def _log_history(self) -> None:
         """
