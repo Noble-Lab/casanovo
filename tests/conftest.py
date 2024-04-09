@@ -266,7 +266,7 @@ def tiny_config(tmp_path):
 @pytest.fixture
 def mgf_small_unannotated(tmp_path):
     """An MGF file with 2 unannotated spectra and scan numbers."""
-    peptides = ["LESLIEK", "PEPTIDEK"]
+    peptides = ["LESLIEK", "PEPTIDEK", "LESTIEK"]
     mgf_file = tmp_path / "small_unannotated.mgf"
     return _create_unannotated_mgf(peptides, mgf_file)
 
@@ -350,6 +350,17 @@ def tide_dir_small(tmp_path):
         1: {
             "targets": ["LESLIEK", "PEPTIDEK"],
             "decoys": ["KEILSEL", "KEDITEPP"],
+        },
+        2: {
+            "targets": [
+                "L[42.011]EM[15.9]SLIM[15.995]EK",
+                "P[43.01]EN[0.99]PTIQ[0.984]DEK",
+            ],
+            "decoys": [
+                "K[-17.03]M[15.995]EILSEL",
+                "K[25.1]EDITEPP",
+                "KEDIQ[0.984]TEPPQ[0.984]",
+            ],
         },
     }
 

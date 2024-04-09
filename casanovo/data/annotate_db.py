@@ -24,14 +24,15 @@ def _normalize_mods(seq: str) -> str:
         str
             The peptide sequence with Casanovo-DB-style modifications.
     """
+    logger = logging.getLogger("casanovo")
     seq = seq.replace("C", "C+57.021")
-    seq = re.sub(r"M\[15\..*\]", r"M+15.995", seq)
-    seq = re.sub(r"N\[0\.9.*\]", r"N+0.984", seq)
-    seq = re.sub(r"Q\[0\.9.*\]", r"Q+0.984", seq)
-    seq = re.sub(r"(.*)\[42\..*\]", r"+42.011\1", seq)
-    seq = re.sub(r"(.*)\[43\..*\]", r"+43.006\1", seq)
-    seq = re.sub(r"(.*)\[\-17\..*\]", r"-17.027\1", seq)
-    seq = re.sub(r"(.*)\[25\..*\]", r"+43.006-17.027\1", seq)
+    seq = re.sub(r"M\[15\.[0-9]*\]", r"M+15.995", seq)
+    seq = re.sub(r"N\[0\.9[0-9]*\]", r"N+0.984", seq)
+    seq = re.sub(r"Q\[0\.9[0-9]*\]", r"Q+0.984", seq)
+    seq = re.sub(r"(.*)\[42\.[0-9]*\]", r"+42.011\1", seq)
+    seq = re.sub(r"(.*)\[43\.[0-9]*\]", r"+43.006\1", seq)
+    seq = re.sub(r"(.*)\[\-17\.[0-9]*\]", r"-17.027\1", seq)
+    seq = re.sub(r"(.*)\[25\.[0-9]*\]", r"+43.006-17.027\1", seq)
     return seq
 
 

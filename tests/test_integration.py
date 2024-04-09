@@ -31,7 +31,25 @@ def test_annotate(
     assert result.exit_code == 0
     assert (tmp_path / "annotated_mgf.mgf").exists()
 
-    ## TODO: Write rest of test to verify the output file.
+    # Read in the annotated file
+    with open(tmp_path / "annotated_mgf.mgf") as f:
+        annotated_lines = f.readlines()
+
+    # Get each SEQ= line
+    seq_lines = [line for line in annotated_lines if line.startswith("SEQ=")]
+    assert len(seq_lines) == 3
+    assert (
+        seq_lines[0].strip()
+        == "SEQ=LESLIEK,PEPTIDEK,decoy_KEILSEL,decoy_KEDITEPP"
+    )
+    assert (
+        seq_lines[1].strip()
+        == "SEQ=LESLIEK,PEPTIDEK,decoy_KEILSEL,decoy_KEDITEPP"
+    )
+    assert (
+        seq_lines[2].strip()
+        == "SEQ=+42.011LEM+15.995SLIM+15.995EK,+43.006PEN+0.984PTIQ+0.984DEK,decoy_-17.027KM+15.995EILSEL,decoy_+43.006-17.027KEDITEPP,decoy_KEDIQ+0.984TEPPQ+0.984"
+    )
 
 
 def test_train_and_run(
