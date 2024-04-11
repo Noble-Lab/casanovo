@@ -989,6 +989,171 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         return [optimizer], {"scheduler": lr_scheduler, "interval": "step"}
 
 
+class DBSpec2Pep(Spec2Pep):
+    """
+    Inherits Spec2Pep
+
+    Hijacks teacher-forcing implemented in Spec2Pep and uses it to predict scores between a spectra and associated peptide.
+    Input format is .mgf, with comma-separated targets and decoys in the SEQ field. Decoys should have a prefix of "decoy_".
+    """
+
+    num_pairs = 1024
+    decoy_prefix = "decoy_"
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+    def predict_step(self, batch, *args):
+        batch_res = []
+        for (
+            indexes,
+            t_or_d,
+            peptides,
+            precursors,
+            encoded_ms,
+        ) in self.smart_batch_gen(batch):
+            with torch.set_grad_enabled(True):
+                pred, truth = self.decoder(peptides, precursors, *encoded_ms)
+                sm = torch.nn.Softmax(dim=2)
+                pred = sm(pred)
+                score_result, per_aa_score = calc_match_score(
+                    pred, truth
+                )  # Calculate the score between spectra + peptide list
+                batch_res.append(
+                    (
+                        indexes,
+                        t_or_d,
+                        peptides,
+                        score_result,
+                        per_aa_score,
+                        precursors,
+                    )
+                )
+        return batch_res
+
+    def smart_batch_gen(self, batch):
+        all_psm = []
+        enc = self.encoder(batch[0])
+        precursors = batch[1]
+        indexes = batch[3]
+        enc = list(zip(*enc))
+        for idx, _ in enumerate(batch[0]):
+            spec_peptides = batch[2][idx].split(",")
+            # Check for decoy prefixes and create a bit-vector indicating targets (1) or decoys (0)
+            t_or_ds = [
+                0 if p.startswith(self.decoy_prefix) else 1
+                for p in spec_peptides
+            ]
+            # Remove decoy prefix
+            spec_peptides = [
+                s[len(self.decoy_prefix) :]
+                if s.startswith(self.decoy_prefix)
+                else s
+                for s in spec_peptides
+            ]
+            spec_precursors = [precursors[idx]] * len(spec_peptides)
+            spec_enc = [enc[idx]] * len(spec_peptides)
+            spec_idx = [indexes[idx]] * len(spec_peptides)
+            all_psm.extend(
+                list(
+                    zip(
+                        spec_enc,
+                        spec_precursors,
+                        spec_peptides,
+                        spec_idx,
+                        t_or_ds,
+                    )
+                )
+            )
+        # Continually grab num_pairs items from all_psm until list is exhausted
+        while len(all_psm) > 0:
+            batch = all_psm[: self.num_pairs]
+            all_psm = all_psm[self.num_pairs :]
+            batch = list(zip(*batch))
+            encoded_ms = (
+                torch.stack([a[0] for a in batch[0]]),
+                torch.stack([a[1] for a in batch[0]]),
+            )
+            prec_data = torch.stack(batch[1])
+            pep_str = list(batch[2])
+            indexes = [a[1] for a in batch[3]]
+            t_or_ds = batch[4]
+            yield (indexes, t_or_ds, pep_str, prec_data, encoded_ms)
+
+    def on_predict_batch_end(
+        self,
+        outputs: List[Tuple[np.ndarray, List[str], torch.Tensor]],
+        *args,
+    ) -> None:
+        if self.out_writer is None:
+            return
+        (
+            indexes,
+            t_or_d,
+            peptides,
+            score_result,
+            per_aa_score,
+            precursors,
+        ) = list(zip(*outputs))
+        for index, t_or_d, peptide, score, per_aa_scores, precursor in zip(
+            indexes, t_or_d, peptides, score_result, per_aa_score, precursors
+        ):
+            per_aa_scores = per_aa_scores.cpu().numpy()
+            per_aa_scores = list(per_aa_scores[per_aa_scores != 0])
+            score = score.cpu().numpy()
+            precursor = precursor.cpu().numpy()
+            self.out_writer.psms.append(
+                (index, peptide, precursor, score, t_or_d, per_aa_scores),
+            )
+
+
+def calc_match_score(
+    batch_all_aa_scores: torch.Tensor, truth_aa_indicies: torch.Tensor
+) -> List[float]:
+    """
+    Take in teacher-forced scoring of amino acids of the peptides (in a batch) and use the truth labels
+    to calculate a score between the input spectra and associated peptide. The score is the geometric
+    mean of the AA probabilities
+
+        Parameters
+        ----------
+        batch_all_aa_scores : torch.Tensor
+            Amino acid scores for all amino acids in the vocabulary for every prediction made to generate the associated peptide (for an entire batch)
+        truth_aa_indicies : torch.Tensor
+            Indicies of the score for each actual amino acid in the peptide (for an entire batch)
+
+        Returns
+        -------
+        score : list[float], list[list[float]]
+            The score between the input spectra and associated peptide (for an entire batch)
+            a list of lists of per amino acid scores (for an entire batch)
+    """
+    # Remove trailing tokens from predictions,
+    batch_all_aa_scores = batch_all_aa_scores[:, :-1]
+
+    # Vectorized scoring using efficient indexing.
+    rows = (
+        torch.arange(batch_all_aa_scores.shape[0])
+        .unsqueeze(-1)
+        .expand(-1, batch_all_aa_scores.shape[1])
+    )
+    cols = torch.arange(0, batch_all_aa_scores.shape[1]).expand_as(rows)
+
+    per_aa_scores = batch_all_aa_scores[rows, cols, truth_aa_indicies]
+
+    score_mask = truth_aa_indicies != 0
+    masked_per_aa_scores = per_aa_scores * score_mask
+    # all_scores = masked_per_aa_scores.sum(dim=1) / score_mask.sum(dim=1) # Calculated arithmetic score
+    all_scores = torch.where(
+        torch.log(masked_per_aa_scores) == float("-inf"),
+        torch.tensor(0.0),
+        torch.log(masked_per_aa_scores),
+    ).sum(dim=1) / score_mask.sum(
+        dim=1
+    )  # Calculates geometric score
+    return all_scores, masked_per_aa_scores
+
+
 class CosineWarmupScheduler(torch.optim.lr_scheduler._LRScheduler):
     """
     Learning rate scheduler with linear warm-up followed by cosine shaped decay.

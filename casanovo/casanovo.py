@@ -193,6 +193,32 @@ def annotate(
 
 @main.command(cls=_SharedParams)
 @click.argument(
+    "peak_path",
+    required=True,
+    nargs=-1,
+    type=click.Path(exists=True, dir_okay=False),
+)
+def db_search(
+    peak_path: Tuple[str],
+    model: Optional[str],
+    config: Optional[str],
+    output: Optional[str],
+    verbosity: str,
+) -> None:
+    """Perform a search using Casanovo-DB.
+
+    PEAK_PATH must be one MGF file that has ANNOTATED spectra, as output by annotate mode.
+    """
+    output = setup_logging(output, verbosity)
+    config, model = setup_model(model, config, output, False)
+    with ModelRunner(config, model) as runner:
+        runner.db_search(peak_path, output)
+
+    logger.info("DONE!")
+
+
+@main.command(cls=_SharedParams)
+@click.argument(
     "annotated_peak_path",
     required=True,
     nargs=-1,

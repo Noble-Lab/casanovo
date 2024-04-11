@@ -9,7 +9,11 @@ import numpy as np
 import torch
 from depthcharge.data import AnnotatedSpectrumIndex
 
-from ..data.datasets import AnnotatedSpectrumDataset, SpectrumDataset
+from ..data.datasets import (
+    AnnotatedSpectrumDataset,
+    SpectrumDataset,
+    DBSpectrumDataset,
+)
 
 
 class DeNovoDataModule(pl.LightningDataModule):
@@ -88,7 +92,7 @@ class DeNovoDataModule(pl.LightningDataModule):
 
         Parameters
         ----------
-        stage : str {"fit", "validate", "test"}
+        stage : str {"fit", "validate", "test", "db"}
             The stage indicating which Datasets to prepare. All are prepared by
             default.
         annotated: bool
@@ -114,6 +118,17 @@ class DeNovoDataModule(pl.LightningDataModule):
         if stage in (None, "test"):
             make_dataset = functools.partial(
                 AnnotatedSpectrumDataset if annotated else SpectrumDataset,
+                n_peaks=self.n_peaks,
+                min_mz=self.min_mz,
+                max_mz=self.max_mz,
+                min_intensity=self.min_intensity,
+                remove_precursor_tol=self.remove_precursor_tol,
+            )
+            if self.test_index is not None:
+                self.test_dataset = make_dataset(self.test_index)
+        if stage in (None, "db"):
+            make_dataset = functools.partial(
+                DBSpectrumDataset,
                 n_peaks=self.n_peaks,
                 min_mz=self.min_mz,
                 max_mz=self.max_mz,
@@ -155,6 +170,35 @@ class DeNovoDataModule(pl.LightningDataModule):
             shuffle=shuffle,
         )
 
+    def _make_db_loader(
+        self, dataset: torch.utils.data.Dataset, batch_size: int
+    ) -> torch.utils.data.DataLoader:
+        """
+        Create a PyTorch DataLoader.
+
+        Parameters
+        ----------
+        dataset : torch.utils.data.Dataset
+            A PyTorch Dataset.
+
+        Returns
+        -------
+        torch.utils.data.DataLoader
+            A PyTorch DataLoader.
+        """
+        # Calculate new batch size to saturate previous batch size with PSMs
+        pep_per_spec = []
+        for i in range(min(10, len(dataset))):
+            pep_per_spec.append(len(dataset[i][3].split(",")))
+        new_batch_size = int(batch_size // np.mean(pep_per_spec))
+        return torch.utils.data.DataLoader(
+            dataset,
+            batch_size=new_batch_size,
+            collate_fn=prepare_db_batch,
+            pin_memory=True,
+            num_workers=self.n_workers,
+        )
+
     def train_dataloader(self) -> torch.utils.data.DataLoader:
         """Get the training DataLoader."""
         return self._make_loader(
@@ -172,6 +216,10 @@ class DeNovoDataModule(pl.LightningDataModule):
     def predict_dataloader(self) -> torch.utils.data.DataLoader:
         """Get the predict DataLoader."""
         return self._make_loader(self.test_dataset, self.eval_batch_size)
+
+    def db_dataloader(self) -> torch.utils.data.DataLoader:
+        """Get the predict DataLoader."""
+        return self._make_db_loader(self.test_dataset, self.eval_batch_size)
 
 
 def prepare_batch(
@@ -211,3 +259,47 @@ def prepare_batch(
         [precursor_masses, precursor_charges, precursor_mzs]
     ).T.float()
     return spectra, precursors, np.asarray(spectrum_ids)
+
+
+def prepare_db_batch(
+    batch: List[Tuple[torch.Tensor, float, int, str, Tuple[str, str]]]
+) -> Tuple[torch.Tensor, torch.Tensor, np.ndarray, Tuple[str, str]]:
+    """
+    Collate MS/MS spectra into a batch meant for Casanovo-DB.
+
+    Parameters
+    ----------
+    batch : List[Tuple[torch.Tensor, float, int, str, Tuple[str, str]]]
+        A batch of data from an AnnotatedSpectrumDataset, consisting of for each
+        spectrum (i) a tensor with the m/z and intensity peak values, (ii), the
+        precursor m/z, (iii) the precursor charge, (iv) the spectrum identifier (peptide), (v)
+        spectrum identifiers (file and scan).
+
+    Returns
+    -------
+    spectra : torch.Tensor of shape (batch_size, n_peaks, 2)
+        The padded mass spectra tensor with the m/z and intensity peak values
+        for each spectrum.
+    precursors : torch.Tensor of shape (batch_size, 3)
+        A tensor with the precursor neutral mass, precursor charge, and
+        precursor m/z.
+    spectrum_peps : np.ndarray
+        Peptide sequences
+    spectrum_ids : Tuple[str, str]
+        Peak file and spectrum identifier
+    """
+    (
+        spectra,
+        precursor_mzs,
+        precursor_charges,
+        spectrum_peps,
+        spectrum_ids,
+    ) = list(zip(*batch))
+    spectra = torch.nn.utils.rnn.pad_sequence(spectra, batch_first=True)
+    precursor_mzs = torch.tensor(precursor_mzs)
+    precursor_charges = torch.tensor(precursor_charges)
+    precursor_masses = (precursor_mzs - 1.007276) * precursor_charges
+    precursors = torch.vstack(
+        [precursor_masses, precursor_charges, precursor_mzs]
+    ).T.float()
+    return spectra, precursors, np.asarray(spectrum_peps), spectrum_ids

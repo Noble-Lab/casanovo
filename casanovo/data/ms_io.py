@@ -209,3 +209,51 @@ class MztabWriter:
                         psm[6],  # opt_ms_run[1]_aa_scores
                     ]
                 )
+
+
+class DBWriter(MztabWriter):
+    """
+    Export DB search results to an mzTab file.
+
+    Parameters
+    ----------
+    filename : str
+        The name of the mzTab file.
+    """
+
+    def save(self) -> None:
+        """
+        Export the DB search results to the mzTab file.
+        """
+        with open(self.filename, "w", newline="") as f:
+            writer = csv.writer(f, delimiter="\t", lineterminator=os.linesep)
+            # Write metadata.
+            for row in self.metadata:
+                writer.writerow(["MTD", *row])
+            # Write PSMs.
+            writer.writerow(
+                [
+                    "PSH",
+                    "spectrum_index",
+                    "sequence",
+                    "precursor",
+                    "score",
+                    "target",
+                    "aa_scores",
+                ]
+            )
+            for i, psm in enumerate(
+                natsort.natsorted(self.psms, key=operator.itemgetter(1)), 1
+            ):
+                for psm in list(zip(*psm)):
+                    writer.writerow(
+                        [
+                            "PSM",
+                            psm[0],  # spectrum_index
+                            psm[1],  # sequence
+                            psm[2],  # precursor
+                            psm[3],  # score
+                            bool(psm[4]),  # target
+                            psm[5],  # aa_scores
+                        ]
+                    )
