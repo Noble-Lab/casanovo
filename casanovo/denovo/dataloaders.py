@@ -190,7 +190,7 @@ class DeNovoDataModule(pl.LightningDataModule):
         pep_per_spec = []
         for i in range(min(10, len(dataset))):
             pep_per_spec.append(len(dataset[i][3].split(",")))
-        new_batch_size = int(batch_size // np.mean(pep_per_spec))
+        new_batch_size = max(1, int(batch_size // np.mean(pep_per_spec)))
         return torch.utils.data.DataLoader(
             dataset,
             batch_size=new_batch_size,

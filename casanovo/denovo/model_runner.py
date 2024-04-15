@@ -80,7 +80,19 @@ class ModelRunner:
             self.writer.save()
 
     def db_search(self, peak_path: Iterable[str], output: str) -> None:
-        """Casanovo-DB TODO DOCS"""
+        """Perform database search with Casanovo.
+
+        Parameters
+        ----------
+        peak_path : iterable of str
+            The path to the annotated .mgf data files for database search.
+        output : str
+            Where should the output be saved?
+
+        Returns
+        -------
+        self
+        """
         self.writer = ms_io.DBWriter(Path(output).with_suffix(".mztab"))
         self.writer.set_metadata(
             self.config,
@@ -286,6 +298,9 @@ class ModelRunner:
                 self.model_filename, map_location=device, **loaded_model_params
             )
 
+            # Pass in information about predict_batch_size to the model for batch saturation
+            self.model.num_pairs = self.config.predict_batch_size
+
             architecture_params = set(model_params.keys()) - set(
                 loaded_model_params.keys()
             )
@@ -305,6 +320,8 @@ class ModelRunner:
                     map_location=device,
                     **model_params,
                 )
+                # Pass in information about predict_batch_size to the model for batch saturation
+                self.model.num_pairs = self.config.predict_batch_size
             except RuntimeError:
                 raise RuntimeError(
                     "Weights file incompatible with the current version of "

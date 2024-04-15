@@ -997,13 +997,13 @@ class DBSpec2Pep(Spec2Pep):
     Input format is .mgf, with comma-separated targets and decoys in the SEQ field. Decoys should have a prefix of "decoy_".
     """
 
-    num_pairs = 1024
-    decoy_prefix = "decoy_"
+    num_pairs = None  # Modified to be predict_batch_size from config
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
     def predict_step(self, batch, *args):
+        logger.info("New batch")
         batch_res = []
         for (
             indexes,
@@ -1012,23 +1012,22 @@ class DBSpec2Pep(Spec2Pep):
             precursors,
             encoded_ms,
         ) in self.smart_batch_gen(batch):
-            with torch.set_grad_enabled(True):
-                pred, truth = self.decoder(peptides, precursors, *encoded_ms)
-                sm = torch.nn.Softmax(dim=2)
-                pred = sm(pred)
-                score_result, per_aa_score = calc_match_score(
-                    pred, truth
-                )  # Calculate the score between spectra + peptide list
-                batch_res.append(
-                    (
-                        indexes,
-                        t_or_d,
-                        peptides,
-                        score_result,
-                        per_aa_score,
-                        precursors,
-                    )
+            pred, truth = self.decoder(peptides, precursors, *encoded_ms)
+            sm = torch.nn.Softmax(dim=2)
+            pred = sm(pred)
+            score_result, per_aa_score = calc_match_score(
+                pred, truth
+            )  # Calculate the score between spectra + peptide list
+            batch_res.append(
+                (
+                    indexes,
+                    t_or_d,
+                    peptides,
+                    score_result.cpu().detach().numpy(),
+                    per_aa_score.cpu().detach().numpy(),
+                    precursors.cpu().detach().numpy(),
                 )
+            )
         return batch_res
 
     def smart_batch_gen(self, batch):
@@ -1040,15 +1039,13 @@ class DBSpec2Pep(Spec2Pep):
         for idx, _ in enumerate(batch[0]):
             spec_peptides = batch[2][idx].split(",")
             # Check for decoy prefixes and create a bit-vector indicating targets (1) or decoys (0)
+            decoy_prefix = "decoy_"  # Decoy prefix
             t_or_ds = [
-                0 if p.startswith(self.decoy_prefix) else 1
-                for p in spec_peptides
+                0 if p.startswith(decoy_prefix) else 1 for p in spec_peptides
             ]
             # Remove decoy prefix
             spec_peptides = [
-                s[len(self.decoy_prefix) :]
-                if s.startswith(self.decoy_prefix)
-                else s
+                s[len(decoy_prefix) :] if s.startswith(decoy_prefix) else s
                 for s in spec_peptides
             ]
             spec_precursors = [precursors[idx]] * len(spec_peptides)
@@ -1066,6 +1063,8 @@ class DBSpec2Pep(Spec2Pep):
                 )
             )
         # Continually grab num_pairs items from all_psm until list is exhausted
+        logger.info(f"Received {len(all_psm)} PSMs")
+        logger.info(f"Processing num_pairs: {self.num_pairs}")
         while len(all_psm) > 0:
             batch = all_psm[: self.num_pairs]
             all_psm = all_psm[self.num_pairs :]
@@ -1098,10 +1097,7 @@ class DBSpec2Pep(Spec2Pep):
         for index, t_or_d, peptide, score, per_aa_scores, precursor in zip(
             indexes, t_or_d, peptides, score_result, per_aa_score, precursors
         ):
-            per_aa_scores = per_aa_scores.cpu().numpy()
             per_aa_scores = list(per_aa_scores[per_aa_scores != 0])
-            score = score.cpu().numpy()
-            precursor = precursor.cpu().numpy()
             self.out_writer.psms.append(
                 (index, peptide, precursor, score, t_or_d, per_aa_scores),
             )
