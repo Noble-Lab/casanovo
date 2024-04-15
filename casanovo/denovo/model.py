@@ -1003,7 +1003,6 @@ class DBSpec2Pep(Spec2Pep):
         super().__init__(*args, **kwargs)
 
     def predict_step(self, batch, *args):
-        logger.info("New batch")
         batch_res = []
         for (
             indexes,
@@ -1063,8 +1062,6 @@ class DBSpec2Pep(Spec2Pep):
                 )
             )
         # Continually grab num_pairs items from all_psm until list is exhausted
-        logger.info(f"Received {len(all_psm)} PSMs")
-        logger.info(f"Processing num_pairs: {self.num_pairs}")
         while len(all_psm) > 0:
             batch = all_psm[: self.num_pairs]
             all_psm = all_psm[self.num_pairs :]
@@ -1097,7 +1094,6 @@ class DBSpec2Pep(Spec2Pep):
         for index, t_or_d, peptide, score, per_aa_scores, precursor in zip(
             indexes, t_or_d, peptides, score_result, per_aa_score, precursors
         ):
-            per_aa_scores = list(per_aa_scores[per_aa_scores != 0])
             self.out_writer.psms.append(
                 (index, peptide, precursor, score, t_or_d, per_aa_scores),
             )
@@ -1139,7 +1135,7 @@ def calc_match_score(
 
     score_mask = truth_aa_indicies != 0
     masked_per_aa_scores = per_aa_scores * score_mask
-    # all_scores = masked_per_aa_scores.sum(dim=1) / score_mask.sum(dim=1) # Calculated arithmetic score
+    # all_scores = masked_per_aa_scores.sum(dim=1) / score_mask.sum(dim=1) # Calculated arithmetic score that was used before
     all_scores = torch.where(
         torch.log(masked_per_aa_scores) == float("-inf"),
         torch.tensor(0.0),

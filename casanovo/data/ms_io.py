@@ -236,24 +236,36 @@ class DBWriter(MztabWriter):
                     "PSH",
                     "spectrum_index",
                     "sequence",
-                    "precursor",
+                    "precursor_mass",
+                    "precursor_charge",
+                    "precursor_mz",
                     "score",
                     "target",
                     "aa_scores",
                 ]
             )
             for i, psm in enumerate(
-                natsort.natsorted(self.psms, key=operator.itemgetter(1)), 1
+                natsort.natsorted(self.psms, key=operator.itemgetter(0)), 1
             ):
-                for psm in list(zip(*psm)):
+                # [precursor_masses, precursor_charges, precursor_mzs]
+                for rowinfo in list(zip(*psm)):
                     writer.writerow(
                         [
                             "PSM",
-                            psm[0],  # spectrum_index
-                            psm[1],  # sequence
-                            psm[2],  # precursor
-                            psm[3],  # score
-                            bool(psm[4]),  # target
-                            psm[5],  # aa_scores
+                            rowinfo[0],  # spectrum_index
+                            rowinfo[1],  # sequence
+                            rowinfo[2][0],  # precursor mass
+                            int(rowinfo[2][1]),  # precursor charge
+                            rowinfo[2][2],  # precursor m/z
+                            rowinfo[3],  # score
+                            bool(rowinfo[4]),  # target
+                            ",".join(
+                                list(
+                                    map(
+                                        "{:.5f}".format,
+                                        rowinfo[5][rowinfo[5] != 0],
+                                    )
+                                )
+                            ),  # aa_scores including stop token
                         ]
                     )
