@@ -123,7 +123,6 @@ def annotate_mgf(peak_path: str, tide_path: str, output: Optional[str]):
             pass
     try:
         output = str(output)
-        logger.info(output)
         mgf.write(all_spec, output, file_mode="w")
         logger.info("Annotated .mgf file written to %s.", output)
     except Exception as e:
