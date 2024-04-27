@@ -224,6 +224,7 @@ class DBWriter(MztabWriter):
     def save(self) -> None:
         """
         Export the DB search results to the mzTab file.
+        Outputs PSMs in the order they were scored (i.e. the order in the annotated .mgf file).
         """
         with open(self.filename, "w", newline="") as f:
             writer = csv.writer(f, delimiter="\t", lineterminator=os.linesep)
@@ -234,38 +235,58 @@ class DBWriter(MztabWriter):
             writer.writerow(
                 [
                     "PSH",
-                    "spectrum_index",
                     "sequence",
-                    "precursor_mass",
-                    "precursor_charge",
-                    "precursor_mz",
-                    "score",
-                    "target",
-                    "aa_scores",
+                    "PSM_ID",
+                    "accession",
+                    "unique",
+                    "database",
+                    "database_version",
+                    "search_engine",
+                    "search_engine_score[1]",
+                    "modifications",
+                    "retention_time",
+                    "charge",
+                    "exp_mass_to_charge",
+                    "calc_mass_to_charge",
+                    "spectra_ref",
+                    "pre",
+                    "post",
+                    "start",
+                    "end",
+                    "opt_ms_run[1]_aa_scores",
+                    "opt_target",
                 ]
             )
-            for i, psm in enumerate(
-                natsort.natsorted(self.psms, key=operator.itemgetter(0)), 1
-            ):
-                # [precursor_masses, precursor_charges, precursor_mzs]
-                for rowinfo in list(zip(*psm)):
-                    writer.writerow(
-                        [
-                            "PSM",
-                            rowinfo[0],  # spectrum_index
-                            rowinfo[1],  # sequence
-                            rowinfo[2][0],  # precursor mass
-                            int(rowinfo[2][1]),  # precursor charge
-                            rowinfo[2][2],  # precursor m/z
-                            rowinfo[3],  # score
-                            bool(rowinfo[4]),  # target
-                            ",".join(
-                                list(
-                                    map(
-                                        "{:.5f}".format,
-                                        rowinfo[5][rowinfo[5] != 0],
-                                    )
+            for i, psm in enumerate(self.psms):
+                writer.writerow(
+                    [
+                        "PSM",
+                        psm[0],  # sequence
+                        f"{psm[5]}:{i}",  # spectra_ref
+                        "null",  # accession
+                        "null",  # unique
+                        "null",  # database
+                        "null",  # database_version
+                        "null",  # search_engine
+                        psm[1],  # search_engine_score[1]
+                        "null",  # modifications
+                        "null",  # retention_time
+                        int(psm[2]),  # charge
+                        psm[3],  # exp_mass_to_charge
+                        psm[4],  # calc_mass_to_charge
+                        psm[5],  # spectra_ref
+                        "null",  # pre
+                        "null",  # post
+                        "null",  # start
+                        "null",  # end
+                        ",".join(
+                            list(
+                                map(
+                                    "{:.5f}".format,
+                                    psm[6][psm[6] != 0],
                                 )
-                            ),  # aa_scores including stop token
-                        ]
-                    )
+                            )
+                        ),  # opt_ms_run[1]_aa_scores
+                        bool(psm[7]),  # opt_target
+                    ]
+                )

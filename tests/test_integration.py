@@ -52,6 +52,83 @@ def test_annotate(
     )
 
 
+def test_db_search(
+    mgf_small_unannotated, tide_dir_small, tiny_config, tmp_path
+):
+    # Run a command:
+    run = functools.partial(
+        CliRunner().invoke, casanovo.main, catch_exceptions=False
+    )
+
+    annotate_args = [
+        "annotate",
+        str(mgf_small_unannotated),
+        str(tide_dir_small),
+        "--config",
+        tiny_config,
+        "--output",
+        str(tmp_path / "annotated_mgf.mgf"),
+    ]
+
+    result = run(annotate_args)
+
+    assert result.exit_code == 0
+    assert (tmp_path / "annotated_mgf.mgf").exists()
+
+    # Follow up annotate run with db search
+
+    output_path = tmp_path / "db_search.mztab"
+
+    search_args = [
+        "db-search",
+        str(tmp_path / "annotated_mgf.mgf"),
+        "--config",
+        tiny_config,
+        "--output",
+        str(output_path),
+    ]
+
+    result = run(search_args)
+
+    assert result.exit_code == 0
+    assert output_path.exists()
+    assert output_path.is_file()
+
+    mztab = pyteomics.mztab.MzTab(str(output_path))
+
+    psms = mztab.spectrum_match_table
+    assert list(psms.sequence) == [
+        "LESLIEK",
+        "PEPTIDEK",
+        "KEILSEL",
+        "KEDITEPP",
+        "LESLIEK",
+        "PEPTIDEK",
+        "KEILSEL",
+        "KEDITEPP",
+        "+42.011LEM+15.995SLIM+15.995EK",
+        "+43.006PEN+0.984PTIQ+0.984DEK",
+        "-17.027KM+15.995EILSEL",
+        "+43.006-17.027KEDITEPP",
+        "KEDIQ+0.984TEPPQ+0.984",
+    ]
+    assert list(psms.opt_target) == [
+        "True",
+        "True",
+        "False",
+        "False",
+        "True",
+        "True",
+        "False",
+        "False",
+        "True",
+        "True",
+        "False",
+        "False",
+        "False",
+    ]
+
+
 def test_train_and_run(
     mgf_small, mzml_small, tiny_config, tmp_path, monkeypatch
 ):

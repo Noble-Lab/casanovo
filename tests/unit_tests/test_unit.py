@@ -16,7 +16,7 @@ from casanovo import utils
 from casanovo.data import ms_io
 from casanovo.data.datasets import SpectrumDataset, AnnotatedSpectrumDataset
 from casanovo.denovo.evaluate import aa_match_batch, aa_match_metrics
-from casanovo.denovo.model import Spec2Pep, _aa_pep_score
+from casanovo.denovo.model import Spec2Pep, _aa_pep_score, _calc_match_score
 from depthcharge.data import SpectrumIndex, AnnotatedSpectrumIndex
 
 
@@ -137,6 +137,54 @@ def test_aa_pep_score():
     aa_scores, peptide_score = _aa_pep_score(aa_scores_raw, False)
     np.testing.assert_array_equal(aa_scores, np.asarray([0.25, 0.5, 0.75]))
     assert peptide_score == pytest.approx(-0.5)
+
+
+def test_calc_match_score():
+    """
+    Test the calculation of geometric scores using teacher-forced
+    decoder output probabilities and ground truth amino acid sequences.
+    """
+    first_slot_prob = torch.zeros(29)
+    first_slot_prob[1] = 1.0  # A
+    second_slot_prob = torch.zeros(29)
+    second_slot_prob[2] = 1.0  # B
+    third_slot_prob = torch.zeros(29)
+    third_slot_prob[3] = 1.0  # C
+    stop_slot_prob = torch.zeros(29)
+    stop_slot_prob[28] = 1.0  # $
+    blank_slot_prob = torch.zeros(29)
+
+    pep_1_aa = torch.stack(
+        [
+            first_slot_prob,
+            second_slot_prob,
+            third_slot_prob,
+            stop_slot_prob,
+            blank_slot_prob,
+        ]
+    )
+    pep_2_aa = torch.stack(
+        [
+            third_slot_prob,
+            second_slot_prob,
+            stop_slot_prob,
+            blank_slot_prob,
+            blank_slot_prob,
+        ]
+    )
+
+    batch_all_aa_scores = torch.stack([pep_1_aa, pep_2_aa])
+    truth_aa_indices = torch.tensor([[1, 2, 3, 28], [3, 2, 28, 0]])
+
+    all_scores, masked_per_aa_scores = _calc_match_score(
+        batch_all_aa_scores, truth_aa_indices
+    )
+
+    assert all_scores.numpy()[0] == pytest.approx(0)
+    assert all_scores.numpy()[1] == pytest.approx(0)
+
+    assert np.sum(masked_per_aa_scores.numpy()[0]) == pytest.approx(4)
+    assert np.sum(masked_per_aa_scores.numpy()[1]) == pytest.approx(3)
 
 
 def test_beam_search_decode():

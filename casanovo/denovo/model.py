@@ -1014,7 +1014,7 @@ class DBSpec2Pep(Spec2Pep):
             pred, truth = self.decoder(peptides, precursors, *encoded_ms)
             sm = torch.nn.Softmax(dim=2)
             pred = sm(pred)
-            score_result, per_aa_score = calc_match_score(
+            score_result, per_aa_score = _calc_match_score(
                 pred, truth
             )  # Calculate the score between spectra + peptide list
             batch_res.append(
@@ -1083,23 +1083,40 @@ class DBSpec2Pep(Spec2Pep):
     ) -> None:
         if self.out_writer is None:
             return
-        (
+        for (
             indexes,
             t_or_d,
             peptides,
             score_result,
             per_aa_score,
             precursors,
-        ) = list(zip(*outputs))
-        for index, t_or_d, peptide, score, per_aa_scores, precursor in zip(
-            indexes, t_or_d, peptides, score_result, per_aa_score, precursors
-        ):
-            self.out_writer.psms.append(
-                (index, peptide, precursor, score, t_or_d, per_aa_scores),
-            )
+        ) in outputs:
+            for index, t_or_d, peptide, score, per_aa_scores, precursor in zip(
+                indexes,
+                t_or_d,
+                peptides,
+                score_result,
+                per_aa_score,
+                precursors,
+            ):
+                prec_charge = precursor[1]
+                prec_mz = precursor[2]
+                calc_mz = precursor[2]
+                self.out_writer.psms.append(
+                    (
+                        peptide,
+                        score,
+                        prec_charge,
+                        prec_mz,
+                        calc_mz,
+                        index,
+                        per_aa_scores,
+                        t_or_d,
+                    ),
+                )
 
 
-def calc_match_score(
+def _calc_match_score(
     batch_all_aa_scores: torch.Tensor, truth_aa_indicies: torch.Tensor
 ) -> List[float]:
     """
@@ -1135,7 +1152,8 @@ def calc_match_score(
 
     score_mask = truth_aa_indicies != 0
     masked_per_aa_scores = per_aa_scores * score_mask
-    # all_scores = masked_per_aa_scores.sum(dim=1) / score_mask.sum(dim=1) # Calculated arithmetic score that was used before
+    # Arithmetic score that was used before
+    ## all_scores = masked_per_aa_scores.sum(dim=1) / score_mask.sum(dim=1)
     all_scores = torch.where(
         torch.log(masked_per_aa_scores) == float("-inf"),
         torch.tensor(0.0),
