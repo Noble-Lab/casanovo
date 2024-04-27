@@ -8,11 +8,10 @@ from casanovo import casanovo
 
 
 def test_annotate(
-    mgf_small_unannotated, tide_dir_small, tiny_config, tmp_path, monkeypatch
+    mgf_small_unannotated, tide_dir_small, tiny_config, tmp_path
 ):
 
     # Run a command:
-    monkeypatch.setattr(casanovo, "__version__", "3.0.1")
     run = functools.partial(
         CliRunner().invoke, casanovo.main, catch_exceptions=False
     )
@@ -57,7 +56,7 @@ def test_db_search(
     mgf_small_unannotated, tide_dir_small, tiny_config, tmp_path, monkeypatch
 ):
     # Run a command:
-    monkeypatch.setattr(casanovo, "__version__", "3.0.1")
+    monkeypatch.setattr(casanovo, "__version__", "4.1.1")
     run = functools.partial(
         CliRunner().invoke, casanovo.main, catch_exceptions=False
     )
