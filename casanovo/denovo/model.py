@@ -993,8 +993,10 @@ class DBSpec2Pep(Spec2Pep):
     """
     Inherits Spec2Pep
 
-    Hijacks teacher-forcing implemented in Spec2Pep and uses it to predict scores between a spectra and associated peptide.
-    Input format is .mgf, with comma-separated targets and decoys in the SEQ field. Decoys should have a prefix of "decoy_".
+    Hijacks teacher-forcing implemented in Spec2Pep and
+    uses it to predict scores between a spectra and associated peptide.
+    Input format is .mgf, with comma-separated targets
+    and decoys in the SEQ field. Decoys should have a prefix of "decoy_".
     """
 
     num_pairs = None  # Modified to be predict_batch_size from config
@@ -1120,22 +1122,29 @@ def _calc_match_score(
     batch_all_aa_scores: torch.Tensor, truth_aa_indicies: torch.Tensor
 ) -> List[float]:
     """
-    Take in teacher-forced scoring of amino acids of the peptides (in a batch) and use the truth labels
-    to calculate a score between the input spectra and associated peptide. The score is the geometric
+    Take in teacher-forced scoring of amino acids
+    of the peptides (in a batch) and use the truth labels
+    to calculate a score between the input spectra and
+    associated peptide. The score is the geometric
     mean of the AA probabilities
 
         Parameters
         ----------
         batch_all_aa_scores : torch.Tensor
-            Amino acid scores for all amino acids in the vocabulary for every prediction made to generate the associated peptide (for an entire batch)
+            Amino acid scores for all amino acids in
+            the vocabulary for every prediction made to generate
+            the associated peptide (for an entire batch)
         truth_aa_indicies : torch.Tensor
-            Indicies of the score for each actual amino acid in the peptide (for an entire batch)
+            Indicies of the score for each actual amino acid
+            in the peptide (for an entire batch)
 
         Returns
         -------
         score : list[float], list[list[float]]
-            The score between the input spectra and associated peptide (for an entire batch)
-            a list of lists of per amino acid scores (for an entire batch)
+            The score between the input spectra and associated peptide
+            (for an entire batch)
+            a list of lists of per amino acid scores
+            (for an entire batch)
     """
     # Remove trailing tokens from predictions,
     batch_all_aa_scores = batch_all_aa_scores[:, :-1]

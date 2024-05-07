@@ -47,8 +47,9 @@ def test_annotate(
         == "SEQ=LESLIEK,PEPTIDEK,decoy_KEILSEL,decoy_KEDITEPP"
     )
     assert (
-        seq_lines[2].strip()
-        == "SEQ=+42.011LEM+15.995SLIM+15.995EK,+43.006PEN+0.984PTIQ+0.984DEK,decoy_-17.027KM+15.995EILSEL,decoy_+43.006-17.027KEDITEPP,decoy_KEDIQ+0.984TEPPQ+0.984"
+        seq_lines[2].strip() == "SEQ=+42.011LEM+15.995SLIM+15.995EK,"
+        "+43.006PEN+0.984PTIQ+0.984DEK,decoy_-17.027KM+15.995EILSEL,"
+        "decoy_+43.006-17.027KEDITEPP,decoy_KEDIQ+0.984TEPPQ+0.984"
     )
 
 
@@ -56,7 +57,7 @@ def test_db_search(
     mgf_small_unannotated, tide_dir_small, tiny_config, tmp_path, monkeypatch
 ):
     # Run a command:
-    monkeypatch.setattr(casanovo, "__version__", "4.1.1")
+    monkeypatch.setattr(casanovo, "__version__", "4.1.0")
     run = functools.partial(
         CliRunner().invoke, casanovo.main, catch_exceptions=False
     )
