@@ -209,3 +209,84 @@ class MztabWriter:
                         psm[6],  # opt_ms_run[1]_aa_scores
                     ]
                 )
+
+
+class DBWriter(MztabWriter):
+    """
+    Export DB search results to an mzTab file.
+
+    Parameters
+    ----------
+    filename : str
+        The name of the mzTab file.
+    """
+
+    def save(self) -> None:
+        """
+        Export the DB search results to the mzTab file.
+        Outputs PSMs in the order they were scored (i.e. the order in the annotated .mgf file).
+        """
+        with open(self.filename, "w", newline="") as f:
+            writer = csv.writer(f, delimiter="\t", lineterminator=os.linesep)
+            # Write metadata.
+            for row in self.metadata:
+                writer.writerow(["MTD", *row])
+            # Write PSMs.
+            writer.writerow(
+                [
+                    "PSH",
+                    "sequence",
+                    "PSM_ID",
+                    "accession",
+                    "unique",
+                    "database",
+                    "database_version",
+                    "search_engine",
+                    "search_engine_score[1]",
+                    "modifications",
+                    "retention_time",
+                    "charge",
+                    "exp_mass_to_charge",
+                    "calc_mass_to_charge",
+                    "spectra_ref",
+                    "pre",
+                    "post",
+                    "start",
+                    "end",
+                    "opt_ms_run[1]_aa_scores",
+                    "opt_target",
+                ]
+            )
+            for i, psm in enumerate(self.psms):
+                writer.writerow(
+                    [
+                        "PSM",
+                        psm[0],  # sequence
+                        f"{psm[5]}:{i}",  # spectra_ref
+                        "null",  # accession
+                        "null",  # unique
+                        "null",  # database
+                        "null",  # database_version
+                        "null",  # search_engine
+                        psm[1],  # search_engine_score[1]
+                        "null",  # modifications
+                        "null",  # retention_time
+                        int(psm[2]),  # charge
+                        psm[3],  # exp_mass_to_charge
+                        psm[4],  # calc_mass_to_charge
+                        psm[5],  # spectra_ref
+                        "null",  # pre
+                        "null",  # post
+                        "null",  # start
+                        "null",  # end
+                        ",".join(
+                            list(
+                                map(
+                                    "{:.5f}".format,
+                                    psm[6][psm[6] != 0],
+                                )
+                            )
+                        ),  # opt_ms_run[1]_aa_scores
+                        bool(psm[7]),  # opt_target
+                    ]
+                )

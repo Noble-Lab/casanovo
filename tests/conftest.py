@@ -1,6 +1,7 @@
 """Fixtures used for testing."""
 
 import numpy as np
+import pandas as pd
 import psims
 import pytest
 import yaml
@@ -260,3 +261,142 @@ def tiny_config(tmp_path):
         yaml.dump(cfg, out_file)
 
     return cfg_file
+
+
+@pytest.fixture
+def mgf_small_unannotated(tmp_path):
+    """An MGF file with 2 unannotated spectra and scan numbers."""
+    peptides = ["LESLIEK", "PEPTIDEK", "LESTIEK"]
+    mgf_file = tmp_path / "small_unannotated.mgf"
+    return _create_unannotated_mgf(peptides, mgf_file)
+
+
+def _create_unannotated_mgf(peptides, mgf_file, random_state=999):
+    """
+    Create a fake MGF file from one or more peptides.
+    This file will have no SEQ= parameter, but will have a SCANS= parameter.
+
+    Parameters
+    ----------
+    peptides : str or list of str
+        The peptides for which to create spectra.
+    mgf_file : Path
+        The MGF file to create.
+    random_state : int or numpy.random.Generator, optional
+        The random seed. The charge states are chosen to be 2 or 3 randomly.
+
+    Returns
+    -------
+    mgf_file : Path
+    """
+    rng = np.random.default_rng(random_state)
+    entries = [
+        _create_unannotated_mgf_entry(p, idx, rng.choice([2, 3]))
+        for idx, p in enumerate(peptides)
+    ]
+    with mgf_file.open("w+") as mgf_ref:
+        mgf_ref.write("\n".join(entries))
+
+    return mgf_file
+
+
+def _create_unannotated_mgf_entry(peptide, scan_num, charge):
+    """
+    Create a MassIVE-KB style MGF entry for a single PSM.
+    Each entry will have no SEQ= parameter, but will have a SCANS= parameter.
+
+    Parameters
+    ----------
+    peptide : str
+        A peptide sequence.
+    scan_num : int
+        The scan number.
+    charge : int, optional
+        The peptide charge state.
+
+    Returns
+    -------
+    str
+        The PSM entry in an MGF file format.
+    """
+    precursor_mz = calculate_mass(peptide, charge=int(charge))
+    mzs, intensities = _peptide_to_peaks(peptide, charge)
+    frags = "\n".join([f"{m} {i}" for m, i in zip(mzs, intensities)])
+
+    mgf = [
+        "BEGIN IONS",
+        f"TITLE=title::{scan_num}",
+        f"PEPMASS={precursor_mz}",
+        f"CHARGE={charge}+",
+        f"SCANS={scan_num}",
+        f"{frags}",
+        "END IONS",
+    ]
+    return "\n".join(mgf)
+
+
+@pytest.fixture
+def tide_dir_small(tmp_path):
+    """A directory with a very small TIDE search result."""
+    tide_dir = tmp_path / "tide_results"
+    tide_dir.mkdir()
+
+    # Key is the scan number
+    built_dict = {
+        0: {
+            "targets": ["LESLIEK", "PEPTIDEK"],
+            "decoys": ["KEILSEL", "KEDITEPP"],
+        },
+        1: {
+            "targets": ["LESLIEK", "PEPTIDEK"],
+            "decoys": ["KEILSEL", "KEDITEPP"],
+        },
+        2: {
+            "targets": [
+                "L[42.011]EM[15.9]SLIM[15.995]EK",
+                "P[43.01]EN[0.99]PTIQ[0.984]DEK",
+            ],
+            "decoys": [
+                "K[-17.03]M[15.995]EILSEL",
+                "K[25.1]EDITEPP",
+                "KEDIQ[0.984]TEPPQ[0.984]",
+            ],
+        },
+    }
+
+    _create_tide_results_target(tide_dir, built_dict)
+    _create_tide_results_decoy(tide_dir, built_dict)
+
+    return tide_dir
+
+
+def _create_tide_results_target(tide_dir, built_dict):
+    """Create a fake TIDE search result file (target)."""
+    out_file = tide_dir / "tide-search.target.txt"
+    df = pd.DataFrame(columns=["scan", "sequence", "target/decoy"])
+    for scan, peptides in built_dict.items():
+        entry = pd.DataFrame.from_dict(
+            {
+                "scan": [scan] * len(peptides["targets"]),
+                "sequence": peptides["targets"],
+                "target/decoy": ["target"] * len(peptides["targets"]),
+            }
+        )
+        df = pd.concat([df, entry], ignore_index=True)
+    df.to_csv(out_file, sep="\t", index=True)
+
+
+def _create_tide_results_decoy(tide_dir, built_dict):
+    """Create a fake TIDE search result file (decoy)."""
+    out_file = tide_dir / "tide-search.decoy.txt"
+    df = pd.DataFrame(columns=["scan", "sequence", "target/decoy"])
+    for scan, peptides in built_dict.items():
+        entry = pd.DataFrame.from_dict(
+            {
+                "scan": [scan] * len(peptides["decoys"]),
+                "sequence": peptides["decoys"],
+                "target/decoy": ["decoy"] * len(peptides["decoys"]),
+            }
+        )
+        df = pd.concat([df, entry], ignore_index=True)
+    df.to_csv(out_file, sep="\t", index=True)

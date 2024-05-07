@@ -7,6 +7,130 @@ from click.testing import CliRunner
 from casanovo import casanovo
 
 
+def test_annotate(
+    mgf_small_unannotated, tide_dir_small, tiny_config, tmp_path
+):
+
+    # Run a command:
+    run = functools.partial(
+        CliRunner().invoke, casanovo.main, catch_exceptions=False
+    )
+
+    annotate_args = [
+        "annotate",
+        str(mgf_small_unannotated),
+        str(tide_dir_small),
+        "--config",
+        tiny_config,
+        "--output",
+        str(tmp_path / "annotated_mgf.mgf"),
+    ]
+
+    result = run(annotate_args)
+
+    assert result.exit_code == 0
+    assert (tmp_path / "annotated_mgf.mgf").exists()
+
+    # Read in the annotated file
+    with open(tmp_path / "annotated_mgf.mgf") as f:
+        annotated_lines = f.readlines()
+
+    # Get each SEQ= line
+    seq_lines = [line for line in annotated_lines if line.startswith("SEQ=")]
+    assert len(seq_lines) == 3
+    assert (
+        seq_lines[0].strip()
+        == "SEQ=LESLIEK,PEPTIDEK,decoy_KEILSEL,decoy_KEDITEPP"
+    )
+    assert (
+        seq_lines[1].strip()
+        == "SEQ=LESLIEK,PEPTIDEK,decoy_KEILSEL,decoy_KEDITEPP"
+    )
+    assert (
+        seq_lines[2].strip() == "SEQ=+42.011LEM+15.995SLIM+15.995EK,"
+        "+43.006PEN+0.984PTIQ+0.984DEK,decoy_-17.027KM+15.995EILSEL,"
+        "decoy_+43.006-17.027KEDITEPP,decoy_KEDIQ+0.984TEPPQ+0.984"
+    )
+
+
+def test_db_search(
+    mgf_small_unannotated, tide_dir_small, tiny_config, tmp_path, monkeypatch
+):
+    # Run a command:
+    monkeypatch.setattr(casanovo, "__version__", "4.1.0")
+    run = functools.partial(
+        CliRunner().invoke, casanovo.main, catch_exceptions=False
+    )
+
+    annotate_args = [
+        "annotate",
+        str(mgf_small_unannotated),
+        str(tide_dir_small),
+        "--config",
+        tiny_config,
+        "--output",
+        str(tmp_path / "annotated_mgf.mgf"),
+    ]
+
+    result = run(annotate_args)
+
+    assert result.exit_code == 0
+    assert (tmp_path / "annotated_mgf.mgf").exists()
+
+    # Follow up annotate run with db search
+
+    output_path = tmp_path / "db_search.mztab"
+
+    search_args = [
+        "db-search",
+        str(tmp_path / "annotated_mgf.mgf"),
+        "--config",
+        tiny_config,
+        "--output",
+        str(output_path),
+    ]
+
+    result = run(search_args)
+
+    assert result.exit_code == 0
+    assert output_path.exists()
+    assert output_path.is_file()
+
+    mztab = pyteomics.mztab.MzTab(str(output_path))
+
+    psms = mztab.spectrum_match_table
+    assert list(psms.sequence) == [
+        "LESLIEK",
+        "PEPTIDEK",
+        "KEILSEL",
+        "KEDITEPP",
+        "LESLIEK",
+        "PEPTIDEK",
+        "KEILSEL",
+        "KEDITEPP",
+        "+42.011LEM+15.995SLIM+15.995EK",
+        "+43.006PEN+0.984PTIQ+0.984DEK",
+        "-17.027KM+15.995EILSEL",
+        "+43.006-17.027KEDITEPP",
+        "KEDIQ+0.984TEPPQ+0.984",
+    ]
+    assert list(psms.opt_target) == [
+        "True",
+        "True",
+        "False",
+        "False",
+        "True",
+        "True",
+        "False",
+        "False",
+        "True",
+        "True",
+        "False",
+        "False",
+        "False",
+    ]
+
+
 def test_train_and_run(
     mgf_small, mzml_small, tiny_config, tmp_path, monkeypatch
 ):
