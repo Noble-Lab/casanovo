@@ -34,7 +34,7 @@ dependencies = [
     "scikit-learn",
     "spectrum_utils",
     "tensorboard",
-    "torch>=2.1",
+    "torch>=2.3",
     "tqdm",
 ]
 dynamic = ["version"]
