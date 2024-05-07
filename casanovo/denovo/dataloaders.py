@@ -126,7 +126,7 @@ class DeNovoDataModule(pl.LightningDataModule):
             )
             if self.test_index is not None:
                 self.test_dataset = make_dataset(self.test_index)
-        if stage in (None, "db"):
+        if stage == "db":
             make_dataset = functools.partial(
                 DBSpectrumDataset,
                 n_peaks=self.n_peaks,

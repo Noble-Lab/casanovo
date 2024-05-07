@@ -38,8 +38,10 @@ def _normalize_mods(seq: str) -> str:
 
 def annotate_mgf(peak_path: str, tide_path: str, output: Optional[str]):
     """
-    Accepts a directory containing the results of a successful tide search, and an .mgf file containing MS/MS spectra.
-    The .mgf file is then annotated in the SEQ field with all of the candidate peptides for each spectrum, as well as their target/decoy status.
+    Accepts a directory containing the results of a successful tide search,
+    and an .mgf file containing MS/MS spectra.
+    The .mgf file is then annotated in the SEQ field with
+    all of the candidate peptides for each spectrum, as well as their target/decoy status.
     This annotated .mgf can be given directly to Casanovo-DB to perfrom a database search.
 
         Parameters
@@ -104,7 +106,11 @@ def annotate_mgf(peak_path: str, tide_path: str, output: Optional[str]):
             decoy_candidate_list = []
             logger.warn(f"No decoy peptides found for scan {scan}.")
 
-        scan_map[scan] = target_candidate_list + decoy_candidate_list
+        pep_list = target_candidate_list + decoy_candidate_list
+        if len(pep_list) == 0:
+            logger.warn(f"No peptides found for scan {scan}.")
+        else:
+            scan_map[scan] = target_candidate_list + decoy_candidate_list
 
     all_spec = []
     for idx, spec_dict in enumerate(mgf.read(peak_path)):
@@ -112,7 +118,8 @@ def annotate_mgf(peak_path: str, tide_path: str, output: Optional[str]):
             scan = int(spec_dict["params"]["scans"])
         except KeyError as e:
             logger.error(
-                "Could not find the scan number in the .mgf file. Please ensure that the .mgf file contains the scan number in the 'SCANS' field."
+                "Could not find the scan number in the .mgf file."
+                "Please ensure that the .mgf file contains the scan number in the 'SCANS' field."
             )
             raise e
         try:
