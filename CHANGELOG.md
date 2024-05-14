@@ -10,7 +10,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Added
 
-- A deprecation warning will be issued when depecrated config options are used in the config file or in the model weights file.
+- A deprecation warning will be issued when deprecated config options are used in the config file or in the model weights file.
 
 ### Changed
 
