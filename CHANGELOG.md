@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+## [4.2.0] - 2024-05-14
+
 ### Added
 
 - A deprecation warning will be issued when depecrated config options are used in the config file or in the model weights file.
@@ -246,7 +248,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 - Initial Casanovo version.
 
-[Unreleased]: https://github.com/Noble-Lab/casanovo/compare/v4.1.0...HEAD
+[Unreleased]: https://github.com/Noble-Lab/casanovo/compare/v4.2.0...HEAD
+[4.2.0]: https://github.com/Noble-Lab/casanovo/compare/v4.1.0...v4.2.0
 [4.1.0]: https://github.com/Noble-Lab/casanovo/compare/v4.0.1...v4.1.0
 [4.0.1]: https://github.com/Noble-Lab/casanovo/compare/v4.0.0...v4.0.1
 [4.0.0]: https://github.com/Noble-Lab/casanovo/compare/v3.5.0...v4.0.0
