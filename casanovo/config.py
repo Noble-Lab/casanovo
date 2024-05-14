@@ -2,6 +2,7 @@
 
 import logging
 import shutil
+import warnings
 from pathlib import Path
 from typing import Optional, Dict, Callable, Tuple, Union
 
@@ -10,6 +11,14 @@ import yaml
 from . import utils
 
 logger = logging.getLogger("casanovo")
+
+
+# FIXME: This contains deprecated config options to be removed in the next major
+#  version update.
+_config_deprecated = dict(
+    every_n_train_steps="val_check_interval",
+    max_iters="cosine_schedule_period_iters",
+)
 
 
 class Config:
@@ -56,7 +65,7 @@ class Config:
         tb_summarywriter=str,
         train_label_smoothing=float,
         warmup_iters=int,
-        max_iters=int,
+        cosine_schedule_period_iters=int,
         learning_rate=float,
         weight_decay=float,
         train_batch_size=int,
@@ -84,6 +93,15 @@ class Config:
         else:
             with Path(config_file).open() as f_in:
                 self._user_config = yaml.safe_load(f_in)
+                # Remap deprecated config entries.
+                for old, new in _config_deprecated.items():
+                    if old in self._user_config:
+                        self._user_config[new] = self._user_config.pop(old)
+                        warnings.warn(
+                            f"Deprecated config option '{old}' remapped to "
+                            f"'{new}'",
+                            DeprecationWarning,
+                        )
                 # Check for missing entries in config file.
                 config_missing = self._params.keys() - self._user_config.keys()
                 if len(config_missing) > 0:

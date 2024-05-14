@@ -6,6 +6,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+## [4.2.0] - 2024-05-14
+
+### Added
+
+- A deprecation warning will be issued when deprecated config options are used in the config file or in the model weights file.
+
+### Changed
+
+- Config option `max_iters` has been renamed to `cosine_schedule_period_iters` to better reflect that it controls the number of iterations for the cosine half period of the learning rate.
+
+### Fixed
+
+- Fix beam search caching failure when multiple beams have an equal predicted peptide score by breaking ties randomly.
+- The mzTab output file now has proper line endings regardless of platform, fixing the extra `\r` found when run on Windows.
+
 ## [4.1.0] - 2024-02-16
 
 ### Changed
@@ -233,7 +248,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 - Initial Casanovo version.
 
-[Unreleased]: https://github.com/Noble-Lab/casanovo/compare/v4.1.0...HEAD
+[Unreleased]: https://github.com/Noble-Lab/casanovo/compare/v4.2.0...HEAD
+[4.2.0]: https://github.com/Noble-Lab/casanovo/compare/v4.1.0...v4.2.0
 [4.1.0]: https://github.com/Noble-Lab/casanovo/compare/v4.0.1...v4.1.0
 [4.0.1]: https://github.com/Noble-Lab/casanovo/compare/v4.0.0...v4.0.1
 [4.0.0]: https://github.com/Noble-Lab/casanovo/compare/v3.5.0...v4.0.0

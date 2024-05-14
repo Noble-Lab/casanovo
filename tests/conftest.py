@@ -193,7 +193,7 @@ def tiny_config(tmp_path):
         "n_layers": 1,
         "train_label_smoothing": 0.01,
         "warmup_iters": 1,
-        "max_iters": 1,
+        "cosine_schedule_period_iters": 1,
         "max_epochs": 20,
         "val_check_interval": 1,
         "model_save_folder_path": str(tmp_path),
