@@ -15,7 +15,7 @@ precursor_mass_tol: 50  # ppm
 isotope_error_range: [0, 1]
 # The minimum length of predicted peptides.
 min_peptide_len: 6
-# Number of spectra in one inference batch. 
+# Number of spectra in one inference batch.
 predict_batch_size: 1024
 # Number of beams used in beam search.
 n_beams: 1

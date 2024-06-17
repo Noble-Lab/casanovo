@@ -146,7 +146,7 @@ def sequence(
     logger.info("DONE!")
 
 
-@main.command(cls=_SharedParams)
+@main.command()
 @click.argument(
     "peak_path",
     required=True,
@@ -159,11 +159,28 @@ def sequence(
     nargs=1,
     type=click.Path(exists=True, dir_okay=True),
 )
+@click.option(
+    "-o",
+    "--output",
+    help="The output annotated MGF file.",
+    type=click.Path(dir_okay=False),
+)
+@click.option(
+    "-v",
+    "--verbosity",
+    help="""
+    Set the verbosity of console logging messages. Log files are
+    always set to 'debug'.
+    """,
+    type=click.Choice(
+        ["debug", "info", "warning", "error"],
+        case_sensitive=False,
+    ),
+    default="info",
+)
 def annotate(
     peak_path: str,
     tide_path: str,
-    model: Optional[str],
-    config: Optional[str],
     output: Optional[str],
     verbosity: str,
 ) -> None:
@@ -174,13 +191,12 @@ def annotate(
     TIDE_PATH must be one directory containing the Tide search results of the <PEAK_PATH> .mgf.
     This directory must contain tide-search.decoy.txt and tide-search.target.txt
     """
-    for peak_file in peak_path:
-        logger.info("  %s", peak_file)
-
     if output is None:
         output = setup_logging(output, verbosity)
         logger.info(
-            "Output file not specified. Annotated MGF will be saved in the same directory as the input MGF."
+            "Output file not specified. \
+            Annotated MGF will be saved in the same directory \
+            as the input MGF."
         )
         output = peak_path.replace(".mgf", "_annotated.mgf")
     else:
@@ -207,11 +223,13 @@ def db_search(
 ) -> None:
     """Perform a search using Casanovo-DB.
 
-    PEAK_PATH must be one MGF file that has ANNOTATED spectra, as output by annotate mode.
+    PEAK_PATH must be one MGF file that has ANNOTATED spectra,
+    as output by annotate mode.
     """
     output = setup_logging(output, verbosity)
     config, model = setup_model(model, config, output, False)
     with ModelRunner(config, model) as runner:
+        logger.info("DB-searching peptides from: %s", peak_path)
         runner.db_search(peak_path, output)
 
     logger.info("DONE!")

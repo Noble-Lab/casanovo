@@ -254,7 +254,7 @@ class DBWriter(MztabWriter):
                     "start",
                     "end",
                     "opt_ms_run[1]_aa_scores",
-                    "opt_target",
+                    "opt_cv_MS:1002217_decoy_peptide",
                 ]
             )
             for i, psm in enumerate(self.psms):
@@ -287,6 +287,6 @@ class DBWriter(MztabWriter):
                                 )
                             )
                         ),  # opt_ms_run[1]_aa_scores
-                        bool(psm[7]),  # opt_target
+                        bool(psm[7]),  # opt_cv_MS:1002217_decoy_peptide
                     ]
                 )

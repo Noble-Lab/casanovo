@@ -267,9 +267,10 @@ class AnnotatedSpectrumDataset(SpectrumDataset):
         return spectrum, precursor_mz, precursor_charge, peptide
 
 
-class DBSpectrumDataset(AnnotatedSpectrumDataset):
+class DbSpectrumDataset(AnnotatedSpectrumDataset):
     """
-    Parse and retrieve collections of annotated MS/MS spectra, additionally keep track of spectrum ids for Casanovo-DB.
+    Parse and retrieve collections of annotated MS/MS spectra,
+    additionally keep track of spectrum ids for Casanovo-DB.
 
     Parameters
     ----------

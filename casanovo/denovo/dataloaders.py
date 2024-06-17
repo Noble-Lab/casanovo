@@ -12,7 +12,7 @@ from depthcharge.data import AnnotatedSpectrumIndex
 from ..data.datasets import (
     AnnotatedSpectrumDataset,
     SpectrumDataset,
-    DBSpectrumDataset,
+    DbSpectrumDataset,
 )
 
 
@@ -128,7 +128,7 @@ class DeNovoDataModule(pl.LightningDataModule):
                 self.test_dataset = make_dataset(self.test_index)
         if stage == "db":
             make_dataset = functools.partial(
-                DBSpectrumDataset,
+                DbSpectrumDataset,
                 n_peaks=self.n_peaks,
                 min_mz=self.min_mz,
                 max_mz=self.max_mz,

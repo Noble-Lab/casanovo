@@ -7,9 +7,7 @@ from click.testing import CliRunner
 from casanovo import casanovo
 
 
-def test_annotate(
-    mgf_small_unannotated, tide_dir_small, tiny_config, tmp_path
-):
+def test_annotate(mgf_small_unannotated, tide_dir_small, tmp_path):
 
     # Run a command:
     run = functools.partial(
@@ -20,8 +18,6 @@ def test_annotate(
         "annotate",
         str(mgf_small_unannotated),
         str(tide_dir_small),
-        "--config",
-        tiny_config,
         "--output",
         str(tmp_path / "annotated_mgf.mgf"),
     ]
@@ -66,8 +62,6 @@ def test_db_search(
         "annotate",
         str(mgf_small_unannotated),
         str(tide_dir_small),
-        "--config",
-        tiny_config,
         "--output",
         str(tmp_path / "annotated_mgf.mgf"),
     ]

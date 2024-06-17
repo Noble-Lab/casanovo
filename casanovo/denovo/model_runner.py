@@ -20,7 +20,7 @@ from lightning.pytorch.callbacks import ModelCheckpoint
 from ..config import Config
 from ..data import ms_io
 from ..denovo.dataloaders import DeNovoDataModule
-from ..denovo.model import Spec2Pep, DBSpec2Pep
+from ..denovo.model import Spec2Pep, DbSpec2Pep
 
 
 logger = logging.getLogger("casanovo")
@@ -294,7 +294,7 @@ class ModelRunner:
         # the provided configuration.
         device = torch.empty(1).device  # Use the default device.
         try:
-            self.model = DBSpec2Pep.load_from_checkpoint(
+            self.model = DbSpec2Pep.load_from_checkpoint(
                 self.model_filename, map_location=device, **loaded_model_params
             )
 
@@ -315,7 +315,7 @@ class ModelRunner:
         except RuntimeError:
             # This only doesn't work if the weights are from an older version
             try:
-                self.model = DBSpec2Pep.load_from_checkpoint(
+                self.model = DbSpec2Pep.load_from_checkpoint(
                     self.model_filename,
                     map_location=device,
                     **model_params,
