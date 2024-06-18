@@ -995,30 +995,45 @@ class DbSpec2Pep(Spec2Pep):
 
     Hijacks teacher-forcing implemented in Spec2Pep and
     uses it to predict scores between a spectra and associated peptide.
-    Decoys should have a prefix of "decoy_".
     """
-
-    num_pairs = None
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
     def predict_step(self, batch, *args):
+        """
+        A single prediction step for Casanovo-DB
+
+        Parameters
+        ----------
+        batch : Tuple[torch.Tensor, torch.Tensor, torch.Tensor]
+            A batch of (i) MS/MS spectra, (ii) precursor information, (iii)
+            spectrum identifiers as torch Tensors, (iv) scan numbers.
+
+        Returns
+        -------
+        predictions: List[Tuple[int, bool, str, float, np.ndarray, np.ndarray]]
+            Model predictions for the given batch of spectra containing spectrum
+            scan number, decoy flag, peptide sequence, Casanovo-DB score,
+            amino acid-level confidence scores, and precursor information.
+        """
         batch_res = []
         for (
             indexes,
-            t_or_d,
+            is_decoy,
             peptides,
             precursors,
             encoded_ms,
         ) in self.smart_batch_gen(batch):
             pred, truth = self.decoder(peptides, precursors, *encoded_ms)
             pred = self.softmax(pred)
-            score_result, per_aa_score = _calc_match_score(pred, truth)
+            score_result, per_aa_score = _calc_match_score(
+                pred, truth, self.decoder.reverse
+            )
             batch_res.append(
                 (
                     indexes,
-                    t_or_d,
+                    is_decoy,
                     peptides,
                     score_result.cpu().detach().numpy(),
                     per_aa_score.cpu().detach().numpy(),
@@ -1028,6 +1043,7 @@ class DbSpec2Pep(Spec2Pep):
         return batch_res
 
     def smart_batch_gen(self, batch):
+        batch_size = len(batch[0])
         all_psm = []
         enc = self.encoder(batch[0])
         precursors = batch[1]
@@ -1037,7 +1053,7 @@ class DbSpec2Pep(Spec2Pep):
             spec_peptides = batch[2][idx].split(",")
             # Check for decoy prefixes and create a bit-vector indicating targets (1) or decoys (0)
             decoy_prefix = "decoy_"  # Decoy prefix
-            t_or_ds = [
+            decoy_mask = [
                 0 if p.startswith(decoy_prefix) else 1 for p in spec_peptides
             ]
             # Remove decoy prefix
@@ -1055,14 +1071,14 @@ class DbSpec2Pep(Spec2Pep):
                         spec_precursors,
                         spec_peptides,
                         spec_idx,
-                        t_or_ds,
+                        decoy_mask,
                     )
                 )
             )
         # Continually grab num_pairs items from all_psm until list is exhausted
         while len(all_psm) > 0:
-            batch = all_psm[: self.num_pairs]
-            all_psm = all_psm[self.num_pairs :]
+            batch = all_psm[:batch_size]
+            all_psm = all_psm[batch_size:]
             batch = list(zip(*batch))
             encoded_ms = (
                 torch.stack([a[0] for a in batch[0]]),
@@ -1071,8 +1087,8 @@ class DbSpec2Pep(Spec2Pep):
             prec_data = torch.stack(batch[1])
             pep_str = list(batch[2])
             indexes = [a[1] for a in batch[3]]
-            t_or_ds = batch[4]
-            yield (indexes, t_or_ds, pep_str, prec_data, encoded_ms)
+            is_decoy = batch[4]
+            yield (indexes, is_decoy, pep_str, prec_data, encoded_ms)
 
     def on_predict_batch_end(
         self,
@@ -1115,7 +1131,9 @@ class DbSpec2Pep(Spec2Pep):
 
 
 def _calc_match_score(
-    batch_all_aa_scores: torch.Tensor, truth_aa_indicies: torch.Tensor
+    batch_all_aa_scores: torch.Tensor,
+    truth_aa_indicies: torch.Tensor,
+    decoder_reverse: bool = False,
 ) -> List[float]:
     """
     Calculate the score between the input spectra and associated peptide.
@@ -1135,6 +1153,8 @@ def _calc_match_score(
     truth_aa_indicies : torch.Tensor
         Indicies of the score for each actual amino acid
         in the peptide (for an entire batch)
+    decoder_reverse : bool
+        Whether the decoder is reversed.
 
     Returns
     -------
@@ -1144,8 +1164,11 @@ def _calc_match_score(
         a list of lists of per amino acid scores
         (for an entire batch)
     """
-    # Remove trailing tokens from predictions,
-    batch_all_aa_scores = batch_all_aa_scores[:, :-1]
+    # Remove trailing tokens from predictions based on decoder reversal
+    if decoder_reverse:
+        batch_all_aa_scores = batch_all_aa_scores[:, 1:]
+    elif not decoder_reverse:
+        batch_all_aa_scores = batch_all_aa_scores[:, :-1]
 
     # Vectorized scoring using efficient indexing.
     rows = (

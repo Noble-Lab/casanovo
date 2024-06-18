@@ -322,8 +322,6 @@ class ModelRunner:
                     map_location=device,
                     **loaded_model_params,
                 )
-                ## TODO move?
-                self.model.num_pairs = self.config.predict_batch_size
             else:
                 self.model = Spec2Pep.load_from_checkpoint(
                     self.model_filename,
@@ -351,8 +349,6 @@ class ModelRunner:
                         map_location=device,
                         **model_params,
                     )
-                    ## TODO move?
-                    self.model.num_pairs = self.config.predict_batch_size
                 else:
                     self.model = Spec2Pep.load_from_checkpoint(
                         self.model_filename,

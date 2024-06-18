@@ -245,11 +245,12 @@ def prepare_db_batch(
 
     Parameters
     ----------
-    batch : List[Tuple[torch.Tensor, float, int, str, Tuple[str, str]]]
+    batch : List[Tuple[torch.Tensor, Tuple[float, int, float], str, Tuple[str, str]]]
         A batch of data from an AnnotatedSpectrumDataset, consisting of for each
-        spectrum (i) a tensor with the m/z and intensity peak values, (ii), the
-        precursor m/z, (iii) the precursor charge, (iv) the spectrum identifier (peptide), (v)
-        spectrum identifiers (file and scan).
+        spectrum (i) a tensor with the m/z and intensity peak values,
+        (ii) the precursor information [mass, charge, m/z], (iii) the
+        peptide sequence, the precursor m/z, (iv) spectrum identifiers
+        (file and scan).
 
     Returns
     -------
