@@ -93,7 +93,9 @@ class ModelRunner:
         -------
         self
         """
-        self.writer = ms_io.DBWriter(Path(output).with_suffix(".mztab"))
+        self.writer = ms_io.MztabWriter(
+            Path(output).with_suffix(".mztab"), is_db_variant=True
+        )
         self.writer.set_metadata(
             self.config,
             model=str(self.model_filename),
@@ -101,7 +103,7 @@ class ModelRunner:
         )
 
         self.initialize_trainer(train=True)
-        self.initialize_db_model()
+        self.initialize_model(train=False, db_search=True)
         self.model.out_writer = self.writer
 
         test_index = self._get_index(peak_path, True, "db search")
@@ -229,106 +231,9 @@ class ModelRunner:
 
         self.trainer = pl.Trainer(**trainer_cfg)
 
-    def initialize_db_model(self) -> None:
-        """Initialize the Casanovo-DB model.
-        Required because the DB search model is a unique subclass of the Spec2Pep model.
-        """
-        model_params = dict(
-            dim_model=self.config.dim_model,
-            n_head=self.config.n_head,
-            dim_feedforward=self.config.dim_feedforward,
-            n_layers=self.config.n_layers,
-            dropout=self.config.dropout,
-            dim_intensity=self.config.dim_intensity,
-            max_length=self.config.max_length,
-            residues=self.config.residues,
-            max_charge=self.config.max_charge,
-            precursor_mass_tol=self.config.precursor_mass_tol,
-            isotope_error_range=self.config.isotope_error_range,
-            min_peptide_len=self.config.min_peptide_len,
-            n_beams=self.config.n_beams,
-            top_match=self.config.top_match,
-            n_log=self.config.n_log,
-            tb_summarywriter=self.config.tb_summarywriter,
-            train_label_smoothing=self.config.train_label_smoothing,
-            warmup_iters=self.config.warmup_iters,
-            cosine_schedule_period_iters=self.config.cosine_schedule_period_iters,
-            lr=self.config.learning_rate,
-            weight_decay=self.config.weight_decay,
-            out_writer=self.writer,
-            calculate_precision=self.config.calculate_precision,
-        )
-
-        # Reconfigurable non-architecture related parameters for a loaded model.
-        loaded_model_params = dict(
-            max_length=self.config.max_length,
-            precursor_mass_tol=self.config.precursor_mass_tol,
-            isotope_error_range=self.config.isotope_error_range,
-            n_beams=self.config.n_beams,
-            min_peptide_len=self.config.min_peptide_len,
-            top_match=self.config.top_match,
-            n_log=self.config.n_log,
-            tb_summarywriter=self.config.tb_summarywriter,
-            train_label_smoothing=self.config.train_label_smoothing,
-            warmup_iters=self.config.warmup_iters,
-            cosine_schedule_period_iters=self.config.cosine_schedule_period_iters,
-            lr=self.config.learning_rate,
-            weight_decay=self.config.weight_decay,
-            out_writer=self.writer,
-            calculate_precision=self.config.calculate_precision,
-        )
-
-        # Model file must exist for DB search
-        if self.model_filename is None:
-            logger.error("A model file must be provided")
-            raise ValueError("A model file must be provided")
-
-        if not Path(self.model_filename).exists():
-            logger.error(
-                "Could not find the model weights at file %s",
-                self.model_filename,
-            )
-            raise FileNotFoundError("Could not find the model weights file")
-
-        # First try loading model details from the weights file, otherwise use
-        # the provided configuration.
-        device = torch.empty(1).device  # Use the default device.
-        try:
-            self.model = DbSpec2Pep.load_from_checkpoint(
-                self.model_filename, map_location=device, **loaded_model_params
-            )
-
-            # Pass in information about predict_batch_size to the model for batch saturation
-            self.model.num_pairs = self.config.predict_batch_size
-
-            architecture_params = set(model_params.keys()) - set(
-                loaded_model_params.keys()
-            )
-            for param in architecture_params:
-                if model_params[param] != self.model.hparams[param]:
-                    warnings.warn(
-                        f"Mismatching {param} parameter in "
-                        f"model checkpoint ({self.model.hparams[param]}) "
-                        f"vs config file ({model_params[param]}); "
-                        "using the checkpoint."
-                    )
-        except RuntimeError:
-            # This only doesn't work if the weights are from an older version
-            try:
-                self.model = DbSpec2Pep.load_from_checkpoint(
-                    self.model_filename,
-                    map_location=device,
-                    **model_params,
-                )
-                # Pass in information about predict_batch_size to the model for batch saturation
-                self.model.num_pairs = self.config.predict_batch_size
-            except RuntimeError:
-                raise RuntimeError(
-                    "Weights file incompatible with the current version of "
-                    "Casanovo."
-                )
-
-    def initialize_model(self, train: bool) -> None:
+    def initialize_model(
+        self, train: bool, db_search: Optional[bool] = False
+    ) -> None:
         """Initialize the Casanovo model.
 
         Parameters
@@ -336,6 +241,8 @@ class ModelRunner:
         train : bool
             Determines whether to set the model up for model training or
             evaluation / inference.
+        db_search : Optional[bool]
+            Determines whether to use the DB search model subclass.
         """
         model_params = dict(
             dim_model=self.config.dim_model,
@@ -385,6 +292,11 @@ class ModelRunner:
         if self.model_filename is None:
             # Train a model from scratch if no model file is provided.
             if train:
+                if db_search:
+                    logger.error("Db search mode requires a model file.")
+                    raise ValueError(
+                        "A model file must be provided for DB search mode"
+                    )
                 self.model = Spec2Pep(**model_params)
                 return
             # Else we're not training, so a model file must be provided.
@@ -404,9 +316,20 @@ class ModelRunner:
         # the provided configuration.
         device = torch.empty(1).device  # Use the default device.
         try:
-            self.model = Spec2Pep.load_from_checkpoint(
-                self.model_filename, map_location=device, **loaded_model_params
-            )
+            if db_search:
+                self.model = DbSpec2Pep.load_from_checkpoint(
+                    self.model_filename,
+                    map_location=device,
+                    **loaded_model_params,
+                )
+                ## TODO move?
+                self.model.num_pairs = self.config.predict_batch_size
+            else:
+                self.model = Spec2Pep.load_from_checkpoint(
+                    self.model_filename,
+                    map_location=device,
+                    **loaded_model_params,
+                )
 
             architecture_params = set(model_params.keys()) - set(
                 loaded_model_params.keys()
@@ -422,11 +345,20 @@ class ModelRunner:
         except RuntimeError:
             # This only doesn't work if the weights are from an older version
             try:
-                self.model = Spec2Pep.load_from_checkpoint(
-                    self.model_filename,
-                    map_location=device,
-                    **model_params,
-                )
+                if db_search:
+                    self.model = DbSpec2Pep.load_from_checkpoint(
+                        self.model_filename,
+                        map_location=device,
+                        **model_params,
+                    )
+                    ## TODO move?
+                    self.model.num_pairs = self.config.predict_batch_size
+                else:
+                    self.model = Spec2Pep.load_from_checkpoint(
+                        self.model_filename,
+                        map_location=device,
+                        **model_params,
+                    )
             except RuntimeError:
                 raise RuntimeError(
                     "Weights file incompatible with the current version of "

@@ -12,7 +12,6 @@ from depthcharge.data import AnnotatedSpectrumIndex
 from ..data.datasets import (
     AnnotatedSpectrumDataset,
     SpectrumDataset,
-    DbSpectrumDataset,
 )
 
 
@@ -128,12 +127,13 @@ class DeNovoDataModule(pl.LightningDataModule):
                 self.test_dataset = make_dataset(self.test_index)
         if stage == "db":
             make_dataset = functools.partial(
-                DbSpectrumDataset,
+                AnnotatedSpectrumDataset,
                 n_peaks=self.n_peaks,
                 min_mz=self.min_mz,
                 max_mz=self.max_mz,
                 min_intensity=self.min_intensity,
                 remove_precursor_tol=self.remove_precursor_tol,
+                track_spectrum_id=True,
             )
             if self.test_index is not None:
                 self.test_dataset = make_dataset(self.test_index)
@@ -143,6 +143,7 @@ class DeNovoDataModule(pl.LightningDataModule):
         dataset: torch.utils.data.Dataset,
         batch_size: int,
         shuffle: bool = False,
+        db_mode: bool = False,
     ) -> torch.utils.data.DataLoader:
         """
         Create a PyTorch DataLoader.
@@ -155,6 +156,8 @@ class DeNovoDataModule(pl.LightningDataModule):
             The batch size to use.
         shuffle : bool
             Option to shuffle the batches.
+        db_mode : bool
+            Option to use the DataLoader for Casanovo-DB.
 
         Returns
         -------
@@ -164,39 +167,10 @@ class DeNovoDataModule(pl.LightningDataModule):
         return torch.utils.data.DataLoader(
             dataset,
             batch_size=batch_size,
-            collate_fn=prepare_batch,
+            collate_fn=prepare_batch if not db_mode else prepare_db_batch,
             pin_memory=True,
             num_workers=self.n_workers,
             shuffle=shuffle,
-        )
-
-    def _make_db_loader(
-        self, dataset: torch.utils.data.Dataset, batch_size: int
-    ) -> torch.utils.data.DataLoader:
-        """
-        Create a PyTorch DataLoader.
-
-        Parameters
-        ----------
-        dataset : torch.utils.data.Dataset
-            A PyTorch Dataset.
-
-        Returns
-        -------
-        torch.utils.data.DataLoader
-            A PyTorch DataLoader.
-        """
-        # Calculate new batch size to saturate previous batch size with PSMs
-        pep_per_spec = []
-        for i in range(min(10, len(dataset))):
-            pep_per_spec.append(len(dataset[i][3].split(",")))
-        new_batch_size = max(1, int(batch_size // np.mean(pep_per_spec)))
-        return torch.utils.data.DataLoader(
-            dataset,
-            batch_size=new_batch_size,
-            collate_fn=prepare_db_batch,
-            pin_memory=True,
-            num_workers=self.n_workers,
         )
 
     def train_dataloader(self) -> torch.utils.data.DataLoader:
@@ -219,7 +193,9 @@ class DeNovoDataModule(pl.LightningDataModule):
 
     def db_dataloader(self) -> torch.utils.data.DataLoader:
         """Get the predict DataLoader."""
-        return self._make_db_loader(self.test_dataset, self.eval_batch_size)
+        return self._make_loader(
+            self.test_dataset, self.eval_batch_size, db_mode=True
+        )
 
 
 def prepare_batch(

@@ -22,10 +22,13 @@ class MztabWriter:
     ----------
     filename : str
         The name of the mzTab file.
+    is_db_variant : bool
+        Whether the mzTab file is for a Casanovo-DB search.
     """
 
-    def __init__(self, filename: str):
+    def __init__(self, filename: str, is_db_variant: bool = False):
         self.filename = filename
+        self.is_db_variant = is_db_variant
         self.metadata = [
             ("mzTab-version", "1.0.0"),
             ("mzTab-mode", "Summary"),
@@ -147,6 +150,9 @@ class MztabWriter:
         """
         Export the spectrum identifications to the mzTab file.
         """
+        if self.is_db_variant:
+            self.save_db_variant()
+            return
         with open(self.filename, "w", newline="") as f:
             writer = csv.writer(f, delimiter="\t", lineterminator=os.linesep)
             # Write metadata.
@@ -210,21 +216,12 @@ class MztabWriter:
                     ]
                 )
 
-
-class DBWriter(MztabWriter):
-    """
-    Export DB search results to an mzTab file.
-
-    Parameters
-    ----------
-    filename : str
-        The name of the mzTab file.
-    """
-
-    def save(self) -> None:
+    def save_db_variant(self) -> None:
         """
-        Export the DB search results to the mzTab file.
-        Outputs PSMs in the order they were scored (i.e. the order in the annotated .mgf file).
+        Export the Casanovo-DB search results to the mzTab file.
+
+        Outputs PSMs in the order they were scored
+        (i.e. the order in the annotated .mgf file).
         """
         with open(self.filename, "w", newline="") as f:
             writer = csv.writer(f, delimiter="\t", lineterminator=os.linesep)

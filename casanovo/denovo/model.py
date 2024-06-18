@@ -1157,18 +1157,18 @@ def _calc_match_score(
 
     per_aa_scores = batch_all_aa_scores[rows, cols, truth_aa_indicies]
 
+    per_aa_scores[per_aa_scores == 0] += 1e-10
     score_mask = truth_aa_indicies != 0
-    masked_per_aa_scores = per_aa_scores * score_mask
-    # Arithmetic score that was used before
-    ## all_scores = masked_per_aa_scores.sum(dim=1) / score_mask.sum(dim=1)
+    per_aa_scores[~score_mask] = 0
+    log_per_aa_scores = torch.log(per_aa_scores)
     all_scores = torch.where(
-        torch.log(masked_per_aa_scores) == float("-inf"),
+        log_per_aa_scores == float("-inf"),
         torch.tensor(0.0),
-        torch.log(masked_per_aa_scores),
+        log_per_aa_scores,
     ).sum(dim=1) / score_mask.sum(
         dim=1
     )  # Calculates geometric score
-    return all_scores, masked_per_aa_scores
+    return all_scores, per_aa_scores
 
 
 class CosineWarmupScheduler(torch.optim.lr_scheduler._LRScheduler):

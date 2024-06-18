@@ -153,6 +153,11 @@ def test_calc_match_score():
     stop_slot_prob = torch.zeros(29)
     stop_slot_prob[28] = 1.0  # $
     blank_slot_prob = torch.zeros(29)
+    blank_slot_prob[0] = 0.42  # Should never come into play
+    fourth_slot_prob = torch.zeros(29)
+    fourth_slot_prob[4] = 0.5  # D
+    fifth_slot_prob = torch.zeros(29)
+    fifth_slot_prob[5] = 0.5  # E
 
     pep_1_aa = torch.stack(
         [
@@ -172,19 +177,46 @@ def test_calc_match_score():
             blank_slot_prob,
         ]
     )
-
-    batch_all_aa_scores = torch.stack([pep_1_aa, pep_2_aa])
-    truth_aa_indices = torch.tensor([[1, 2, 3, 28], [3, 2, 28, 0]])
+    pep_3_aa = torch.stack(
+        [
+            fourth_slot_prob,
+            fifth_slot_prob,
+            first_slot_prob,
+            stop_slot_prob,
+            blank_slot_prob,
+        ]
+    )
+    pep_4_aa = torch.stack(
+        [
+            first_slot_prob,
+            second_slot_prob,
+            third_slot_prob,
+            stop_slot_prob,
+            blank_slot_prob,
+        ]
+    )
+    batch_all_aa_scores = torch.stack([pep_1_aa, pep_2_aa, pep_3_aa, pep_4_aa])
+    truth_aa_indices = torch.tensor(
+        [[1, 2, 3, 28], [3, 2, 28, 0], [4, 5, 1, 28], [2, 2, 3, 28]]
+    )
 
     all_scores, masked_per_aa_scores = _calc_match_score(
         batch_all_aa_scores, truth_aa_indices
     )
 
-    assert all_scores.numpy()[0] == pytest.approx(0)
-    assert all_scores.numpy()[1] == pytest.approx(0)
+    assert all_scores.numpy()[0] == 0
+    assert all_scores.numpy()[1] == 0
+    assert all_scores.numpy()[2] == pytest.approx(
+        np.log(0.5 * 0.5 * 1 * 1) / 4
+    )
+    assert all_scores.numpy()[3] == pytest.approx(
+        np.log(1e-10 * 1 * 1 * 1) / 4
+    )
 
-    assert np.sum(masked_per_aa_scores.numpy()[0]) == pytest.approx(4)
-    assert np.sum(masked_per_aa_scores.numpy()[1]) == pytest.approx(3)
+    assert np.sum(masked_per_aa_scores.numpy()[0]) == 4
+    assert np.sum(masked_per_aa_scores.numpy()[1]) == 3
+    assert np.sum(masked_per_aa_scores.numpy()[2]) == 3
+    assert np.sum(masked_per_aa_scores.numpy()[3]) == 3
 
 
 def test_beam_search_decode():

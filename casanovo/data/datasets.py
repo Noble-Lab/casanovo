@@ -212,6 +212,8 @@ class AnnotatedSpectrumDataset(SpectrumDataset):
     random_state : Optional[int]
         The NumPy random state. ``None`` leaves mass spectra in the order they
         were parsed.
+    track_spectrum_id : Optional[bool]
+        Whether to keep track of the identifier of the MS/MS spectra.
     """
 
     def __init__(
@@ -223,6 +225,7 @@ class AnnotatedSpectrumDataset(SpectrumDataset):
         min_intensity: float = 0.01,
         remove_precursor_tol: float = 2.0,
         random_state: Optional[int] = None,
+        track_spectrum_id: Optional[bool] = False,
     ):
         super().__init__(
             annotated_spectrum_index,
@@ -233,6 +236,7 @@ class AnnotatedSpectrumDataset(SpectrumDataset):
             remove_precursor_tol=remove_precursor_tol,
             random_state=random_state,
         )
+        self.track_spectrum_id = track_spectrum_id
 
     def __getitem__(self, idx: int) -> Tuple[torch.Tensor, float, int, str]:
         """
@@ -264,76 +268,12 @@ class AnnotatedSpectrumDataset(SpectrumDataset):
         spectrum = self._process_peaks(
             mz_array, int_array, precursor_mz, precursor_charge
         )
+        if self.track_spectrum_id:
+            return (
+                spectrum,
+                precursor_mz,
+                precursor_charge,
+                peptide,
+                self.get_spectrum_id(idx),
+            )
         return spectrum, precursor_mz, precursor_charge, peptide
-
-
-class DbSpectrumDataset(AnnotatedSpectrumDataset):
-    """
-    Parse and retrieve collections of annotated MS/MS spectra,
-    additionally keep track of spectrum ids for Casanovo-DB.
-
-    Parameters
-    ----------
-    annotated_spectrum_index : depthcharge.data.SpectrumIndex
-        The MS/MS spectra to use as a dataset.
-    n_peaks : Optional[int]
-        The number of top-n most intense peaks to keep in each spectrum. `None`
-        retains all peaks.
-    min_mz : float
-        The minimum m/z to include. The default is 140 m/z, in order to exclude
-        TMT and iTRAQ reporter ions.
-    max_mz : float
-        The maximum m/z to include.
-    min_intensity : float
-        Remove peaks whose intensity is below `min_intensity` percentage of the
-        base peak intensity.
-    remove_precursor_tol : float
-        Remove peaks within the given mass tolerance in Dalton around the
-        precursor mass.
-    random_state : Optional[int]
-        The NumPy random state. ``None`` leaves mass spectra in the order they
-        were parsed.
-    """
-
-    def __getitem__(
-        self, idx: int
-    ) -> Tuple[torch.Tensor, float, int, str, Tuple[str, str]]:
-        """
-        Return the annotated MS/MS spectrum with the given index.
-
-        Parameters
-        ----------
-        idx : int
-            The index of the spectrum to return.
-
-        Returns
-        -------
-        spectrum : torch.Tensor of shape (n_peaks, 2)
-            A tensor of the spectrum with the m/z and intensity peak values.
-        precursor_mz : float
-            The precursor m/z.
-        precursor_charge : int
-            The precursor charge.
-        annotation : str
-            The peptide annotation of the spectrum.
-        spectrum_id: Tuple[str, str]
-            The unique spectrum identifier, formed by its original peak file and
-            identifier (index or scan number) therein.
-        """
-        (
-            mz_array,
-            int_array,
-            precursor_mz,
-            precursor_charge,
-            peptide,
-        ) = self.index[idx]
-        spectrum = self._process_peaks(
-            mz_array, int_array, precursor_mz, precursor_charge
-        )
-        return (
-            spectrum,
-            precursor_mz,
-            precursor_charge,
-            peptide,
-            self.get_spectrum_id(idx),
-        )

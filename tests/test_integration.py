@@ -108,7 +108,7 @@ def test_db_search(
         "+43.006-17.027KEDITEPP",
         "KEDIQ+0.984TEPPQ+0.984",
     ]
-    assert list(psms.opt_target) == [
+    assert list(psms["opt_cv_MS:1002217_decoy_peptide"]) == [
         "True",
         "True",
         "False",
