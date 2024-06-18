@@ -16,7 +16,7 @@ maxdepth: 1
 ---
 Getting Started <getting_started.md>
 File Formats <file_formats.md>
-CLI <cli.md>
+CLI <cli.rst>
 FAQs <faq.md>
 Contributing <CONTRIBUTING.md>
 Code of Conduct <CODE_OF_CONDUCT.md>
