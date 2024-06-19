@@ -12,6 +12,7 @@ import torch
 import numpy as np
 import lightning.pytorch as pl
 from torch.utils.tensorboard import SummaryWriter
+from pyteomics import mass
 from depthcharge.components import ModelMixin, PeptideDecoder, SpectrumEncoder
 
 from . import evaluate
@@ -1043,24 +1044,26 @@ class DbSpec2Pep(Spec2Pep):
         return batch_res
 
     def smart_batch_gen(self, batch):
-        batch_size = len(batch[0])
         all_psm = []
+        batch_size = len(batch[0])
         enc = self.encoder(batch[0])
         precursors = batch[1]
         indexes = batch[3]
         enc = list(zip(*enc))
-        for idx, _ in enumerate(batch[0]):
+        for idx in range(batch_size):
             spec_peptides = batch[2][idx].split(",")
             # Check for decoy prefixes and create a bit-vector indicating targets (1) or decoys (0)
             decoy_prefix = "decoy_"  # Decoy prefix
-            decoy_mask = [
-                0 if p.startswith(decoy_prefix) else 1 for p in spec_peptides
-            ]
-            # Remove decoy prefix
-            spec_peptides = [
-                s[len(decoy_prefix) :] if s.startswith(decoy_prefix) else s
-                for s in spec_peptides
-            ]
+            id_decoys = np.array(
+                [
+                    (0, p.removeprefix(decoy_prefix))
+                    if p.startswith(decoy_prefix)
+                    else (1, p)
+                    for p in spec_peptides
+                ]
+            )
+            decoy_mask = np.array(id_decoys[:, 0], dtype=bool)
+            spec_peptides = list(id_decoys[:, 1])
             spec_precursors = [precursors[idx]] * len(spec_peptides)
             spec_enc = [enc[idx]] * len(spec_peptides)
             spec_idx = [indexes[idx]] * len(spec_peptides)
@@ -1105,29 +1108,22 @@ class DbSpec2Pep(Spec2Pep):
             per_aa_score,
             precursors,
         ) in outputs:
-            for index, t_or_d, peptide, score, per_aa_scores, precursor in zip(
-                indexes,
-                t_or_d,
+            prec_mass = precursors[:, 0]
+            prec_charge = precursors[:, 1]
+            prec_mz = precursors[:, 2]
+            # calc_mz = [mass.fast_mass(pep, charge=int(pc)) for pep, pc in zip(peptides, prec_charge)]
+            calc_mz = prec_mass  # TODO: Replace with actual calc_mz
+            for row in zip(
                 peptides,
                 score_result,
+                prec_charge,
+                prec_mz,
+                calc_mz,
+                indexes,
                 per_aa_score,
-                precursors,
+                t_or_d,
             ):
-                prec_charge = precursor[1]
-                prec_mz = precursor[2]
-                calc_mz = precursor[2]
-                self.out_writer.psms.append(
-                    (
-                        peptide,
-                        score,
-                        prec_charge,
-                        prec_mz,
-                        calc_mz,
-                        index,
-                        per_aa_scores,
-                        t_or_d,
-                    ),
-                )
+                self.out_writer.psms.append(row)
 
 
 def _calc_match_score(
