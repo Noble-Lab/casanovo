@@ -4,21 +4,21 @@ import random
 import string
 
 from casanovo.report_gen import (
-    getMzTabPath,
-    getNumSpectra,
-    getScoreBins,
-    getPeptideLengths,
-    getPeptideLengthHisto
+    get_mztab_path,
+    get_num_spectra,
+    get_score_bins,
+    get_peptide_lengths,
+    get_peptide_length_histo
 )
 
-def test_getMzTabPath():
+def get_mztab_path():
     path = "\\Foo\\Bar\\FooBar"
     file_path = path + ".mztab"
 
-    assert getMzTabPath(path) == file_path
-    assert getMzTabPath(file_path) == file_path
+    assert get_mztab_path(path) == file_path
+    assert get_mztab_path(file_path) == file_path
 
-def test_getNumSpectra():
+def test_get_num_spectra():
     NUM_TEST = 5
     MIN_LEN = 10
     MAX_LEN = 200
@@ -28,9 +28,9 @@ def test_getNumSpectra():
 
     for curr_num_spectra in rand_num_spectra:
         curr_results_table = pd.DataFrame({"sequence": [arb_sequence] * curr_num_spectra})
-        assert getNumSpectra(curr_results_table) == curr_num_spectra
+        assert get_num_spectra(curr_results_table) == curr_num_spectra
 
-def test_getScoreBins():
+def test_get_score_bins():
     NUM_TEST = 5
     NUM_BINS = 5
     BIN_MIN = -1.0
@@ -60,10 +60,10 @@ def test_getScoreBins():
 
         np.random.shuffle(curr_scores)
         results_table = pd.DataFrame({"search_engine_score[1]": curr_scores})
-        actual = getScoreBins(results_table, curr_bins)
+        actual = get_score_bins(results_table, curr_bins)
         assert expected == actual
 
-def test_getPeptideLengths():
+def test_get_peptide_lengths():
     NUM_TEST = 5
     MAX_LENGTH = 20
     MIN_LENGTH = 5
@@ -94,10 +94,10 @@ def test_getPeptideLengths():
             peptide_list.append(curr_peptide_seq)
 
         results_table = pd.DataFrame({"sequence": peptide_list})
-        actual = getPeptideLengths(results_table)
+        actual = get_peptide_lengths(results_table)
         assert np.array_equal(expected, actual)
 
-def test_getPeptideLengthHisto():
+def test_get_peptide_length_histo():
     NUM_TEST = 5
     MAX_LENGTH = 20
     MIN_LENGTH = 1
@@ -117,5 +117,5 @@ def test_getPeptideLengthHisto():
         peptide_lengths = np.array(nums_list)
         np.random.shuffle(peptide_lengths)
         expected = dict(zip(lengths, frequencies.tolist()))
-        actual = getPeptideLengthHisto(peptide_lengths)
+        actual = get_peptide_length_histo(peptide_lengths)
         assert expected == actual
