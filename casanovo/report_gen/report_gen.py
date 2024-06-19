@@ -11,7 +11,7 @@ from pandas import DataFrame
 SCORE_BINS = [0.0, 0.5, 0.9, 0.95, 0.99]
 MZTAB_EXT = ".mztab"
 
-def getMzTabPath(results_path: PathLike) -> PathLike:
+def get_mztab_path(results_path: PathLike) -> PathLike:
     """
     Convert output from setup_logging (see casanovo.py) to valid mzTab file path
 
@@ -32,7 +32,7 @@ def getMzTabPath(results_path: PathLike) -> PathLike:
 
     return results_path
 
-def parseMzTabResults(results_path: PathLike) -> DataFrame:
+def parse_mztab_results(results_path: PathLike) -> DataFrame:
     """
     Parse the spectrum match table from a mzTab file
 
@@ -46,11 +46,11 @@ def parseMzTabResults(results_path: PathLike) -> DataFrame:
         results_table: DataFrame
             Parsed spectrum match table
     """
-    results_path = getMzTabPath(results_path)
+    results_path = get_mztab_path(results_path)
     file_reader = MzTab(results_path)
     return file_reader.spectrum_match_table
 
-def getNumSpectra(results_table: DataFrame) -> int:
+def get_num_spectra(results_table: DataFrame) -> int:
     """
     Get the number of spectra in a results table
 
@@ -66,7 +66,7 @@ def getNumSpectra(results_table: DataFrame) -> int:
     """
     return results_table.shape[0]
 
-def getScoreBins(results_table: DataFrame, score_bins: List[float]) -> Dict[float, int]:
+def get_score_bins(results_table: DataFrame, score_bins: List[float]) -> Dict[float, int]:
     """
     From a list of confidence scores, return a dictionary mapping each confidence score
     to the number of spectra with a confidence greater than or equal to it.
@@ -88,7 +88,7 @@ def getScoreBins(results_table: DataFrame, score_bins: List[float]) -> Dict[floa
     score_bin_dict = {score: len(se_scores[se_scores >= score]) for score in score_bins}
     return score_bin_dict
 
-def getPeptideLengths(results_table: DataFrame) -> np.ndarray:
+def get_peptide_lengths(results_table: DataFrame) -> np.ndarray:
     """
     Get a numpy array containing the length of each peptide sequence in results_table
 
@@ -112,7 +112,7 @@ def getPeptideLengths(results_table: DataFrame) -> np.ndarray:
 
     return sequence_lengths.to_numpy()
 
-def getPeptideLengthHisto(peptide_lengths: np.ndarray) -> Dict[int, int]:
+def get_peptide_length_histo(peptide_lengths: np.ndarray) -> Dict[int, int]:
     """
     Get a dictionary mapping each unique peptide length to its frequency
 
@@ -129,7 +129,7 @@ def getPeptideLengthHisto(peptide_lengths: np.ndarray) -> Dict[int, int]:
     lengths, counts = np.unique(peptide_lengths, return_counts=True)
     return dict(zip(lengths.tolist(), counts.tolist()))
 
-def genReport(
+def gen_report(
     results_path: PathLike,
     score_bins: List[float] = SCORE_BINS
 ) -> Dict:
@@ -147,14 +147,14 @@ def genReport(
         report_gen: Dict
             Generated report, represented as a dictionary
     """
-    results_table = parseMzTabResults(results_path)
-    peptide_lengths = getPeptideLengths(results_table)
+    results_table = parse_mztab_results(results_path)
+    peptide_lengths = get_peptide_lengths(results_table)
 
     return {
-        "num_spectra": getNumSpectra(results_table),
-        "score_bins": getScoreBins(results_table, score_bins),
+        "num_spectra": get_num_spectra(results_table),
+        "score_bins": get_score_bins(results_table, score_bins),
         "max_sequence_length": int(np.max(peptide_lengths)),
         "min_sequence_length": int(np.min(peptide_lengths)),
         "median_sequence_length": int(np.median(peptide_lengths)),
-        "peptide_length_histogram": getPeptideLengthHisto(peptide_lengths)
+        "peptide_length_histogram": get_peptide_length_histo(peptide_lengths)
     }
