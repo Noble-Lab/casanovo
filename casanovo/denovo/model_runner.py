@@ -116,7 +116,7 @@ class ModelRunner:
             self.trainer.save_checkpoint(
                 os.path.join(
                     self.config.model_save_folder_path,
-                    "train-run-final"
+                    "train-run-final.ckpt"
                 )
             )
 
