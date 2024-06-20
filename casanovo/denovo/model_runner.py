@@ -62,11 +62,6 @@ class ModelRunner:
                     monitor="valid_CELoss",
                     mode="min",
                     save_top_k=config.save_top_k,
-                ),
-                ModelCheckpoint(
-                    dirpath=config.model_save_folder_path,
-                    save_on_train_epoch_end=True,
-                    filename="train-final"
                 )
             ]
         else:
@@ -115,6 +110,15 @@ class ModelRunner:
             self.loaders.train_dataloader(),
             self.loaders.val_dataloader(),
         )
+
+        # Always save final model weights at the end of training
+        if self.config.model_save_folder_path is not None:
+            self.trainer.save_checkpoint(
+                os.path.join(
+                    self.config.model_save_folder_path,
+                    "train-run-final"
+                )
+            )
 
     def evaluate(self, peak_path: Iterable[str]) -> None:
         """Evaluate peptide sequence preditions from a trained Casanovo model.
