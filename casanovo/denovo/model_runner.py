@@ -62,6 +62,11 @@ class ModelRunner:
                     monitor="valid_CELoss",
                     mode="min",
                     save_top_k=config.save_top_k,
+                ),
+                ModelCheckpoint(
+                    dirpath=config.model_save_folder_path,
+                    save_on_train_epoch_end=True,
+                    filename="train-final"
                 )
             ]
         else:
