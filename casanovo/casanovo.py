@@ -103,7 +103,7 @@ def main() -> None:
     MassIVE-KB, for training new models.
 
     Links:
-    
+
     - Documentation: https://casanovo.readthedocs.io
     - Official code repository: https://github.com/Noble-Lab/casanovo
 
