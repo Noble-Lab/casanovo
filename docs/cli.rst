@@ -1,3 +1,9 @@
+..
+   This is just a random sequence of letters so the custom javascript can
+   ensure it is running on the correct page before running any filtering
+   operations
+pfqnhktptyfdeomqabhq
+
 Cassanovo CLI
 ==============
 

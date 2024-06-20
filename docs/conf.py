@@ -60,6 +60,10 @@ html_title = "Casanovo"
 html_static_path = ["_static"]
 html_theme_options = {"repository_url": "https//github.com/Noble-Lab/casanovo"}
 
+html_js_files = [
+    'js/cli-page.js',
+]
+
 # -- MyST configuration ------------------------------------------------------
 myst_enable_extensions = [
     "amsmath",
