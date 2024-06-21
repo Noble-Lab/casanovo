@@ -54,7 +54,7 @@ def test_get_score_bins():
                 expected[curr_min] = cumulative_sum
 
         np.random.shuffle(curr_scores)
-        results_table = pd.DataFrame({"search_engine_score[1]": curr_scores})
+        results_table = pd.DataFrame({"score": curr_scores})
         actual = get_score_bins(results_table, curr_bins)
         assert expected == actual
 
