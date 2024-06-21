@@ -20,6 +20,6 @@
 
         // Change second header text content
         let secondHeader = document.querySelector("#casanovo > h3:first-of-type");
-        secondHeader.textContent = "Cassanovo CLI Commands";
+        secondHeader.textContent = "Casanovo CLI Commands";
     }
 })();
