@@ -2,6 +2,8 @@ from logging import Logger
 from typing import Tuple, List, Dict
 from sys import argv
 from socket import gethostname
+from time import time
+from datetime import datetime
 
 import re
 
@@ -93,13 +95,33 @@ def get_peptide_length_histo(peptide_lengths: np.ndarray) -> Dict[int, int]:
     return dict(zip(lengths.tolist(), counts.tolist()))
 
 class LogPredictionWriter(PredictionWriter):
+    """
+    Log predictions and use them to generate a sequencing run report
+    when save is called, usually when the parent ModelRunner goes out
+    of context. Sequencing run will be written at the INFO level.
+
+    Parameters
+    ----------
+        logger : Logger
+            logger to write sequencing run report to
+        score_bins : List[float] (optional)
+            Confidence score bins for generating sequence confidence score
+            cmf. Defaults to [0.0, 0.5, 0.9, 0.95, 0.99].
+    """
     def __init__(self, logger: Logger, score_bins: List[float] = SCORE_BINS) -> None:
         self.logger = logger
         self.score_bins = score_bins
+        self.start_time = None
         self.predictions = {
             "sequence": list(),
             "score": list(),
         }
+
+    def log_start_time(self) -> None:
+        """
+        Record the sequencing run start timestamp
+        """
+        self.start_time = time()
 
     def append_prediction(
         self,
@@ -165,14 +187,23 @@ class LogPredictionWriter(PredictionWriter):
         """
         Log sequencing run report
         """
+        self.logger.info("======= Sequencing Run Report =======")
+        if self.start_time is not None:
+            end_time = time()
+            elapsed_time = end_time - self.start_time
+            self.logger.info(f"Sequencing Run Start Timestamp: {int(self.start_time)}s")
+            self.logger.info(f"Sequencing Run End Timestamp: {int(end_time)}s")
+            self.logger.info(f"Time Elapsed: {int(elapsed_time)}s")
+
         run_report = self.get_report_dict()
+        run_date_string = datetime.now().strftime("%m/%d/%y %H:%M:%S")
         self.logger.info(f"Executed Command: {' '.join(argv)}")
-        self.logger.info(f"Host Machine: {gethostname()}")
+        self.logger.info(f"Executed on Host Machine: {gethostname()}")
+        self.logger.info(f"Sequencing run date: {run_date_string}")
         self.logger.info(f"Sequenced {run_report['num_spectra']} spectra")
         self.logger.info(f"Sequence Score CMF: {run_report['score_bins']}")
         self.logger.info(f"Max Sequence Length: {run_report['max_sequence_length']}")
         self.logger.info(f"Min Sequence Length: {run_report['min_sequence_length']}")
-        self.logger.info(f"Peptide Length Histogram: {str(run_report['peptide_length_histogram'])}")
 
         if torch.cuda.is_available():
             gpu_util = torch.cuda.max_memory_allocated() / (10 ** 6)

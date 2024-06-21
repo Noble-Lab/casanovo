@@ -156,6 +156,7 @@ class ModelRunner:
         )
 
         log_writer = LogPredictionWriter(logger)
+        log_writer.log_start_time()
         self.writer = PredictionMultiWriter([mztab_writer, log_writer])
         self.initialize_trainer(train=False)
         self.initialize_model(train=False)
