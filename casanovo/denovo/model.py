@@ -913,7 +913,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         ) in outputs:
             if len(peptide) == 0:
                 continue
-            self.out_writer.psms.append(
+            self.out_writer.append_prediction(
                 (
                     peptide,
                     tuple(spectrum_i),

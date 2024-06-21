@@ -6,15 +6,16 @@ import operator
 import os
 import re
 from pathlib import Path
-from typing import List
+from typing import List, Tuple
 
 import natsort
 
+from .pred_io import PredictionWriter
 from .. import __version__
 from ..config import Config
 
 
-class MztabWriter:
+class MztabWriter(PredictionWriter):
     """
     Export spectrum identifications to an mzTab file.
 
@@ -126,6 +127,35 @@ class MztabWriter:
                 self.metadata.append(
                     (f"software[1]-setting[{i}]", f"{key} = {value}")
                 )
+
+    def append_prediction(
+        self,
+        next_prediction: Tuple[
+            str,
+            Tuple[str, str],
+            float,
+            float,
+            float,
+            float,
+            str
+        ]
+    ) -> None:
+        """
+        Add new prediction to logging context
+
+        Parameters
+        ----------
+        next_prediction : Tuple[str, Tuple[str, str], float, float, float, float, str]
+            Tuple containing next prediction data. The tuple should contain the following:
+                - str: next peptide prediction
+                - Tuple[str, str]: sample origin file path, origin file index number ("index={i}") 
+                - float: peptide prediction score (search engine score)
+                - float: charge
+                - float: precursor m/z
+                - float: peptide mass
+                - str: aa scores for each peptide in sequence, comma separated
+        """
+        self.psms.append(next_prediction)
 
     def set_ms_run(self, peak_filenames: List[str]) -> None:
         """
