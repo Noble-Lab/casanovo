@@ -15,6 +15,7 @@ import torch
 
 SCORE_BINS = [0.0, 0.5, 0.9, 0.95, 0.99]
 
+
 def get_num_spectra(results_table: DataFrame) -> int:
     """
     Get the number of spectra in a results table
@@ -31,7 +32,10 @@ def get_num_spectra(results_table: DataFrame) -> int:
     """
     return results_table.shape[0]
 
-def get_score_bins(results_table: DataFrame, score_bins: List[float]) -> Dict[float, int]:
+
+def get_score_bins(
+    results_table: DataFrame, score_bins: List[float]
+) -> Dict[float, int]:
     """
     From a list of confidence scores, return a dictionary mapping each confidence score
     to the number of spectra with a confidence greater than or equal to it.
@@ -50,8 +54,11 @@ def get_score_bins(results_table: DataFrame, score_bins: List[float]) -> Dict[fl
             greater than or equal to it.
     """
     se_scores = results_table["score"].to_numpy()
-    score_bin_dict = {score: len(se_scores[se_scores >= score]) for score in score_bins}
+    score_bin_dict = {
+        score: len(se_scores[se_scores >= score]) for score in score_bins
+    }
     return score_bin_dict
+
 
 def get_peptide_lengths(results_table: DataFrame) -> np.ndarray:
     """
@@ -77,6 +84,7 @@ def get_peptide_lengths(results_table: DataFrame) -> np.ndarray:
 
     return sequence_lengths.to_numpy()
 
+
 def get_peptide_length_histo(peptide_lengths: np.ndarray) -> Dict[int, int]:
     """
     Get a dictionary mapping each unique peptide length to its frequency
@@ -94,6 +102,7 @@ def get_peptide_length_histo(peptide_lengths: np.ndarray) -> Dict[int, int]:
     lengths, counts = np.unique(peptide_lengths, return_counts=True)
     return dict(zip(lengths.tolist(), counts.tolist()))
 
+
 class LogPredictionWriter(PredictionWriter):
     """
     Log predictions and use them to generate a sequencing run report
@@ -108,7 +117,10 @@ class LogPredictionWriter(PredictionWriter):
             Confidence score bins for generating sequence confidence score
             cmf. Defaults to [0.0, 0.5, 0.9, 0.95, 0.99].
     """
-    def __init__(self, logger: Logger, score_bins: List[float] = SCORE_BINS) -> None:
+
+    def __init__(
+        self, logger: Logger, score_bins: List[float] = SCORE_BINS
+    ) -> None:
         self.logger = logger
         self.score_bins = score_bins
         self.start_time = None
@@ -126,14 +138,8 @@ class LogPredictionWriter(PredictionWriter):
     def append_prediction(
         self,
         next_prediction: Tuple[
-            str,
-            Tuple[str, str],
-            float,
-            float,
-            float,
-            float,
-            str
-        ]
+            str, Tuple[str, str], float, float, float, float, str
+        ],
     ) -> None:
         """
         Add new prediction to log writer context
@@ -143,7 +149,7 @@ class LogPredictionWriter(PredictionWriter):
         next_prediction : Tuple[str, Tuple[str, str], float, float, float, float, str]
             Tuple containing next prediction data. The tuple should contain the following:
                 - str: next peptide prediction
-                - Tuple[str, str]: sample origin file path, origin file index number ("index={i}") 
+                - Tuple[str, str]: sample origin file path, origin file index number ("index={i}")
                 - float: peptide prediction score (search engine score)
                 - float: charge
                 - float: precursor m/z
@@ -163,7 +169,7 @@ class LogPredictionWriter(PredictionWriter):
         Generate sequencing run report
 
         Parameters
-        ----------    
+        ----------
             score_bins: List[float], Optional
                 Confidence scores for creating confidence CMF, see getScoreBins
 
@@ -180,7 +186,9 @@ class LogPredictionWriter(PredictionWriter):
             "max_sequence_length": int(np.max(peptide_lengths)),
             "min_sequence_length": int(np.min(peptide_lengths)),
             "median_sequence_length": int(np.median(peptide_lengths)),
-            "peptide_length_histogram": get_peptide_length_histo(peptide_lengths)
+            "peptide_length_histogram": get_peptide_length_histo(
+                peptide_lengths
+            ),
         }
 
     def save(self) -> None:
@@ -191,7 +199,9 @@ class LogPredictionWriter(PredictionWriter):
         if self.start_time is not None:
             end_time = time()
             elapsed_time = end_time - self.start_time
-            self.logger.info(f"Sequencing Run Start Timestamp: {int(self.start_time)}s")
+            self.logger.info(
+                f"Sequencing Run Start Timestamp: {int(self.start_time)}s"
+            )
             self.logger.info(f"Sequencing Run End Timestamp: {int(end_time)}s")
             self.logger.info(f"Time Elapsed: {int(elapsed_time)}s")
 
@@ -202,9 +212,13 @@ class LogPredictionWriter(PredictionWriter):
         self.logger.info(f"Sequencing run date: {run_date_string}")
         self.logger.info(f"Sequenced {run_report['num_spectra']} spectra")
         self.logger.info(f"Sequence Score CMF: {run_report['score_bins']}")
-        self.logger.info(f"Max Sequence Length: {run_report['max_sequence_length']}")
-        self.logger.info(f"Min Sequence Length: {run_report['min_sequence_length']}")
+        self.logger.info(
+            f"Max Sequence Length: {run_report['max_sequence_length']}"
+        )
+        self.logger.info(
+            f"Min Sequence Length: {run_report['min_sequence_length']}"
+        )
 
         if torch.cuda.is_available():
-            gpu_util = torch.cuda.max_memory_allocated() / (10 ** 6)
+            gpu_util = torch.cuda.max_memory_allocated() / (10**6)
             self.logger.info(f"Max GPU Memory Utilization: {int(gpu_util)}mb")

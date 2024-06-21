@@ -142,6 +142,7 @@ def sequence(
 
         runner.predict(peak_path, output)
 
+
 @main.command(cls=_SharedParams)
 @click.argument(
     "annotated_peak_path",

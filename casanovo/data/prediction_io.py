@@ -1,19 +1,14 @@
 from abc import ABCMeta, abstractmethod
 from typing import List, Tuple, Type
 
+
 class PredictionWriter(metaclass=ABCMeta):
     @abstractmethod
     def append_prediction(
         self,
         next_prediction: Tuple[
-            str,
-            Tuple[str, str],
-            float,
-            float,
-            float,
-            float,
-            str
-        ]
+            str, Tuple[str, str], float, float, float, float, str
+        ],
     ) -> None:
         """
         Add new prediction to writer context
@@ -23,7 +18,7 @@ class PredictionWriter(metaclass=ABCMeta):
         next_prediction : Tuple[str, Tuple[str, str], float, float, float, float, str]
             Tuple containing next prediction data. The tuple should contain the following:
                 - str: next peptide prediction
-                - Tuple[str, str]: sample origin file path, origin file index number ("index={i}") 
+                - Tuple[str, str]: sample origin file path, origin file index number ("index={i}")
                 - float: peptide prediction score (search engine score)
                 - float: charge
                 - float: precursor m/z
@@ -39,6 +34,7 @@ class PredictionWriter(metaclass=ABCMeta):
         """
         pass
 
+
 class PredictionMultiWriter(PredictionWriter):
     """
     Write predictions to multiple prediction writers
@@ -48,6 +44,7 @@ class PredictionMultiWriter(PredictionWriter):
         writers : List[Type[PredictionWriter]]
             prediction writers to write to
     """
+
     def __init__(self, writers: List[Type[PredictionWriter]]) -> None:
         self.writers = writers
 
@@ -65,14 +62,8 @@ class PredictionMultiWriter(PredictionWriter):
     def append_prediction(
         self,
         next_prediction: Tuple[
-            str,
-            Tuple[str, str],
-            float,
-            float,
-            float,
-            float,
-            str
-        ]
+            str, Tuple[str, str], float, float, float, float, str
+        ],
     ) -> None:
         """
         Write prediction to all prediction writers in multi writer
@@ -82,7 +73,7 @@ class PredictionMultiWriter(PredictionWriter):
         next_prediction : Tuple[str, Tuple[str, str], float, float, float, float, str]
             Tuple containing next prediction data. The tuple should contain the following:
                 - str: next peptide prediction
-                - Tuple[str, str]: sample origin file path, origin file index number ("index={i}") 
+                - Tuple[str, str]: sample origin file path, origin file index number ("index={i}")
                 - float: peptide prediction score (search engine score)
                 - float: charge
                 - float: precursor m/z
@@ -98,4 +89,3 @@ class PredictionMultiWriter(PredictionWriter):
         """
         for writer in self.writers:
             writer.save()
-        
