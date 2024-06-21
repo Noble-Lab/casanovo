@@ -10,7 +10,7 @@ from typing import List, Tuple
 
 import natsort
 
-from .pred_io import PredictionWriter
+from .prediction_io import PredictionWriter
 from .. import __version__
 from ..config import Config
 
