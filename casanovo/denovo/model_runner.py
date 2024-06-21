@@ -19,6 +19,8 @@ from lightning.pytorch.callbacks import ModelCheckpoint
 
 from ..config import Config
 from ..data import ms_io
+from ..data.logger_io import LogPredictionWriter
+from ..data.prediction_io import PredictionMultiWriter
 from ..denovo.dataloaders import DeNovoDataModule
 from ..denovo.model import Spec2Pep
 
@@ -146,19 +148,21 @@ class ModelRunner:
         -------
         self
         """
-        self.writer = ms_io.MztabWriter(Path(output).with_suffix(".mztab"))
-        self.writer.set_metadata(
+        mztab_writer = ms_io.MztabWriter(Path(output).with_suffix(".mztab"))
+        mztab_writer.set_metadata(
             self.config,
             model=str(self.model_filename),
             config_filename=self.config.file,
         )
 
+        log_writer = LogPredictionWriter(logger)
+        self.writer = PredictionMultiWriter([mztab_writer, log_writer])
         self.initialize_trainer(train=False)
         self.initialize_model(train=False)
         self.model.out_writer = self.writer
 
         test_index = self._get_index(peak_path, False, "")
-        self.writer.set_ms_run(test_index.ms_files)
+        mztab_writer.set_ms_run(test_index.ms_files)
         self.initialize_data_module(test_index=test_index)
         self.loaders.setup(stage="test", annotated=False)
         self.trainer.predict(self.model, self.loaders.test_dataloader())

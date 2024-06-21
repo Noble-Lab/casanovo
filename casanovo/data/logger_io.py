@@ -1,5 +1,7 @@
 from logging import Logger
 from typing import Tuple, List, Dict
+from sys import argv
+from socket import gethostname
 
 import re
 
@@ -7,6 +9,7 @@ from pandas import DataFrame
 from .prediction_io import PredictionWriter
 
 import numpy as np
+import torch
 
 SCORE_BINS = [0.0, 0.5, 0.9, 0.95, 0.99]
 
@@ -44,7 +47,7 @@ def get_score_bins(results_table: DataFrame, score_bins: List[float]) -> Dict[fl
             Dictionary mapping each confidence score to the number of spectra with a confidence
             greater than or equal to it.
     """
-    se_scores = results_table["search_engine_score[1]"].to_numpy()
+    se_scores = results_table["score"].to_numpy()
     score_bin_dict = {score: len(se_scores[se_scores >= score]) for score in score_bins}
     return score_bin_dict
 
@@ -129,10 +132,10 @@ class LogPredictionWriter(PredictionWriter):
         prediction_score = next_prediction[2]
         self.predictions["sequence"].append(predicted_sequence)
         self.predictions["score"].append(prediction_score)
-    
+
     def get_results_table(self) -> DataFrame:
         return DataFrame(self.predictions)
-    
+
     def get_report_dict(self) -> Dict:
         """
         Generate sequencing run report
@@ -157,22 +160,20 @@ class LogPredictionWriter(PredictionWriter):
             "median_sequence_length": int(np.median(peptide_lengths)),
             "peptide_length_histogram": get_peptide_length_histo(peptide_lengths)
         }
-    
+
     def save(self) -> None:
+        """
+        Log sequencing run report
+        """
         run_report = self.get_report_dict()
+        self.logger.info(f"Executed Command: {' '.join(argv)}")
+        self.logger.info(f"Host Machine: {gethostname()}")
         self.logger.info(f"Sequenced {run_report['num_spectra']} spectra")
-        self.logger.info("Score CMF:")
-        cmf_list = list(run_report["score_bins"].items())
-        cmf_list.sort()
+        self.logger.info(f"Sequence Score CMF: {run_report['score_bins']}")
+        self.logger.info(f"Max Sequence Length: {run_report['max_sequence_length']}")
+        self.logger.info(f"Min Sequence Length: {run_report['min_sequence_length']}")
+        self.logger.info(f"Peptide Length Histogram: {str(run_report['peptide_length_histogram'])}")
 
-        for bin, pop in cmf_list:
-            self.logger.info(f"  {bin}: {pop}")
-
-        self.logger.info(f"Max sequence length: {run_report['max_sequence_length']}")
-        self.logger.info(f"Min sequence length: {run_report['min_sequence_length']}")
-        self.logger.info(f"Peptide length histogram:")
-        hist_list = list(run_report["peptide_length_histogram"].items())
-        hist_list.sort()
-
-        for len, freq in hist_list:
-            self.logger.info(f"  {len}: {freq}")
+        if torch.cuda.is_available():
+            gpu_util = torch.cuda.max_memory_allocated() / (10 ** 6)
+            self.logger.info(f"Max GPU Memory Utilization: {int(gpu_util)}mb")
