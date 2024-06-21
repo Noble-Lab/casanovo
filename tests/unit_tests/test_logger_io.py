@@ -3,20 +3,15 @@ import numpy as np
 import random
 import string
 
-from casanovo.report_gen import (
-    get_mztab_path,
+from casanovo.data.logger_io import (
     get_num_spectra,
     get_score_bins,
     get_peptide_lengths,
     get_peptide_length_histo
 )
 
-def get_mztab_path():
-    path = "\\Foo\\Bar\\FooBar"
-    file_path = path + ".mztab"
-
-    assert get_mztab_path(path) == file_path
-    assert get_mztab_path(file_path) == file_path
+np.random.seed(4000)
+random.seed(4000)
 
 def test_get_num_spectra():
     NUM_TEST = 5
