@@ -1,13 +1,101 @@
 from logging import Logger
-from typing import Tuple
+from typing import Tuple, List, Dict
 
+import re
+
+from pandas import DataFrame
 from .prediction_io import PredictionWriter
 
+import numpy as np
+
+SCORE_BINS = [0.0, 0.5, 0.9, 0.95, 0.99]
+
+def get_num_spectra(results_table: DataFrame) -> int:
+    """
+    Get the number of spectra in a results table
+
+    Parameters
+    ----------
+        results_table: DataFrame
+            Parsed spectrum match table
+
+    Returns
+    -------
+        num_spectra: int
+            Number of spectra in results table
+    """
+    return results_table.shape[0]
+
+def get_score_bins(results_table: DataFrame, score_bins: List[float]) -> Dict[float, int]:
+    """
+    From a list of confidence scores, return a dictionary mapping each confidence score
+    to the number of spectra with a confidence greater than or equal to it.
+
+    Parameters
+    ----------
+        results_table: DataFrame
+            Parsed spectrum match table
+        score_bins: List[float]
+            Confidence scores to map
+
+    Returns
+    -------
+        score_bin_dict: Dict[float, int]
+            Dictionary mapping each confidence score to the number of spectra with a confidence
+            greater than or equal to it.
+    """
+    se_scores = results_table["search_engine_score[1]"].to_numpy()
+    score_bin_dict = {score: len(se_scores[se_scores >= score]) for score in score_bins}
+    return score_bin_dict
+
+def get_peptide_lengths(results_table: DataFrame) -> np.ndarray:
+    """
+    Get a numpy array containing the length of each peptide sequence in results_table
+
+    Parameters
+    ----------
+        results_table: DataFrame
+            Parsed spectrum match table
+
+    Returns
+    -------
+        sequence_lengths: np.ndarray
+            Numpy array containing the length of each sequence, listed in the same order
+            that the sequences are provided in.
+    """
+    # Mass modifications do not contribute to sequence length
+    alpha_re = re.compile("[^a-zA-Z]")
+    filter_fun = lambda x: alpha_re.sub("", x)
+    peptide_sequences = results_table["sequence"].copy()
+    filtered_sequences = peptide_sequences.apply(filter_fun)
+    sequence_lengths = filtered_sequences.apply(len)
+
+    return sequence_lengths.to_numpy()
+
+def get_peptide_length_histo(peptide_lengths: np.ndarray) -> Dict[int, int]:
+    """
+    Get a dictionary mapping each unique peptide length to its frequency
+
+    Parameters
+    ----------
+        peptide_lengths: np.ndarray
+            Numpy array containing the length of each sequence
+
+    Returns
+    -------
+        peptide_length_histogram: Dict[int, int]
+            Dictionary mapping each unique peptide length to its frequency
+    """
+    lengths, counts = np.unique(peptide_lengths, return_counts=True)
+    return dict(zip(lengths.tolist(), counts.tolist()))
+
 class LogPredictionWriter(PredictionWriter):
-    def __init__(self, logger: Logger) -> None:
+    def __init__(self, logger: Logger, score_bins: List[float] = SCORE_BINS) -> None:
         self.logger = logger
+        self.score_bins = score_bins
         self.predictions = {
-            ""
+            "sequence": list(),
+            "score": list(),
         }
 
     def append_prediction(
@@ -39,4 +127,52 @@ class LogPredictionWriter(PredictionWriter):
         """
         predicted_sequence = next_prediction[0]
         prediction_score = next_prediction[2]
+        self.predictions["sequence"].append(predicted_sequence)
+        self.predictions["score"].append(prediction_score)
     
+    def get_results_table(self) -> DataFrame:
+        return DataFrame(self.predictions)
+    
+    def get_report_dict(self) -> Dict:
+        """
+        Generate sequencing run report
+
+        Parameters
+        ----------    
+            score_bins: List[float], Optional
+                Confidence scores for creating confidence CMF, see getScoreBins
+
+        Returns:
+            report_gen: Dict
+                Generated report, represented as a dictionary
+        """
+        results_table = self.get_results_table()
+        peptide_lengths = get_peptide_lengths(results_table)
+
+        return {
+            "num_spectra": get_num_spectra(results_table),
+            "score_bins": get_score_bins(results_table, self.score_bins),
+            "max_sequence_length": int(np.max(peptide_lengths)),
+            "min_sequence_length": int(np.min(peptide_lengths)),
+            "median_sequence_length": int(np.median(peptide_lengths)),
+            "peptide_length_histogram": get_peptide_length_histo(peptide_lengths)
+        }
+    
+    def save(self) -> None:
+        run_report = self.get_report_dict()
+        self.logger.info(f"Sequenced {run_report['num_spectra']} spectra")
+        self.logger.info("Score CMF:")
+        cmf_list = list(run_report["score_bins"].items())
+        cmf_list.sort()
+
+        for bin, pop in cmf_list:
+            self.logger.info(f"  {bin}: {pop}")
+
+        self.logger.info(f"Max sequence length: {run_report['max_sequence_length']}")
+        self.logger.info(f"Min sequence length: {run_report['min_sequence_length']}")
+        self.logger.info(f"Peptide length histogram:")
+        hist_list = list(run_report["peptide_length_histogram"].items())
+        hist_list.sort()
+
+        for len, freq in hist_list:
+            self.logger.info(f"  {len}: {freq}")
