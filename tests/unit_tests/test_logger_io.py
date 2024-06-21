@@ -7,11 +7,12 @@ from casanovo.data.logger_io import (
     get_num_spectra,
     get_score_bins,
     get_peptide_lengths,
-    get_peptide_length_histo
+    get_peptide_length_histo,
 )
 
 np.random.seed(4000)
 random.seed(4000)
+
 
 def test_get_num_spectra():
     NUM_TEST = 5
@@ -22,8 +23,11 @@ def test_get_num_spectra():
     rand_num_spectra = np.random.randint(MIN_LEN, MAX_LEN, NUM_TEST)
 
     for curr_num_spectra in rand_num_spectra:
-        curr_results_table = pd.DataFrame({"sequence": [arb_sequence] * curr_num_spectra})
+        curr_results_table = pd.DataFrame(
+            {"sequence": [arb_sequence] * curr_num_spectra}
+        )
         assert get_num_spectra(curr_results_table) == curr_num_spectra
+
 
 def test_get_score_bins():
     NUM_TEST = 5
@@ -44,12 +48,16 @@ def test_get_score_bins():
 
         for i in range(len(nums_per_bin) - 1, -2, -1):
             curr_min = BIN_MIN if i < 0 else curr_bins[i]
-            curr_max = BIN_MAX if i + 1 >= len(nums_per_bin) else curr_bins[i + 1]
+            curr_max = (
+                BIN_MAX if i + 1 >= len(nums_per_bin) else curr_bins[i + 1]
+            )
             curr_num = nums_per_bin[i]
-            next_scores = (np.random.rand(curr_num) * (curr_max - curr_min)) + curr_min
+            next_scores = (
+                np.random.rand(curr_num) * (curr_max - curr_min)
+            ) + curr_min
             curr_scores = np.append(curr_scores, next_scores)
             cumulative_sum += curr_num
-            
+
             if i >= 0:
                 expected[curr_min] = cumulative_sum
 
@@ -57,6 +65,7 @@ def test_get_score_bins():
         results_table = pd.DataFrame({"score": curr_scores})
         actual = get_score_bins(results_table, curr_bins)
         assert expected == actual
+
 
 def test_get_peptide_lengths():
     NUM_TEST = 5
@@ -66,7 +75,9 @@ def test_get_peptide_lengths():
     MIN_NUM_PEPTIDES = 20
     PROB_MASS_MOD = 0.1
 
-    num_peptides = np.random.randint(MIN_NUM_PEPTIDES, MAX_NUM_PEPTIDES, NUM_TEST)
+    num_peptides = np.random.randint(
+        MIN_NUM_PEPTIDES, MAX_NUM_PEPTIDES, NUM_TEST
+    )
     for curr_num_peptides in num_peptides:
         expected = np.random.randint(MIN_LENGTH, MAX_LENGTH, curr_num_peptides)
         peptide_list = []
@@ -78,10 +89,12 @@ def test_get_peptide_lengths():
             while i < curr_expected_len:
                 if random.random() < PROB_MASS_MOD:
                     random_mass_mod = 50 * random.random()
-                    random_mass_mod = f"{random.choice('+-')}{random_mass_mod:.5f}"
+                    random_mass_mod = (
+                        f"{random.choice('+-')}{random_mass_mod:.5f}"
+                    )
                     curr_peptide_seq += random_mass_mod
                     continue
-                
+
                 random_peptide = random.choice(string.ascii_uppercase)
                 curr_peptide_seq += random_peptide
                 i += 1
@@ -91,6 +104,7 @@ def test_get_peptide_lengths():
         results_table = pd.DataFrame({"sequence": peptide_list})
         actual = get_peptide_lengths(results_table)
         assert np.array_equal(expected, actual)
+
 
 def test_get_peptide_length_histo():
     NUM_TEST = 5
@@ -102,8 +116,12 @@ def test_get_peptide_length_histo():
 
     for _ in range(NUM_TEST):
         num_samples = random.randint(1, MAX_NUM_SAMPLES)
-        lengths = random.sample(range(MIN_LENGTH, MAX_LENGTH + 1, 1), k = num_samples)
-        frequencies = np.random.randint(MIN_FREQUENCY, MAX_FREQUENCY, len(lengths))
+        lengths = random.sample(
+            range(MIN_LENGTH, MAX_LENGTH + 1, 1), k=num_samples
+        )
+        frequencies = np.random.randint(
+            MIN_FREQUENCY, MAX_FREQUENCY, len(lengths)
+        )
 
         nums_list = list()
         for curr_length, curr_frequency in zip(lengths, frequencies.tolist()):
