@@ -307,12 +307,13 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
             tokens, scores = self._get_topk_beams(
                 tokens, scores, finished_beams, batch, step + 1
             )
+            
             # Update discarded spectra
             discarded_beam_matrix = torch.reshape(discarded_beams, (batch, beam))
             next_was_discarded = torch.all(discarded_beam_matrix, axis=1)
             was_discarded |= next_was_discarded
 
-            # Update finished beams
+            # Update finished spectra
             finished_beam_matrix = torch.reshape(finished_beams, (batch, beam))
             finished_beam_matrix &= ~discarded_beam_matrix
             next_was_finished = torch.any(finished_beam_matrix, axis=1)

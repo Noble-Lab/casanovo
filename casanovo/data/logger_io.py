@@ -158,7 +158,7 @@ class LogPredictionWriter(PredictionWriter):
     def get_results_table(self) -> DataFrame:
         return DataFrame(self.predictions)
 
-    def get_report_dict(self) -> Dict:
+    def get_report_dict(self) -> Optional[Dict]:
         """
         Generate sequencing run report
 
@@ -169,11 +169,14 @@ class LogPredictionWriter(PredictionWriter):
 
         Returns:
             report_gen: Dict
-                Generated report, represented as a dictionary
+                Generated report represented as a dictionary, or None if no
+                sequencing predictions were logged
         """
         results_table = self.get_results_table()
-        peptide_lengths = get_peptide_lengths(results_table)
+        if results_table.empty:
+            return None
 
+        peptide_lengths = get_peptide_lengths(results_table)
         return {
             "num_spectra": len(self.predictions["sequence"]),
             "score_bins": get_score_bins(results_table, self.score_bins),
@@ -201,30 +204,38 @@ class LogPredictionWriter(PredictionWriter):
 
         run_report = self.get_report_dict()
         run_date_string = datetime.now().strftime("%m/%d/%y %H:%M:%S")
-        num_spectra = run_report['num_spectra']
-        spectra_percent_conversion = 100 / (self.skipped_spectra + num_spectra)
-        sequence_percentage = spectra_percent_conversion * num_spectra
-        skip_percentage = spectra_percent_conversion * self.skipped_spectra
-
         self.logger.info(f"Executed Command: {' '.join(argv)}")
         self.logger.info(f"Executed on Host Machine: {gethostname()}")
         self.logger.info(f"Sequencing run date: {run_date_string}")
+
+        if run_report is None:
+            self.logger.warning(f"No predictions were logged, this may be due to an error")
+
+        num_spectra = 0 if run_report is None else run_report['num_spectra']
+        total_spectra = num_spectra + self.skipped_spectra
+        self.logger.info(f"Attempted to sequence {total_spectra} spectra")
         self.logger.info(f"Sequenced {num_spectra} spectra")
         self.logger.info(f"Skipped {self.skipped_spectra} spectra")
-        self.logger.info(f"Sequenced {sequence_percentage:.2f}% of total spectra")
-        self.logger.info(f"Skipped {skip_percentage:.2f}% of total spectra")
-        self.logger.info(f"Score Distribution:")
 
-        for score, pop in sorted(run_report['score_bins'].items()):
-            pop_percentage = 100 * pop / num_spectra
-            self.logger.info(f"{pop} spectra ({pop_percentage:.2f}%) scored >= {score}")
+        if total_spectra != 0:
+            spectra_percent_conversion = 100 / (self.skipped_spectra + num_spectra)
+            sequence_percentage = spectra_percent_conversion * num_spectra
+            skip_percentage = spectra_percent_conversion * self.skipped_spectra
+            self.logger.info(f"Sequenced {sequence_percentage:.2f}% of total spectra")
+            self.logger.info(f"Skipped {skip_percentage:.2f}% of total spectra")
 
-        self.logger.info(
-            f"Max Sequence Length: {run_report['max_sequence_length']}"
-        )
-        self.logger.info(
-            f"Min Sequence Length: {run_report['min_sequence_length']}"
-        )
+        if run_report is not None:
+            self.logger.info(f"Score Distribution:")
+            for score, pop in sorted(run_report['score_bins'].items()):
+                pop_percentage = 100 * pop / num_spectra
+                self.logger.info(f"{pop} spectra ({pop_percentage:.2f}%) scored >= {score}")
+
+            self.logger.info(
+                f"Max Sequence Length: {run_report['max_sequence_length']}"
+            )
+            self.logger.info(
+                f"Min Sequence Length: {run_report['min_sequence_length']}"
+            )
 
         if torch.cuda.is_available():
             gpu_util = torch.cuda.max_memory_allocated() / (10**6)
