@@ -13,6 +13,7 @@ from casanovo.data.logger_io import (
 np.random.seed(4000)
 random.seed(4000)
 
+
 def test_get_score_bins():
     NUM_TEST = 5
     NUM_BINS = 5
@@ -116,6 +117,7 @@ def test_get_peptide_length_histo():
         expected = dict(zip(lengths, frequencies.tolist()))
         actual = get_peptide_length_histo(peptide_lengths)
         assert expected == actual
+
 
 def test_prediction_multi_writer_serialization():
     reference_writer = PredictionMultiWriter(list())

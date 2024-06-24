@@ -15,6 +15,7 @@ import torch
 
 SCORE_BINS = [0.0, 0.5, 0.9, 0.95, 0.99]
 
+
 def get_score_bins(
     results_table: DataFrame, score_bins: List[float]
 ) -> Dict[float, int]:
@@ -209,26 +210,36 @@ class LogPredictionWriter(PredictionWriter):
         self.logger.info(f"Sequencing run date: {run_date_string}")
 
         if run_report is None:
-            self.logger.warning(f"No predictions were logged, this may be due to an error")
+            self.logger.warning(
+                f"No predictions were logged, this may be due to an error"
+            )
 
-        num_spectra = 0 if run_report is None else run_report['num_spectra']
+        num_spectra = 0 if run_report is None else run_report["num_spectra"]
         total_spectra = num_spectra + self.skipped_spectra
         self.logger.info(f"Attempted to sequence {total_spectra} spectra")
         self.logger.info(f"Sequenced {num_spectra} spectra")
         self.logger.info(f"Skipped {self.skipped_spectra} spectra")
 
         if total_spectra != 0:
-            spectra_percent_conversion = 100 / (self.skipped_spectra + num_spectra)
+            spectra_percent_conversion = 100 / (
+                self.skipped_spectra + num_spectra
+            )
             sequence_percentage = spectra_percent_conversion * num_spectra
             skip_percentage = spectra_percent_conversion * self.skipped_spectra
-            self.logger.info(f"Sequenced {sequence_percentage:.2f}% of total spectra")
-            self.logger.info(f"Skipped {skip_percentage:.2f}% of total spectra")
+            self.logger.info(
+                f"Sequenced {sequence_percentage:.2f}% of total spectra"
+            )
+            self.logger.info(
+                f"Skipped {skip_percentage:.2f}% of total spectra"
+            )
 
         if run_report is not None:
             self.logger.info(f"Score Distribution:")
-            for score, pop in sorted(run_report['score_bins'].items()):
+            for score, pop in sorted(run_report["score_bins"].items()):
                 pop_percentage = 100 * pop / num_spectra
-                self.logger.info(f"{pop} spectra ({pop_percentage:.2f}%) scored >= {score}")
+                self.logger.info(
+                    f"{pop} spectra ({pop_percentage:.2f}%) scored >= {score}"
+                )
 
             self.logger.info(
                 f"Max Sequence Length: {run_report['max_sequence_length']}"

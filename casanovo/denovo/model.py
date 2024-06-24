@@ -267,8 +267,12 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         memories = einops.repeat(memories, "B L V -> (B S) L V", S=beam)
         tokens = einops.rearrange(tokens, "B L S -> (B S) L")
         scores = einops.rearrange(scores, "B L V S -> (B S) L V")
-        was_discarded = torch.zeros(batch, dtype=torch.bool, device=self.encoder.device)
-        was_finished = torch.zeros(batch, dtype=torch.bool, device=self.encoder.device)
+        was_discarded = torch.zeros(
+            batch, dtype=torch.bool, device=self.encoder.device
+        )
+        was_finished = torch.zeros(
+            batch, dtype=torch.bool, device=self.encoder.device
+        )
 
         # The main decoding loop.
         for step in range(0, self.max_length):
@@ -307,9 +311,11 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
             tokens, scores = self._get_topk_beams(
                 tokens, scores, finished_beams, batch, step + 1
             )
-            
+
             # Update discarded spectra
-            discarded_beam_matrix = torch.reshape(discarded_beams, (batch, beam))
+            discarded_beam_matrix = torch.reshape(
+                discarded_beams, (batch, beam)
+            )
             next_was_discarded = torch.all(discarded_beam_matrix, axis=1)
             was_discarded |= next_was_discarded
 

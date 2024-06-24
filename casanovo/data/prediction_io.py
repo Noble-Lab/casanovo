@@ -1,5 +1,6 @@
 from typing import Any, List, Tuple, Type, Callable
 
+
 class PredictionWriter:
     def log_prediction(
         self,
@@ -41,6 +42,7 @@ class PredictionWriter:
         """
         pass
 
+
 def get_writer_methods() -> List[str]:
     """
     Get list defining the PredictionWriter interface methods
@@ -54,8 +56,10 @@ def get_writer_methods() -> List[str]:
     return [
         attr
         for attr in dir(PredictionWriter)
-        if callable(getattr(PredictionWriter, attr)) and not attr.startswith("__")
+        if callable(getattr(PredictionWriter, attr))
+        and not attr.startswith("__")
     ]
+
 
 class PredictionMultiWriter(PredictionWriter):
     """
@@ -87,13 +91,16 @@ class PredictionMultiWriter(PredictionWriter):
         -------
             Callable: function that calls method_name on all writers in the writer list
         """
+
         def __writer_passthrough_fun(*args, **kwargs):
             for writer in self.writers:
                 getattr(writer, method_name)(*args, **kwargs)
 
         return __writer_passthrough_fun
-    
-    def __reduce__(self) -> Tuple[Callable, Tuple[List[PredictionWriter]], dict]:
+
+    def __reduce__(
+        self,
+    ) -> Tuple[Callable, Tuple[List[PredictionWriter]], dict]:
         """
         Reduce method for object serialization.
 
@@ -137,7 +144,9 @@ class PredictionMultiWriter(PredictionWriter):
 
         # Restore dynamically generated methods
         for writer_method in get_writer_methods():
-            self.__dict__[writer_method] = self.__multi_writer_method_factory(writer_method)
+            self.__dict__[writer_method] = self.__multi_writer_method_factory(
+                writer_method
+            )
 
     def add_writer(self, writer: Type[PredictionWriter]) -> None:
         """
