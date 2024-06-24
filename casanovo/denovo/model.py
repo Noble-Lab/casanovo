@@ -16,7 +16,7 @@ from depthcharge.components import ModelMixin, PeptideDecoder, SpectrumEncoder
 
 from . import evaluate
 from .. import config
-from ..data import ms_io
+from ..data.prediction_io import PredictionWriter
 
 logger = logging.getLogger("casanovo")
 
@@ -82,7 +82,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         The number of iterations for the linear warm-up of the learning rate.
     cosine_schedule_period_iters : int
         The number of iterations for the cosine half period of the learning rate.
-    out_writer : Optional[str]
+    out_writer : Optional[PredictionWriter]
         The output writer for the prediction results.
     calculate_precision : bool
         Calculate the validation set precision during training.
@@ -114,7 +114,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         train_label_smoothing: float = 0.01,
         warmup_iters: int = 100_000,
         cosine_schedule_period_iters: int = 600_000,
-        out_writer: Optional[ms_io.MztabWriter] = None,
+        out_writer: Optional[PredictionWriter] = None,
         calculate_precision: bool = False,
         **kwargs: Dict,
     ):
@@ -267,6 +267,8 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         memories = einops.repeat(memories, "B L V -> (B S) L V", S=beam)
         tokens = einops.rearrange(tokens, "B L S -> (B S) L")
         scores = einops.rearrange(scores, "B L V S -> (B S) L V")
+        was_discarded = torch.zeros(batch, dtype=torch.bool, device=self.encoder.device)
+        was_finished = torch.zeros(batch, dtype=torch.bool, device=self.encoder.device)
 
         # The main decoding loop.
         for step in range(0, self.max_length):
@@ -305,6 +307,21 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
             tokens, scores = self._get_topk_beams(
                 tokens, scores, finished_beams, batch, step + 1
             )
+            # Update discarded spectra
+            discarded_beam_matrix = torch.reshape(discarded_beams, (batch, beam))
+            next_was_discarded = torch.all(discarded_beam_matrix, axis=1)
+            was_discarded |= next_was_discarded
+
+            # Update finished beams
+            finished_beam_matrix = torch.reshape(finished_beams, (batch, beam))
+            finished_beam_matrix &= ~discarded_beam_matrix
+            next_was_finished = torch.any(finished_beam_matrix, axis=1)
+            was_finished |= next_was_finished
+
+        # Send number of skipped spectra to writer
+        if self.out_writer is not None:
+            num_discarded = (was_discarded & ~was_finished).sum()
+            self.out_writer.log_skipped_spectra(num_discarded)
 
         # Return the peptide with the highest confidence score, within the
         # precursor m/z tolerance if possible.
@@ -913,7 +930,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         ) in outputs:
             if len(peptide) == 0:
                 continue
-            self.out_writer.append_prediction(
+            self.out_writer.log_prediction(
                 (
                     peptide,
                     tuple(spectrum_i),

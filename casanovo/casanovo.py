@@ -48,7 +48,6 @@ click.rich_click.USE_MARKDOWN = True
 click.rich_click.STYLE_HELPTEXT = ""
 click.rich_click.SHOW_ARGUMENTS = True
 
-
 class _SharedParams(click.RichCommand):
     """Options shared between most Casanovo commands"""
 

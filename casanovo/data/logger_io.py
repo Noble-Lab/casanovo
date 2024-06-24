@@ -1,5 +1,5 @@
 from logging import Logger
-from typing import Tuple, List, Dict
+from typing import Tuple, List, Dict, Optional
 from sys import argv
 from socket import gethostname
 from time import time
@@ -14,24 +14,6 @@ import numpy as np
 import torch
 
 SCORE_BINS = [0.0, 0.5, 0.9, 0.95, 0.99]
-
-
-def get_num_spectra(results_table: DataFrame) -> int:
-    """
-    Get the number of spectra in a results table
-
-    Parameters
-    ----------
-        results_table: DataFrame
-            Parsed spectrum match table
-
-    Returns
-    -------
-        num_spectra: int
-            Number of spectra in results table
-    """
-    return results_table.shape[0]
-
 
 def get_score_bins(
     results_table: DataFrame, score_bins: List[float]
@@ -124,6 +106,7 @@ class LogPredictionWriter(PredictionWriter):
         self.logger = logger
         self.score_bins = score_bins
         self.start_time = None
+        self.skipped_spectra = 0
         self.predictions = {
             "sequence": list(),
             "score": list(),
@@ -135,7 +118,7 @@ class LogPredictionWriter(PredictionWriter):
         """
         self.start_time = time()
 
-    def append_prediction(
+    def log_prediction(
         self,
         next_prediction: Tuple[
             str, Tuple[str, str], float, float, float, float, str
@@ -161,6 +144,17 @@ class LogPredictionWriter(PredictionWriter):
         self.predictions["sequence"].append(predicted_sequence)
         self.predictions["score"].append(prediction_score)
 
+    def log_skipped_spectra(self, num_skipped: int) -> None:
+        """
+        Append some number of skipped spectra to the writer context
+
+        Parameters
+        ----------
+        num_skipped : str
+            number of skipped spectra
+        """
+        self.skipped_spectra += num_skipped
+
     def get_results_table(self) -> DataFrame:
         return DataFrame(self.predictions)
 
@@ -181,7 +175,7 @@ class LogPredictionWriter(PredictionWriter):
         peptide_lengths = get_peptide_lengths(results_table)
 
         return {
-            "num_spectra": get_num_spectra(results_table),
+            "num_spectra": len(self.predictions["sequence"]),
             "score_bins": get_score_bins(results_table, self.score_bins),
             "max_sequence_length": int(np.max(peptide_lengths)),
             "min_sequence_length": int(np.min(peptide_lengths)),
@@ -207,11 +201,24 @@ class LogPredictionWriter(PredictionWriter):
 
         run_report = self.get_report_dict()
         run_date_string = datetime.now().strftime("%m/%d/%y %H:%M:%S")
+        num_spectra = run_report['num_spectra']
+        spectra_percent_conversion = 100 / (self.skipped_spectra + num_spectra)
+        sequence_percentage = spectra_percent_conversion * num_spectra
+        skip_percentage = spectra_percent_conversion * self.skipped_spectra
+
         self.logger.info(f"Executed Command: {' '.join(argv)}")
         self.logger.info(f"Executed on Host Machine: {gethostname()}")
         self.logger.info(f"Sequencing run date: {run_date_string}")
-        self.logger.info(f"Sequenced {run_report['num_spectra']} spectra")
-        self.logger.info(f"Sequence Score CMF: {run_report['score_bins']}")
+        self.logger.info(f"Sequenced {num_spectra} spectra")
+        self.logger.info(f"Skipped {self.skipped_spectra} spectra")
+        self.logger.info(f"Sequenced {sequence_percentage:.2f}% of total spectra")
+        self.logger.info(f"Skipped {skip_percentage:.2f}% of total spectra")
+        self.logger.info(f"Score Distribution:")
+
+        for score, pop in sorted(run_report['score_bins'].items()):
+            pop_percentage = 100 * pop / num_spectra
+            self.logger.info(f"{pop} spectra ({pop_percentage:.2f}%) scored >= {score}")
+
         self.logger.info(
             f"Max Sequence Length: {run_report['max_sequence_length']}"
         )

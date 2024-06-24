@@ -6,7 +6,7 @@ import operator
 import os
 import re
 from pathlib import Path
-from typing import List, Tuple
+from typing import List, Tuple, Optional
 
 import natsort
 
@@ -128,7 +128,7 @@ class MztabWriter(PredictionWriter):
                     (f"software[1]-setting[{i}]", f"{key} = {value}")
                 )
 
-    def append_prediction(
+    def log_prediction(
         self,
         next_prediction: Tuple[
             str, Tuple[str, str], float, float, float, float, str

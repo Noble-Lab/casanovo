@@ -4,7 +4,6 @@ import random
 import string
 
 from casanovo.data.logger_io import (
-    get_num_spectra,
     get_score_bins,
     get_peptide_lengths,
     get_peptide_length_histo,
@@ -12,22 +11,6 @@ from casanovo.data.logger_io import (
 
 np.random.seed(4000)
 random.seed(4000)
-
-
-def test_get_num_spectra():
-    NUM_TEST = 5
-    MIN_LEN = 10
-    MAX_LEN = 200
-
-    arb_sequence = "VKEDPDGEHAR"
-    rand_num_spectra = np.random.randint(MIN_LEN, MAX_LEN, NUM_TEST)
-
-    for curr_num_spectra in rand_num_spectra:
-        curr_results_table = pd.DataFrame(
-            {"sequence": [arb_sequence] * curr_num_spectra}
-        )
-        assert get_num_spectra(curr_results_table) == curr_num_spectra
-
 
 def test_get_score_bins():
     NUM_TEST = 5
