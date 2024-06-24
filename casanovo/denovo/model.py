@@ -267,9 +267,6 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         memories = einops.repeat(memories, "B L V -> (B S) L V", S=beam)
         tokens = einops.rearrange(tokens, "B L S -> (B S) L")
         scores = einops.rearrange(scores, "B L V S -> (B S) L V")
-        was_discarded = torch.zeros(
-            batch, dtype=torch.bool, device=self.encoder.device
-        )
         was_finished = torch.zeros(
             batch, dtype=torch.bool, device=self.encoder.device
         )
@@ -312,14 +309,10 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
                 tokens, scores, finished_beams, batch, step + 1
             )
 
-            # Update discarded spectra
+            # Update finished spectra
             discarded_beam_matrix = torch.reshape(
                 discarded_beams, (batch, beam)
             )
-            next_was_discarded = torch.all(discarded_beam_matrix, axis=1)
-            was_discarded |= next_was_discarded
-
-            # Update finished spectra
             finished_beam_matrix = torch.reshape(finished_beams, (batch, beam))
             finished_beam_matrix &= ~discarded_beam_matrix
             next_was_finished = torch.any(finished_beam_matrix, axis=1)
@@ -327,7 +320,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
 
         # Send number of skipped spectra to writer
         if self.out_writer is not None:
-            num_discarded = (was_discarded & ~was_finished).sum()
+            num_discarded = torch.numel(was_finished) - was_finished.sum()
             self.out_writer.log_skipped_spectra(num_discarded)
 
         # Return the peptide with the highest confidence score, within the
