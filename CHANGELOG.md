@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+### Changed
+
+- The charge value that's written to the results mzTab file is now an integer value to comply
+with the mzTab standard.
+
 ## [4.2.0] - 2024-05-14
 
 ### Added
