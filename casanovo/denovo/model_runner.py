@@ -55,17 +55,22 @@ class ModelRunner:
         self.writer = None
 
         # Configure checkpoints.
+        self.callbacks = [
+            ModelCheckpoint(
+                dirpath=config.model_save_folder_path,
+                save_on_train_epoch_end=True,
+            )
+        ]
+
         if config.save_top_k is not None:
-            self.callbacks = [
+            self.callbacks.append(
                 ModelCheckpoint(
                     dirpath=config.model_save_folder_path,
                     monitor="valid_CELoss",
                     mode="min",
                     save_top_k=config.save_top_k,
                 )
-            ]
-        else:
-            self.callbacks = None
+            )
 
     def __enter__(self):
         """Enter the context manager"""
@@ -110,15 +115,6 @@ class ModelRunner:
             self.loaders.train_dataloader(),
             self.loaders.val_dataloader(),
         )
-
-        # Always save final model weights at the end of training
-        if self.config.model_save_folder_path is not None:
-            self.trainer.save_checkpoint(
-                os.path.join(
-                    self.config.model_save_folder_path,
-                    f"train-run-final-{self.trainer.current_epoch}.ckpt",
-                )
-            )
 
     def evaluate(self, peak_path: Iterable[str]) -> None:
         """Evaluate peptide sequence preditions from a trained Casanovo model.
