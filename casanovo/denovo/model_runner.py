@@ -42,6 +42,7 @@ class ModelRunner:
         self,
         config: Config,
         model_filename: Optional[str] = None,
+        root_checkpoint_name: Optional[str] = None,
     ) -> None:
         """Initialize a ModelRunner"""
         self.config = config
@@ -54,6 +55,10 @@ class ModelRunner:
         self.loaders = None
         self.writer = None
 
+        checkpoint_filename = None
+        if root_checkpoint_name is not None:
+            checkpoint_filename = root_checkpoint_name + ".{epoch}-{step}"
+
         # Configure checkpoints.
         if config.save_top_k is not None:
             self.callbacks = [
@@ -62,6 +67,7 @@ class ModelRunner:
                     monitor="valid_CELoss",
                     mode="min",
                     save_top_k=config.save_top_k,
+                    filename=checkpoint_filename,
                 )
             ]
         else:
