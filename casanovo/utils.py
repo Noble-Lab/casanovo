@@ -1,4 +1,5 @@
 """Small utility functions"""
+
 import logging
 import os
 import platform

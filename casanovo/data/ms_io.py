@@ -1,4 +1,5 @@
 """Mass spectrometry file type input/output operations."""
+
 import collections
 import csv
 import operator
@@ -146,7 +147,7 @@ class MztabWriter:
         """
         Export the spectrum identifications to the mzTab file.
         """
-        with open(self.filename, "w") as f:
+        with open(self.filename, "w", newline="") as f:
             writer = csv.writer(f, delimiter="\t", lineterminator=os.linesep)
             # Write metadata.
             for row in self.metadata:
@@ -197,7 +198,7 @@ class MztabWriter:
                         # FIXME: Can we get the retention time from the data
                         #  loader?
                         "null",  # retention_time
-                        psm[3],  # charge
+                        int(psm[3]),  # charge
                         psm[4],  # exp_mass_to_charge
                         psm[5],  # calc_mass_to_charge
                         f"ms_run[{self._run_map[filename]}]:{idx}",

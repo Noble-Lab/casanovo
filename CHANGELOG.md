@@ -10,6 +10,47 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 - Update description of the `output` command-line argument to reflect that this is the root of the output (mzTab, log) files.
 
+### Fixed
+
+- Precursor charges are now exported as integers instead of floats in the mzTab output file, in compliance with the mzTab specification.
+
+## [4.2.1] - 2024-06-25
+
+### Fixed
+
+- Pin NumPy version to below v2.0 to ensure compatibility with current DepthCharge version.
+
+## [4.2.0] - 2024-05-14
+
+### Added
+
+- A deprecation warning will be issued when deprecated config options are used in the config file or in the model weights file.
+
+### Changed
+
+- Config option `max_iters` has been renamed to `cosine_schedule_period_iters` to better reflect that it controls the number of iterations for the cosine half period of the learning rate.
+
+### Fixed
+
+- Fix beam search caching failure when multiple beams have an equal predicted peptide score by breaking ties randomly.
+- The mzTab output file now has proper line endings regardless of platform, fixing the extra `\r` found when run on Windows.
+
+## [4.1.0] - 2024-02-16
+
+### Changed
+
+- Instead of having to specify `train_from_scratch` in the config file, training will proceed from an existing model weights file if this is given as an argument to `casanovo train`.
+
+### Fixed
+
+- Fixed beam search decoding error due to non-deterministic selection of beams with equal scores.
+
+## [4.0.1] - 2023-12-25
+
+### Fixed
+
+- Fix automatic PyPI upload.
+
 ## [4.0.0] - 2023-12-22
 
 ### Added
@@ -221,7 +262,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 - Initial Casanovo version.
 
-[Unreleased]: https://github.com/Noble-Lab/casanovo/compare/v4.0.0...HEAD
+[Unreleased]: https://github.com/Noble-Lab/casanovo/compare/v4.2.1...HEAD
+[4.2.1]: https://github.com/Noble-Lab/casanovo/compare/v4.2.0...v4.2.1
+[4.2.0]: https://github.com/Noble-Lab/casanovo/compare/v4.1.0...v4.2.0
+[4.1.0]: https://github.com/Noble-Lab/casanovo/compare/v4.0.1...v4.1.0
+[4.0.1]: https://github.com/Noble-Lab/casanovo/compare/v4.0.0...v4.0.1
 [4.0.0]: https://github.com/Noble-Lab/casanovo/compare/v3.5.0...v4.0.0
 [3.5.0]: https://github.com/Noble-Lab/casanovo/compare/v3.4.0...v3.5.0
 [3.4.0]: https://github.com/Noble-Lab/casanovo/compare/v3.3.0...v3.4.0

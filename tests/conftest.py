@@ -1,4 +1,5 @@
 """Fixtures used for testing."""
+
 import numpy as np
 import psims
 import pytest
@@ -192,7 +193,7 @@ def tiny_config(tmp_path):
         "n_layers": 1,
         "train_label_smoothing": 0.01,
         "warmup_iters": 1,
-        "max_iters": 1,
+        "cosine_schedule_period_iters": 1,
         "max_epochs": 20,
         "val_check_interval": 1,
         "model_save_folder_path": str(tmp_path),
@@ -222,7 +223,6 @@ def tiny_config(tmp_path):
         "weight_decay": 1e-5,
         "train_batch_size": 32,
         "num_sanity_val_steps": 0,
-        "train_from_scratch": True,
         "calculate_precision": False,
         "residues": {
             "G": 57.021464,

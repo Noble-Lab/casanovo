@@ -203,7 +203,7 @@ def test_beam_search_decode():
     )
     # Verify that the correct peptides have been cached.
     correct_cached = 0
-    for _, _, pep in pred_cache[0]:
+    for _, _, _, pep in pred_cache[0]:
         if torch.equal(pep, torch.tensor([4, 14, 4, 13])):
             correct_cached += 1
         elif torch.equal(pep, torch.tensor([4, 14, 4, 18])):
@@ -220,13 +220,13 @@ def test_beam_search_decode():
     # Return the candidate peptide with the highest score
     test_cache = collections.OrderedDict((i, []) for i in range(batch))
     heapq.heappush(
-        test_cache[0], (0.93, 4 * [0.93], torch.tensor([4, 14, 4, 19]))
+        test_cache[0], (0.93, 0.1, 4 * [0.93], torch.tensor([4, 14, 4, 19]))
     )
     heapq.heappush(
-        test_cache[0], (0.95, 4 * [0.95], torch.tensor([4, 14, 4, 13]))
+        test_cache[0], (0.95, 0.2, 4 * [0.95], torch.tensor([4, 14, 4, 13]))
     )
     heapq.heappush(
-        test_cache[0], (0.94, 4 * [0.94], torch.tensor([4, 14, 4, 4]))
+        test_cache[0], (0.94, 0.3, 4 * [0.94], torch.tensor([4, 14, 4, 4]))
     )
 
     assert list(model._get_top_peptide(test_cache))[0][0][-1] == "PEPK"
@@ -296,7 +296,7 @@ def test_beam_search_decode():
     )
     # Verify predictions with matching/non-matching precursor m/z.
     positive_score = negative_score = 0
-    for peptide_score, _, _ in pred_cache[0]:
+    for peptide_score, _, _, _ in pred_cache[0]:
         positive_score += peptide_score >= 0
         negative_score += peptide_score < 0
     assert positive_score == 2
@@ -423,6 +423,80 @@ def test_beam_search_decode():
         beam_fits_precursor, torch.tensor([False, False, False])
     )
     assert torch.equal(discarded_beams, torch.tensor([False, True, True]))
+
+    # Test _get_topk_beams() with finished beams in the batch.
+    model = Spec2Pep(n_beams=1, residues="massivekb", min_peptide_len=3)
+
+    # Sizes and other variables.
+    batch = 2  # B
+    beam = model.n_beams  # S
+    model.decoder.reverse = True
+    length = model.max_length + 1  # L
+    vocab = model.decoder.vocab_size + 1  # V
+    step = 4
+
+    # Initialize dummy scores and tokens.
+    scores = torch.full(
+        size=(batch, length, vocab, beam), fill_value=torch.nan
+    )
+    scores = einops.rearrange(scores, "B L V S -> (B S) L V")
+    tokens = torch.zeros(batch * beam, length, dtype=torch.int64)
+
+    # Simulate non-zero amino acid-level probability scores.
+    scores[:, : step + 1, :] = torch.rand(batch, step + 1, vocab)
+    scores[:, step, range(1, 4)] = torch.tensor([1.0, 2.0, 3.0])
+
+    # Simulate one finished and one unfinished beam in the same batch.
+    tokens[0, :step] = torch.tensor([4, 14, 4, 28])
+    tokens[1, :step] = torch.tensor([4, 14, 4, 1])
+
+    # Set finished beams array to allow decoding from only one beam.
+    test_finished_beams = torch.tensor([True, False])
+
+    new_tokens, new_scores = model._get_topk_beams(
+        tokens, scores, test_finished_beams, batch, step
+    )
+
+    # Only the second peptide should have a new token predicted.
+    expected_tokens = torch.tensor(
+        [
+            [4, 14, 4, 28, 0],
+            [4, 14, 4, 1, 3],
+        ]
+    )
+
+    assert torch.equal(new_tokens[:, : step + 1], expected_tokens)
+
+    # Test that duplicate peptide scores don't lead to a conflict in the cache.
+    model = Spec2Pep(n_beams=5, residues="massivekb", min_peptide_len=3)
+    batch = 2  # B
+    beam = model.n_beams  # S
+    model.decoder.reverse = True
+    length = model.max_length + 1  # L
+    vocab = model.decoder.vocab_size + 1  # V
+    step = 4
+
+    # Simulate beams with identical amino acid scores but different tokens.
+    scores = torch.zeros(size=(batch * beam, length, vocab))
+    scores[: batch * beam, : step + 1, :] = torch.rand(1)
+    tokens = torch.zeros(batch * beam, length, dtype=torch.int64)
+    tokens[: batch * beam, :step] = torch.randint(
+        1, vocab, (batch * beam, step)
+    )
+
+    pred_cache = collections.OrderedDict((i, []) for i in range(batch))
+    model._cache_finished_beams(
+        tokens,
+        scores,
+        step,
+        torch.ones(batch * beam, dtype=torch.bool),
+        torch.ones(batch * beam, dtype=torch.bool),
+        pred_cache,
+    )
+    for beam_i, preds in pred_cache.items():
+        assert len(preds) == beam
+        peptide_scores = [pep[0] for pep in preds]
+        assert np.allclose(peptide_scores, peptide_scores[0])
 
 
 def test_eval_metrics():
