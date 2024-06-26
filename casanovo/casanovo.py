@@ -98,8 +98,8 @@ class _SharedParams(click.RichCommand):
                 """,
                 is_flag=True,
                 show_default=True,
-                default=False
-            )
+                default=False,
+            ),
         ]
 
 
@@ -139,7 +139,7 @@ def sequence(
     config: Optional[str],
     output: Optional[str],
     verbosity: str,
-    overwrite_output: bool
+    overwrite_output: bool,
 ) -> None:
     """De novo sequence peptides from tandem mass spectra.
 
@@ -171,7 +171,7 @@ def evaluate(
     config: Optional[str],
     output: Optional[str],
     verbosity: str,
-    overwrite_output: bool
+    overwrite_output: bool,
 ) -> None:
     """Evaluate de novo peptide sequencing performance.
 
@@ -285,9 +285,7 @@ def configure(output: str) -> None:
 
 
 def setup_logging(
-    output: Optional[str],
-    verbosity: str,
-    check_overwrite: bool = False
+    output: Optional[str], verbosity: str, check_overwrite: bool = False
 ) -> Path:
     """Set up the logger.
 
@@ -350,7 +348,9 @@ def setup_logging(
     console_handler.setFormatter(console_formatter)
     root_logger.addHandler(console_handler)
     warnings_logger.addHandler(console_handler)
-    file_handler = logging.FileHandler(output.with_suffix(output.suffix + ".log"))
+    file_handler = logging.FileHandler(
+        output.with_suffix(output.suffix + ".log")
+    )
     file_handler.setFormatter(log_formatter)
     root_logger.addHandler(file_handler)
     warnings_logger.addHandler(file_handler)
