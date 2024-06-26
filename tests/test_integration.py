@@ -3,6 +3,7 @@ from pathlib import Path
 
 import pyteomics.mztab
 from click.testing import CliRunner
+from pytest import raises
 
 from casanovo import casanovo
 
@@ -35,8 +36,12 @@ def test_train_and_run(
     assert result.exit_code == 0
     assert model_file.exists()
 
+    # Test whether running training again raises exception
+    with raises(FileExistsError):
+        run(train_args)
+
     # Train with root option specified
-    train_args.extend(["--root_ckpt_name", "foobar"])
+    train_args.extend(["--root_ckpt_name", "foobar", "-d"])
     named_model_file = tmp_path / "foobar.epoch=19-step=20.ckpt"
     result = run(train_args)
     assert result.exit_code == 0
@@ -57,8 +62,18 @@ def test_train_and_run(
     result = run(eval_args)
     assert result.exit_code == 0
 
+    # Check whether running eval again raises FileExistsError
+    with raises(FileExistsError):
+        run(eval_args)
+
+    # Check overwrite option in eval
+    eval_args.append("-d")
+    result = run(eval_args)
+    assert result.exit_code == 0
+
     # Finally try predicting:
     output_filename = tmp_path / "test.mztab"
+    output_arg = output_filename.with_suffix("")
     predict_args = [
         "sequence",
         "--model",
@@ -66,11 +81,23 @@ def test_train_and_run(
         "--config",
         tiny_config,
         "--output",
-        str(output_filename),
+        str(output_arg),
         str(mgf_small),
         str(mzml_small),
     ]
 
+    result = run(predict_args)
+    assert result.exit_code == 0
+    assert output_filename.is_file()
+
+    # Test whether trying to overwrite existing output will raise exception
+    with raises(FileExistsError):
+        run(predict_args)
+
+    assert output_filename.is_file()
+
+    # Set overwrite flag and test whether sequencing run succeeds
+    predict_args.append("--overwrite_output")
     result = run(predict_args)
     assert result.exit_code == 0
     assert output_filename.is_file()
