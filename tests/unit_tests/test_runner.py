@@ -10,6 +10,7 @@ from casanovo.denovo.model_runner import ModelRunner
 def test_initialize_model(tmp_path, mgf_small):
     """Test initializing a new or existing model."""
     config = Config()
+    config.model_save_folder_path = tmp_path
     # No model filename given, so train from scratch.
     ModelRunner(config=config).initialize_model(train=True)
 

@@ -192,7 +192,7 @@ class ModelRunner:
             additional_cfg = dict(
                 devices=devices,
                 callbacks=self.callbacks,
-                enable_checkpointing=self.config.save_top_k is not None,
+                enable_checkpointing=True,
                 max_epochs=self.config.max_epochs,
                 num_sanity_val_steps=self.config.num_sanity_val_steps,
                 strategy=self._get_strategy(),
