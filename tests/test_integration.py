@@ -35,6 +35,13 @@ def test_train_and_run(
     assert result.exit_code == 0
     assert model_file.exists()
 
+    # Train with root option specified
+    train_args.extend(["--root_ckpt_name", "foobar"])
+    named_model_file = tmp_path / "foobar.epoch=19-step=20.ckpt"
+    result = run(train_args)
+    assert result.exit_code == 0
+    assert named_model_file.exists()
+
     # Try evaluating:
     eval_args = [
         "evaluate",

@@ -197,9 +197,23 @@ def evaluate(
     multiple=True,
     type=click.Path(exists=True, dir_okay=False),
 )
+@click.option(
+    "-r",
+    "--root_ckpt_name",
+    help="""
+    Root name for all model checkpoints saved during training,
+    i.e. if root is specified as `--root_ckpt_name foo` than all saved 
+    checkpoint filenames will be formatted as `foo.epoch=2-step=150000.ckpt`.
+    If root is not specified the checkpoint filenames will instead be formatted
+    as `epoch=2-step=150000.ckpt`.
+    """,
+    required=False,
+    type=str,
+)
 def train(
     train_peak_path: Tuple[str],
     validation_peak_path: Tuple[str],
+    root_ckpt_name: Optional[str],
     model: Optional[str],
     config: Optional[str],
     output: Optional[str],
@@ -212,7 +226,9 @@ def train(
     """
     output = setup_logging(output, verbosity)
     config, model = setup_model(model, config, output, True)
-    with ModelRunner(config, model) as runner:
+    with ModelRunner(
+        config, model, root_checkpoint_name=root_ckpt_name
+    ) as runner:
         logger.info("Training a model from:")
         for peak_file in train_peak_path:
             logger.info("  %s", peak_file)
