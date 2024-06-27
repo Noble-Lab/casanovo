@@ -222,7 +222,7 @@ class MztabWriter(PredictionWriter):
                         # FIXME: Can we get the retention time from the data
                         #  loader?
                         "null",  # retention_time
-                        psm[3],  # charge
+                        int(psm[3]),  # charge
                         psm[4],  # exp_mass_to_charge
                         psm[5],  # calc_mass_to_charge
                         f"ms_run[{self._run_map[filename]}]:{idx}",

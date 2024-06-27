@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+### Fixed
+
+- Precursor charges are now exported as integers instead of floats in the mzTab output file, in compliance with the mzTab specification.
+
 ## [4.2.1] - 2024-06-25
 
 ### Fixed
