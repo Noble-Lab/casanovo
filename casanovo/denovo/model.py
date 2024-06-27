@@ -1111,8 +1111,10 @@ class DbSpec2Pep(Spec2Pep):
             prec_mass = precursors[:, 0]
             prec_charge = precursors[:, 1]
             prec_mz = precursors[:, 2]
-            # calc_mz = [mass.fast_mass(pep, charge=int(pc)) for pep, pc in zip(peptides, prec_charge)]
-            calc_mz = prec_mass  # TODO: Replace with actual calc_mz
+            calc_mz = [
+                self.peptide_mass_calculator.mass(peptide, charge)
+                for peptide, charge in zip(peptides, prec_charge)
+            ]
             for row in zip(
                 peptides,
                 score_result,
