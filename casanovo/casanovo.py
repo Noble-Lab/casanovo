@@ -43,16 +43,6 @@ from . import utils
 from .denovo import ModelRunner
 from .config import Config
 
-# Filter tenserflow warnings on google Collab
-try:
-    import tensorflow as tf
-
-    tf.get_logger().setLevel(logging.CRITICAL)
-    print("FILTER")
-except:
-    print("NO FILTER")
-    pass
-
 logger = logging.getLogger("casanovo")
 
 click.rich_click.USE_MARKDOWN = True
