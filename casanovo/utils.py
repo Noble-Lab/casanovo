@@ -25,9 +25,15 @@ class CollabWarningsFilter(logging.Filter):
 
     def filter(self, record: logging.LogRecord) -> bool | logging.LogRecord:
         """Filter Google Collab Warnings"""
-        return not any(
+        is_filtered = not any(
             message in record.getMessage() for message in self.WARNINGS_FILTER
         )
+
+        print("LOGGER DEBUG")
+        print(f"Message: {record.getMessage()}")
+        print(f"Filtered: {is_filtered}")
+
+        return is_filtered
 
 
 def n_workers() -> int:
