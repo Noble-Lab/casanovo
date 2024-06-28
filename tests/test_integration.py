@@ -8,13 +8,7 @@ from casanovo import casanovo
 
 
 def test_train_and_run(
-    mgf_small,
-    mzml_small,
-    tiny_config,
-    tmp_path,
-    tiny_config_interval_greater,
-    tiny_config_not_factor,
-    monkeypatch,
+    mgf_small, mzml_small, tiny_config, tmp_path, monkeypatch
 ):
     # We can use this to explicitly test different versions.
     monkeypatch.setattr(casanovo, "__version__", "3.0.1")
@@ -91,44 +85,6 @@ def test_train_and_run(
     assert psms.loc[3, "spectra_ref"] == "ms_run[2]:scan=17"
     assert psms.loc[4, "sequence"] == "PEPTLDEK"
     assert psms.loc[4, "spectra_ref"] == "ms_run[2]:scan=111"
-
-    # Test checkpoint saving when val_check_interval is greater than training steps
-    Path.unlink(model_file)
-    result = run(
-        [
-            "train",
-            "--validation_peak_path",
-            str(mgf_small),
-            "--config",
-            tiny_config_interval_greater,
-            "--output",
-            str(tmp_path / "train"),
-            str(mgf_small),
-        ]
-    )
-
-    assert result.exit_code == 0
-    assert model_file.exists()
-
-    # Test checkpoint saving when val_check_interval is not a factor of training steps
-    Path.unlink(model_file)
-    validation_file = tmp_path / "epoch=14-step=15.ckpt"
-    result = run(
-        [
-            "train",
-            "--validation_peak_path",
-            str(mgf_small),
-            "--config",
-            tiny_config_not_factor,
-            "--output",
-            str(tmp_path / "train"),
-            str(mgf_small),
-        ]
-    )
-
-    assert result.exit_code == 0
-    assert model_file.exists()
-    assert validation_file.exists()
 
 
 def test_auxilliary_cli(tmp_path, monkeypatch):

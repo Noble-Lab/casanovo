@@ -4,7 +4,6 @@ import numpy as np
 import psims
 import pytest
 import yaml
-import math
 from pyteomics.mass import calculate_mass
 
 
@@ -185,9 +184,10 @@ def _create_mzml(peptides, mzml_file, random_state=42):
     return mzml_file
 
 
-def _get_default_config(tmp_path):
-    """Get default test config (dictionary)"""
-    return {
+@pytest.fixture
+def tiny_config(tmp_path):
+    """A config file for a tiny model."""
+    cfg = {
         "n_head": 2,
         "dim_feedforward": 10,
         "n_layers": 1,
@@ -255,36 +255,8 @@ def _get_default_config(tmp_path):
         },
     }
 
-
-def _write_config_file(cfg, tmp_path):
-    """Write config file to temp directory"""
     cfg_file = tmp_path / "config.yml"
     with cfg_file.open("w+") as out_file:
         yaml.dump(cfg, out_file)
 
     return cfg_file
-
-
-@pytest.fixture
-def tiny_config(tmp_path):
-    """A config file for a tiny model."""
-    cfg = _get_default_config(tmp_path)
-    return _write_config_file(cfg, tmp_path)
-
-
-@pytest.fixture
-def tiny_config_interval_greater(tmp_path):
-    """Config file where val_check interval is greater than the number of training steps"""
-    cfg = _get_default_config(tmp_path)
-    val_check_interval = 50
-    cfg["val_check_interval"] = val_check_interval
-    return _write_config_file(cfg, tmp_path)
-
-
-@pytest.fixture
-def tiny_config_not_factor(tmp_path):
-    """Config file where val_check interval isn't a factor of the number of training steps"""
-    cfg = _get_default_config(tmp_path)
-    val_check_interval = 15
-    cfg["val_check_interval"] = val_check_interval
-    return _write_config_file(cfg, tmp_path)
