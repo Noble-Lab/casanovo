@@ -59,14 +59,17 @@ class _SharedParams(click.RichCommand):
             click.Option(
                 ("-m", "--model"),
                 help="""
-                The model weights (.ckpt file). If not provided, Casanovo
-                will try to download the latest release.
+                The model weights (.ckpt file). If not provided, Casanovo will
+                try to download the latest release (during sequencing).
                 """,
                 type=click.Path(exists=True, dir_okay=False),
             ),
             click.Option(
                 ("-o", "--output"),
-                help="The mzTab file to which results will be written.",
+                help="The root file name to which results (i.e. the mzTab file "
+                "during sequencing, as well as the log file during all modes) "
+                "will be written. If not specified, a default timestamped file "
+                "name will be used.",
                 type=click.Path(dir_okay=False),
             ),
             click.Option(
@@ -87,6 +90,15 @@ class _SharedParams(click.RichCommand):
                     case_sensitive=False,
                 ),
                 default="info",
+            ),
+            click.Option(
+                ("-d", "--overwrite_output"),
+                help="""
+                Whether to overwrite sequencing output files (i.e. output .log and .mzTab files)
+                """,
+                is_flag=True,
+                show_default=True,
+                default=False,
             ),
         ]
 
@@ -127,13 +139,14 @@ def sequence(
     config: Optional[str],
     output: Optional[str],
     verbosity: str,
+    overwrite_output: bool,
 ) -> None:
     """De novo sequence peptides from tandem mass spectra.
 
     PEAK_PATH must be one or more mzMl, mzXML, or MGF files from which
     to sequence peptides.
     """
-    output = setup_logging(output, verbosity)
+    output = setup_logging(output, verbosity, not overwrite_output)
     config, model = setup_model(model, config, output, False)
     with ModelRunner(config, model) as runner:
         logger.info("Sequencing peptides from:")
@@ -158,13 +171,14 @@ def evaluate(
     config: Optional[str],
     output: Optional[str],
     verbosity: str,
+    overwrite_output: bool,
 ) -> None:
     """Evaluate de novo peptide sequencing performance.
 
     ANNOTATED_PEAK_PATH must be one or more annoated MGF files,
     such as those provided by MassIVE-KB.
     """
-    output = setup_logging(output, verbosity)
+    output = setup_logging(output, verbosity, not overwrite_output)
     config, model = setup_model(model, config, output, False)
     with ModelRunner(config, model) as runner:
         logger.info("Sequencing and evaluating peptides from:")
@@ -194,22 +208,39 @@ def evaluate(
     multiple=True,
     type=click.Path(exists=True, dir_okay=False),
 )
+@click.option(
+    "-r",
+    "--root_ckpt_name",
+    help="""
+    Root name for all model checkpoints saved during training,
+    i.e. if root is specified as `--root_ckpt_name foo` than all saved 
+    checkpoint filenames will be formatted as `foo.epoch=2-step=150000.ckpt`.
+    If root is not specified the checkpoint filenames will instead be formatted
+    as `epoch=2-step=150000.ckpt`.
+    """,
+    required=False,
+    type=str,
+)
 def train(
     train_peak_path: Tuple[str],
     validation_peak_path: Tuple[str],
+    root_ckpt_name: Optional[str],
     model: Optional[str],
     config: Optional[str],
     output: Optional[str],
     verbosity: str,
+    overwrite_output: bool,
 ) -> None:
     """Train a Casanovo model on your own data.
 
     TRAIN_PEAK_PATH must be one or more annoated MGF files, such as those
     provided by MassIVE-KB, from which to train a new Casnovo model.
     """
-    output = setup_logging(output, verbosity)
+    output = setup_logging(output, verbosity, not overwrite_output)
     config, model = setup_model(model, config, output, True)
-    with ModelRunner(config, model) as runner:
+    with ModelRunner(
+        config, model, root_checkpoint_name=root_ckpt_name
+    ) as runner:
         logger.info("Training a model from:")
         for peak_file in train_peak_path:
             logger.info("  %s", peak_file)
@@ -254,8 +285,7 @@ def configure(output: str) -> None:
 
 
 def setup_logging(
-    output: Optional[str],
-    verbosity: str,
+    output: Optional[str], verbosity: str, check_overwrite: bool = False
 ) -> Path:
     """Set up the logger.
 
@@ -273,10 +303,24 @@ def setup_logging(
     output : Path
         The output file path.
     """
+    OUTPUT_SUFFIXES = [".log", ".mztab"]
+
     if output is None:
         output = f"casanovo_{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}"
 
     output = Path(output).expanduser().resolve()
+
+    if check_overwrite:
+        for output_suffix in OUTPUT_SUFFIXES:
+            next_path = output.with_suffix(output.suffix + output_suffix)
+            if not next_path.is_file():
+                continue
+
+            raise FileExistsError(
+                f"Output file {next_path} already exists, existing output files "
+                f"can't be overwritten without setting the --overwrite_output "
+                f"flag"
+            )
 
     logging_levels = {
         "debug": logging.DEBUG,
@@ -304,7 +348,9 @@ def setup_logging(
     console_handler.setFormatter(console_formatter)
     root_logger.addHandler(console_handler)
     warnings_logger.addHandler(console_handler)
-    file_handler = logging.FileHandler(output.with_suffix(".log"))
+    file_handler = logging.FileHandler(
+        output.with_suffix(output.suffix + ".log")
+    )
     file_handler.setFormatter(log_formatter)
     root_logger.addHandler(file_handler)
     warnings_logger.addHandler(file_handler)
@@ -329,7 +375,7 @@ def setup_model(
     config: Optional[str],
     output: Optional[Path],
     is_train: bool,
-) -> Config:
+) -> Tuple[Config, str]:
     """Setup Casanovo for most commands.
 
     Parameters
@@ -348,6 +394,8 @@ def setup_model(
     ------
     config : Config
         The parsed configuration
+    model : str
+        The name of the model weights.
     """
     # Read parameters from the config file.
     config = Config(config)

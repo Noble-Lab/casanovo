@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+### Changed
+
+- Update description of the `output` command-line argument to reflect that this is the root of the output (mzTab, log) files.
+
 ### Fixed
 
 - Precursor charges are now exported as integers instead of floats in the mzTab output file, in compliance with the mzTab specification.
