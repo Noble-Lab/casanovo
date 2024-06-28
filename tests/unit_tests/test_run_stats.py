@@ -3,8 +3,7 @@ import numpy as np
 import random
 import string
 
-from casanovo.data.prediction_io import PredictionMultiWriter
-from casanovo.data.logger_io import (
+from casanovo.data.ms_io import (
     get_score_bins,
     get_peptide_lengths,
     get_peptide_length_histo,
@@ -117,10 +116,3 @@ def test_get_peptide_length_histo():
         expected = dict(zip(lengths, frequencies.tolist()))
         actual = get_peptide_length_histo(peptide_lengths)
         assert expected == actual
-
-
-def test_prediction_multi_writer_serialization():
-    reference_writer = PredictionMultiWriter(list())
-    create_fun, create_args, state = reference_writer.__reduce__()
-    serialized_writer = create_fun(*create_args)
-    assert serialized_writer.__getstate__() == state
