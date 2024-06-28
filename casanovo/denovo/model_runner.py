@@ -25,7 +25,6 @@ from ..utils import CollabWarningsFilter
 
 
 logger = logging.getLogger("casanovo")
-logger.addFilter(CollabWarningsFilter())
 
 
 class ModelRunner:
