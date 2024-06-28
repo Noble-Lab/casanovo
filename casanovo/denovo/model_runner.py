@@ -55,17 +55,22 @@ class ModelRunner:
         self.writer = None
 
         # Configure checkpoints.
+        self.callbacks = [
+            ModelCheckpoint(
+                dirpath=config.model_save_folder_path,
+                save_on_train_epoch_end=True,
+            )
+        ]
+
         if config.save_top_k is not None:
-            self.callbacks = [
+            self.callbacks.append(
                 ModelCheckpoint(
                     dirpath=config.model_save_folder_path,
                     monitor="valid_CELoss",
                     mode="min",
                     save_top_k=config.save_top_k,
                 )
-            ]
-        else:
-            self.callbacks = None
+            )
 
     def __enter__(self):
         """Enter the context manager"""
@@ -187,7 +192,7 @@ class ModelRunner:
             additional_cfg = dict(
                 devices=devices,
                 callbacks=self.callbacks,
-                enable_checkpointing=self.config.save_top_k is not None,
+                enable_checkpointing=True,
                 max_epochs=self.config.max_epochs,
                 num_sanity_val_steps=self.config.num_sanity_val_steps,
                 strategy=self._get_strategy(),
