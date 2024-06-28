@@ -142,8 +142,6 @@ def sequence(
 
         runner.predict(peak_path, output)
 
-    logger.info("DONE!")
-
 
 @main.command(cls=_SharedParams)
 @click.argument(
