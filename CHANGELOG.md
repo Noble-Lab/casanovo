@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+### Added
+
+- During training, model checkpoints will now be saved at the end of each training epoch in addition to the checkpoints saved at the end of every validation run.
+
 ### Fixed
 
 - Precursor charges are now exported as integers instead of floats in the mzTab output file, in compliance with the mzTab specification.
