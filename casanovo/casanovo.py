@@ -44,6 +44,7 @@ from .denovo import ModelRunner
 from .config import Config
 
 logger = logging.getLogger("casanovo")
+logger.addFilter(utils.CollabWarningsFilter())
 click.rich_click.USE_MARKDOWN = True
 click.rich_click.STYLE_HELPTEXT = ""
 click.rich_click.SHOW_ARGUMENTS = True

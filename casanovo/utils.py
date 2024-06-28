@@ -13,6 +13,23 @@ import torch
 logger = logging.getLogger("casanovo")
 
 
+class CollabWarningsFilter(logging.Filter):
+    """Google Collab message filter"""
+
+    WARNINGS_FILTER = [
+        "Unable to register cuDNN factory:",
+        "Unable to register cuFFT factory:",
+        "Unable to register cuBLAS factory:",
+        "This TensorFlow binary is optimized to use available CPU instructions",
+    ]
+
+    def filter(self, record: logging.LogRecord) -> bool | logging.LogRecord:
+        """Filter Google Collab Warnings"""
+        return not any(
+            message in record.getMessage() for message in self.WARNINGS_FILTER
+        )
+
+
 def n_workers() -> int:
     """
     Get the number of workers to use for data loading.
