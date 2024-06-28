@@ -21,9 +21,11 @@ from ..config import Config
 from ..data import ms_io
 from ..denovo.dataloaders import DeNovoDataModule
 from ..denovo.model import Spec2Pep
+from ..utils import CollabWarningsFilter
 
 
 logger = logging.getLogger("casanovo")
+logger.addFilter(CollabWarningsFilter())
 
 
 class ModelRunner:

@@ -17,8 +17,10 @@ from depthcharge.components import ModelMixin, PeptideDecoder, SpectrumEncoder
 from . import evaluate
 from .. import config
 from ..data import ms_io
+from ..utils import CollabWarningsFilter
 
 logger = logging.getLogger("casanovo")
+logger.addFilter(CollabWarningsFilter())
 
 
 class Spec2Pep(pl.LightningModule, ModelMixin):
