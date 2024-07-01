@@ -7,7 +7,7 @@ import os
 import re
 from pathlib import Path
 from typing import List
-
+import pprint
 import natsort
 
 from .. import __version__
@@ -141,7 +141,7 @@ class MztabWriter:
             self.metadata.append(
                 (f"ms_run[{i}]-location", Path(filename).as_uri()),
             )
-            self._run_map[filename] = i
+            self._run_map[os.path.basename(filename)] = i
 
     def save(self) -> None:
         """
@@ -180,12 +180,12 @@ class MztabWriter:
             for i, psm in enumerate(
                 natsort.natsorted(self.psms, key=operator.itemgetter(1)), 1
             ):
-                filename, idx = os.path.abspath(psm[1][0]), psm[1][1]
+                #filename, idx = os.path.abspath(psm[1][0]), psm[1][1]
                 writer.writerow(
                     [
                         "PSM",
                         psm[0],  # sequence
-                        i,  # PSM_ID
+                        psm[1][0],  # PSM_ID
                         "null",  # accession
                         "null",  # unique
                         "null",  # database
@@ -201,7 +201,7 @@ class MztabWriter:
                         psm[3],  # charge
                         psm[4],  # exp_mass_to_charge
                         psm[5],  # calc_mass_to_charge
-                        f"ms_run[{self._run_map[filename]}]:{idx}",
+                        f"ms_run[{self._run_map[psm[7][0]]}]:{psm[9][0]}", # Title and file name idx
                         "null",  # pre
                         "null",  # post
                         "null",  # start
