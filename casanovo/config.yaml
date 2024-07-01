@@ -129,7 +129,7 @@ weight_decay: 1e-5
 train_label_smoothing: 0.01
 # Shuffle dataset during training.
 # A buffer of size buffer_size is filled and examples from this buffer are randomly sampled.
-shuffle: 
+shuffle: True
 buffer_size: 100_000
 
 # TRAINING/INFERENCE OPTIONS
