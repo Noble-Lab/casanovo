@@ -3,15 +3,24 @@
 import functools
 import logging
 import os
-from typing import List, Optional, Tuple
-
+from typing import Optional, Iterable
+from pathlib import Path
 import lightning.pytorch as pl
 import numpy as np
 import torch
-from depthcharge.data import AnnotatedSpectrumIndex
+from torch.utils.data import DataLoader
+import tempfile
+import pyarrow as pa
+from torch.utils.data.datapipes.iter.combinatorics import ShufflerIterDataPipe
 
-from ..data import db_utils
-from ..data.datasets import AnnotatedSpectrumDataset, SpectrumDataset
+
+from depthcharge.tokenizers import PeptideTokenizer
+from depthcharge.data import (
+                                AnnotatedSpectrumDataset,
+                                CustomField,
+                                SpectrumDataset,
+                                preprocessing
+)
 
 
 logger = logging.getLogger("casanovo")
@@ -23,12 +32,12 @@ class DeNovoDataModule(pl.LightningDataModule):
 
     Parameters
     ----------
-    train_index : Optional[AnnotatedSpectrumIndex]
-        The spectrum index file corresponding to the training data.
-    valid_index : Optional[AnnotatedSpectrumIndex]
-        The spectrum index file corresponding to the validation data.
-    test_index : Optional[AnnotatedSpectrumIndex]
-        The spectrum index file corresponding to the testing data.
+    train_paths : str, optional
+            A spectrum lance path for model training.
+    valid_pathas : str, optional
+        A spectrum lance path for validation.
+    test_paths : str, optional
+        A spectrum lance path for evaluation or inference.
     train_batch_size : int
         The batch size to use for training.
     eval_batch_size : int
@@ -48,18 +57,27 @@ class DeNovoDataModule(pl.LightningDataModule):
         Remove peaks within the given mass tolerance in Dalton around
         the precursor mass.
     n_workers : int, optional
-        The number of workers to use for data loading. By default, the
-        number of available CPU cores on the current machine is used.
+        The number of workers to use for data loading. By default, the number of
+        available CPU cores on the current machine is used.
+    max_charge: int
+        Remove PSMs which precursor charge higher than specified max_charge
+    tokenizer: Optional[PeptideTokenizer] 
+        Peptide tokenizer for tokenizing sequences
     random_state : Optional[int]
-        The NumPy random state. ``None`` leaves mass spectra in the
-        order they were parsed.
+        The NumPy random state. ``None`` leaves mass spectra in the order they
+        were parsed.
+    shuffle: Optional[bool]
+        Should the training dataset be shuffled? Suffling based on specified buffer_size
+    buffer_size: Optional[int]
+        See more here: 
+        https://huggingface.co/docs/datasets/v1.11.0/dataset_streaming.html#shuffling-the-dataset-shuffle
     """
 
     def __init__(
         self,
-        train_index: Optional[AnnotatedSpectrumIndex] = None,
-        valid_index: Optional[AnnotatedSpectrumIndex] = None,
-        test_index: Optional[AnnotatedSpectrumIndex] = None,
+        train_paths: Optional[Iterable[str]] = None,
+        valid_paths: Optional[Iterable[str]] = None,
+        test_paths: Optional[str] = None,
         train_batch_size: int = 128,
         eval_batch_size: int = 1028,
         n_peaks: Optional[int] = 150,
@@ -69,24 +87,123 @@ class DeNovoDataModule(pl.LightningDataModule):
         remove_precursor_tol: float = 2.0,
         n_workers: Optional[int] = None,
         random_state: Optional[int] = None,
+        max_charge: Optional[int] = 10,
+        tokenizer: Optional[PeptideTokenizer] = None,
+        lance_dir: Optional[str] = None,
+        shuffle: Optional[bool] = True,
+        buffer_size: Optional[int] = 100_000,
     ):
         super().__init__()
-        self.train_index: Optional[AnnotatedSpectrumIndex] = train_index
-        self.valid_index: Optional[AnnotatedSpectrumIndex] = valid_index
-        self.test_index: Optional[AnnotatedSpectrumIndex] = test_index
+        self.train_paths = train_paths
+        self.valid_paths = valid_paths
+        self.test_paths = test_paths
         self.train_batch_size = train_batch_size
         self.eval_batch_size = eval_batch_size
-        self.n_peaks: Optional[int] = n_peaks
-        self.min_mz = min_mz
-        self.max_mz = max_mz
-        self.min_intensity = min_intensity
-        self.remove_precursor_tol = remove_precursor_tol
-        self.n_workers = n_workers if n_workers is not None else os.cpu_count()
-        self.rng = np.random.default_rng(random_state)
+
+        self.tokenizer = tokenizer if tokenizer is not None else PeptideTokenizer()
+        self.lance_dir = lance_dir if lance_dir is not None else tempfile.TemporaryDirectory(suffix='.lance').name 
+
+
         self.train_dataset = None
         self.valid_dataset = None
         self.test_dataset = None
         self.protein_database = None
+
+        self.n_workers = n_workers if n_workers is not None else os.cpu_count()
+        self.shuffle = shuffle if shuffle else None  # set to None if not wanted. Otherwise torch throws and error
+        self.buffer_size = buffer_size
+
+        self.valid_charge = np.arange(1, max_charge+1)
+        self.preprocessing_fn = [
+            preprocessing.set_mz_range(min_mz=min_mz, max_mz=max_mz),
+            preprocessing.remove_precursor_peak(remove_precursor_tol, "Da"),
+            preprocessing.filter_intensity(min_intensity, n_peaks),
+            preprocessing.scale_intensity("root", 1),
+            scale_to_unit_norm
+            ]
+        self.custom_field_test_mgf = [
+            CustomField("scans",
+                        lambda x: x["params"]["scans"] if 'scans' in x["params"] else x["params"]["title"],
+                        pa.string()),
+            CustomField("title",
+                        lambda x: x["params"]["title"],
+                        pa.string())
+        ]
+        self.custom_field_test_mzml = [
+            CustomField("scans", lambda x: x["id"], pa.string()),
+            CustomField("title", lambda x: x["id"], pa.string()),
+        ]
+        
+        self.custom_field_anno = [CustomField("seq", lambda x: x["params"]["seq"], pa.string())]
+
+    def make_dataset(self, paths, annotated, mode, shuffle):
+        """
+        Make spectrum datasets
+        Parameters
+        ----------
+        paths : Iterable[str]
+            Paths to input datasets
+        annotated: bool
+            True if peptide sequence annotations are available for the test
+            data.
+        mode: str {"train", "valid", "test"}
+            The mode indicating name of lance instance  
+        shuffle: bool
+            Indicates whether to shuffle training data based on buffer_size
+        """
+        custom_fields = self.custom_field_anno if annotated else []
+        
+        if mode=="test":
+            if all([Path(f).suffix in ('.mgf') for f in paths]):
+                custom_fields = custom_fields + self.custom_field_test_mgf
+            if all([Path(f).suffix in (".mzml",  ".mzxml", '.mzML') for f in paths]):
+                custom_fields = custom_fields + self.custom_field_test_mzml
+            
+        lance_path = f'{self.lance_dir}/{mode}.lance'
+        
+        parse_kwargs = dict(
+            preprocessing_fn=self.preprocessing_fn,
+            custom_fields=custom_fields,
+            valid_charge=self.valid_charge,
+
+        )
+
+        dataset_params = dict(
+            batch_size=self.train_batch_size if mode=="train" else self.eval_batch_size
+        )
+        anno_dataset_params = dataset_params | dict(
+            tokenizer=self.tokenizer,
+            annotations='seq',
+        )
+
+        if any([Path(f).suffix in (".lance") for f in paths]):
+            if annotated:
+                dataset = AnnotatedSpectrumDataset.from_lance(paths[0], **anno_dataset_params)
+            else:
+                dataset = SpectrumDataset.from_lance(paths[0], **dataset_params)
+        else:
+            if annotated:
+                dataset = AnnotatedSpectrumDataset(
+                    spectra=paths,
+                    path=lance_path,
+                    parse_kwargs=parse_kwargs,
+                    **anno_dataset_params,
+                )
+            else:
+                dataset = SpectrumDataset(
+                    spectra=paths,
+                    path=lance_path,
+                    parse_kwargs=parse_kwargs,
+                    **dataset_params,
+                )
+    
+        if shuffle:
+            dataset = ShufflerIterDataPipe(
+                dataset,
+                buffer_size=self.buffer_size
+            )
+
+        return dataset
 
     def setup(self, stage: str = None, annotated: bool = True) -> None:
         """
@@ -102,43 +219,32 @@ class DeNovoDataModule(pl.LightningDataModule):
             test data.
         """
         if stage in (None, "fit", "validate"):
-            make_dataset = functools.partial(
-                AnnotatedSpectrumDataset,
-                n_peaks=self.n_peaks,
-                min_mz=self.min_mz,
-                max_mz=self.max_mz,
-                min_intensity=self.min_intensity,
-                remove_precursor_tol=self.remove_precursor_tol,
-            )
-            if self.train_index is not None:
-                self.train_dataset = make_dataset(
-                    self.train_index,
-                    random_state=self.rng,
+            if self.train_paths is not None:
+                self.train_dataset = self.make_dataset(
+                    self.train_paths, annotated=True,
+                    mode='train', shuffle=self.shuffle
                 )
-            if self.valid_index is not None:
-                self.valid_dataset = make_dataset(self.valid_index)
+            if self.valid_paths is not None:
+                self.valid_dataset = self.make_dataset(
+                    self.valid_paths, annotated=True,
+                    mode='valid', shuffle=False
+                )
         if stage in (None, "test"):
-            make_dataset = functools.partial(
-                AnnotatedSpectrumDataset if annotated else SpectrumDataset,
-                n_peaks=self.n_peaks,
-                min_mz=self.min_mz,
-                max_mz=self.max_mz,
-                min_intensity=self.min_intensity,
-                remove_precursor_tol=self.remove_precursor_tol,
-            )
-            if self.test_index is not None:
-                self.test_dataset = make_dataset(self.test_index)
+            if self.test_paths is not None:
+                self.test_dataset = self.make_dataset(
+                    self.test_paths,
+                    annotated=annotated,
+                    mode='test',
+                    shuffle=False
+                )
 
     def _make_loader(
         self,
         dataset: torch.utils.data.Dataset,
-        batch_size: int,
-        shuffle: bool = False,
-        collate_fn: Optional[callable] = None,
+        shuffle: Optional[bool] = None,
     ) -> torch.utils.data.DataLoader:
         """
-        Create a PyTorch DataLoader.
-
+        Create a PyTorch DataLoader.  
         Parameters
         ----------
         dataset : torch.utils.data.Dataset
@@ -155,32 +261,29 @@ class DeNovoDataModule(pl.LightningDataModule):
         torch.utils.data.DataLoader
             A PyTorch DataLoader.
         """
-        return torch.utils.data.DataLoader(
+        return DataLoader(
             dataset,
-            batch_size=batch_size,
-            collate_fn=prepare_batch if collate_fn is None else collate_fn,
-            pin_memory=True,
-            num_workers=self.n_workers,
             shuffle=shuffle,
+            num_workers=0,  # self.n_workers,
+            #precision=torch.float32,
+            pin_memory=True,
         )
 
     def train_dataloader(self) -> torch.utils.data.DataLoader:
         """Get the training DataLoader."""
-        return self._make_loader(
-            self.train_dataset, self.train_batch_size, shuffle=True
-        )
+        return self._make_loader(self.train_dataset, self.shuffle )
 
     def val_dataloader(self) -> torch.utils.data.DataLoader:
         """Get the validation DataLoader."""
-        return self._make_loader(self.valid_dataset, self.eval_batch_size)
+        return self._make_loader(self.valid_dataset)
 
     def test_dataloader(self) -> torch.utils.data.DataLoader:
         """Get the test DataLoader."""
-        return self._make_loader(self.test_dataset, self.eval_batch_size)
+        return self._make_loader(self.test_dataset)
 
     def predict_dataloader(self) -> torch.utils.data.DataLoader:
         """Get the predict DataLoader."""
-        return self._make_loader(self.test_dataset, self.eval_batch_size)
+        return self._make_loader(self.test_dataset)
 
     def db_dataloader(self) -> torch.utils.data.DataLoader:
         """Get a special dataloader for DB search."""
@@ -193,114 +296,13 @@ class DeNovoDataModule(pl.LightningDataModule):
         )
 
 
-def prepare_batch(
-    batch: List[Tuple[torch.Tensor, float, int, str]]
-) -> Tuple[torch.Tensor, torch.Tensor, np.ndarray]:
+def scale_to_unit_norm(spectrum):
     """
-    Collate MS/MS spectra into a batch.
-
-    The MS/MS spectra will be padded so that they fit nicely as a
-    tensor. However, the padded elements are ignored during the
-    subsequent steps.
-
-    Parameters
-    ----------
-    batch : List[Tuple[torch.Tensor, float, int, str]]
-        A batch of data from an AnnotatedSpectrumDataset, consisting of
-        for each spectrum (i) a tensor with the m/z and intensity peak
-        values, (ii), the precursor m/z, (iii) the precursor charge,
-        (iv) the spectrum identifier.
-
-    Returns
-    -------
-    spectra : torch.Tensor of shape (batch_size, n_peaks, 2)
-        The padded mass spectra tensor with the m/z and intensity peak
-        values for each spectrum.
-    precursors : torch.Tensor of shape (batch_size, 3)
-        A tensor with the precursor neutral mass, precursor charge, and
-        precursor m/z.
-    spectrum_ids : np.ndarray
-        The spectrum identifiers (during de novo sequencing) or peptide
-        sequences (during training).
+    Scaling function used in Casanovo
+    slightly differing from the depthcharge implementation
     """
-    spectra, precursor_mzs, precursor_charges, spectrum_ids = list(zip(*batch))
-    spectra = torch.nn.utils.rnn.pad_sequence(spectra, batch_first=True)
-    precursor_mzs = torch.tensor(precursor_mzs)
-    precursor_charges = torch.tensor(precursor_charges)
-    precursor_masses = (precursor_mzs - 1.007276) * precursor_charges
-    precursors = torch.vstack(
-        [precursor_masses, precursor_charges, precursor_mzs]
-    ).T.float()
-    return spectra, precursors, np.asarray(spectrum_ids)
-
-
-def prepare_psm_batch(
-    batch: List[Tuple[torch.Tensor, float, int, str]],
-    protein_database: db_utils.ProteinDatabase,
-) -> Tuple[torch.Tensor, torch.Tensor, np.ndarray, np.ndarray]:
-    """
-    Collate MS/MS spectra into a batch for DB search.
-
-    The MS/MS spectra will be padded so that they fit nicely as a
-    tensor. However, the padded elements are ignored during the
-    subsequent steps.
-
-    Parameters
-    ----------
-    batch : List[Tuple[torch.Tensor, float, int, str]]
-        A batch of data from an AnnotatedSpectrumDataset, consisting of
-        for each spectrum (i) a tensor with the m/z and intensity peak
-        values, (ii), the precursor m/z, (iii) the precursor charge,
-        (iv) the spectrum identifier.
-    protein_database : db_utils.ProteinDatabase
-        The protein database to use for candidate peptide retrieval.
-
-    Returns
-    -------
-    batch_spectra : torch.Tensor of shape (batch_size, n_peaks, 2)
-        The padded mass spectra tensor with the m/z and intensity peak
-        values for each spectrum.
-    batch_precursors : torch.Tensor of shape (batch_size, 3)
-        A tensor with the precursor neutral mass, precursor charge, and
-        precursor m/z.
-    batch_spectrum_ids : np.ndarray
-        The spectrum identifiers.
-    batch_peptides : np.ndarray
-        The candidate peptides for each spectrum.
-    """
-    spectra, precursors, spectrum_ids = prepare_batch(batch)
-
-    batch_spectra = []
-    batch_precursors = []
-    batch_spectrum_ids = []
-    batch_peptides = []
-    # FIXME: This can be optimized by using a sliding window instead of
-    #  retrieving candidates for each spectrum independently.
-    for i in range(len(batch)):
-        candidate_pep = protein_database.get_candidates(
-            precursors[i][2], precursors[i][1]
-        )
-        if len(candidate_pep) == 0:
-            logger.debug(
-                "No candidate peptides found for spectrum %s with precursor "
-                "charge %d and precursor m/z %f",
-                spectrum_ids[i],
-                precursors[i][1],
-                precursors[i][2],
+    spectrum._inner._intensity = spectrum.intensity / np.linalg.norm(
+                spectrum.intensity
             )
-        else:
-            batch_spectra.append(
-                spectra[i].unsqueeze(0).repeat(len(candidate_pep), 1, 1)
-            )
-            batch_precursors.append(
-                precursors[i].unsqueeze(0).repeat(len(candidate_pep), 1)
-            )
-            batch_spectrum_ids.extend([spectrum_ids[i]] * len(candidate_pep))
-            batch_peptides.extend(candidate_pep)
+    return spectrum
 
-    return (
-        torch.cat(batch_spectra, dim=0),
-        torch.cat(batch_precursors, dim=0),
-        np.asarray(batch_spectrum_ids),
-        np.asarray(batch_peptides),
-    )

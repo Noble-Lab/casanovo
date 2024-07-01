@@ -22,7 +22,7 @@ dependencies = [
     "appdirs",
     "lightning>=2.1",
     "click",
-    "depthcharge-ms>=0.2.3,<0.3.0",
+    "depthcharge-ms>=0.4.8 ",
     "natsort",
     "numpy<2.0",
     "pandas",

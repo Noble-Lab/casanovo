@@ -7,7 +7,7 @@ import os
 import re
 from pathlib import Path
 from typing import List
-
+import pprint
 import natsort
 
 from .. import __version__
@@ -142,7 +142,7 @@ class MztabWriter:
             self.metadata.append(
                 (f"ms_run[{i}]-location", Path(filename).as_uri()),
             )
-            self._run_map[filename] = i
+            self._run_map[os.path.basename(filename)] = i
 
     def save(self) -> None:
         """
