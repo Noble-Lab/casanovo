@@ -83,6 +83,18 @@ class Config:
         calculate_precision=bool,
         accelerator=str,
         devices=int,
+        lance_dir=str,
+        shuffle=bool,
+        buffer_size=int,
+        reverse_peptides=bool,
+        replace_isoleucine_with_leucine=bool,
+        accumulate_grad_batches=int,
+        gradient_clip_val=float,
+        gradient_clip_algorithm=str,
+        precision=str,
+        early_stopping_patience=int,
+        resume_training_from=str,
+        mskb_tokenizer=bool,
     )
 
     def __init__(self, config_file: Optional[str] = None):

@@ -5,19 +5,21 @@ import glob
 import logging
 import os
 import tempfile
-import uuid
 import warnings
 from pathlib import Path
 from typing import Iterable, List, Optional, Union
+from datetime import datetime
 
-import depthcharge.masses
 import lightning.pytorch as pl
 import lightning.pytorch.loggers
-import numpy as np
 import torch
-from depthcharge.data import AnnotatedSpectrumIndex, SpectrumIndex
+
 from lightning.pytorch.strategies import DDPStrategy
-from lightning.pytorch.callbacks import ModelCheckpoint, LearningRateMonitor
+from lightning.pytorch.callbacks import ModelCheckpoint, LearningRateMonitor, EarlyStopping
+from lightning.pytorch.loggers import TensorBoardLogger
+
+from depthcharge.tokenizers import PeptideTokenizer
+from depthcharge.tokenizers.peptides import MskbPeptideTokenizer
 
 from .. import utils
 from ..config import Config
@@ -187,17 +189,20 @@ class ModelRunner:
             The path to the MS data files for validation.
         """
         self.initialize_trainer(train=True)
+        self.initialize_tokenizer()
         self.initialize_model(train=True)
 
-        train_index = self._get_index(train_peak_path, True, "training")
-        valid_index = self._get_index(valid_peak_path, True, "validation")
-        self.initialize_data_module(train_index, valid_index)
+        train_paths = self._get_input_paths(train_peak_path, True, "train")
+        valid_paths = self._get_input_paths(valid_peak_path, True, "valid")
+        self.initialize_data_module(train_paths, valid_paths)
         self.loaders.setup()
+        #logger.info(f'TRAIN PSMs: {self.loaders.train_dataset.n_spectra}')
+        #logger.info(f'VAL PSMs: {self.loaders.valid_dataset.n_spectra}')
 
         self.trainer.fit(
             self.model,
             self.loaders.train_dataloader(),
-            self.loaders.val_dataloader(),
+            self.loaders.val_dataloader()
         )
 
     def log_metrics(self, test_index: AnnotatedSpectrumIndex) -> None:
@@ -226,6 +231,13 @@ class ModelRunner:
                     pred_idx += 1
                 else:
                     seq_pred.append(None)
+        self.initialize_trainer(train=False)
+        self.initialize_tokenizer()
+        self.initialize_model(train=False)
+
+        test_paths = self._get_input_paths(peak_path, True, "test")
+        self.initialize_data_module(test_paths=test_paths)
+        self.loaders.setup(stage="test", annotated=True)
 
         aa_precision, aa_recall, pep_precision = aa_match_metrics(
             *aa_match_batch(
@@ -278,12 +290,13 @@ class ModelRunner:
         )
 
         self.initialize_trainer(train=False)
+        self.initialize_tokenizer()
         self.initialize_model(train=False)
         self.model.out_writer = self.writer
 
-        test_index = self._get_index(peak_path, evaluate, "")
-        self.writer.set_ms_run(test_index.ms_files)
-        self.initialize_data_module(test_index=test_index)
+        test_paths = self._get_input_paths(peak_path, False, "test")
+        self.writer.set_ms_run(test_paths)
+        self.initialize_data_module(test_paths=test_paths)
         self.loaders.setup(stage="test", annotated=False)
         self.trainer.predict(self.model, self.loaders.test_dataloader())
 
@@ -303,6 +316,8 @@ class ModelRunner:
             accelerator=self.config.accelerator,
             devices=1,
             enable_checkpointing=False,
+            precision=self.config.precision,
+            logger=False
         )
 
         if train:
@@ -311,6 +326,16 @@ class ModelRunner:
             else:
                 devices = self.config.devices
 
+            if self.config.tb_summarywriter is not None:
+                logger = TensorBoardLogger(
+                    self.config.tb_summarywriter, 
+                    version=None,
+                    name=f'model_{datetime.now().strftime("%Y%m%d_%H%M")}',
+                    default_hp_metric=False
+                )
+            else:
+                logger = False
+                
             additional_cfg = dict(
                 devices=devices,
                 callbacks=self.callbacks,
@@ -320,7 +345,10 @@ class ModelRunner:
                 strategy=self._get_strategy(),
                 val_check_interval=self.config.val_check_interval,
                 check_val_every_n_epoch=None,
-                log_every_n_steps=self.config.log_every_n_steps,
+                logger=logger,
+                accumulate_grad_batches=self.config.accumulate_grad_batches,
+                gradient_clip_val=self.config.gradient_clip_val,
+                gradient_clip_algorithm=self.config.gradient_clip_algorithm,
             )
 
             if self.config.log_metrics:
@@ -372,6 +400,10 @@ class ModelRunner:
                 )
             else:
                 tb_summarywriter = self.output_dir / "tensorboard"
+        try:
+            tokenizer = self.tokenizer
+        except AttributeError:
+            raise RuntimeError("Please use `initialize_tokenizer()` first.")
 
         model_params = dict(
             dim_model=self.config.dim_model,
@@ -380,8 +412,7 @@ class ModelRunner:
             n_layers=self.config.n_layers,
             dropout=self.config.dropout,
             dim_intensity=self.config.dim_intensity,
-            max_peptide_len=self.config.max_peptide_len,
-            residues=self.config.residues,
+            max_length=self.config.max_length,
             max_charge=self.config.max_charge,
             precursor_mass_tol=self.config.precursor_mass_tol,
             isotope_error_range=self.config.isotope_error_range,
@@ -397,6 +428,7 @@ class ModelRunner:
             weight_decay=self.config.weight_decay,
             out_writer=self.writer,
             calculate_precision=self.config.calculate_precision,
+            tokenizer=tokenizer
         )
 
         # Reconfigurable non-architecture related parameters for a
@@ -476,24 +508,38 @@ class ModelRunner:
                     "Casanovo."
                 )
 
+    def initialize_tokenizer(
+        self,
+    ) -> None :
+        """Initialize the peptide tokenizer"""
+        if self.config.mskb_tokenizer:
+            tokenizer_cs = MskbPeptideTokenizer
+        else:
+            tokenizer_cs = PeptideTokenizer
+            
+        self.tokenizer = tokenizer_cs(
+            residues=self.config.residues,
+            replace_isoleucine_with_leucine=self.config.replace_isoleucine_with_leucine,
+            reverse=self.config.reverse_peptides,
+            start_token=None, stop_token='$'
+        )
+
     def initialize_data_module(
         self,
-        train_index: Optional[AnnotatedSpectrumIndex] = None,
-        valid_index: Optional[AnnotatedSpectrumIndex] = None,
-        test_index: Optional[
-            Union[AnnotatedSpectrumIndex, SpectrumIndex]
-        ] = None,
+        train_paths: Optional[str] = None,
+        valid_paths: Optional[str] = None,
+        test_paths: Optional[str] = None,
     ) -> None:
         """Initialize the data module.
 
         Parameters
         ----------
-        train_index : AnnotatedSpectrumIndex, optional
-            A spectrum index for model training.
-        valid_index : AnnotatedSpectrumIndex, optional
-            A spectrum index for validation.
-        test_index : AnnotatedSpectrumIndex or SpectrumIndex, optional
-            A spectrum index for evaluation or inference.
+        train_paths : str, optional
+            A spectrum path for model training.
+        valid_paths : str, optional
+            A spectrum path for validation.
+        test_paths : str, optional
+            A spectrum path for evaluation or inference.
         """
         try:
             n_devices = self.trainer.num_devices
@@ -502,10 +548,16 @@ class ModelRunner:
         except AttributeError:
             raise RuntimeError("Please use `initialize_trainer()` first.")
 
+        try:
+            tokenizer = self.tokenizer
+        except AttributeError:
+            raise RuntimeError("Please use `initialize_tokenizer()` first.")
+
+        lance_dir = Path(self.tmp_dir.name) if self.config.lance_dir is None else self.config.lance_dir
         self.loaders = DeNovoDataModule(
-            train_index=train_index,
-            valid_index=valid_index,
-            test_index=test_index,
+            train_paths=train_paths,
+            valid_paths=valid_paths,
+            test_paths=test_paths,
             min_mz=self.config.min_mz,
             max_mz=self.config.max_mz,
             min_intensity=self.config.min_intensity,
@@ -513,18 +565,21 @@ class ModelRunner:
             n_workers=self.config.n_workers,
             train_batch_size=train_bs,
             eval_batch_size=eval_bs,
+            n_peaks=self.config.n_peaks,
+            max_charge=self.config.max_charge,
+            tokenizer=tokenizer,
+            lance_dir=lance_dir,
+            shuffle=self.config.shuffle,
+            buffer_size=self.config.buffer_size,
         )
 
-    def _get_index(
+    def _get_input_paths(
         self,
         peak_path: Iterable[str],
         annotated: bool,
-        msg: str = "",
-    ) -> Union[SpectrumIndex, AnnotatedSpectrumIndex]:
-        """Get the spectrum index.
-
-        If the file is a SpectrumIndex, only one is allowed. Otherwise
-        multiple may be specified.
+        mode: str,
+    ) -> str:
+        """Get the spectrum input paths.
 
         Parameters
         ----------
@@ -532,54 +587,30 @@ class ModelRunner:
             The peak files/directories to check.
         annotated : bool
             Are the spectra expected to be annotated?
-        msg : str, optional
-            A string to insert into the error message.
-
+        mode : str
+            Either train, valid or test to specify lance file name
         Returns
         -------
-        SpectrumIndex or AnnotatedSpectrumIndex
-            The spectrum index for training, evaluation, or inference.
+            The spectrum paths for training, evaluation, or inference.
         """
-        ext = (".mgf", ".h5", ".hdf5")
+        ext = (".mgf", ".lance")
         if not annotated:
-            ext += (".mzml", ".mzxml")
+            ext += (".mzML", ".mzml", ".mzxml") # FIXME: Check if these work
 
-        msg = msg.strip()
         filenames = _get_peak_filenames(peak_path, ext)
         if not filenames:
-            not_found_err = f"Cound not find {msg} peak files"
+            not_found_err = f"Cound not find {mode} peak files"
             logger.error(not_found_err + " from %s", peak_path)
             raise FileNotFoundError(not_found_err)
 
-        is_index = any([Path(f).suffix in (".h5", ".hdf5") for f in filenames])
-        if is_index:
+        is_lance = any([Path(f).suffix in (".lance") for f in filenames])
+        if is_lance:
             if len(filenames) > 1:
-                h5_err = f"Multiple {msg} HDF5 spectrum indexes specified"
-                logger.error(h5_err)
-                raise ValueError(h5_err)
+                lance_err = f"Multiple {mode} spectrum lance files specified"
+                logger.error(lance_err)
+                raise ValueError(lance_err)
 
-            index_fname, filenames = filenames[0], None
-        else:
-            index_fname = Path(self.tmp_dir.name) / f"{uuid.uuid4().hex}.hdf5"
-
-        Index = AnnotatedSpectrumIndex if annotated else SpectrumIndex
-        valid_charge = np.arange(1, self.config.max_charge + 1)
-
-        try:
-            return Index(index_fname, filenames, valid_charge=valid_charge)
-        except TypeError as e:
-            if Index == AnnotatedSpectrumIndex:
-                error_msg = (
-                    "Error creating annotated spectrum index. "
-                    "This may be the result of having an unannotated MGF file "
-                    "present in the validation peak file path list.\n"
-                    f"Original error message: {e}"
-                )
-
-                logger.error(error_msg)
-                raise TypeError(error_msg)
-
-            raise e
+        return filenames
 
     def _get_strategy(self) -> Union[str, DDPStrategy]:
         """Get the strategy for the Trainer.
