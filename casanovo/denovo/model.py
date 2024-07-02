@@ -17,7 +17,7 @@ from depthcharge.components import ModelMixin, PeptideDecoder, SpectrumEncoder
 
 from . import evaluate
 from .. import config
-from ..data import ms_io
+from ..data import ms_io, db_utils
 
 logger = logging.getLogger("casanovo")
 
@@ -1009,19 +1009,18 @@ class DbSpec2Pep(Spec2Pep):
         ----------
         batch : Tuple[torch.Tensor, torch.Tensor, torch.Tensor]
             A batch of (i) MS/MS spectra, (ii) precursor information, (iii)
-            spectrum identifiers as torch Tensors, (iv) scan numbers.
+            spectrum identifiers as torch Tensors
 
         Returns
         -------
-        predictions: List[Tuple[int, bool, str, float, np.ndarray, np.ndarray]]
+        predictions: List[Tuple[int, str, float, np.ndarray, np.ndarray]]
             Model predictions for the given batch of spectra containing spectrum
-            scan number, decoy flag, peptide sequence, Casanovo-DB score,
+            scan number, peptide sequence, Casanovo-DB score,
             amino acid-level confidence scores, and precursor information.
         """
         batch_res = []
         for (
             indexes,
-            is_decoy,
             peptides,
             precursors,
             encoded_ms,
@@ -1034,7 +1033,6 @@ class DbSpec2Pep(Spec2Pep):
             batch_res.append(
                 (
                     indexes,
-                    is_decoy,
                     peptides,
                     score_result.cpu().detach().numpy(),
                     per_aa_score.cpu().detach().numpy(),
@@ -1043,27 +1041,25 @@ class DbSpec2Pep(Spec2Pep):
             )
         return batch_res
 
-    def smart_batch_gen(self, batch):
+    def smart_batch_gen(self, spectrum_batch):
+        """TODO: ADD DOCSTRING"""
         all_psm = []
-        batch_size = len(batch[0])
-        enc = self.encoder(batch[0])
-        precursors = batch[1]
-        indexes = batch[3]
+        batch_size = len(spectrum_batch[0])
+        enc = self.encoder(spectrum_batch[0])
         enc = list(zip(*enc))
+        precursors = spectrum_batch[1]
+        indexes = spectrum_batch[2]
         for idx in range(batch_size):
-            spec_peptides = batch[2][idx].split(",")
-            # Check for decoy prefixes and create a bit-vector indicating targets (1) or decoys (0)
-            decoy_prefix = "decoy_"  # Decoy prefix
-            id_decoys = np.array(
-                [
-                    (0, p.removeprefix(decoy_prefix))
-                    if p.startswith(decoy_prefix)
-                    else (1, p)
-                    for p in spec_peptides
-                ]
+            spec_peptides = db_utils.get_candidates(
+                precursors[idx][2],
+                precursors[idx][1],
+                self.digest,
+                self.precursor_tolerance,
+                self.isotope_error,
             )
-            decoy_mask = np.array(id_decoys[:, 0], dtype=bool)
-            spec_peptides = list(id_decoys[:, 1])
+            spec_peptides = [
+                a[0] for a in spec_peptides
+            ]  # TODO: USE MASS AND PROTEIN INFORMATION
             spec_precursors = [precursors[idx]] * len(spec_peptides)
             spec_enc = [enc[idx]] * len(spec_peptides)
             spec_idx = [indexes[idx]] * len(spec_peptides)
@@ -1074,24 +1070,22 @@ class DbSpec2Pep(Spec2Pep):
                         spec_precursors,
                         spec_peptides,
                         spec_idx,
-                        decoy_mask,
                     )
                 )
             )
         # Continually grab num_pairs items from all_psm until list is exhausted
         while len(all_psm) > 0:
-            batch = all_psm[:batch_size]
+            psm_batch = all_psm[:batch_size]
             all_psm = all_psm[batch_size:]
-            batch = list(zip(*batch))
+            psm_batch = list(zip(*psm_batch))
             encoded_ms = (
-                torch.stack([a[0] for a in batch[0]]),
-                torch.stack([a[1] for a in batch[0]]),
+                torch.stack([a[0] for a in psm_batch[0]]),
+                torch.stack([a[1] for a in psm_batch[0]]),
             )
-            prec_data = torch.stack(batch[1])
-            pep_str = list(batch[2])
-            indexes = [a[1] for a in batch[3]]
-            is_decoy = batch[4]
-            yield (indexes, is_decoy, pep_str, prec_data, encoded_ms)
+            prec_data = torch.stack(psm_batch[1])
+            pep_str = list(psm_batch[2])
+            indexes = [a[1] for a in psm_batch[3]]
+            yield (indexes, pep_str, prec_data, encoded_ms)
 
     def on_predict_batch_end(
         self,
@@ -1102,7 +1096,6 @@ class DbSpec2Pep(Spec2Pep):
             return
         for (
             indexes,
-            t_or_d,
             peptides,
             score_result,
             per_aa_score,
@@ -1123,7 +1116,6 @@ class DbSpec2Pep(Spec2Pep):
                 calc_mz,
                 indexes,
                 per_aa_score,
-                t_or_d,
             ):
                 self.out_writer.psms.append(row)
 

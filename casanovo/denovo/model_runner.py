@@ -18,7 +18,7 @@ from lightning.pytorch.strategies import DDPStrategy
 from lightning.pytorch.callbacks import ModelCheckpoint
 
 from ..config import Config
-from ..data import ms_io
+from ..data import ms_io, db_utils
 from ..denovo.dataloaders import DeNovoDataModule
 from ..denovo.model import Spec2Pep, DbSpec2Pep
 
@@ -79,13 +79,29 @@ class ModelRunner:
         if self.writer is not None:
             self.writer.save()
 
-    def db_search(self, peak_path: Iterable[str], output: str) -> None:
+    def db_search(
+        self,
+        peak_path: Iterable[str],
+        fasta_path: str,
+        enzyme: str,
+        digestion: str,
+        missed_cleavages: int,
+        max_mods: int,
+        min_length: int,
+        max_length: int,
+        precursor_tolerance: float,
+        isotope_error: float,
+        output: str,
+    ) -> None:
         """Perform database search with Casanovo.
 
         Parameters
         ----------
-        peak_path : iterable of str
-            The path to the annotated .mgf data files for database search.
+        peak_path : Iterable[str]
+            The path to the .mgf data file for database search.
+        fasta_path : str
+            The path to the FASTA file for database search.
+        # TODO: ADD ALL DOCUMENTATION
         output : str
             Where should the output be saved?
 
@@ -105,12 +121,23 @@ class ModelRunner:
         self.initialize_trainer(train=True)
         self.initialize_model(train=False, db_search=True)
         self.model.out_writer = self.writer
+        self.model.digest = db_utils.digest_fasta(
+            fasta_path,
+            enzyme,
+            digestion,
+            missed_cleavages,
+            max_mods,
+            min_length,
+            max_length,
+        )
+        self.model.precursor_tolerance = precursor_tolerance
+        self.model.isotope_error = isotope_error
 
-        test_index = self._get_index(peak_path, True, "db search")
+        test_index = self._get_index(peak_path, False, "db search")
         self.writer.set_ms_run(test_index.ms_files)
         self.initialize_data_module(test_index=test_index)
         self.loaders.setup(stage="db")
-        self.trainer.predict(self.model, self.loaders.db_dataloader())
+        self.trainer.predict(self.model, self.loaders.predict_dataloader())
 
     def train(
         self,

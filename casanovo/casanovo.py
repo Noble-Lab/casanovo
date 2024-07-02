@@ -214,8 +214,74 @@ def annotate(
     nargs=-1,
     type=click.Path(exists=True, dir_okay=False),
 )
+@click.argument(
+    "fasta_path",
+    required=True,
+    nargs=1,
+    type=click.Path(exists=True, dir_okay=False),
+)
+@click.option(
+    "--enzyme",
+    help="Enzyme for in silico digestion, see pyteomics.parser.expasy_rules",
+    type=str,
+    default="trypsin",
+)
+@click.option(
+    "--digestion",
+    help="Digestion: full, partial",
+    type=click.Choice(
+        ["full", "partial"],
+        case_sensitive=False,
+    ),
+    default="full",
+)
+@click.option(
+    "--missed_cleavages",
+    help="Number of allowed missed cleavages",
+    type=int,
+    default=0,
+)
+@click.option(
+    "--max_mods",
+    help="Maximum number of modifications per peptide",
+    type=int,
+    default=0,
+)
+@click.option(
+    "--min_length",
+    help="Minimum peptide length",
+    type=int,
+    default=6,
+)
+@click.option(
+    "--max_length",
+    help="Maximum peptide length",
+    type=int,
+    default=50,
+)
+@click.option(
+    "--precursor_tolerance",
+    help="Precursor tolerance window size (ppm)",
+    type=int,
+    default=20,
+)
+@click.option(
+    "--isotope_error",
+    help="Isotope error levels to consider (list of ints, e.g: 1,2)",
+    type=str,
+    default="0",
+)
 def db_search(
     peak_path: Tuple[str],
+    fasta_path: str,
+    enzyme: str,
+    digestion: str,
+    missed_cleavages: int,
+    max_mods: int,
+    min_length: int,
+    max_length: int,
+    precursor_tolerance: int,
+    isotope_error: str,
     model: Optional[str],
     config: Optional[str],
     output: Optional[str],
@@ -223,14 +289,30 @@ def db_search(
 ) -> None:
     """Perform a search using Casanovo-DB.
 
-    PEAK_PATH must be one MGF file that has ANNOTATED spectra,
-    as output by annotate mode.
+    PEAK_PATH must be one MGF file. FASTA_PATH must be one FASTA file.
     """
     output = setup_logging(output, verbosity)
     config, model = setup_model(model, config, output, False)
     with ModelRunner(config, model) as runner:
-        logger.info("DB-searching peptides from: %s", peak_path)
-        runner.db_search(peak_path, output)
+        logger.info("Performing database search on:")
+        for peak_file in peak_path:
+            logger.info("  %s", peak_file)
+        logger.info("Using the following FASTA file:")
+        logger.info("  %s", fasta_path)
+
+        runner.db_search(
+            peak_path,
+            fasta_path,
+            enzyme,
+            digestion,
+            missed_cleavages,
+            max_mods,
+            min_length,
+            max_length,
+            precursor_tolerance,
+            isotope_error,
+            output,
+        )
 
     logger.info("DONE!")
 

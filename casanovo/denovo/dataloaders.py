@@ -127,13 +127,12 @@ class DeNovoDataModule(pl.LightningDataModule):
                 self.test_dataset = make_dataset(self.test_index)
         if stage == "db":
             make_dataset = functools.partial(
-                AnnotatedSpectrumDataset,
+                SpectrumDataset,
                 n_peaks=self.n_peaks,
                 min_mz=self.min_mz,
                 max_mz=self.max_mz,
                 min_intensity=self.min_intensity,
                 remove_precursor_tol=self.remove_precursor_tol,
-                track_spectrum_id=True,
             )
             if self.test_index is not None:
                 self.test_dataset = make_dataset(self.test_index)
@@ -143,7 +142,6 @@ class DeNovoDataModule(pl.LightningDataModule):
         dataset: torch.utils.data.Dataset,
         batch_size: int,
         shuffle: bool = False,
-        db_mode: bool = False,
     ) -> torch.utils.data.DataLoader:
         """
         Create a PyTorch DataLoader.
@@ -167,7 +165,7 @@ class DeNovoDataModule(pl.LightningDataModule):
         return torch.utils.data.DataLoader(
             dataset,
             batch_size=batch_size,
-            collate_fn=prepare_batch if not db_mode else prepare_db_batch,
+            collate_fn=prepare_batch,
             pin_memory=True,
             num_workers=self.n_workers,
             shuffle=shuffle,
@@ -190,12 +188,6 @@ class DeNovoDataModule(pl.LightningDataModule):
     def predict_dataloader(self) -> torch.utils.data.DataLoader:
         """Get the predict DataLoader."""
         return self._make_loader(self.test_dataset, self.eval_batch_size)
-
-    def db_dataloader(self) -> torch.utils.data.DataLoader:
-        """Get the predict DataLoader."""
-        return self._make_loader(
-            self.test_dataset, self.eval_batch_size, db_mode=True
-        )
 
 
 def prepare_batch(
@@ -235,48 +227,3 @@ def prepare_batch(
         [precursor_masses, precursor_charges, precursor_mzs]
     ).T.float()
     return spectra, precursors, np.asarray(spectrum_ids)
-
-
-def prepare_db_batch(
-    batch: List[Tuple[torch.Tensor, float, int, str, Tuple[str, str]]]
-) -> Tuple[torch.Tensor, torch.Tensor, np.ndarray, Tuple[str, str]]:
-    """
-    Collate MS/MS spectra into a batch meant for Casanovo-DB.
-
-    Parameters
-    ----------
-    batch : List[Tuple[torch.Tensor, Tuple[float, int, float], str, Tuple[str, str]]]
-        A batch of data from an AnnotatedSpectrumDataset, consisting of for each
-        spectrum (i) a tensor with the m/z and intensity peak values,
-        (ii) the precursor information [mass, charge, m/z], (iii) the
-        peptide sequence, the precursor m/z, (iv) spectrum identifiers
-        (file and scan).
-
-    Returns
-    -------
-    spectra : torch.Tensor of shape (batch_size, n_peaks, 2)
-        The padded mass spectra tensor with the m/z and intensity peak values
-        for each spectrum.
-    precursors : torch.Tensor of shape (batch_size, 3)
-        A tensor with the precursor neutral mass, precursor charge, and
-        precursor m/z.
-    spectrum_peps : np.ndarray
-        Peptide sequences
-    spectrum_ids : Tuple[str, str]
-        Peak file and spectrum identifier
-    """
-    (
-        spectra,
-        precursor_mzs,
-        precursor_charges,
-        spectrum_peps,
-        spectrum_ids,
-    ) = list(zip(*batch))
-    spectra = torch.nn.utils.rnn.pad_sequence(spectra, batch_first=True)
-    precursor_mzs = torch.tensor(precursor_mzs)
-    precursor_charges = torch.tensor(precursor_charges)
-    precursor_masses = (precursor_mzs - 1.007276) * precursor_charges
-    precursors = torch.vstack(
-        [precursor_masses, precursor_charges, precursor_mzs]
-    ).T.float()
-    return spectra, precursors, np.asarray(spectrum_peps), spectrum_ids

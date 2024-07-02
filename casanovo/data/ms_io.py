@@ -251,7 +251,6 @@ class MztabWriter:
                     "start",
                     "end",
                     "opt_ms_run[1]_aa_scores",
-                    "opt_cv_MS:1002217_decoy_peptide",
                 ]
             )
             for i, psm in enumerate(self.psms):
@@ -259,7 +258,7 @@ class MztabWriter:
                     [
                         "PSM",
                         psm[0],  # sequence
-                        f"{psm[5]}:{i}",  # spectra_ref
+                        f"{psm[5]}:{i}",  # PSM_ID (spectrum # :candidate #)
                         "null",  # accession
                         "null",  # unique
                         "null",  # database
@@ -284,6 +283,5 @@ class MztabWriter:
                                 )
                             )
                         ),  # opt_ms_run[1]_aa_scores
-                        bool(psm[7]),  # opt_cv_MS:1002217_decoy_peptide
                     ]
                 )
