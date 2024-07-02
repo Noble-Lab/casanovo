@@ -53,7 +53,8 @@ Documentation = "https://casanovo.readthedocs.io"
 docs = [
     "sphinx>=4.5.0",
     "myst-parser>=0.18.1",
-    "sphinx-book-theme>=0.3.3"
+    "sphinx-book-theme>=0.3.3",
+    "sphinx-click>=5.2.1"
 ]
 dev = [
     "pre-commit>=2.7.1",
