@@ -417,7 +417,7 @@ def _get_weights_from_url(
         path to cached weights file
     """
     os.makedirs(cache_dir, exist_ok=True)
-    url_hash = shake_256(file_url.encode("utf-8")).hexdigest(20)
+    url_hash = shake_256(file_url.encode("utf-8")).hexdigest(10)
     cache_file_name = url_hash + ".ckpt"
     cache_file_path = cache_dir / cache_file_name
 
