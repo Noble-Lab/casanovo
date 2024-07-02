@@ -1,12 +1,9 @@
 """A de novo peptide sequencing model."""
 
 import collections
-import csv
 import heapq
 import logging
 import warnings
-from os import PathLike
-from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
 
 import depthcharge.masses
@@ -114,7 +111,6 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         tb_summarywriter: Optional[
             torch.utils.tensorboard.SummaryWriter
         ] = None,
-        metrics_file: Optional[PathLike] = None,
         train_label_smoothing: float = 0.01,
         warmup_iters: int = 100_000,
         cosine_schedule_period_iters: int = 600_000,
@@ -185,17 +181,6 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
 
         # Output writer during predicting.
         self.out_writer = out_writer
-
-        # Metrics file
-        if metrics_file is not None:
-            self.metrics_file = Path(metrics_file)
-
-            if not self.metrics_file.is_file():
-                with open(self.metrics_file, "w") as f:
-                    writer = csv.writer(f, delimiter="\t")
-                    writer.writerow(
-                        ["loss type", "CELLoss", "Epoch", "Batch", "Loss"]
-                    )
 
     def forward(
         self, spectra: torch.Tensor, precursors: torch.Tensor
