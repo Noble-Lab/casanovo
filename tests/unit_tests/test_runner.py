@@ -1,5 +1,7 @@
 """Unit tests specifically for the model_runner module."""
 
+from pathlib import Path
+
 import pytest
 import torch
 
@@ -10,6 +12,7 @@ from casanovo.denovo.model_runner import ModelRunner
 def test_initialize_model(tmp_path, mgf_small):
     """Test initializing a new or existing model."""
     config = Config()
+    config.model_save_folder_path = tmp_path
     # No model filename given, so train from scratch.
     ModelRunner(config=config).initialize_model(train=True)
 
@@ -149,3 +152,25 @@ def test_calculate_precision(tmp_path, mgf_small, tiny_config):
 
     assert "valid_aa_precision" in runner.model.history.columns
     assert "valid_pep_precision" in runner.model.history.columns
+
+
+def test_save_final_model(tmp_path, mgf_small, tiny_config):
+    """Test that final model checkpoints are saved."""
+    # Test checkpoint saving when val_check_interval is greater than training steps
+    config = Config(tiny_config)
+    config.val_check_interval = 50
+    model_file = tmp_path / "epoch=19-step=20.ckpt"
+    with ModelRunner(config) as runner:
+        runner.train([mgf_small], [mgf_small])
+
+    assert model_file.exists()
+    Path.unlink(model_file)
+
+    # Test checkpoint saving when val_check_interval is not a factor of training steps
+    config.val_check_interval = 15
+    validation_file = tmp_path / "epoch=14-step=15.ckpt"
+    with ModelRunner(config) as runner:
+        runner.train([mgf_small], [mgf_small])
+
+    assert model_file.exists()
+    assert validation_file.exists()
