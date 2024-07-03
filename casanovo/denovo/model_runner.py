@@ -151,7 +151,7 @@ class ModelRunner:
         test_index = self._get_index(peak_path, False, "db search")
         self.writer.set_ms_run(test_index.ms_files)
         self.initialize_data_module(test_index=test_index)
-        self.loaders.setup(stage="db")
+        self.loaders.setup(stage="test", annotated=False)
         self.trainer.predict(self.model, self.loaders.predict_dataloader())
 
     def train(

@@ -134,8 +134,6 @@ class SpectrumDataset(Dataset):
             The precursor m/z.
         precursor_charge : int
             The precursor charge.
-        track_spectrum_id : Optional[bool]
-            Whether to keep track of the identifier of the MS/MS spectra.
 
         Returns
         -------

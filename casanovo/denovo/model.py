@@ -12,7 +12,6 @@ import torch
 import numpy as np
 import lightning.pytorch as pl
 from torch.utils.tensorboard import SummaryWriter
-from pyteomics import mass
 from depthcharge.components import ModelMixin, PeptideDecoder, SpectrumEncoder
 
 from . import evaluate
@@ -992,10 +991,19 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
 
 class DbSpec2Pep(Spec2Pep):
     """
-    Inherits Spec2Pep
+    Subclass of Spec2Pep for the use of Casanovo as an MS/MS database search score function.
 
-    Hijacks teacher-forcing implemented in Spec2Pep and
-    uses it to predict scores between a spectra and associated peptide.
+    Uses teacher forcing to 'query' Casanovo for its score for each AA
+    within a candidate peptide, and takes the geometric average of these scores
+    and reports this as the score for the spectrum-peptide pair. Note that the
+    geometric mean of the AA scores is actually calculated by a
+    summation and average of the log of the scores, to preserve numerical
+    stability. This does not affect PSM ranking.
+
+    Also note that although teacher-forcing is used within this method,
+    there is *no training* involved. This is a prediction-only method.
+
+    Output is provided in .mztab format.
     """
 
     def __init__(self, *args, **kwargs):
@@ -1119,7 +1127,6 @@ class DbSpec2Pep(Spec2Pep):
             per_aa_score,
             precursors,
         ) in outputs:
-            prec_mass = precursors[:, 0]
             prec_charge = precursors[:, 1]
             prec_mz = precursors[:, 2]
             calc_mz = [
@@ -1140,9 +1147,9 @@ class DbSpec2Pep(Spec2Pep):
 
 def _calc_match_score(
     batch_all_aa_scores: torch.Tensor,
-    truth_aa_indicies: torch.Tensor,
+    truth_aa_indices: torch.Tensor,
     decoder_reverse: bool = False,
-) -> List[float]:
+) -> Tuple[torch.Tensor, torch.Tensor]:
     """
     Calculate the score between the input spectra and associated peptide.
 
@@ -1158,7 +1165,7 @@ def _calc_match_score(
         Amino acid scores for all amino acids in
         the vocabulary for every prediction made to generate
         the associated peptide (for an entire batch)
-    truth_aa_indicies : torch.Tensor
+    truth_aa_indices : torch.Tensor
         Indicies of the score for each actual amino acid
         in the peptide (for an entire batch)
     decoder_reverse : bool
@@ -1166,7 +1173,7 @@ def _calc_match_score(
 
     Returns
     -------
-    score : list[float], list[list[float]]
+    (all_scores, per_aa_scores) : Tuple[torch.Tensor, torch.Tensor]
         The score between the input spectra and associated peptide
         (for an entire batch)
         a list of lists of per amino acid scores
@@ -1175,7 +1182,7 @@ def _calc_match_score(
     # Remove trailing tokens from predictions based on decoder reversal
     if decoder_reverse:
         batch_all_aa_scores = batch_all_aa_scores[:, 1:]
-    elif not decoder_reverse:
+    else:
         batch_all_aa_scores = batch_all_aa_scores[:, :-1]
 
     # Vectorized scoring using efficient indexing.
@@ -1186,10 +1193,10 @@ def _calc_match_score(
     )
     cols = torch.arange(0, batch_all_aa_scores.shape[1]).expand_as(rows)
 
-    per_aa_scores = batch_all_aa_scores[rows, cols, truth_aa_indicies]
+    per_aa_scores = batch_all_aa_scores[rows, cols, truth_aa_indices]
 
     per_aa_scores[per_aa_scores == 0] += 1e-10
-    score_mask = truth_aa_indicies != 0
+    score_mask = truth_aa_indices != 0
     per_aa_scores[~score_mask] = 0
     log_per_aa_scores = torch.log(per_aa_scores)
     all_scores = torch.where(

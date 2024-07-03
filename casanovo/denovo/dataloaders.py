@@ -125,17 +125,6 @@ class DeNovoDataModule(pl.LightningDataModule):
             )
             if self.test_index is not None:
                 self.test_dataset = make_dataset(self.test_index)
-        if stage == "db":
-            make_dataset = functools.partial(
-                SpectrumDataset,
-                n_peaks=self.n_peaks,
-                min_mz=self.min_mz,
-                max_mz=self.max_mz,
-                min_intensity=self.min_intensity,
-                remove_precursor_tol=self.remove_precursor_tol,
-            )
-            if self.test_index is not None:
-                self.test_dataset = make_dataset(self.test_index)
 
     def _make_loader(
         self,
@@ -154,8 +143,6 @@ class DeNovoDataModule(pl.LightningDataModule):
             The batch size to use.
         shuffle : bool
             Option to shuffle the batches.
-        db_mode : bool
-            Option to use the DataLoader for Casanovo-DB.
 
         Returns
         -------
