@@ -1071,15 +1071,13 @@ class DbSpec2Pep(Spec2Pep):
                 self.precursor_tolerance,
                 self.isotope_error,
             )
-            logger.debug("%s", digest_data)
             try:
                 spec_peptides, pep_masses, pep_protein = list(
                     zip(*digest_data)
                 )
             except ValueError:
-                logger.info(
-                    "No peptides found for precursor %s", precursors[idx]
-                )
+                logger.info("No peptides found for spectrum %s", indexes[idx])
+                continue
             spec_precursors = [precursors[idx]] * len(spec_peptides)
             spec_enc = [enc[idx]] * len(spec_peptides)
             spec_idx = [indexes[idx]] * len(spec_peptides)
