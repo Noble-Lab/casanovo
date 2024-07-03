@@ -7,6 +7,7 @@ import os
 import re
 import shutil
 import sys
+import time
 import warnings
 from pathlib import Path
 from typing import Optional, Tuple
@@ -135,12 +136,17 @@ def sequence(
     """
     output = setup_logging(output, verbosity)
     config, model = setup_model(model, config, output, False)
+    start_time = time.time()
     with ModelRunner(config, model) as runner:
         logger.info("Sequencing peptides from:")
         for peak_file in peak_path:
             logger.info("  %s", peak_file)
 
         runner.predict(peak_path, output)
+        psms = runner.writer.psms
+        utils.log_sequencing_report(
+            psms, start_time=start_time, end_time=time.time()
+        )
 
 
 @main.command(cls=_SharedParams)
@@ -164,14 +170,14 @@ def evaluate(
     """
     output = setup_logging(output, verbosity)
     config, model = setup_model(model, config, output, False)
+    start_time = time.time()
     with ModelRunner(config, model) as runner:
         logger.info("Sequencing and evaluating peptides from:")
         for peak_file in annotated_peak_path:
             logger.info("  %s", peak_file)
 
         runner.evaluate(annotated_peak_path)
-
-    logger.info("DONE!")
+        utils.log_run_report(start_time=start_time, end_time=time.time())
 
 
 @main.command(cls=_SharedParams)
@@ -207,6 +213,7 @@ def train(
     """
     output = setup_logging(output, verbosity)
     config, model = setup_model(model, config, output, True)
+    start_time = time.time()
     with ModelRunner(config, model) as runner:
         logger.info("Training a model from:")
         for peak_file in train_peak_path:
@@ -217,8 +224,7 @@ def train(
             logger.info("  %s", peak_file)
 
         runner.train(train_peak_path, validation_peak_path)
-
-    logger.info("DONE!")
+        utils.log_run_report(start_time=start_time, end_time=time.time())
 
 
 @main.command()

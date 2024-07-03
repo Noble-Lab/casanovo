@@ -3,7 +3,7 @@ import numpy as np
 import random
 import string
 
-from casanovo.data.ms_io import (
+from casanovo.utils import (
     get_score_bins,
     get_peptide_lengths,
     get_peptide_length_histo,
