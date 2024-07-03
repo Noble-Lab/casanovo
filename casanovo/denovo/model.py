@@ -1021,30 +1021,34 @@ class DbSpec2Pep(Spec2Pep):
 
         Returns
         -------
-        predictions: List[Tuple[int, str, float, np.ndarray, np.ndarray]]
+        predictions: List[Tuple[int, int, float, str, np.ndarray, np.ndarray]]
             Model predictions for the given batch of spectra containing spectrum
-            scan number, peptide sequence, Casanovo-DB score,
-            amino acid-level confidence scores, and precursor information.
+            ids, precursor charge and m/z, candidate peptide sequences, peptide
+            scores, and amino acid-level scores.
         """
         batch_res = []
         for (
-            indexes,
+            spectrum_i,
             peptides,
             precursors,
             encoded_ms,
         ) in self.smart_batch_gen(batch):
             pred, truth = self.decoder(peptides, precursors, *encoded_ms)
             pred = self.softmax(pred)
-            score_result, per_aa_score = _calc_match_score(
+            peptide_scores, aa_scores = _calc_match_score(
                 pred, truth, self.decoder.reverse
             )
+            precursor_info = precursors.cpu().detach().numpy()
+            precursor_charge = precursor_info[:, 1]
+            precursor_mz = precursor_info[:, 2]
             batch_res.append(
                 (
-                    indexes,
+                    spectrum_i,
+                    precursor_charge,
+                    precursor_mz,
                     peptides,
-                    score_result.cpu().detach().numpy(),
-                    per_aa_score.cpu().detach().numpy(),
-                    precursors.cpu().detach().numpy(),
+                    peptide_scores.cpu().detach().numpy(),
+                    aa_scores.cpu().detach().numpy(),
                 )
             )
         return batch_res
@@ -1121,26 +1125,25 @@ class DbSpec2Pep(Spec2Pep):
         if self.out_writer is None:
             return
         for (
-            indexes,
+            spectrum_i,
+            precursor_charge,
+            precursor_mz,
             peptides,
-            score_result,
-            per_aa_score,
-            precursors,
+            peptide_scores,
+            aa_scores,
         ) in outputs:
-            prec_charge = precursors[:, 1]
-            prec_mz = precursors[:, 2]
             calc_mz = [
                 self.peptide_mass_calculator.mass(peptide, charge)
-                for peptide, charge in zip(peptides, prec_charge)
+                for peptide, charge in zip(peptides, precursor_charge)
             ]
             for row in zip(
                 peptides,
-                score_result,
-                prec_charge,
-                prec_mz,
+                peptide_scores,
+                precursor_charge,
+                precursor_mz,
                 calc_mz,
-                indexes,
-                per_aa_score,
+                spectrum_i,
+                aa_scores,
             ):
                 self.out_writer.psms.append(row)
 

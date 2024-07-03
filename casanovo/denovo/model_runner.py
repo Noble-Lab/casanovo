@@ -333,12 +333,12 @@ class ModelRunner:
 
         if self.model_filename is None:
             # Train a model from scratch if no model file is provided.
+            if db_search:
+                logger.error("DB search mode requires a model file")
+                raise ValueError(
+                    "A model file must be provided for DB search mode"
+                )
             if train:
-                if db_search:
-                    logger.error("Db search mode requires a model file.")
-                    raise ValueError(
-                        "A model file must be provided for DB search mode"
-                    )
                 self.model = Spec2Pep(**model_params)
                 return
             # Else we're not training, so a model file must be provided.
