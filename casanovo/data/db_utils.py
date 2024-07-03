@@ -5,11 +5,14 @@ import depthcharge.masses
 from pyteomics import fasta, parser
 import bisect
 
+from typing import List, Tuple
+
+# CONSTANTS
 HYDROGEN = 1.007825035
 OXYGEN = 15.99491463
 H2O = 2 * HYDROGEN + OXYGEN
 PROTON = 1.00727646677
-ISOTOPE_SPACING = 1.003355  # - 0.00288
+ISOTOPE_SPACING = 1.003355
 
 var_mods = {
     "d": ["N", "Q"],
@@ -22,7 +25,7 @@ var_mods = {
 fixed_mods = {"carbm": ["C"]}
 
 
-def convert_from_modx(seq):
+def convert_from_modx(seq: str):
     """Converts peptide sequence from modX format to Casanovo-acceptable modifications.
 
     Args:
@@ -40,15 +43,41 @@ def convert_from_modx(seq):
 
 
 def digest_fasta(
-    fasta_filename,
-    enzyme,
-    digestion,
-    missed_cleavages,
-    max_mods,
-    min_length,
-    max_length,
+    fasta_filename: str,
+    enzyme: str,
+    digestion: str,
+    missed_cleavages: int,
+    max_mods: int,
+    min_length: int,
+    max_length: int,
 ):
-    """TODO: Add docstring"""
+    """
+    Digests a FASTA file and returns the peptides, their masses, and associated protein.
+
+    Parameters
+    ----------
+    fasta_filename : str
+        Path to the FASTA file.
+    enzyme : str
+        The enzyme to use for digestion.
+        See pyteomics.parser.expasy_rules for valid enzymes.
+    digestion : str
+        The type of digestion to perform. Either 'full' or 'partial'.
+    missed_cleavages : int
+        The number of missed cleavages to allow.
+    max_mods : int
+        The maximum number of modifications to allow per peptide.
+    min_length : int
+        The minimum length of peptides to consider.
+    max_length : int
+        The maximum length of peptides to consider.
+
+    Returns
+    -------
+    mod_peptide_list : List[Tuple[str, float, str]]
+        A list of tuples containing the peptide sequence, mass,
+        and associated protein. Sorted by neutral mass in ascending order.
+    """
 
     # Verify the eistence of the file:
     if not os.path.isfile(fasta_filename):
@@ -96,19 +125,39 @@ def digest_fasta(
 
 
 def get_candidates(
-    precursor_mass, charge, peptide_list, precursor_tolerance, isotope_error
+    precursor_mz: float,
+    charge: int,
+    peptide_list: List[Tuple[str, float, str]],
+    precursor_tolerance: int,
+    isotope_error: str,
 ):
-    """TODO: ADD DOCSTRING"""
+    """
+    Returns a list of candidate peptides that fall within the specified mass range.
+
+    Parameters
+    ----------
+    precursor_mz : float
+        The precursor mass-to-charge ratio.
+    charge : int
+        The precursor charge.
+    peptide_list : List[Tuple[str, float, str]]
+        A list of tuples containing the peptide sequence, mass, and associated protein.
+        Must be sorted by mass in ascending order. Uses neutral masses.
+    precursor_tolerance : float
+        The precursor mass tolerance in parts-per-million.
+    isotope_error : str
+        The isotope error levels to consider.
+    """
 
     candidates = set()
 
     isotope_error = [int(x) for x in isotope_error.split(",")]
     for e in isotope_error:
         iso_shift = ISOTOPE_SPACING * e
-        upper_bound = (_to_raw_mass(precursor_mass, charge) - iso_shift) * (
+        upper_bound = (_to_raw_mass(precursor_mz, charge) - iso_shift) * (
             1 + (precursor_tolerance / 1e6)
         )
-        lower_bound = (_to_raw_mass(precursor_mass, charge) - iso_shift) * (
+        lower_bound = (_to_raw_mass(precursor_mz, charge) - iso_shift) * (
             1 - (precursor_tolerance / 1e6)
         )
 
@@ -124,12 +173,40 @@ def get_candidates(
 
 
 def _to_mz(precursor_mass, charge):
-    """TODO: ADD DOCSTRING"""
+    """
+    Convert precursor neutral mass to m/z value.
+
+    Parameters
+    ----------
+    precursor_mass : float
+        The precursor neutral mass.
+    charge : int
+        The precursor charge.
+
+    Returns
+    -------
+    mz : float
+        The calculated precursor mass-to-charge ratio.
+    """
     return (precursor_mass + (charge * PROTON)) / charge
 
 
 def _to_raw_mass(mz_mass, charge):
-    """TODO: ADD DOCSTRING"""
+    """
+    Convert precursor m/z value to neutral mass.
+
+    Parameters
+    ----------
+    mz_mass : float
+        The precursor mass-to-charge ratio.
+    charge : int
+        The precursor charge.
+
+    Returns
+    -------
+    mass : float
+        The calculated precursor neutral mass.
+    """
     return charge * (mz_mass - PROTON)
 
 

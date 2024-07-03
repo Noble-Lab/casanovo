@@ -221,7 +221,7 @@ class MztabWriter:
         Export the Casanovo-DB search results to the mzTab file.
 
         Outputs PSMs in the order they were scored
-        (i.e. the order in the annotated .mgf file).
+        (i.e. the order in the .mgf file).
         """
         with open(self.filename, "w", newline="") as f:
             writer = csv.writer(f, delimiter="\t", lineterminator=os.linesep)

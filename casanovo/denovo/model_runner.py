@@ -90,7 +90,7 @@ class ModelRunner:
         min_length: int,
         max_length: int,
         precursor_tolerance: float,
-        isotope_error: float,
+        isotope_error: str,
         output: str,
     ) -> None:
         """Perform database search with Casanovo.
@@ -101,7 +101,22 @@ class ModelRunner:
             The path to the .mgf data file for database search.
         fasta_path : str
             The path to the FASTA file for database search.
-        # TODO: ADD ALL DOCUMENTATION
+        enzyme : str
+            The enzyme used for digestion.
+        digestion : str
+            The digestion type, full or partial.
+        missed_cleavages : int
+            The number of missed cleavages allowed.
+        max_mods : int
+            The maximum number of modifications allowed per peptide.
+        min_length : int
+            The minimum peptide length.
+        max_length : int
+            The maximum peptide length.
+        precursor_tolerance : float
+            The precursor mass tolerance in ppm.
+        isotope_error : str
+            Isotope error levels to consider, in comma-delineated string form.
         output : str
             Where should the output be saved?
 

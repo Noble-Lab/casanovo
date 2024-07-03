@@ -5,7 +5,7 @@ import pandas as pd
 import psims
 import pytest
 import yaml
-from pyteomics.mass import calculate_mass
+from pyteomics.mass import calculate_mass, fast_mass, std_aa_mass
 
 
 @pytest.fixture
@@ -264,6 +264,36 @@ def tiny_config(tmp_path):
 
 
 @pytest.fixture
+def tiny_fasta_file(tmp_path, fasta_raw_data):
+    fasta_file = tmp_path / "tiny_fasta.fasta"
+    with fasta_file.open("w+") as fasta_ref:
+        fasta_ref.write(fasta_raw_data)
+
+    return fasta_file
+
+
+@pytest.fixture
+def fasta_raw_data():
+    return ">foo\nMEAPAQLLFLLLLWLPDTTREIVMTQSPPTLSLSPGERVTLSCRASQSVSSSYLTWYQQKPGQAPRLLIYGASTRATSIPARFSGSGSGTDFTLTISSLQPEDFAVYYCQQDYNLP"
+
+
+@pytest.fixture
+def mgf_db_search(tmp_path):
+    """An MGF file with 2 unannotated spectra and scan numbers."""
+    peptides = [
+        "ATSIPAR",
+        "VTLSCR",
+        "LLIYGASTR",
+        "EIVMTQSPPTLSLSPGER",
+        "MEAPAQLLFLLLLWLPDTTR",
+        "ASQSVSSSYLTWYQQKPGQAPR",
+        "FSGSGSGTDFTLTISSLQPEDFAVYYCQQDYNLP",
+    ]
+    mgf_file = tmp_path / "db_search.mgf"
+    return _create_unannotated_mgf(peptides, mgf_file, c_mod=True)
+
+
+@pytest.fixture
 def mgf_small_unannotated(tmp_path):
     """An MGF file with 2 unannotated spectra and scan numbers."""
     peptides = ["LESLIEK", "PEPTIDEK", "LESTIEK"]
@@ -271,7 +301,7 @@ def mgf_small_unannotated(tmp_path):
     return _create_unannotated_mgf(peptides, mgf_file)
 
 
-def _create_unannotated_mgf(peptides, mgf_file, random_state=999):
+def _create_unannotated_mgf(peptides, mgf_file, random_state=999, c_mod=False):
     """
     Create a fake MGF file from one or more peptides.
     This file will have no SEQ= parameter, but will have a SCANS= parameter.
@@ -284,6 +314,9 @@ def _create_unannotated_mgf(peptides, mgf_file, random_state=999):
         The MGF file to create.
     random_state : int or numpy.random.Generator, optional
         The random seed. The charge states are chosen to be 2 or 3 randomly.
+    c_mod : bool, optional
+        Whether to use the constant carbamidomethylation
+        of C in mass calculations.
 
     Returns
     -------
@@ -291,7 +324,7 @@ def _create_unannotated_mgf(peptides, mgf_file, random_state=999):
     """
     rng = np.random.default_rng(random_state)
     entries = [
-        _create_unannotated_mgf_entry(p, idx, rng.choice([2, 3]))
+        _create_unannotated_mgf_entry(p, idx, rng.choice([2, 3]), c_mod=c_mod)
         for idx, p in enumerate(peptides)
     ]
     with mgf_file.open("w+") as mgf_ref:
@@ -300,7 +333,7 @@ def _create_unannotated_mgf(peptides, mgf_file, random_state=999):
     return mgf_file
 
 
-def _create_unannotated_mgf_entry(peptide, scan_num, charge):
+def _create_unannotated_mgf_entry(peptide, scan_num, charge, c_mod=False):
     """
     Create a MassIVE-KB style MGF entry for a single PSM.
     Each entry will have no SEQ= parameter, but will have a SCANS= parameter.
@@ -313,13 +346,21 @@ def _create_unannotated_mgf_entry(peptide, scan_num, charge):
         The scan number.
     charge : int, optional
         The peptide charge state.
+    c_mod : bool, optional
+        Whether to use the constant carbamidomethylation
+        of C in mass calculations.
 
     Returns
     -------
     str
         The PSM entry in an MGF file format.
     """
-    precursor_mz = calculate_mass(peptide, charge=int(charge))
+    if not c_mod:
+        precursor_mz = calculate_mass(peptide, charge=int(charge))
+    else:
+        aa_mass = std_aa_mass
+        aa_mass.update({"C": 160.030649})  # Carbamidomethylated C mass
+        precursor_mz = fast_mass(peptide, charge=int(charge), aa_mass=aa_mass)
     mzs, intensities = _peptide_to_peaks(peptide, charge)
     frags = "\n".join([f"{m} {i}" for m, i in zip(mzs, intensities)])
 

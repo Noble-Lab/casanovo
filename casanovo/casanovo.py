@@ -42,7 +42,6 @@ from . import __version__
 from . import utils
 from .denovo import ModelRunner
 from .config import Config
-from .data.annotate_db import annotate_mgf
 
 logger = logging.getLogger("casanovo")
 click.rich_click.USE_MARKDOWN = True
@@ -146,67 +145,6 @@ def sequence(
     logger.info("DONE!")
 
 
-@main.command()
-@click.argument(
-    "peak_path",
-    required=True,
-    nargs=1,
-    type=click.Path(exists=True, dir_okay=False),
-)
-@click.argument(
-    "tide_path",
-    required=True,
-    nargs=1,
-    type=click.Path(exists=True, dir_okay=True),
-)
-@click.option(
-    "-o",
-    "--output",
-    help="The output annotated MGF file.",
-    type=click.Path(dir_okay=False),
-)
-@click.option(
-    "-v",
-    "--verbosity",
-    help="""
-    Set the verbosity of console logging messages. Log files are
-    always set to 'debug'.
-    """,
-    type=click.Choice(
-        ["debug", "info", "warning", "error"],
-        case_sensitive=False,
-    ),
-    default="info",
-)
-def annotate(
-    peak_path: str,
-    tide_path: str,
-    output: Optional[str],
-    verbosity: str,
-) -> None:
-    """Annotate a given .mgf with candidates as selected by a Tide search for Casanovo-DB.
-
-    PEAK_PATH must be one MGF file from which to annotate spectra.
-
-    TIDE_PATH must be one directory containing the Tide search results of the <PEAK_PATH> .mgf.
-    This directory must contain tide-search.decoy.txt and tide-search.target.txt
-    """
-    if output is None:
-        output = setup_logging(output, verbosity)
-        logger.info(
-            "Output file not specified. \
-            Annotated MGF will be saved in the same directory \
-            as the input MGF."
-        )
-        output = peak_path.replace(".mgf", "_annotated.mgf")
-    else:
-        output = setup_logging(output, verbosity)
-
-    annotate_mgf(peak_path, tide_path, output)
-
-    logger.info("DONE!")
-
-
 @main.command(cls=_SharedParams)
 @click.argument(
     "peak_path",
@@ -222,8 +160,47 @@ def annotate(
 )
 @click.option(
     "--enzyme",
-    help="Enzyme for in silico digestion, see pyteomics.parser.expasy_rules",
-    type=str,
+    help="Enzyme for in silico digestion, \
+    See pyteomics.parser.expasy_rules for valid enzymes",
+    type=click.Choice(
+        [
+            "arg-c",
+            "asp-n",
+            "bnps-skatole",
+            "caspase 1",
+            "caspase 2",
+            "caspase 3",
+            "caspase 4",
+            "caspase 5",
+            "caspase 6",
+            "caspase 7",
+            "caspase 8",
+            "caspase 9",
+            "caspase 10",
+            "chymotrypsin high specificity",
+            "chymotrypsin low specificity",
+            "clostripain",
+            "cnbr",
+            "enterokinase",
+            "factor xa",
+            "formic acid",
+            "glutamyl endopeptidase",
+            "granzyme b",
+            "hydroxylamine",
+            "iodosobenzoic acid",
+            "lysc",
+            "ntcb",
+            "pepsin ph1.3",
+            "pepsin ph2.0",
+            "proline endopeptidase",
+            "proteinase k",
+            "staphylococcal peptidase i",
+            "thermolysin",
+            "thrombin",
+            "trypsin",
+            "trypsin_exception",
+        ]
+    ),
     default="trypsin",
 )
 @click.option(
@@ -287,7 +264,7 @@ def db_search(
     output: Optional[str],
     verbosity: str,
 ) -> None:
-    """Perform a search using Casanovo-DB.
+    """Perform a database search on MS/MS data using Casanovo-DB.
 
     PEAK_PATH must be one MGF file. FASTA_PATH must be one FASTA file.
     """

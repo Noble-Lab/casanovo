@@ -1009,7 +1009,7 @@ class DbSpec2Pep(Spec2Pep):
         ----------
         batch : Tuple[torch.Tensor, torch.Tensor, torch.Tensor]
             A batch of (i) MS/MS spectra, (ii) precursor information, (iii)
-            spectrum identifiers as torch Tensors
+            spectrum identifiers as torch Tensors.
 
         Returns
         -------
@@ -1042,7 +1042,21 @@ class DbSpec2Pep(Spec2Pep):
         return batch_res
 
     def smart_batch_gen(self, spectrum_batch):
-        """TODO: ADD DOCSTRING"""
+        """
+        Transforms a batch of spectra into multiple equally-sized batches of PSMs.
+
+        Parameters
+        ----------
+        spectrum batch : Tuple[torch.Tensor, torch.Tensor, torch.Tensor]
+            A batch of (i) MS/MS spectra, (ii) precursor information, (iii)
+            spectrum identifiers as torch Tensors.
+
+        Yields
+        -------
+        psm_batch: Tuple[List[int], List[str], torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]
+            A batch of PSMs containing the spectrum index, peptide sequence,
+            precursor information, and encoded MS/MS spectra.
+        """
         all_psm = []
         batch_size = len(spectrum_batch[0])
         enc = self.encoder(spectrum_batch[0])
@@ -1050,16 +1064,22 @@ class DbSpec2Pep(Spec2Pep):
         precursors = spectrum_batch[1]
         indexes = spectrum_batch[2]
         for idx in range(batch_size):
-            spec_peptides = db_utils.get_candidates(
+            digest_data = db_utils.get_candidates(
                 precursors[idx][2],
                 precursors[idx][1],
                 self.digest,
                 self.precursor_tolerance,
                 self.isotope_error,
             )
-            spec_peptides = [
-                a[0] for a in spec_peptides
-            ]  # TODO: USE MASS AND PROTEIN INFORMATION
+            logger.debug("%s", digest_data)
+            try:
+                spec_peptides, pep_masses, pep_protein = list(
+                    zip(*digest_data)
+                )
+            except ValueError:
+                logger.info(
+                    "No peptides found for precursor %s", precursors[idx]
+                )
             spec_precursors = [precursors[idx]] * len(spec_peptides)
             spec_enc = [enc[idx]] * len(spec_peptides)
             spec_idx = [indexes[idx]] * len(spec_peptides)
