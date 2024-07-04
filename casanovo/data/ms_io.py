@@ -22,13 +22,10 @@ class MztabWriter:
     ----------
     filename : str
         The name of the mzTab file.
-    is_db_variant : bool
-        Whether the mzTab file is for a Casanovo-DB search.
     """
 
-    def __init__(self, filename: str, is_db_variant: bool = False):
+    def __init__(self, filename: str):
         self.filename = filename
-        self.is_db_variant = is_db_variant
         self.metadata = [
             ("mzTab-version", "1.0.0"),
             ("mzTab-mode", "Summary"),
@@ -150,9 +147,6 @@ class MztabWriter:
         """
         Export the spectrum identifications to the mzTab file.
         """
-        if self.is_db_variant:
-            self.save_db_variant()
-            return
         with open(self.filename, "w", newline="") as f:
             writer = csv.writer(f, delimiter="\t", lineterminator=os.linesep)
             # Write metadata.
@@ -192,7 +186,7 @@ class MztabWriter:
                         "PSM",
                         psm[0],  # sequence
                         i,  # PSM_ID
-                        "null",  # accession
+                        "null" if len(psm) < 8 else psm[7],  # accession
                         "null",  # unique
                         "null",  # database
                         "null",  # database_version
@@ -213,75 +207,5 @@ class MztabWriter:
                         "null",  # start
                         "null",  # end
                         psm[6],  # opt_ms_run[1]_aa_scores
-                    ]
-                )
-
-    def save_db_variant(self) -> None:
-        """
-        Export the Casanovo-DB search results to the mzTab file.
-
-        Outputs PSMs in the order they were scored
-        (i.e. the order in the .mgf file).
-        """
-        with open(self.filename, "w", newline="") as f:
-            writer = csv.writer(f, delimiter="\t", lineterminator=os.linesep)
-            # Write metadata.
-            for row in self.metadata:
-                writer.writerow(["MTD", *row])
-            # Write PSMs.
-            writer.writerow(
-                [
-                    "PSH",
-                    "sequence",
-                    "PSM_ID",
-                    "accession",
-                    "unique",
-                    "database",
-                    "database_version",
-                    "search_engine",
-                    "search_engine_score[1]",
-                    "modifications",
-                    "retention_time",
-                    "charge",
-                    "exp_mass_to_charge",
-                    "calc_mass_to_charge",
-                    "spectra_ref",
-                    "pre",
-                    "post",
-                    "start",
-                    "end",
-                    "opt_ms_run[1]_aa_scores",
-                ]
-            )
-            for i, psm in enumerate(self.psms):
-                writer.writerow(
-                    [
-                        "PSM",
-                        psm[0],  # sequence
-                        f"{psm[5]}:{i}",  # PSM_ID (spectrum # :candidate #)
-                        "null",  # accession
-                        "null",  # unique
-                        "null",  # database
-                        "null",  # database_version
-                        "null",  # search_engine
-                        psm[1],  # search_engine_score[1]
-                        "null",  # modifications
-                        "null",  # retention_time
-                        int(psm[2]),  # charge
-                        psm[3],  # exp_mass_to_charge
-                        psm[4],  # calc_mass_to_charge
-                        psm[5],  # spectra_ref
-                        "null",  # pre
-                        "null",  # post
-                        "null",  # start
-                        "null",  # end
-                        ",".join(
-                            list(
-                                map(
-                                    "{:.5f}".format,
-                                    psm[6][psm[6] != 0],
-                                )
-                            )
-                        ),  # opt_ms_run[1]_aa_scores
                     ]
                 )

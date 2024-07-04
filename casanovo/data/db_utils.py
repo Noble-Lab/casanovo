@@ -4,8 +4,11 @@ import os
 import depthcharge.masses
 from pyteomics import fasta, parser
 import bisect
+import logging
 
 from typing import List, Tuple
+
+logger = logging.getLogger("casanovo")
 
 # CONSTANTS
 HYDROGEN = 1.007825035
@@ -96,17 +99,22 @@ def digest_fasta(
                 semi=semi,
             )
             protein = header.split()[0]
-            peptide_list.extend([(pep, protein) for pep in pep_set])
+            for pep in pep_set:
+                if len(pep) < min_length or len(pep) > max_length:
+                    continue
+                if "X" in pep or "U" in pep:
+                    logger.warn(
+                        "Skipping peptide with ambiguous amino acids: %s", pep
+                    )
+                    continue
+                peptide_list.append((pep, protein))
     else:
         raise ValueError(f"Digestion type {digestion} not recognized.")
 
     # Generate modified peptides
     mass_calculator = depthcharge.masses.PeptideMass(residues="massivekb")
-    mass_calculator.masses.update({"X": 0.0})  # TODO: REMOVE?
     mod_peptide_list = []
     for pep, prot in peptide_list:
-        if len(pep) < min_length or len(pep) > max_length:
-            continue
         peptide_isoforms = parser.isoforms(
             pep,
             variable_mods=var_mods,

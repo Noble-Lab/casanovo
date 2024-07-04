@@ -10,6 +10,8 @@ import warnings
 from pathlib import Path
 from typing import Iterable, List, Optional, Union
 
+import time
+
 import lightning.pytorch as pl
 import numpy as np
 import torch
@@ -124,19 +126,21 @@ class ModelRunner:
         -------
         self
         """
-        self.writer = ms_io.MztabWriter(
-            Path(output).with_suffix(".mztab"), is_db_variant=True
-        )
+        self.writer = ms_io.MztabWriter(Path(output).with_suffix(".mztab"))
         self.writer.set_metadata(
             self.config,
             model=str(self.model_filename),
             config_filename=self.config.file,
         )
-
         self.initialize_trainer(train=True)
         self.initialize_model(train=False, db_search=True)
         self.model.out_writer = self.writer
-        self.model.digest = db_utils.digest_fasta(
+        test_index = self._get_index(peak_path, False, "db search")
+        self.writer.set_ms_run(test_index.ms_files)
+
+        self.initialize_data_module(test_index=test_index)
+        self.loaders.setup(stage="test", annotated=False)
+        self.loaders.digest = db_utils.digest_fasta(
             fasta_path,
             enzyme,
             digestion,
@@ -145,14 +149,16 @@ class ModelRunner:
             min_length,
             max_length,
         )
-        self.model.precursor_tolerance = precursor_tolerance
-        self.model.isotope_error = isotope_error
+        self.loaders.precursor_tolerance = precursor_tolerance
+        self.loaders.isotope_error = isotope_error
 
-        test_index = self._get_index(peak_path, False, "db search")
-        self.writer.set_ms_run(test_index.ms_files)
-        self.initialize_data_module(test_index=test_index)
-        self.loaders.setup(stage="test", annotated=False)
-        self.trainer.predict(self.model, self.loaders.predict_dataloader())
+        t1 = time.time()
+        self.trainer.predict(self.model, self.loaders.db_dataloader())
+        t2 = time.time()
+        logger.info("Database search took %.3f seconds", t2 - t1)
+        logger.info("Scored %s PSMs", self.model.total_psms)
+        logger.info("%.3f PSMs per second", self.model.total_psms / (t2 - t1))
+        logger.info("%s seconds per PSM", (t2 - t1) / self.model.total_psms)
 
     def train(
         self,

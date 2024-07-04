@@ -1008,6 +1008,7 @@ class DbSpec2Pep(Spec2Pep):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self.total_psms = 0
 
     def predict_step(self, batch, *args):
         """
@@ -1015,137 +1016,85 @@ class DbSpec2Pep(Spec2Pep):
 
         Parameters
         ----------
-        batch : Tuple[torch.Tensor, torch.Tensor, torch.Tensor]
+        batch : Tuple[torch.Tensor, torch.Tensor, np.array, List[str], List[str]]
             A batch of (i) MS/MS spectra, (ii) precursor information, (iii)
-            spectrum identifiers as torch Tensors.
+            spectrum identifiers, (iv) candidate peptides, (v) associated proteins.
 
         Returns
         -------
-        predictions: List[Tuple[int, int, float, str, np.ndarray, np.ndarray]]
+        predictions: List[Tuple[int, int, float, str, np.ndarray, np.ndarray, str]]
             Model predictions for the given batch of spectra containing spectrum
             ids, precursor charge and m/z, candidate peptide sequences, peptide
-            scores, and amino acid-level scores.
+            scores, amino acid-level scores, and associated proteins.
         """
-        batch_res = []
+        predictions = []
+        pred, truth = self.decoder(batch[3], batch[1], *self.encoder(batch[0]))
+        pred = self.softmax(pred)
+        all_scores, per_aa_scores = _calc_match_score(
+            pred, truth, self.decoder.reverse
+        )
         for (
+            precursor_charge,
+            precursor_mz,
             spectrum_i,
-            peptides,
-            precursors,
-            encoded_ms,
-        ) in self.smart_batch_gen(batch):
-            pred, truth = self.decoder(peptides, precursors, *encoded_ms)
-            pred = self.softmax(pred)
-            peptide_scores, aa_scores = _calc_match_score(
-                pred, truth, self.decoder.reverse
-            )
-            precursor_info = precursors.cpu().detach().numpy()
-            precursor_charge = precursor_info[:, 1]
-            precursor_mz = precursor_info[:, 2]
-            batch_res.append(
+            peptide_score,
+            aa_scores,
+            peptide,
+            protein,
+        ) in zip(
+            batch[1][:, 1].cpu().detach().numpy(),
+            batch[1][:, 2].cpu().detach().numpy(),
+            batch[2],
+            all_scores.cpu().detach().numpy(),
+            per_aa_scores.cpu().detach().numpy(),
+            batch[3],
+            batch[4],
+        ):
+            predictions.append(
                 (
                     spectrum_i,
                     precursor_charge,
                     precursor_mz,
-                    peptides,
-                    peptide_scores.cpu().detach().numpy(),
-                    aa_scores.cpu().detach().numpy(),
+                    peptide,
+                    peptide_score,
+                    aa_scores,
+                    protein,
                 )
             )
-        return batch_res
-
-    def smart_batch_gen(self, spectrum_batch):
-        """
-        Transforms a batch of spectra into multiple equally-sized batches of PSMs.
-
-        Parameters
-        ----------
-        spectrum batch : Tuple[torch.Tensor, torch.Tensor, torch.Tensor]
-            A batch of (i) MS/MS spectra, (ii) precursor information, (iii)
-            spectrum identifiers as torch Tensors.
-
-        Yields
-        -------
-        psm_batch: Tuple[List[int], List[str], torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]
-            A batch of PSMs containing the spectrum index, peptide sequence,
-            precursor information, and encoded MS/MS spectra.
-        """
-        all_psm = []
-        batch_size = len(spectrum_batch[0])
-        enc = self.encoder(spectrum_batch[0])
-        enc = list(zip(*enc))
-        precursors = spectrum_batch[1]
-        indexes = spectrum_batch[2]
-        for idx in range(batch_size):
-            digest_data = db_utils.get_candidates(
-                precursors[idx][2],
-                precursors[idx][1],
-                self.digest,
-                self.precursor_tolerance,
-                self.isotope_error,
-            )
-            try:
-                spec_peptides, pep_masses, pep_protein = list(
-                    zip(*digest_data)
-                )
-            except ValueError:
-                logger.info("No peptides found for spectrum %s", indexes[idx])
-                continue
-            spec_precursors = [precursors[idx]] * len(spec_peptides)
-            spec_enc = [enc[idx]] * len(spec_peptides)
-            spec_idx = [indexes[idx]] * len(spec_peptides)
-            all_psm.extend(
-                list(
-                    zip(
-                        spec_enc,
-                        spec_precursors,
-                        spec_peptides,
-                        spec_idx,
-                    )
-                )
-            )
-        # Continually grab num_pairs items from all_psm until list is exhausted
-        while len(all_psm) > 0:
-            psm_batch = all_psm[:batch_size]
-            all_psm = all_psm[batch_size:]
-            psm_batch = list(zip(*psm_batch))
-            encoded_ms = (
-                torch.stack([a[0] for a in psm_batch[0]]),
-                torch.stack([a[1] for a in psm_batch[0]]),
-            )
-            prec_data = torch.stack(psm_batch[1])
-            pep_str = list(psm_batch[2])
-            indexes = [a[1] for a in psm_batch[3]]
-            yield (indexes, pep_str, prec_data, encoded_ms)
+        self.total_psms += len(predictions)
+        return predictions
 
     def on_predict_batch_end(
         self,
         outputs: List[Tuple[np.ndarray, List[str], torch.Tensor]],
         *args,
     ) -> None:
-        if self.out_writer is None:
-            return
+        """
+        Write the database search results to the output file.
+        """
         for (
             spectrum_i,
-            precursor_charge,
+            charge,
             precursor_mz,
-            peptides,
-            peptide_scores,
+            peptide,
+            peptide_score,
             aa_scores,
+            protein,
         ) in outputs:
-            calc_mz = [
-                self.peptide_mass_calculator.mass(peptide, charge)
-                for peptide, charge in zip(peptides, precursor_charge)
-            ]
-            for row in zip(
-                peptides,
-                peptide_scores,
-                precursor_charge,
-                precursor_mz,
-                calc_mz,
-                spectrum_i,
-                aa_scores,
-            ):
-                self.out_writer.psms.append(row)
+            if len(peptide) == 0:
+                continue
+            self.out_writer.psms.append(
+                (
+                    peptide,
+                    tuple(spectrum_i),
+                    peptide_score,
+                    charge,
+                    precursor_mz,
+                    self.peptide_mass_calculator.mass(peptide, charge),
+                    ",".join(list(map("{:.5f}".format, aa_scores))),
+                    protein,
+                ),
+            )
 
 
 def _calc_match_score(
