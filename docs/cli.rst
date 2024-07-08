@@ -8,9 +8,3 @@ For Casanovo installation instructions, see the :doc:`Getting Started <getting_s
    :prog: casanovo
    :nested: full
    :commands: configure, evaluate, sequence, train, version
-
-..
-   This is just a random sequence of letters so the custom javascript can
-   ensure it is running on the correct page before running any filtering
-   operations
-pfqnhktptyfdeomqabhq
