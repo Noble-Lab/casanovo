@@ -1,5 +1,6 @@
 """Small utility functions"""
 
+import heapq
 import logging
 import os
 import platform
@@ -11,9 +12,9 @@ from datetime import datetime
 from typing import Tuple, Dict, List, Optional
 
 import numpy as np
+import pandas as pd
 import psutil
 import torch
-from pandas import DataFrame
 
 
 SCORE_BINS = [0.0, 0.5, 0.9, 0.95, 0.99]
@@ -77,7 +78,7 @@ def split_version(version: str) -> Tuple[str, str, str]:
 
 
 def get_score_bins(
-    results_table: DataFrame, score_bins: List[float]
+    results_table: pd.DataFrame, score_bins: List[float]
 ) -> Dict[float, int]:
     """
     Get binned confidence scores
@@ -88,7 +89,7 @@ def get_score_bins(
 
     Parameters
     ----------
-    results_table: DataFrame
+    results_table: pd.DataFrame
         Parsed spectrum match table
     score_bins: List[float]
         Confidence scores to map
@@ -104,33 +105,34 @@ def get_score_bins(
     }
 
 
-def get_peptide_length_histo(peptide_lengths: np.ndarray) -> Dict[int, int]:
+def get_peptide_length_hist(peptide_lengths: np.ndarray) -> np.ndarray:
     """
-    Get a dictionary mapping each unique peptide length to its frequency
+    Get a matrix mapping each unique peptide length to its frequency
 
     Parameters
     ----------
-        peptide_lengths: np.ndarray
-            Numpy array containing the length of each sequence
+    peptide_lengths: np.ndarray
+        Numpy array containing the length of each sequence
 
     Returns
     -------
-        peptide_length_histogram: Dict[int, int]
-            Dictionary mapping each unique peptide length to its frequency
+    peptide_length_hist_matrix: np.ndarray
+        A matrix of size (n x 2) where each row vector is
+        (peptide_length, frequency)
     """
-    bins = np.bincount(peptide_lengths)
-    return {
-        curr_bin: count for curr_bin, count in enumerate(bins) if count != 0
-    }
+    frequncies = np.bincount(peptide_lengths).reshape((-1, 1))
+    bins = np.arange(len(frequncies), dtype=int).reshape((-1, 1))
+    bin_freqs = np.hstack((bins, frequncies))
+    return bin_freqs[bin_freqs[:, 1] != 0]
 
 
-def get_peptide_lengths(results_table: DataFrame) -> np.ndarray:
+def get_peptide_lengths(results_table: pd.DataFrame) -> np.ndarray:
     """
     Get a numpy array containing the length of each peptide sequence
 
     Parameters
     ----------
-    results_table: DataFrame
+    results_table: pd.DataFrame
         Parsed spectrum match table
 
     Returns
@@ -142,20 +144,22 @@ def get_peptide_lengths(results_table: DataFrame) -> np.ndarray:
     # Mass modifications do not contribute to sequence length
     # If PTMs ae represented in ProForma notation this filtering operation
     # needs to be reimplemented
-    alpha_re = re.compile("[^a-zA-Z]")
-    peptide_sequences = results_table["sequence"]
-    return peptide_sequences.str.replace(alpha_re, "", regex=True).apply(len)
+    return (
+        results_table["sequence"]
+        .str.replace(r"[^a-zA-Z]", "", regex=True)
+        .apply(len)
+    )
 
 
 def get_report_dict(
-    results_table: DataFrame, score_bins: List[float] = SCORE_BINS
+    results_table: pd.DataFrame, score_bins: List[float] = SCORE_BINS
 ) -> Optional[Dict]:
     """
     Generate sequencing run report
 
     Parameters
     ----------
-    results_table: DataFrame
+    results_table: pd.DataFrame
         Parsed spectrum match table
     score_bins: List[float], Optional
         Confidence scores for creating confidence CMF, see get_score_bins
@@ -170,13 +174,16 @@ def get_report_dict(
         return None
 
     peptide_lengths = get_peptide_lengths(results_table)
+    min_length, med_length, max_length = np.quantile(
+        peptide_lengths, [0, 0.5, 1]
+    )
     return {
         "num_spectra": len(results_table),
         "score_bins": get_score_bins(results_table, score_bins),
-        "max_sequence_length": int(np.max(peptide_lengths)),
-        "min_sequence_length": int(np.min(peptide_lengths)),
-        "median_sequence_length": int(np.median(peptide_lengths)),
-        "peptide_length_histogram": get_peptide_length_histo(peptide_lengths),
+        "max_sequence_length": max_length,
+        "min_sequence_length": min_length,
+        "median_sequence_length": med_length,
+        "peptide_length_histogram": get_peptide_length_hist(peptide_lengths),
     }
 
 
@@ -195,24 +202,25 @@ def log_run_report(
     """
     logger.info("======= End of Run Report =======")
     if (start_time is not None) and (end_time is not None):
-        end_time = time.time()
-        elapsed_time = end_time - start_time
-        start_timestamp = datetime.fromtimestamp(start_time).strftime(
-            "%y/%m/%d %H:%M:%S"
+        end_time = time.time() if end_time is None else end_time
+        start_datetime = datetime.fromtimestamp(start_time)
+        end_datetime = datetime.fromtimestamp(end_time)
+        delta_datetime = end_datetime - start_datetime
+        logger.info(
+            "Run Start Timestamp: %s",
+            start_datetime.strftime("%y/%m/%d %H:%M:%S"),
         )
-        end_timestamp = datetime.fromtimestamp(end_time).strftime(
-            "%y/%m/%d %H:%M:%S"
+        logger.info(
+            "Run End Timestamp: %s", end_datetime.strftime("%y/%m/%d %H:%M:%S")
         )
-        logger.info(f"Run Start Timestamp: {start_timestamp}")
-        logger.info(f"Run End Timestamp: {end_timestamp}")
-        logger.info(f"Time Elapsed: {int(elapsed_time)}s")
+        logger.info("Time Elapsed: %s", delta_datetime)
 
-    logger.info(f"Executed Command: {' '.join(sys.argv)}")
-    logger.info(f"Executed on Host Machine: {socket.gethostname()}")
+    logger.info("Executed Command: %s", " ".join(sys.argv))
+    logger.info("Executed on Host Machine: %s", socket.gethostname())
 
     if torch.cuda.is_available():
         gpu_util = torch.cuda.max_memory_allocated()
-        logger.info(f"Max GPU Memory Utilization: {gpu_util >> 20}MiB")
+        logger.info("Max GPU Memory Utilization: %dMiB", gpu_util >> 20)
 
 
 def log_sequencing_report(
@@ -238,7 +246,7 @@ def log_sequencing_report(
     """
     log_run_report(start_time=start_time, end_time=end_time)
     run_report = get_report_dict(
-        DataFrame(
+        pd.DataFrame(
             {
                 "sequence": [psm[0] for psm in predictions],
                 "score": [psm[2] for psm in predictions],
@@ -249,16 +257,39 @@ def log_sequencing_report(
 
     if run_report is None:
         logger.warning(
-            f"No predictions were logged, this may be due to an error"
+            "No predictions were logged, this may be due to an error"
         )
     else:
         num_spectra = run_report["num_spectra"]
-        logger.info(f"Sequenced {num_spectra:,} spectra")
+        logger.info("Sequenced %s spectra", num_spectra)
         logger.info("Score Distribution:")
         for score, pop in sorted(run_report["score_bins"].items()):
             logger.info(
-                f"{pop:,} spectra ({pop / num_spectra:.2%}) scored >= {score}"
+                "%s spectra (%.2f%%) scored >= %s",
+                pop,
+                pop / num_spectra * 100,
+                score,
             )
 
-        logger.info(f"Min Peptide Length: {run_report['min_sequence_length']}")
-        logger.info(f"Max Peptide Length: {run_report['max_sequence_length']}")
+        top_pep_lens = run_report["peptide_length_histogram"]
+        if len(top_pep_lens) >= 5:
+            logger.info("Top Five Most Frequent Peptide Lengths:")
+            top_indices = np.argpartition(top_pep_lens[:, 1], -5)
+            top_pep_lens = top_pep_lens[top_indices][-5:]
+        else:
+            logger.info("Peptide Length Frequencies:")
+
+        sorted_indices = np.argsort(-top_pep_lens[:, 1])
+        top_pep_lens = top_pep_lens[sorted_indices]
+        for length, freq in top_pep_lens:
+            logger.info("Length: %d, Frequency: %d", length, freq)
+
+        logger.info(
+            "Min Peptide Length: %d", run_report["min_sequence_length"]
+        )
+        logger.info(
+            "Max Peptide Length: %d", run_report["max_sequence_length"]
+        )
+        logger.info(
+            "Median Peptide Length: %d", run_report["median_sequence_length"]
+        )
