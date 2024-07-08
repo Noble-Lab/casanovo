@@ -10,10 +10,11 @@ import github
 import numpy as np
 import pytest
 import torch
+import re
 
 from casanovo import casanovo
 from casanovo import utils
-from casanovo.data import ms_io
+from casanovo.data import ms_io, db_utils
 from casanovo.data.datasets import SpectrumDataset, AnnotatedSpectrumDataset
 from casanovo.denovo.evaluate import aa_match_batch, aa_match_metrics
 from casanovo.denovo.model import Spec2Pep, _aa_pep_score, _calc_match_score
@@ -217,6 +218,433 @@ def test_calc_match_score():
     assert np.sum(masked_per_aa_scores.numpy()[1]) == 3
     assert np.sum(masked_per_aa_scores.numpy()[2]) == 3
     assert np.sum(masked_per_aa_scores.numpy()[3]) == 3
+
+
+def test_digest_fasta_cleave(fasta_raw_data):
+
+    with open("temp_fasta", "w") as file:
+        file.write(fasta_raw_data)
+
+    # No missed cleavages
+    expected_normal = [
+        "ATSIPAR",
+        "VTLSC+57.021R",
+        "LLIYGASTR",
+        "EIVMTQSPPTLSLSPGER",
+        "MEAPAQLLFLLLLWLPDTTR",
+        "ASQSVSSSYLTWYQQKPGQAPR",
+        "FSGSGSGTDFTLTISSLQPEDFAVYYC+57.021QQDYNLP",
+    ]
+
+    # 1 missed cleavage
+    expected_1missedcleavage = [
+        "ATSIPAR",
+        "VTLSC+57.021R",
+        "LLIYGASTR",
+        "LLIYGASTRATSIPAR",
+        "EIVMTQSPPTLSLSPGER",
+        "MEAPAQLLFLLLLWLPDTTR",
+        "ASQSVSSSYLTWYQQKPGQAPR",
+        "EIVMTQSPPTLSLSPGERVTLSC+57.021R",
+        "VTLSC+57.021RASQSVSSSYLTWYQQKPGQAPR",
+        "ASQSVSSSYLTWYQQKPGQAPRLLIYGASTR",
+        "FSGSGSGTDFTLTISSLQPEDFAVYYC+57.021QQDYNLP",
+        "MEAPAQLLFLLLLWLPDTTREIVMTQSPPTLSLSPGER",
+        "ATSIPARFSGSGSGTDFTLTISSLQPEDFAVYYC+57.021QQDYNLP",
+    ]
+
+    # 3 missed cleavages
+    expected_3missedcleavage = [
+        "ATSIPAR",
+        "VTLSC+57.021R",
+        "LLIYGASTR",
+        "LLIYGASTRATSIPAR",
+        "EIVMTQSPPTLSLSPGER",
+        "MEAPAQLLFLLLLWLPDTTR",
+        "ASQSVSSSYLTWYQQKPGQAPR",
+        "EIVMTQSPPTLSLSPGERVTLSC+57.021R",
+        "VTLSC+57.021RASQSVSSSYLTWYQQKPGQAPR",
+        "ASQSVSSSYLTWYQQKPGQAPRLLIYGASTR",
+        "FSGSGSGTDFTLTISSLQPEDFAVYYC+57.021QQDYNLP",
+        "ASQSVSSSYLTWYQQKPGQAPRLLIYGASTRATSIPAR",
+        "VTLSC+57.021RASQSVSSSYLTWYQQKPGQAPRLLIYGASTR",
+        "MEAPAQLLFLLLLWLPDTTREIVMTQSPPTLSLSPGER",
+        "ATSIPARFSGSGSGTDFTLTISSLQPEDFAVYYC+57.021QQDYNLP",
+        "VTLSC+57.021RASQSVSSSYLTWYQQKPGQAPRLLIYGASTRATSIPAR",
+        "MEAPAQLLFLLLLWLPDTTREIVMTQSPPTLSLSPGERVTLSC+57.021R",
+        "EIVMTQSPPTLSLSPGERVTLSC+57.021RASQSVSSSYLTWYQQKPGQAPR",
+        "LLIYGASTRATSIPARFSGSGSGTDFTLTISSLQPEDFAVYYC+57.021QQDYNLP",
+    ]
+
+    peptide_list = db_utils.digest_fasta(
+        fasta_filename="temp_fasta",
+        enzyme="trypsin",
+        digestion="full",
+        missed_cleavages=0,
+        max_mods=0,
+        min_length=6,
+        max_length=50,
+    )
+    peptide_list = [x[0] for x in peptide_list]
+    assert peptide_list == expected_normal
+
+    peptide_list = db_utils.digest_fasta(
+        fasta_filename="temp_fasta",
+        enzyme="trypsin",
+        digestion="full",
+        missed_cleavages=1,
+        max_mods=0,
+        min_length=6,
+        max_length=50,
+    )
+    peptide_list = [x[0] for x in peptide_list]
+    assert peptide_list == expected_1missedcleavage
+
+    peptide_list = db_utils.digest_fasta(
+        fasta_filename="temp_fasta",
+        enzyme="trypsin",
+        digestion="full",
+        missed_cleavages=3,
+        max_mods=0,
+        min_length=6,
+        max_length=50,
+    )
+    peptide_list = [x[0] for x in peptide_list]
+    assert peptide_list == expected_3missedcleavage
+
+
+def test_digest_fasta_mods(fasta_raw_data):
+
+    with open("temp_fasta", "w") as file:
+        file.write(fasta_raw_data)
+
+    # 1 modification allowed
+    # fixed: C+57.02146
+    # variable: 1M+15.994915,1N+0.984016,1Q+0.984016
+    # nterm: 1X+42.010565,1X+43.005814,1X-17.026549,1X+25.980265
+    expected_1mod = [
+        "-17.027ATSIPAR",
+        "ATSIPAR",
+        "-17.027VTLSC+57.021R",
+        "VTLSC+57.021R",
+        "+43.006-17.027ATSIPAR",
+        "+42.011ATSIPAR",
+        "+43.006ATSIPAR",
+        "+43.006-17.027VTLSC+57.021R",
+        "+42.011VTLSC+57.021R",
+        "+43.006VTLSC+57.021R",
+        "-17.027LLIYGASTR",
+        "LLIYGASTR",
+        "+43.006-17.027LLIYGASTR",
+        "+42.011LLIYGASTR",
+        "+43.006LLIYGASTR",
+        "-17.027EIVMTQSPPTLSLSPGER",
+        "EIVMTQSPPTLSLSPGER",
+        "EIVMTQ+0.984SPPTLSLSPGER",
+        "EIVM+15.995TQSPPTLSLSPGER",
+        "+43.006-17.027EIVMTQSPPTLSLSPGER",
+        "+42.011EIVMTQSPPTLSLSPGER",
+        "+43.006EIVMTQSPPTLSLSPGER",
+        "-17.027MEAPAQLLFLLLLWLPDTTR",
+        "MEAPAQLLFLLLLWLPDTTR",
+        "MEAPAQ+0.984LLFLLLLWLPDTTR",
+        "M+15.995EAPAQLLFLLLLWLPDTTR",
+        "+43.006-17.027MEAPAQLLFLLLLWLPDTTR",
+        "+42.011MEAPAQLLFLLLLWLPDTTR",
+        "+43.006MEAPAQLLFLLLLWLPDTTR",
+        "-17.027ASQSVSSSYLTWYQQKPGQAPR",
+        "ASQSVSSSYLTWYQQKPGQAPR",
+        "ASQ+0.984SVSSSYLTWYQQKPGQAPR",
+        "ASQSVSSSYLTWYQ+0.984QKPGQAPR",
+        "ASQSVSSSYLTWYQQ+0.984KPGQAPR",
+        "ASQSVSSSYLTWYQQKPGQ+0.984APR",
+        "+43.006-17.027ASQSVSSSYLTWYQQKPGQAPR",
+        "+42.011ASQSVSSSYLTWYQQKPGQAPR",
+        "+43.006ASQSVSSSYLTWYQQKPGQAPR",
+        "-17.027FSGSGSGTDFTLTISSLQPEDFAVYYC+57.021QQDYNLP",
+        "FSGSGSGTDFTLTISSLQPEDFAVYYC+57.021QQDYNLP",
+        "FSGSGSGTDFTLTISSLQ+0.984PEDFAVYYC+57.021QQDYNLP",
+        "FSGSGSGTDFTLTISSLQPEDFAVYYC+57.021Q+0.984QDYNLP",
+        "FSGSGSGTDFTLTISSLQPEDFAVYYC+57.021QQ+0.984DYNLP",
+        "FSGSGSGTDFTLTISSLQPEDFAVYYC+57.021QQDYN+0.984LP",
+        "+43.006-17.027FSGSGSGTDFTLTISSLQPEDFAVYYC+57.021QQDYNLP",
+        "+42.011FSGSGSGTDFTLTISSLQPEDFAVYYC+57.021QQDYNLP",
+        "+43.006FSGSGSGTDFTLTISSLQPEDFAVYYC+57.021QQDYNLP",
+    ]
+
+    peptide_list = db_utils.digest_fasta(
+        fasta_filename="temp_fasta",
+        enzyme="trypsin",
+        digestion="full",
+        missed_cleavages=0,
+        max_mods=1,
+        min_length=6,
+        max_length=50,
+    )
+    peptide_list = [x[0] for x in peptide_list]
+    peptide_list = [
+        x
+        for x in peptide_list
+        if not re.search(
+            r"(\+42\.011|\+43\.006|\-17\.027|\+43\.006\-17\.027)+[A-Z]\+", x
+        )
+    ]
+    assert peptide_list == expected_1mod
+
+
+def test_length_restrictions(fasta_raw_data):
+
+    with open("temp_fasta", "w") as file:
+        file.write(fasta_raw_data)
+
+    # length between 20 and 50
+    expected_long = [
+        "MEAPAQLLFLLLLWLPDTTR",
+        "ASQSVSSSYLTWYQQKPGQAPR",
+        "FSGSGSGTDFTLTISSLQPEDFAVYYC+57.021QQDYNLP",
+    ]
+
+    # length between 6 and 8
+    expected_short = ["ATSIPAR", "VTLSC+57.021R"]
+
+    peptide_list = db_utils.digest_fasta(
+        fasta_filename="temp_fasta",
+        enzyme="trypsin",
+        digestion="full",
+        missed_cleavages=0,
+        max_mods=0,
+        min_length=20,
+        max_length=50,
+    )
+    peptide_list = [x[0] for x in peptide_list]
+    assert peptide_list == expected_long
+
+    peptide_list = db_utils.digest_fasta(
+        fasta_filename="temp_fasta",
+        enzyme="trypsin",
+        digestion="full",
+        missed_cleavages=0,
+        max_mods=0,
+        min_length=6,
+        max_length=8,
+    )
+    peptide_list = [x[0] for x in peptide_list]
+    assert peptide_list == expected_short
+
+
+def test_digest_fasta_enzyme(fasta_raw_data):
+
+    with open("temp_fasta", "w") as file:
+        file.write(fasta_raw_data)
+
+    # arg-c enzyme
+    expected_argc = [
+        "ATSIPAR",
+        "VTLSC+57.021R",
+        "LLIYGASTR",
+        "EIVMTQSPPTLSLSPGER",
+        "MEAPAQLLFLLLLWLPDTTR",
+        "ASQSVSSSYLTWYQQKPGQAPR",
+        "FSGSGSGTDFTLTISSLQPEDFAVYYC+57.021QQDYNLP",
+    ]
+
+    # asp-n enzyme
+    expected_aspn = ["DFAVYYC+57.021QQ", "DFTLTISSLQPE", "MEAPAQLLFLLLLWLP"]
+
+    peptide_list = db_utils.digest_fasta(
+        fasta_filename="temp_fasta",
+        enzyme="arg-c",
+        digestion="full",
+        missed_cleavages=0,
+        max_mods=0,
+        min_length=6,
+        max_length=50,
+    )
+    peptide_list = [x[0] for x in peptide_list]
+    assert peptide_list == expected_argc
+
+    peptide_list = db_utils.digest_fasta(
+        fasta_filename="temp_fasta",
+        enzyme="asp-n",
+        digestion="full",
+        missed_cleavages=0,
+        max_mods=0,
+        min_length=6,
+        max_length=50,
+    )
+    peptide_list = [x[0] for x in peptide_list]
+    assert peptide_list == expected_aspn
+
+
+def test_get_candidates(fasta_raw_data):
+
+    with open("temp_fasta", "w") as file:
+        file.write(fasta_raw_data)
+
+    # precursor_window is 10000
+    expected_smallwindow = ["LLIYGASTR"]
+
+    # precursor window is 150000
+    expected_midwindow = ["LLIYGASTR"]
+
+    # precursor window is 600000
+    expected_widewindow = ["ATSIPAR", "VTLSC+57.021R", "LLIYGASTR"]
+
+    peptide_list = db_utils.digest_fasta(
+        fasta_filename="temp_fasta",
+        enzyme="trypsin",
+        digestion="full",
+        missed_cleavages=1,
+        max_mods=0,
+        min_length=6,
+        max_length=50,
+    )
+
+    candidates = db_utils.get_candidates(
+        precursor_mz=496.2,
+        charge=2,
+        peptide_list=peptide_list,
+        precursor_tolerance=10000,
+        isotope_error="0",
+    )
+    candidates = [x[0] for x in candidates]
+    assert expected_smallwindow == candidates
+
+    peptide_list = db_utils.digest_fasta(
+        fasta_filename="temp_fasta",
+        enzyme="trypsin",
+        digestion="full",
+        missed_cleavages=1,
+        max_mods=0,
+        min_length=6,
+        max_length=50,
+    )
+
+    candidates = db_utils.get_candidates(
+        precursor_mz=496.2,
+        charge=2,
+        peptide_list=peptide_list,
+        precursor_tolerance=150000,
+        isotope_error="0",
+    )
+    candidates = [x[0] for x in candidates]
+    assert expected_midwindow == candidates
+
+    peptide_list = db_utils.digest_fasta(
+        fasta_filename="temp_fasta",
+        enzyme="trypsin",
+        digestion="full",
+        missed_cleavages=1,
+        max_mods=0,
+        min_length=6,
+        max_length=50,
+    )
+
+    candidates = db_utils.get_candidates(
+        precursor_mz=496.2,
+        charge=2,
+        peptide_list=peptide_list,
+        precursor_tolerance=600000,
+        isotope_error="0",
+    )
+    candidates = [x[0] for x in candidates]
+    assert expected_widewindow == candidates
+
+
+def test_get_candidates_isotope_error():
+
+    # Tide isotope error windows for 496.2, 2+:
+    # 0: [980.481617, 1000.289326]
+    # 1: [979.491114, 999.278813]
+    # 2: [978.500611, 998.268300]
+    # 3: [977.510108, 997.257787]
+
+    peptide_list = [
+        ("A", 1001),
+        ("B", 1000),
+        ("C", 999),
+        ("D", 998),
+        ("E", 997),
+        ("F", 996),
+        ("G", 995),
+        ("H", 994),
+        ("I", 993),
+        ("J", 992),
+        ("K", 991),
+        ("L", 990),
+        ("M", 989),
+        ("N", 988),
+        ("O", 987),
+        ("P", 986),
+        ("Q", 985),
+        ("R", 984),
+        ("S", 983),
+        ("T", 982),
+        ("U", 981),
+        ("V", 980),
+        ("W", 979),
+        ("X", 978),
+        ("Y", 977),
+        ("Z", 976),
+    ]
+
+    peptide_list.sort(key=lambda x: x[1])
+
+    expected_isotope0 = list("UTSRQPONMLKJIHGFEDCB")
+    expected_isotope1 = list("VUTSRQPONMLKJIHGFEDC")
+    expected_isotope2 = list("WVUTSRQPONMLKJIHGFED")
+    expected_isotope3 = list("XWVUTSRQPONMLKJIHGFE")
+    expected_isotope0123 = list("XWVUTSRQPONMLKJIHGFEDCB")
+
+    candidates = db_utils.get_candidates(
+        precursor_mz=496.2,
+        charge=2,
+        peptide_list=peptide_list,
+        precursor_tolerance=10000,
+        isotope_error="0",
+    )
+    candidates = [x[0] for x in candidates]
+    assert expected_isotope0 == candidates
+
+    candidates = db_utils.get_candidates(
+        precursor_mz=496.2,
+        charge=2,
+        peptide_list=peptide_list,
+        precursor_tolerance=10000,
+        isotope_error="1",
+    )
+    candidates = [x[0] for x in candidates]
+    assert expected_isotope1 == candidates
+
+    candidates = db_utils.get_candidates(
+        precursor_mz=496.2,
+        charge=2,
+        peptide_list=peptide_list,
+        precursor_tolerance=10000,
+        isotope_error="2",
+    )
+    candidates = [x[0] for x in candidates]
+    assert expected_isotope2 == candidates
+
+    candidates = db_utils.get_candidates(
+        precursor_mz=496.2,
+        charge=2,
+        peptide_list=peptide_list,
+        precursor_tolerance=10000,
+        isotope_error="3",
+    )
+    candidates = [x[0] for x in candidates]
+    assert expected_isotope3 == candidates
+
+    candidates = db_utils.get_candidates(
+        precursor_mz=496.2,
+        charge=2,
+        peptide_list=peptide_list,
+        precursor_tolerance=10000,
+        isotope_error="0,1,2,3",
+    )
+    candidates = [x[0] for x in candidates]
+    assert expected_isotope0123 == candidates
 
 
 def test_beam_search_decode():

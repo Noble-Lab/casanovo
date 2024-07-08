@@ -7,50 +7,8 @@ from click.testing import CliRunner
 from casanovo import casanovo
 
 
-def test_annotate(mgf_small_unannotated, tide_dir_small, tmp_path):
-
-    # Run a command:
-    run = functools.partial(
-        CliRunner().invoke, casanovo.main, catch_exceptions=False
-    )
-
-    annotate_args = [
-        "annotate",
-        str(mgf_small_unannotated),
-        str(tide_dir_small),
-        "--output",
-        str(tmp_path / "annotated_mgf.mgf"),
-    ]
-
-    result = run(annotate_args)
-
-    assert result.exit_code == 0
-    assert (tmp_path / "annotated_mgf.mgf").exists()
-
-    # Read in the annotated file
-    with open(tmp_path / "annotated_mgf.mgf") as f:
-        annotated_lines = f.readlines()
-
-    # Get each SEQ= line
-    seq_lines = [line for line in annotated_lines if line.startswith("SEQ=")]
-    assert len(seq_lines) == 3
-    assert (
-        seq_lines[0].strip()
-        == "SEQ=LESLIEK,PEPTIDEK,decoy_KEILSEL,decoy_KEDITEPP"
-    )
-    assert (
-        seq_lines[1].strip()
-        == "SEQ=LESLIEK,PEPTIDEK,decoy_KEILSEL,decoy_KEDITEPP"
-    )
-    assert (
-        seq_lines[2].strip() == "SEQ=+42.011LEM+15.995SLIM+15.995EK,"
-        "+43.006PEN+0.984PTIQ+0.984DEK,decoy_-17.027KM+15.995EILSEL,"
-        "decoy_+43.006-17.027KEDITEPP,decoy_KEDIQ+0.984TEPPQ+0.984"
-    )
-
-
 def test_db_search(
-    mgf_small_unannotated, tide_dir_small, tiny_config, tmp_path, monkeypatch
+    mgf_db_search, tiny_fasta_file, tiny_config, tmp_path, monkeypatch
 ):
     # Run a command:
     monkeypatch.setattr(casanovo, "__version__", "4.1.0")
@@ -58,30 +16,18 @@ def test_db_search(
         CliRunner().invoke, casanovo.main, catch_exceptions=False
     )
 
-    annotate_args = [
-        "annotate",
-        str(mgf_small_unannotated),
-        str(tide_dir_small),
-        "--output",
-        str(tmp_path / "annotated_mgf.mgf"),
-    ]
-
-    result = run(annotate_args)
-
-    assert result.exit_code == 0
-    assert (tmp_path / "annotated_mgf.mgf").exists()
-
-    # Follow up annotate run with db search
-
     output_path = tmp_path / "db_search.mztab"
 
     search_args = [
         "db-search",
-        str(tmp_path / "annotated_mgf.mgf"),
         "--config",
         tiny_config,
         "--output",
         str(output_path),
+        "--precursor_tolerance",
+        str(100),
+        str(mgf_db_search),
+        str(tiny_fasta_file),
     ]
 
     result = run(search_args)
@@ -94,34 +40,13 @@ def test_db_search(
 
     psms = mztab.spectrum_match_table
     assert list(psms.sequence) == [
-        "LESLIEK",
-        "PEPTIDEK",
-        "KEILSEL",
-        "KEDITEPP",
-        "LESLIEK",
-        "PEPTIDEK",
-        "KEILSEL",
-        "KEDITEPP",
-        "+42.011LEM+15.995SLIM+15.995EK",
-        "+43.006PEN+0.984PTIQ+0.984DEK",
-        "-17.027KM+15.995EILSEL",
-        "+43.006-17.027KEDITEPP",
-        "KEDIQ+0.984TEPPQ+0.984",
-    ]
-    assert list(psms["opt_cv_MS:1002217_decoy_peptide"]) == [
-        "True",
-        "True",
-        "False",
-        "False",
-        "True",
-        "True",
-        "False",
-        "False",
-        "True",
-        "True",
-        "False",
-        "False",
-        "False",
+        "ATSIPAR",
+        "VTLSC+57.021R",
+        "LLIYGASTR",
+        "EIVMTQSPPTLSLSPGER",
+        "MEAPAQLLFLLLLWLPDTTR",
+        "ASQSVSSSYLTWYQQKPGQAPR",
+        "FSGSGSGTDFTLTISSLQPEDFAVYYC+57.021QQDYNLP",
     ]
 
 

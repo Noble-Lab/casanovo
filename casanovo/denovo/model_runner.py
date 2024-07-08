@@ -10,6 +10,8 @@ import warnings
 from pathlib import Path
 from typing import Iterable, List, Optional, Union
 
+import time
+
 import lightning.pytorch as pl
 import numpy as np
 import torch
@@ -18,7 +20,7 @@ from lightning.pytorch.strategies import DDPStrategy
 from lightning.pytorch.callbacks import ModelCheckpoint
 
 from ..config import Config
-from ..data import ms_io
+from ..data import ms_io, db_utils
 from ..denovo.dataloaders import DeNovoDataModule
 from ..denovo.model import Spec2Pep, DbSpec2Pep
 
@@ -79,13 +81,44 @@ class ModelRunner:
         if self.writer is not None:
             self.writer.save()
 
-    def db_search(self, peak_path: Iterable[str], output: str) -> None:
+    def db_search(
+        self,
+        peak_path: Iterable[str],
+        fasta_path: str,
+        enzyme: str,
+        digestion: str,
+        missed_cleavages: int,
+        max_mods: int,
+        min_length: int,
+        max_length: int,
+        precursor_tolerance: float,
+        isotope_error: str,
+        output: str,
+    ) -> None:
         """Perform database search with Casanovo.
 
         Parameters
         ----------
-        peak_path : iterable of str
-            The path to the annotated .mgf data files for database search.
+        peak_path : Iterable[str]
+            The path to the .mgf data file for database search.
+        fasta_path : str
+            The path to the FASTA file for database search.
+        enzyme : str
+            The enzyme used for digestion.
+        digestion : str
+            The digestion type, full or partial.
+        missed_cleavages : int
+            The number of missed cleavages allowed.
+        max_mods : int
+            The maximum number of modifications allowed per peptide.
+        min_length : int
+            The minimum peptide length.
+        max_length : int
+            The maximum peptide length.
+        precursor_tolerance : float
+            The precursor mass tolerance in ppm.
+        isotope_error : str
+            Isotope error levels to consider, in comma-delineated string form.
         output : str
             Where should the output be saved?
 
@@ -93,24 +126,40 @@ class ModelRunner:
         -------
         self
         """
-        self.writer = ms_io.MztabWriter(
-            Path(output).with_suffix(".mztab"), is_db_variant=True
-        )
+        self.writer = ms_io.MztabWriter(Path(output).with_suffix(".mztab"))
         self.writer.set_metadata(
             self.config,
             model=str(self.model_filename),
             config_filename=self.config.file,
         )
-
         self.initialize_trainer(train=True)
         self.initialize_model(train=False, db_search=True)
         self.model.out_writer = self.writer
-
-        test_index = self._get_index(peak_path, True, "db search")
+        self.model.psm_batch_size = self.config.predict_batch_size
+        test_index = self._get_index(peak_path, False, "db search")
         self.writer.set_ms_run(test_index.ms_files)
+
         self.initialize_data_module(test_index=test_index)
-        self.loaders.setup(stage="db")
+        self.loaders.setup(stage="test", annotated=False)
+        self.loaders.digest = db_utils.digest_fasta(
+            fasta_path,
+            enzyme,
+            digestion,
+            missed_cleavages,
+            max_mods,
+            min_length,
+            max_length,
+        )
+        self.loaders.precursor_tolerance = precursor_tolerance
+        self.loaders.isotope_error = isotope_error
+
+        t1 = time.time()
         self.trainer.predict(self.model, self.loaders.db_dataloader())
+        t2 = time.time()
+        logger.info("Database search took %.3f seconds", t2 - t1)
+        logger.info("Scored %s PSMs", self.model.total_psms)
+        logger.info("%.3f PSMs per second", self.model.total_psms / (t2 - t1))
+        logger.info("%s seconds per PSM", (t2 - t1) / self.model.total_psms)
 
     def train(
         self,
@@ -291,12 +340,12 @@ class ModelRunner:
 
         if self.model_filename is None:
             # Train a model from scratch if no model file is provided.
+            if db_search:
+                logger.error("DB search mode requires a model file")
+                raise ValueError(
+                    "A model file must be provided for DB search mode"
+                )
             if train:
-                if db_search:
-                    logger.error("Db search mode requires a model file.")
-                    raise ValueError(
-                        "A model file must be provided for DB search mode"
-                    )
                 self.model = Spec2Pep(**model_params)
                 return
             # Else we're not training, so a model file must be provided.
