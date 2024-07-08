@@ -135,6 +135,7 @@ class ModelRunner:
         self.initialize_trainer(train=True)
         self.initialize_model(train=False, db_search=True)
         self.model.out_writer = self.writer
+        self.model.psm_batch_size = self.config.predict_batch_size
         test_index = self._get_index(peak_path, False, "db search")
         self.writer.set_ms_run(test_index.ms_files)
 

@@ -1009,6 +1009,7 @@ class DbSpec2Pep(Spec2Pep):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.total_psms = 0
+        self.psm_batch_size = 1024
 
     def predict_step(self, batch, *args):
         """
@@ -1028,39 +1029,45 @@ class DbSpec2Pep(Spec2Pep):
             scores, amino acid-level scores, and associated proteins.
         """
         predictions = []
-        pred, truth = self.decoder(batch[3], batch[1], *self.encoder(batch[0]))
-        pred = self.softmax(pred)
-        all_scores, per_aa_scores = _calc_match_score(
-            pred, truth, self.decoder.reverse
-        )
-        for (
-            precursor_charge,
-            precursor_mz,
-            spectrum_i,
-            peptide_score,
-            aa_scores,
-            peptide,
-            protein,
-        ) in zip(
-            batch[1][:, 1].cpu().detach().numpy(),
-            batch[1][:, 2].cpu().detach().numpy(),
-            batch[2],
-            all_scores.cpu().detach().numpy(),
-            per_aa_scores.cpu().detach().numpy(),
-            batch[3],
-            batch[4],
-        ):
-            predictions.append(
-                (
-                    spectrum_i,
-                    precursor_charge,
-                    precursor_mz,
-                    peptide,
-                    peptide_score,
-                    aa_scores,
-                    protein,
-                )
+        while len(batch[0]) > 0:
+            next_batch = [b[self.psm_batch_size :] for b in batch]
+            batch = [b[: self.psm_batch_size] for b in batch]
+            pred, truth = self.decoder(
+                batch[3], batch[1], *self.encoder(batch[0])
             )
+            pred = self.softmax(pred)
+            all_scores, per_aa_scores = _calc_match_score(
+                pred, truth, self.decoder.reverse
+            )
+            for (
+                precursor_charge,
+                precursor_mz,
+                spectrum_i,
+                peptide_score,
+                aa_scores,
+                peptide,
+                protein,
+            ) in zip(
+                batch[1][:, 1].cpu().detach().numpy(),
+                batch[1][:, 2].cpu().detach().numpy(),
+                batch[2],
+                all_scores.cpu().detach().numpy(),
+                per_aa_scores.cpu().detach().numpy(),
+                batch[3],
+                batch[4],
+            ):
+                predictions.append(
+                    (
+                        spectrum_i,
+                        precursor_charge,
+                        precursor_mz,
+                        peptide,
+                        peptide_score,
+                        aa_scores,
+                        protein,
+                    )
+                )
+            batch = next_batch
         self.total_psms += len(predictions)
         return predictions
 
