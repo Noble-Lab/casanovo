@@ -15,6 +15,7 @@ from importlib.metadata import version
 import os
 import sys
 
+
 sys.path.insert(0, os.path.abspath("."))
 
 
@@ -58,12 +59,8 @@ html_title = "Casanovo"
 # Add any paths that contain custom static files (such as style sheets) here,
 # relative to this directory. They are copied after the builtin static files,
 # so a file named "default.css" will overwrite the builtin "default.css".
-# html_static_path = ["_static"]
+html_static_path = ["_static"]
 html_theme_options = {"repository_url": "https//github.com/Noble-Lab/casanovo"}
-
-html_js_files = [
-    "js/cli-page.js",
-]
 
 # -- MyST configuration ------------------------------------------------------
 myst_enable_extensions = [
