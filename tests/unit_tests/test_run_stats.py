@@ -6,7 +6,6 @@ import string
 from casanovo.utils import (
     get_score_bins,
     get_peptide_lengths,
-    get_peptide_length_hist,
 )
 
 np.random.seed(4000)
@@ -88,33 +87,3 @@ def test_get_peptide_lengths():
         results_table = pd.DataFrame({"sequence": peptide_list})
         actual = get_peptide_lengths(results_table)
         assert np.array_equal(expected, actual)
-
-
-def test_get_peptide_length_hist():
-    NUM_TEST = 5
-    MAX_LENGTH = 20
-    MIN_LENGTH = 1
-    MAX_FREQUENCY = 100
-    MIN_FREQUENCY = 10
-    MAX_NUM_SAMPLES = MAX_LENGTH - MIN_LENGTH + 1
-
-    for _ in range(NUM_TEST):
-        num_samples = random.randint(1, MAX_NUM_SAMPLES)
-        lengths = random.sample(
-            range(MIN_LENGTH, MAX_LENGTH + 1, 1), k=num_samples
-        )
-        frequencies = np.random.randint(
-            MIN_FREQUENCY, MAX_FREQUENCY, len(lengths)
-        )
-
-        nums_list = list()
-        for curr_length, curr_frequency in zip(lengths, frequencies.tolist()):
-            nums_list += [curr_length] * curr_frequency
-
-        peptide_lengths = np.array(nums_list)
-        np.random.shuffle(peptide_lengths)
-        expected = dict(zip(lengths, frequencies.tolist()))
-        actual_matrix = get_peptide_length_hist(peptide_lengths)
-        actual = {pep_len: freq for pep_len, freq in actual_matrix}
-
-        assert expected == actual

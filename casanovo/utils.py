@@ -105,27 +105,6 @@ def get_score_bins(
     }
 
 
-def get_peptide_length_hist(peptide_lengths: np.ndarray) -> np.ndarray:
-    """
-    Get a matrix mapping each unique peptide length to its frequency
-
-    Parameters
-    ----------
-    peptide_lengths: np.ndarray
-        Numpy array containing the length of each sequence
-
-    Returns
-    -------
-    peptide_length_hist_matrix: np.ndarray
-        A matrix of size (n x 2) where each row vector is
-        (peptide_length, frequency)
-    """
-    frequncies = np.bincount(peptide_lengths).reshape((-1, 1))
-    bins = np.arange(len(frequncies), dtype=int).reshape((-1, 1))
-    bin_freqs = np.hstack((bins, frequncies))
-    return bin_freqs[bin_freqs[:, 1] != 0]
-
-
 def get_peptide_lengths(results_table: pd.DataFrame) -> np.ndarray:
     """
     Get a numpy array containing the length of each peptide sequence
@@ -183,7 +162,6 @@ def get_report_dict(
         "max_sequence_length": max_length,
         "min_sequence_length": min_length,
         "median_sequence_length": med_length,
-        "peptide_length_histogram": get_peptide_length_hist(peptide_lengths),
     }
 
 
@@ -202,16 +180,15 @@ def log_run_report(
     """
     logger.info("======= End of Run Report =======")
     if (start_time is not None) and (end_time is not None):
-        end_time = time.time() if end_time is None else end_time
         start_datetime = datetime.fromtimestamp(start_time)
         end_datetime = datetime.fromtimestamp(end_time)
         delta_datetime = end_datetime - start_datetime
         logger.info(
-            "Run Start Timestamp: %s",
+            "Run Start Time: %s",
             start_datetime.strftime("%y/%m/%d %H:%M:%S"),
         )
         logger.info(
-            "Run End Timestamp: %s", end_datetime.strftime("%y/%m/%d %H:%M:%S")
+            "Run End Time: %s", end_datetime.strftime("%y/%m/%d %H:%M:%S")
         )
         logger.info("Time Elapsed: %s", delta_datetime)
 
@@ -265,24 +242,11 @@ def log_sequencing_report(
         logger.info("Score Distribution:")
         for score, pop in sorted(run_report["score_bins"].items()):
             logger.info(
-                "%s spectra (%.2f%%) scored >= %s",
+                "%s spectra (%.2f%%) scored >= %.2f",
                 pop,
                 pop / num_spectra * 100,
                 score,
             )
-
-        top_pep_lens = run_report["peptide_length_histogram"]
-        if len(top_pep_lens) >= 5:
-            logger.info("Top Five Most Frequent Peptide Lengths:")
-            top_indices = np.argpartition(top_pep_lens[:, 1], -5)
-            top_pep_lens = top_pep_lens[top_indices][-5:]
-        else:
-            logger.info("Peptide Length Frequencies:")
-
-        sorted_indices = np.argsort(-top_pep_lens[:, 1])
-        top_pep_lens = top_pep_lens[sorted_indices]
-        for length, freq in top_pep_lens:
-            logger.info("Length: %d, Frequency: %d", length, freq)
 
         logger.info(
             "Min Peptide Length: %d", run_report["min_sequence_length"]
