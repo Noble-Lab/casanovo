@@ -4,6 +4,8 @@ import os
 import platform
 import shutil
 import tempfile
+import unittest
+import unittest.mock
 
 import einops
 import github
@@ -109,6 +111,47 @@ def test_get_model_weights(monkeypatch):
         mnk.setattr("github.Requester.Requester.requestJsonAndCheck", request)
         with pytest.raises(github.RateLimitExceededException):
             casanovo._get_model_weights()
+
+
+def test_get_weights_from_url():
+    file_url = "http://example.com/model_weights.ckpt"
+    file_content = b"fake model weights content"
+
+    def mock_requests_get(url, stream=True, allow_redirects=True):
+        response = unittest.mock.MagicMock()
+        response.raise_for_status = unittest.mock.MagicMock()
+        response.headers = {"Content-Length": str(len(file_content))}
+        response.raw = unittest.mock.MagicMock()
+        response.raw.read = unittest.mock.MagicMock(return_value=file_content)
+        return response
+
+    def mock_requests_head(url):
+        response = unittest.mock.MagicMock()
+        response.headers = {}
+        return response
+
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        cache_dir = Path(tmp_dir)
+        url_hash = hashlib.shake_256(file_url.encode("utf-8")).hexdigest(5)
+        cache_file_name = "model_weights.ckpt"
+        cache_file_dir = cache_dir / url_hash
+        cache_file_path = cache_file_dir / cache_file_name
+
+        # Test downloading and caching the file
+        assert not cache_file_path.is_file()
+        result_path = _get_weights_from_url(file_url, cache_dir)
+        assert cache_file_path.is_file()
+        assert result_path == str(cache_file_path)
+
+        # Test using the cached file
+        result_path_cached = _get_weights_from_url(file_url, cache_dir)
+        assert result_path_cached == str(cache_file_path)
+
+        # Test force downloading the file
+        result_path_forced = _get_weights_from_url(
+            file_url, cache_dir, force_download=True
+        )
+        assert result_path_forced == str(cache_file_path)
 
 
 def test_tensorboard():

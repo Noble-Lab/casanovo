@@ -431,10 +431,11 @@ def _get_model_weights(cache_dir: Path) -> str:
         for filename in curr_subdir.iterdir():
             root, ext = os.path.splitext(filename)
             if ext == ".ckpt":
-                file_version = tuple(
-                    g
-                    for g in re.match(r".*_v(\d+)_(\d+)_(\d+)", root).groups()
-                )
+                file_version_match = re.match(r".*_v(\d+)_(\d+)_(\d+)", root)
+                if file_version_match is None:
+                    continue
+
+                file_version = file_version_match.groups()
                 match = (
                     sum(m)
                     if (m := [i == j for i, j in zip(version, file_version)])[
@@ -487,7 +488,9 @@ def _get_model_weights(cache_dir: Path) -> str:
         # Download the model weights if a matching release was found.
         if version_match[2] > 0:
             filename, url, _ = version_match
-            return _get_weights_from_url(url, cache_dir)
+            return _get_weights_from_url(
+                url, cache_dir, cache_file_name=Path(filename).name
+            )
         else:
             logger.error(
                 "No matching model weights for release v%s found, please "
@@ -506,6 +509,7 @@ def _get_weights_from_url(
     file_url: str,
     cache_dir: Path,
     force_download: Optional[bool] = False,
+    cache_file_name: Optional[str] = None,
 ) -> str:
     """
     Resolve weight file from URL
@@ -517,19 +521,26 @@ def _get_weights_from_url(
     Parameters
     ----------
     file_url : str
-        url pointing to model weights file
+        URL pointing to model weights file.
     cache_dir : Path
-        model weights cache directory path
+        Model weights cache directory path.
+    force_download : Optional[bool], default=False
+        If True, forces a new download of the weight file even if it exists in
+        the cache.
+    cache_file_name : Optional[str], default=None
+        Custom name for the cached weight file. If None, the name is derived
+        from the URL.
 
     Returns
     -------
     str
-        path to cached weights file
+        Path to the cached weights file.
     """
-    print("RESOLVING URL")
     os.makedirs(cache_dir, exist_ok=True)
     url_hash = hashlib.shake_256(file_url.encode("utf-8")).hexdigest(5)
-    cache_file_name = Path(urllib.parse.urlparse(file_url).path).name
+    if cache_file_name is None:
+        cache_file_name = Path(urllib.parse.urlparse(file_url).path).name
+
     cache_file_dir = cache_dir / url_hash
     cache_file_path = cache_file_dir / cache_file_name
 
