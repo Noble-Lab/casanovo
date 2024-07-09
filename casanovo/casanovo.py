@@ -1,12 +1,17 @@
 """The command line entry point for Casanovo."""
 
 import datetime
+import email
+import email.utils
 import functools
+import hashlib
 import logging
+import urllib
 import os
 import re
 import shutil
 import sys
+import urllib.parse
 import warnings
 from pathlib import Path
 from typing import Optional, Tuple
@@ -37,8 +42,6 @@ import rich_click as click
 import torch
 import tqdm
 from lightning.pytorch import seed_everything
-from hashlib import shake_256
-from urllib.parse import urlparse
 
 from . import __version__
 from . import utils
@@ -62,7 +65,7 @@ class _SharedParams(click.RichCommand):
                 ("-m", "--model"),
                 help="""
                 Either the model weights (.ckpt file) or a URL pointing to the model weights
-                file. If not provided, Casanovo will try to download the latest release.
+                file. If not provided, Casanovo will try to download the latest release automatically.
                 """,
             ),
             click.Option(
@@ -355,34 +358,32 @@ def setup_model(
     seed_everything(seed=config["random_seed"], workers=True)
 
     # Download model weights if these were not specified (except when training).
-    cache_dir = appdirs.user_cache_dir("casanovo", False, opinion=False)
-    if model is None and not is_train:
-        try:
-            model = _get_model_weights(cache_dir)
-        except github.RateLimitExceededException:
-            logger.error(
-                "GitHub API rate limit exceeded while trying to download the "
-                "model weights. Please download compatible model weights "
-                "manually from the official Casanovo code website "
-                "(https://github.com/Noble-Lab/casanovo) and specify these "
-                "explicitly using the `--model` parameter when running "
-                "Casanovo."
+    cache_dir = Path(appdirs.user_cache_dir("casanovo", False, opinion=False))
+    if model is None:
+        if not is_train:
+            try:
+                model = _get_model_weights(cache_dir)
+            except github.RateLimitExceededException:
+                logger.error(
+                    "GitHub API rate limit exceeded while trying to download the "
+                    "model weights. Please download compatible model weights "
+                    "manually from the official Casanovo code website "
+                    "(https://github.com/Noble-Lab/casanovo) and specify these "
+                    "explicitly using the `--model` parameter when running "
+                    "Casanovo."
+                )
+                raise PermissionError(
+                    "GitHub API rate limit exceeded while trying to download the "
+                    "model weights"
+                ) from None
+    else:
+        if _is_valid_url(model):
+            model = _get_weights_from_url(model, cache_dir)
+        elif not Path(model).is_file():
+            raise ValueError(
+                f"{model} is not a valid URL or checkpoint file path, "
+                "--model argument must be a URL or checkpoint file path"
             )
-            raise PermissionError(
-                "GitHub API rate limit exceeded while trying to download the "
-                "model weights"
-            ) from None
-
-    # Download model from URL if model is a valid url
-    is_url = _is_valid_url(model)
-    if (model is not None) and is_url:
-        model = _get_weights_from_url(model, Path(cache_dir))
-
-    if (model is not None) and (not is_url) and (not Path(model).is_file()):
-        raise ValueError(
-            f"{model} is not a valid URL or checkpoint file path, "
-            "--model argument must be a URL or checkpoint file path"
-        )
 
     # Log the active configuration.
     logger.info("Casanovo version %s", str(__version__))
@@ -395,76 +396,7 @@ def setup_model(
     return config, model
 
 
-def _get_weights_from_url(
-    file_url: Optional[str],
-    cache_dir: Path,
-) -> str:
-    """
-    Attempt to download weight file from URL if weights are not already
-    cached. Otherwise use cased weights. Downloaded weight files will be
-    cached.
-
-    Parameters
-    ----------
-    file_url : str
-        url pointing to model weights file
-    cache_dir : Path
-        model weights cache directory path
-
-    Returns
-    -------
-    str
-        path to cached weights file
-    """
-    os.makedirs(cache_dir, exist_ok=True)
-    url_hash = shake_256(file_url.encode("utf-8")).hexdigest(10)
-    cache_file_name = url_hash + ".ckpt"
-    cache_file_path = cache_dir / cache_file_name
-
-    if cache_file_path.is_file():
-        logger.info(f"Model weights {file_url} retrieved from local cache")
-        return str(cache_file_path)
-
-    logger.info(f"Model weights {file_url} not in local cache, downloading")
-    file_response = requests.get(file_url)
-
-    if not file_response.ok:
-        logger.error(f"Failed to download weights from {file_url}")
-        logger.error(
-            f"Server Response: {file_response.status_code}: {file_response.reason}"
-        )
-        raise ConnectionError(f"Failed to download weights file: {file_url}")
-
-    logger.info("Model weights downloaded, writing to cache")
-    with open(cache_file_path, "wb") as cache_file:
-        cache_file.write(file_response.content)
-
-    logger.info("Model weights cached")
-    return str(cache_file_path)
-
-
-def _is_valid_url(file_url: str) -> bool:
-    """
-    Determine whether file URL is a valid URL
-
-    Parameters
-    ----------
-    file_url : str
-        url to verify
-
-    Return
-    ------
-    is_url : bool
-        whether file_url is a valid url
-    """
-    try:
-        result = urlparse(file_url)
-        return all([result.scheme, result.netloc])
-    except ValueError:
-        return False
-
-
-def _get_model_weights(cache_dir: str) -> str:
+def _get_model_weights(cache_dir: Path) -> str:
     """
     Use cached model weights or download them from GitHub.
 
@@ -480,7 +412,7 @@ def _get_model_weights(cache_dir: str) -> str:
 
     Parameters
     ----------
-    cache_dir : str
+    cache_dir : Path
         model weights cache directory path
 
     Returns
@@ -492,19 +424,30 @@ def _get_model_weights(cache_dir: str) -> str:
     version = utils.split_version(__version__)
     version_match: Tuple[Optional[str], Optional[str], int] = None, None, 0
     # Try to find suitable model weights in the local cache.
-    for filename in os.listdir(cache_dir):
-        root, ext = os.path.splitext(filename)
-        if ext == ".ckpt":
-            file_version = tuple(
-                g for g in re.match(r".*_v(\d+)_(\d+)_(\d+)", root).groups()
-            )
-            match = (
-                sum(m)
-                if (m := [i == j for i, j in zip(version, file_version)])[0]
-                else 0
-            )
-            if match > version_match[2]:
-                version_match = os.path.join(cache_dir, filename), None, match
+    for curr_subdir in cache_dir.iterdir():
+        if not curr_subdir.is_dir():
+            continue
+
+        for filename in curr_subdir.iterdir():
+            root, ext = os.path.splitext(filename)
+            if ext == ".ckpt":
+                file_version = tuple(
+                    g
+                    for g in re.match(r".*_v(\d+)_(\d+)_(\d+)", root).groups()
+                )
+                match = (
+                    sum(m)
+                    if (m := [i == j for i, j in zip(version, file_version)])[
+                        0
+                    ]
+                    else 0
+                )
+                if match > version_match[2]:
+                    version_match = (
+                        os.path.join(cache_dir, filename),
+                        None,
+                        match,
+                    )
     # Provide the cached model weights if found.
     if version_match[2] > 0:
         logger.info(
@@ -544,19 +487,7 @@ def _get_model_weights(cache_dir: str) -> str:
         # Download the model weights if a matching release was found.
         if version_match[2] > 0:
             filename, url, _ = version_match
-            logger.info(
-                "Downloading model weights file %s from %s", filename, url
-            )
-            r = requests.get(url, stream=True, allow_redirects=True)
-            r.raise_for_status()
-            file_size = int(r.headers.get("Content-Length", 0))
-            desc = "(Unknown total file size)" if file_size == 0 else ""
-            r.raw.read = functools.partial(r.raw.read, decode_content=True)
-            with tqdm.tqdm.wrapattr(
-                r.raw, "read", total=file_size, desc=desc
-            ) as r_raw, open(filename, "wb") as f:
-                shutil.copyfileobj(r_raw, f)
-            return filename
+            return _get_weights_from_url(url, cache_dir)
         else:
             logger.error(
                 "No matching model weights for release v%s found, please "
@@ -569,6 +500,91 @@ def _get_model_weights(cache_dir: str) -> str:
                 f"please specify your model weights explicitly using the "
                 f"`--model` parameter"
             )
+
+
+def _get_weights_from_url(
+    file_url: str,
+    cache_dir: Path,
+    force_download: Optional[bool] = False,
+) -> str:
+    """
+    Resolve weight file from URL
+
+    Attempt to download weight file from URL if weights are not already
+    cached - otherwise use cached weights. Downloaded weight files will be
+    cached.
+
+    Parameters
+    ----------
+    file_url : str
+        url pointing to model weights file
+    cache_dir : Path
+        model weights cache directory path
+
+    Returns
+    -------
+    str
+        path to cached weights file
+    """
+    print("RESOLVING URL")
+    os.makedirs(cache_dir, exist_ok=True)
+    url_hash = hashlib.shake_256(file_url.encode("utf-8")).hexdigest(5)
+    cache_file_name = Path(urllib.parse.urlparse(file_url).path).name
+    cache_file_dir = cache_dir / url_hash
+    cache_file_path = cache_file_dir / cache_file_name
+
+    if cache_file_path.is_file() and not force_download:
+        cache_time = cache_file_path.stat()
+        file_response = requests.head(file_url)
+        url_last_modified = 0
+
+        if "Last-Modified" in file_response.headers:
+            url_last_modified = email.utils.parsedate_to_datetime(
+                file_response.headers["Last-Modified"]
+            ).timestamp()
+
+        if cache_time.st_mtime > url_last_modified:
+            logger.info(
+                "Model weights %s retrieved from local cache", file_url
+            )
+            return str(cache_file_path)
+
+    os.makedirs(cache_file_dir, exist_ok=True)
+    response = requests.get(file_url, stream=True, allow_redirects=True)
+    response.raise_for_status()
+    file_size = int(response.headers.get("Content-Length", 0))
+    desc = "(Unknown total file size)" if file_size == 0 else ""
+    response.raw.read = functools.partial(
+        response.raw.read, decode_content=True
+    )
+
+    with tqdm.tqdm.wrapattr(
+        response.raw, "read", total=file_size, desc=desc
+    ) as r_raw, open(cache_file_path, "wb") as file:
+        shutil.copyfileobj(r_raw, file)
+
+    return cache_file_path
+
+
+def _is_valid_url(file_url: str) -> bool:
+    """
+    Determine whether file URL is a valid URL
+
+    Parameters
+    ----------
+    file_url : str
+        url to verify
+
+    Return
+    ------
+    is_url : bool
+        whether file_url is a valid url
+    """
+    try:
+        result = urllib.parse.urlparse(file_url)
+        return all([result.scheme, result.netloc])
+    except ValueError:
+        return False
 
 
 if __name__ == "__main__":
