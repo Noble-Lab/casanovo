@@ -78,7 +78,7 @@ def split_version(version: str) -> Tuple[str, str, str]:
 
 
 def get_score_bins(
-    results_table: pd.DataFrame, score_bins: List[float]
+    scores: pd.Series, score_bins: List[float]
 ) -> Dict[float, int]:
     """
     Get binned confidence scores
@@ -89,10 +89,10 @@ def get_score_bins(
 
     Parameters
     ----------
-    results_table: pd.DataFrame
-        Parsed spectrum match table
+    scores: pd.Series
+        Series of assigned peptide scores.
     score_bins: List[float]
-        Confidence scores to map
+        Confidence scores to map.
 
     Returns
     -------
@@ -100,19 +100,17 @@ def get_score_bins(
         Dictionary mapping each confidence score to the number of spectra
         with a confidence greater than or equal to it.
     """
-    return {
-        score: (results_table["score"] >= score).sum() for score in score_bins
-    }
+    return {score: (scores >= score).sum() for score in score_bins}
 
 
-def get_peptide_lengths(results_table: pd.DataFrame) -> np.ndarray:
+def get_peptide_lengths(sequences: pd.Series) -> np.ndarray:
     """
     Get a numpy array containing the length of each peptide sequence
 
     Parameters
     ----------
-    results_table: pd.DataFrame
-        Parsed spectrum match table
+    sequences: pd.Series
+        Series of peptide sequences.
 
     Returns
     -------
@@ -121,13 +119,9 @@ def get_peptide_lengths(results_table: pd.DataFrame) -> np.ndarray:
         same order that the sequences are provided in.
     """
     # Mass modifications do not contribute to sequence length
-    # If PTMs ae represented in ProForma notation this filtering operation
-    # needs to be reimplemented
-    return (
-        results_table["sequence"]
-        .str.replace(r"[^a-zA-Z]", "", regex=True)
-        .apply(len)
-    )
+    # FIXME: If PTMs are represented in ProForma notation this filtering
+    #  operation needs to be reimplemented
+    return sequences.str.replace(r"[^a-zA-Z]", "", regex=True).apply(len)
 
 
 def get_report_dict(
@@ -152,13 +146,13 @@ def get_report_dict(
     if results_table.empty:
         return None
 
-    peptide_lengths = get_peptide_lengths(results_table)
+    peptide_lengths = get_peptide_lengths(results_table["sequence"])
     min_length, med_length, max_length = np.quantile(
         peptide_lengths, [0, 0.5, 1]
     )
     return {
         "num_spectra": len(results_table),
-        "score_bins": get_score_bins(results_table, score_bins),
+        "score_bins": get_score_bins(results_table["score"], score_bins),
         "max_sequence_length": max_length,
         "min_sequence_length": min_length,
         "median_sequence_length": med_length,
@@ -179,7 +173,7 @@ def log_run_report(
         The end time of the sequencing run in seconds since the epoch.
     """
     logger.info("======= End of Run Report =======")
-    if (start_time is not None) and (end_time is not None):
+    if start_time is not None and end_time is not None:
         start_datetime = datetime.fromtimestamp(start_time)
         end_datetime = datetime.fromtimestamp(end_time)
         delta_datetime = end_datetime - start_datetime
@@ -197,7 +191,7 @@ def log_run_report(
 
     if torch.cuda.is_available():
         gpu_util = torch.cuda.max_memory_allocated()
-        logger.info("Max GPU Memory Utilization: %dMiB", gpu_util >> 20)
+        logger.info("Max GPU Memory Utilization: %d MiB", gpu_util >> 20)
 
 
 def log_sequencing_report(
@@ -242,7 +236,7 @@ def log_sequencing_report(
         logger.info("Score Distribution:")
         for score, pop in sorted(run_report["score_bins"].items()):
             logger.info(
-                "%s spectra (%.2f%%) scored >= %.2f",
+                "%s spectra (%.2f%%) scored ≥ %.2f",
                 pop,
                 pop / num_spectra * 100,
                 score,
