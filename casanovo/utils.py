@@ -236,7 +236,7 @@ def log_sequencing_report(
         logger.info("Score Distribution:")
         for score, pop in sorted(run_report["score_bins"].items()):
             logger.info(
-                "%s spectra (%.2f%%) scored ≥ %.2f",
+                "%s spectra (%.2f%%) scored >= %.2f",
                 pop,
                 pop / num_spectra * 100,
                 score,
