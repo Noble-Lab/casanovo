@@ -1,12 +1,11 @@
-import pandas as pd
-import numpy as np
 import random
 import string
 
-from casanovo.utils import (
-    get_score_bins,
-    get_peptide_lengths,
-)
+import numpy as np
+import pandas as pd
+
+from casanovo.utils import get_score_bins, get_peptide_lengths
+
 
 np.random.seed(4000)
 random.seed(4000)
@@ -45,8 +44,8 @@ def test_get_score_bins():
                 expected[curr_min] = cumulative_sum
 
         np.random.shuffle(curr_scores)
-        results_table = pd.DataFrame({"score": curr_scores})
-        actual = get_score_bins(results_table, curr_bins)
+        scores = pd.Series(curr_scores, name="score")
+        actual = get_score_bins(scores, curr_bins)
         assert expected == actual
 
 
@@ -84,6 +83,6 @@ def test_get_peptide_lengths():
 
             peptide_list.append(curr_peptide_seq)
 
-        results_table = pd.DataFrame({"sequence": peptide_list})
-        actual = get_peptide_lengths(results_table)
+        sequences = pd.Series(peptide_list, name="sequence")
+        actual = get_peptide_lengths(sequences)
         assert np.array_equal(expected, actual)
