@@ -1,7 +1,6 @@
 """The command line entry point for Casanovo."""
 
 import datetime
-import email
 import email.utils
 import functools
 import hashlib
@@ -424,38 +423,26 @@ def _get_model_weights(cache_dir: Path) -> str:
     version = utils.split_version(__version__)
     version_match: Tuple[Optional[str], Optional[str], int] = None, None, 0
     # Try to find suitable model weights in the local cache.
-    for curr_subdir in cache_dir.iterdir():
-        if not curr_subdir.is_dir():
-            continue
-
-        for filename in curr_subdir.iterdir():
-            root, ext = os.path.splitext(filename)
-            if ext == ".ckpt":
-                file_version_match = re.match(r".*_v(\d+)_(\d+)_(\d+)", root)
-                if file_version_match is None:
-                    continue
-
-                file_version = file_version_match.groups()
-                match = (
-                    sum(m)
-                    if (m := [i == j for i, j in zip(version, file_version)])[
-                        0
-                    ]
-                    else 0
-                )
-                if match > version_match[2]:
-                    version_match = (
-                        os.path.join(cache_dir, filename),
-                        None,
-                        match,
-                    )
+    for filename in os.listdir(cache_dir):
+        root, ext = os.path.splitext(filename)
+        if ext == ".ckpt":
+            file_version = tuple(
+                g for g in re.match(r".*_v(\d+)_(\d+)_(\d+)", root).groups()
+            )
+            match = (
+                sum(m)
+                if (m := [i == j for i, j in zip(version, file_version)])[0]
+                else 0
+            )
+            if match > version_match[2]:
+                version_match = os.path.join(cache_dir, filename), None, match
     # Provide the cached model weights if found.
     if version_match[2] > 0:
         logger.info(
             "Model weights file %s retrieved from local cache",
             version_match[0],
         )
-        return version_match[0]
+        return Path(version_match[0])
     # Otherwise try to find compatible model weights on GitHub.
     else:
         repo = github.Github().get_repo("Noble-Lab/casanovo")
@@ -488,9 +475,9 @@ def _get_model_weights(cache_dir: Path) -> str:
         # Download the model weights if a matching release was found.
         if version_match[2] > 0:
             filename, url, _ = version_match
-            return _get_weights_from_url(
-                url, cache_dir, cache_file_name=Path(filename).name
-            )
+            cache_file_path = cache_dir / filename
+            _download_weights(url, cache_file_path)
+            return cache_file_path
         else:
             logger.error(
                 "No matching model weights for release v%s found, please "
@@ -509,8 +496,7 @@ def _get_weights_from_url(
     file_url: str,
     cache_dir: Path,
     force_download: Optional[bool] = False,
-    cache_file_name: Optional[str] = None,
-) -> str:
+) -> Path:
     """
     Resolve weight file from URL
 
@@ -527,40 +513,71 @@ def _get_weights_from_url(
     force_download : Optional[bool], default=False
         If True, forces a new download of the weight file even if it exists in
         the cache.
-    cache_file_name : Optional[str], default=None
-        Custom name for the cached weight file. If None, the name is derived
-        from the URL.
 
     Returns
     -------
-    str
+    Path
         Path to the cached weights file.
     """
     os.makedirs(cache_dir, exist_ok=True)
+    cache_file_name = Path(urllib.parse.urlparse(file_url).path).name
     url_hash = hashlib.shake_256(file_url.encode("utf-8")).hexdigest(5)
-    if cache_file_name is None:
-        cache_file_name = Path(urllib.parse.urlparse(file_url).path).name
-
     cache_file_dir = cache_dir / url_hash
     cache_file_path = cache_file_dir / cache_file_name
 
     if cache_file_path.is_file() and not force_download:
         cache_time = cache_file_path.stat()
-        file_response = requests.head(file_url)
         url_last_modified = 0
 
-        if "Last-Modified" in file_response.headers:
-            url_last_modified = email.utils.parsedate_to_datetime(
-                file_response.headers["Last-Modified"]
-            ).timestamp()
+        try:
+            file_response = requests.head(file_url)
+            if file_response.ok:
+                if "Last-Modified" in file_response.headers:
+                    url_last_modified = email.utils.parsedate_to_datetime(
+                        file_response.headers["Last-Modified"]
+                    ).timestamp()
+            else:
+                logger.warning(
+                    "Attempted HEAD request to %s yielded non-ok status code - using cached file",
+                    file_url,
+                )
+        except (
+            requests.ConnectionError,
+            requests.Timeout,
+            requests.TooManyRedirects,
+        ):
+            logger.warning(
+                "Failed to reach %s to get remote last modified time - using cached file",
+                file_url,
+            )
 
         if cache_time.st_mtime > url_last_modified:
             logger.info(
                 "Model weights %s retrieved from local cache", file_url
             )
-            return str(cache_file_path)
+            return cache_file_path
 
-    os.makedirs(cache_file_dir, exist_ok=True)
+    _download_weights(file_url, cache_file_path)
+    return cache_file_path
+
+
+def _download_weights(file_url: str, download_path: Path) -> None:
+    """
+    Download weights file from URL
+
+    Download the model weights file from the specified URL and save it to the
+    given path. Ensures the download directory exists, and uses a progress
+    bar to indicate download status.
+
+    Parameters
+    ----------
+    file_url : str
+        URL pointing to the model weights file.
+    download_path : Path
+        Path where the downloaded weights file will be saved.
+    """
+    download_file_dir = download_path.parent
+    os.makedirs(download_file_dir, exist_ok=True)
     response = requests.get(file_url, stream=True, allow_redirects=True)
     response.raise_for_status()
     file_size = int(response.headers.get("Content-Length", 0))
@@ -571,10 +588,8 @@ def _get_weights_from_url(
 
     with tqdm.tqdm.wrapattr(
         response.raw, "read", total=file_size, desc=desc
-    ) as r_raw, open(cache_file_path, "wb") as file:
+    ) as r_raw, open(download_path, "wb") as file:
         shutil.copyfileobj(r_raw, file)
-
-    return cache_file_path
 
 
 def _is_valid_url(file_url: str) -> bool:

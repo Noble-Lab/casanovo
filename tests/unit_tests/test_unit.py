@@ -1,7 +1,13 @@
 import collections
+import datetime
+import email.utils
+import hashlib
 import heapq
+import io
 import os
+import pathlib
 import platform
+import requests
 import shutil
 import tempfile
 import unittest
@@ -88,17 +94,19 @@ def test_get_model_weights(monkeypatch):
 
             filename = os.path.join(tmp_dir, "casanovo_massivekb_v3_0_0.ckpt")
             assert not os.path.isfile(filename)
-            assert casanovo._get_model_weights() == filename
+            result_path = casanovo._get_model_weights(pathlib.Path(tmp_dir))
+            assert str(result_path.resolve()) == filename
             assert os.path.isfile(filename)
-            assert casanovo._get_model_weights() == filename
+            result_path = casanovo._get_model_weights(pathlib.Path(tmp_dir))
+            assert str(result_path.resolve()) == filename
 
     # Impossible to find model weights for (i) full version mismatch and (ii)
     # major version mismatch.
     for version in ["999.999.999", "999.0.0"]:
-        with monkeypatch.context() as mnk:
+        with monkeypatch.context() as mnk, tempfile.TemporaryDirectory() as tmp_dir:
             mnk.setattr(casanovo, "__version__", version)
             with pytest.raises(ValueError):
-                casanovo._get_model_weights()
+                casanovo._get_model_weights(pathlib.Path(tmp_dir))
 
     # Test GitHub API rate limit.
     def request(self, *args, **kwargs):
@@ -110,28 +118,59 @@ def test_get_model_weights(monkeypatch):
         mnk.setattr("appdirs.user_cache_dir", lambda n, a, opinion: tmp_dir)
         mnk.setattr("github.Requester.Requester.requestJsonAndCheck", request)
         with pytest.raises(github.RateLimitExceededException):
-            casanovo._get_model_weights()
+            casanovo._get_model_weights(pathlib.Path(tmp_dir))
 
 
-def test_get_weights_from_url():
+def test_get_weights_from_url(monkeypatch):
     file_url = "http://example.com/model_weights.ckpt"
     file_content = b"fake model weights content"
 
-    def mock_requests_get(url, stream=True, allow_redirects=True):
-        response = unittest.mock.MagicMock()
-        response.raise_for_status = unittest.mock.MagicMock()
-        response.headers = {"Content-Length": str(len(file_content))}
-        response.raw = unittest.mock.MagicMock()
-        response.raw.read = unittest.mock.MagicMock(return_value=file_content)
-        return response
+    class MockResponseGet:
+        class MockRaw(io.BytesIO):
+            def read(self, *args, **kwargs):
+                return super().read(*args)
 
-    def mock_requests_head(url):
-        response = unittest.mock.MagicMock()
-        response.headers = {}
-        return response
+        def __init__(self):
+            self.request_counter = 0
+            self.is_ok = True
 
-    with tempfile.TemporaryDirectory() as tmp_dir:
-        cache_dir = Path(tmp_dir)
+        def raise_for_status(self):
+            if not self.is_ok:
+                raise requests.HTTPError
+
+        def __call__(self, url, stream=True, allow_redirects=True):
+            self.request_counter += 1
+            response = unittest.mock.MagicMock()
+            response.raise_for_status = self.raise_for_status
+            response.headers = {"Content-Length": str(len(file_content))}
+            response.raw = MockResponseGet.MockRaw(file_content)
+            return response
+
+    class MockResponseHead:
+        def __init__(self):
+            self.last_modified = None
+            self.is_ok = True
+            self.fail = False
+
+        def __call__(self, url):
+            if self.fail:
+                raise requests.ConnectionError
+
+            response = unittest.mock.MagicMock()
+            response.headers = dict()
+            response.ok = self.is_ok
+            if self.last_modified is not None:
+                response.headers["Last-Modified"] = self.last_modified
+
+            return response
+
+    with monkeypatch.context() as mnk, tempfile.TemporaryDirectory() as tmp_dir:
+        mock_get = MockResponseGet()
+        mock_head = MockResponseHead()
+        mnk.setattr(requests, "get", mock_get)
+        mnk.setattr(requests, "head", mock_head)
+
+        cache_dir = pathlib.Path(tmp_dir)
         url_hash = hashlib.shake_256(file_url.encode("utf-8")).hexdigest(5)
         cache_file_name = "model_weights.ckpt"
         cache_file_dir = cache_dir / url_hash
@@ -139,19 +178,67 @@ def test_get_weights_from_url():
 
         # Test downloading and caching the file
         assert not cache_file_path.is_file()
-        result_path = _get_weights_from_url(file_url, cache_dir)
+        result_path = casanovo._get_weights_from_url(file_url, cache_dir)
         assert cache_file_path.is_file()
-        assert result_path == str(cache_file_path)
+        assert result_path.resolve() == cache_file_path.resolve()
+        assert mock_get.request_counter == 1
 
-        # Test using the cached file
-        result_path_cached = _get_weights_from_url(file_url, cache_dir)
-        assert result_path_cached == str(cache_file_path)
+        # Test that cached file is used
+        result_path = casanovo._get_weights_from_url(file_url, cache_dir)
+        assert result_path.resolve() == cache_file_path.resolve()
+        assert mock_get.request_counter == 1
 
         # Test force downloading the file
-        result_path_forced = _get_weights_from_url(
+        result_path = casanovo._get_weights_from_url(
             file_url, cache_dir, force_download=True
         )
-        assert result_path_forced == str(cache_file_path)
+        assert result_path.resolve() == cache_file_path.resolve()
+        assert mock_get.request_counter == 2
+
+        # Test that file is re-downloaded if last modified is newer than
+        # file last modified
+        # NOTE: Assuming test takes < 1 year to run
+        mock_head.last_modified = email.utils.format_datetime(
+            datetime.datetime.now() + datetime.timedelta(days=365.0)
+        )
+        result_path = casanovo._get_weights_from_url(file_url, cache_dir)
+        assert result_path.resolve() == cache_file_path.resolve()
+        assert mock_get.request_counter == 3
+
+        # Test file is not redownloaded if its newer than upstream file
+        mock_head.last_modified = email.utils.format_datetime(
+            datetime.datetime.now() - datetime.timedelta(days=365.0)
+        )
+        result_path = casanovo._get_weights_from_url(file_url, cache_dir)
+        assert result_path.resolve() == cache_file_path.resolve()
+        assert mock_get.request_counter == 3
+
+        # Test that error is raised if file get response is not OK
+        mock_get.is_ok = False
+        with pytest.raises(requests.HTTPError):
+            casanovo._get_weights_from_url(
+                file_url, cache_dir, force_download=True
+            )
+        mock_get.is_ok = True
+        assert mock_get.request_counter == 4
+
+        # Test that cached file is used if head requests yields non-ok status
+        # code, even if upstream file is newer
+        mock_head.is_ok = False
+        mock_head.last_modified = email.utils.format_datetime(
+            datetime.datetime.now() + datetime.timedelta(days=365.0)
+        )
+        result_path = casanovo._get_weights_from_url(file_url, cache_dir)
+        assert result_path.resolve() == cache_file_path.resolve()
+        assert mock_get.request_counter == 4
+        mock_head.is_ok = True
+
+        # Test that cached file is used if head request fails
+        mock_head.fail = True
+        result_path = casanovo._get_weights_from_url(file_url, cache_dir)
+        assert result_path.resolve() == cache_file_path.resolve()
+        assert mock_get.request_counter == 4
+        mock_head.fail = False
 
 
 def test_tensorboard():
