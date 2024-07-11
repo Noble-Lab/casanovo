@@ -313,7 +313,9 @@ def setup_logging(
     console_handler.setFormatter(console_formatter)
     root_logger.addHandler(console_handler)
     warnings_logger.addHandler(console_handler)
-    file_handler = logging.FileHandler(output.with_suffix(".log"))
+    file_handler = logging.FileHandler(
+        output.with_suffix(".log"), encoding="utf8"
+    )
     file_handler.setFormatter(log_formatter)
     root_logger.addHandler(file_handler)
     warnings_logger.addHandler(file_handler)
