@@ -1,6 +1,5 @@
 import collections
 import datetime
-import email.utils
 import hashlib
 import heapq
 import io
@@ -198,17 +197,18 @@ def test_get_weights_from_url(monkeypatch):
         # Test that file is re-downloaded if last modified is newer than
         # file last modified
         # NOTE: Assuming test takes < 1 year to run
-        mock_head.last_modified = email.utils.format_datetime(
-            datetime.datetime.now() + datetime.timedelta(days=365.0)
-        )
+        curr_utc = datetime.datetime.now().astimezone(datetime.timezone.utc)
+        mock_head.last_modified = (
+            curr_utc + datetime.timedelta(days=365.0)
+        ).strftime("%a, %d %b %Y %H:%M:%S GMT")
         result_path = casanovo._get_weights_from_url(file_url, cache_dir)
         assert result_path.resolve() == cache_file_path.resolve()
         assert mock_get.request_counter == 3
 
         # Test file is not redownloaded if its newer than upstream file
-        mock_head.last_modified = email.utils.format_datetime(
-            datetime.datetime.now() - datetime.timedelta(days=365.0)
-        )
+        mock_head.last_modified = (
+            curr_utc - datetime.timedelta(days=365.0)
+        ).strftime("%a, %d %b %Y %H:%M:%S GMT")
         result_path = casanovo._get_weights_from_url(file_url, cache_dir)
         assert result_path.resolve() == cache_file_path.resolve()
         assert mock_get.request_counter == 3
@@ -225,9 +225,9 @@ def test_get_weights_from_url(monkeypatch):
         # Test that cached file is used if head requests yields non-ok status
         # code, even if upstream file is newer
         mock_head.is_ok = False
-        mock_head.last_modified = email.utils.format_datetime(
-            datetime.datetime.now() + datetime.timedelta(days=365.0)
-        )
+        mock_head.last_modified = (
+            curr_utc + datetime.timedelta(days=365.0)
+        ).strftime("%a, %d %b %Y %H:%M:%S GMT")
         result_path = casanovo._get_weights_from_url(file_url, cache_dir)
         assert result_path.resolve() == cache_file_path.resolve()
         assert mock_get.request_counter == 4
@@ -239,6 +239,11 @@ def test_get_weights_from_url(monkeypatch):
         assert result_path.resolve() == cache_file_path.resolve()
         assert mock_get.request_counter == 4
         mock_head.fail = False
+
+        # Test invalid URL
+        with pytest.raises(ValueError):
+            bad_url = "foobar"
+            casanovo._get_weights_from_url(bad_url, cache_dir)
 
 
 def test_tensorboard():

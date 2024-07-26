@@ -1,11 +1,9 @@
 """The command line entry point for Casanovo."""
 
 import datetime
-import email.utils
 import functools
 import hashlib
 import logging
-import urllib
 import os
 import re
 import shutil
@@ -528,6 +526,9 @@ def _get_weights_from_url(
     Path
         Path to the cached weights file.
     """
+    if not _is_valid_url(file_url):
+        raise ValueError("file_url must point to a valid URL")
+
     os.makedirs(cache_dir, exist_ok=True)
     cache_file_name = Path(urllib.parse.urlparse(file_url).path).name
     url_hash = hashlib.shake_256(file_url.encode("utf-8")).hexdigest(5)
@@ -542,8 +543,9 @@ def _get_weights_from_url(
             file_response = requests.head(file_url)
             if file_response.ok:
                 if "Last-Modified" in file_response.headers:
-                    url_last_modified = email.utils.parsedate_to_datetime(
-                        file_response.headers["Last-Modified"]
+                    url_last_modified = datetime.datetime.strptime(
+                        file_response.headers["Last-Modified"],
+                        "%a, %d %b %Y %H:%M:%S %Z",
                     ).timestamp()
             else:
                 logger.warning(
