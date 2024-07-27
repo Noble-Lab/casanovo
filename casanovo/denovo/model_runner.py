@@ -101,7 +101,6 @@ class ModelRunner:
             )
 
         # Configure checkpoints.
-<<<<<<< HEAD
         self.callbacks = [
             ModelCheckpoint(
                 dirpath=output_dir,
@@ -117,37 +116,11 @@ class ModelRunner:
             ),
             LearningRateMonitor(log_momentum=True, log_weight_decay=True),
         ]
-=======
-        if config.save_top_k is not None:
-            self.callbacks = [
-                ModelCheckpoint(
-                    dirpath=config.model_save_folder_path,
-                    monitor="valid_CELoss",
-                    mode="min",
-                    save_top_k=config.save_top_k,
-                    auto_insert_metric_name=True,
-                    filename="{epoch}-{step}-{train_CELoss:.3f}-{valid_CELoss:.3f}",
-                    save_last=True,
-                )
-            ]
-        # Configure early stopping
-        if config.early_stopping_patience is not None:
-            self.callbacks.append(
-                EarlyStopping(
-                    monitor="valid_CELoss",
-                    min_delta=0.00,
-                    patience=self.config.early_stopping_patience,
-                    verbose=True,
-                    check_finite=True,
-                    mode="min",
-                )
-            )
-        # Configure learning rate monitor
+
         if config.tb_summarywriter is not None:
             self.callbacks.append(
                 LearningRateMonitor(logging_interval="step", log_momentum=True)
             )
->>>>>>> c21c899 (Reformat with Black)
 
     def __enter__(self):
         """Enter the context manager"""
@@ -318,11 +291,7 @@ class ModelRunner:
             running model evaluation. Files that are not an annotated
             peak file format will be ignored if evaluate is set to true.
         """
-<<<<<<< HEAD
         self.writer = ms_io.MztabWriter(results_path)
-=======
-        self.writer = ms_io.MztabWriter(Path(output).with_suffix(".mztab"))
->>>>>>> c21c899 (Reformat with Black)
         self.writer.set_metadata(
             self.config,
             model=str(self.model_filename),
@@ -339,9 +308,6 @@ class ModelRunner:
         self.initialize_data_module(test_paths=test_paths)
         self.loaders.setup(stage="test", annotated=False)
         self.trainer.predict(self.model, self.loaders.test_dataloader())
-
-        if evaluate:
-            self.log_metrics(test_index)
 
     def initialize_trainer(self, train: bool) -> None:
         """Initialize the lightning Trainer.
