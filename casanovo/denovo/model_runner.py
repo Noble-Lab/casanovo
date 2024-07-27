@@ -15,7 +15,11 @@ import lightning.pytorch.loggers
 import torch
 
 from lightning.pytorch.strategies import DDPStrategy
-from lightning.pytorch.callbacks import ModelCheckpoint, LearningRateMonitor, EarlyStopping
+from lightning.pytorch.callbacks import (
+    ModelCheckpoint,
+    LearningRateMonitor,
+    EarlyStopping,
+)
 from lightning.pytorch.loggers import TensorBoardLogger
 
 from depthcharge.tokenizers import PeptideTokenizer
@@ -97,6 +101,7 @@ class ModelRunner:
             )
 
         # Configure checkpoints.
+<<<<<<< HEAD
         self.callbacks = [
             ModelCheckpoint(
                 dirpath=output_dir,
@@ -112,6 +117,37 @@ class ModelRunner:
             ),
             LearningRateMonitor(log_momentum=True, log_weight_decay=True),
         ]
+=======
+        if config.save_top_k is not None:
+            self.callbacks = [
+                ModelCheckpoint(
+                    dirpath=config.model_save_folder_path,
+                    monitor="valid_CELoss",
+                    mode="min",
+                    save_top_k=config.save_top_k,
+                    auto_insert_metric_name=True,
+                    filename="{epoch}-{step}-{train_CELoss:.3f}-{valid_CELoss:.3f}",
+                    save_last=True,
+                )
+            ]
+        # Configure early stopping
+        if config.early_stopping_patience is not None:
+            self.callbacks.append(
+                EarlyStopping(
+                    monitor="valid_CELoss",
+                    min_delta=0.00,
+                    patience=self.config.early_stopping_patience,
+                    verbose=True,
+                    check_finite=True,
+                    mode="min",
+                )
+            )
+        # Configure learning rate monitor
+        if config.tb_summarywriter is not None:
+            self.callbacks.append(
+                LearningRateMonitor(logging_interval="step", log_momentum=True)
+            )
+>>>>>>> c21c899 (Reformat with Black)
 
     def __enter__(self):
         """Enter the context manager"""
@@ -196,13 +232,13 @@ class ModelRunner:
         valid_paths = self._get_input_paths(valid_peak_path, True, "valid")
         self.initialize_data_module(train_paths, valid_paths)
         self.loaders.setup()
-        #logger.info(f'TRAIN PSMs: {self.loaders.train_dataset.n_spectra}')
-        #logger.info(f'VAL PSMs: {self.loaders.valid_dataset.n_spectra}')
+        # logger.info(f'TRAIN PSMs: {self.loaders.train_dataset.n_spectra}')
+        # logger.info(f'VAL PSMs: {self.loaders.valid_dataset.n_spectra}')
 
         self.trainer.fit(
             self.model,
             self.loaders.train_dataloader(),
-            self.loaders.val_dataloader()
+            self.loaders.val_dataloader(),
         )
 
     def log_metrics(self, test_index: AnnotatedSpectrumIndex) -> None:
@@ -282,7 +318,11 @@ class ModelRunner:
             running model evaluation. Files that are not an annotated
             peak file format will be ignored if evaluate is set to true.
         """
+<<<<<<< HEAD
         self.writer = ms_io.MztabWriter(results_path)
+=======
+        self.writer = ms_io.MztabWriter(Path(output).with_suffix(".mztab"))
+>>>>>>> c21c899 (Reformat with Black)
         self.writer.set_metadata(
             self.config,
             model=str(self.model_filename),
@@ -317,7 +357,7 @@ class ModelRunner:
             devices=1,
             enable_checkpointing=False,
             precision=self.config.precision,
-            logger=False
+            logger=False,
         )
 
         if train:
@@ -328,14 +368,14 @@ class ModelRunner:
 
             if self.config.tb_summarywriter is not None:
                 logger = TensorBoardLogger(
-                    self.config.tb_summarywriter, 
+                    self.config.tb_summarywriter,
                     version=None,
                     name=f'model_{datetime.now().strftime("%Y%m%d_%H%M")}',
-                    default_hp_metric=False
+                    default_hp_metric=False,
                 )
             else:
                 logger = False
-                
+
             additional_cfg = dict(
                 devices=devices,
                 callbacks=self.callbacks,
@@ -428,7 +468,7 @@ class ModelRunner:
             weight_decay=self.config.weight_decay,
             out_writer=self.writer,
             calculate_precision=self.config.calculate_precision,
-            tokenizer=tokenizer
+            tokenizer=tokenizer,
         )
 
         # Reconfigurable non-architecture related parameters for a
@@ -510,18 +550,19 @@ class ModelRunner:
 
     def initialize_tokenizer(
         self,
-    ) -> None :
+    ) -> None:
         """Initialize the peptide tokenizer"""
         if self.config.mskb_tokenizer:
             tokenizer_cs = MskbPeptideTokenizer
         else:
             tokenizer_cs = PeptideTokenizer
-            
+
         self.tokenizer = tokenizer_cs(
             residues=self.config.residues,
             replace_isoleucine_with_leucine=self.config.replace_isoleucine_with_leucine,
             reverse=self.config.reverse_peptides,
-            start_token=None, stop_token='$'
+            start_token=None,
+            stop_token="$",
         )
 
     def initialize_data_module(
@@ -553,7 +594,11 @@ class ModelRunner:
         except AttributeError:
             raise RuntimeError("Please use `initialize_tokenizer()` first.")
 
-        lance_dir = Path(self.tmp_dir.name) if self.config.lance_dir is None else self.config.lance_dir
+        lance_dir = (
+            Path(self.tmp_dir.name)
+            if self.config.lance_dir is None
+            else self.config.lance_dir
+        )
         self.loaders = DeNovoDataModule(
             train_paths=train_paths,
             valid_paths=valid_paths,
@@ -595,7 +640,7 @@ class ModelRunner:
         """
         ext = (".mgf", ".lance")
         if not annotated:
-            ext += (".mzML", ".mzml", ".mzxml") # FIXME: Check if these work
+            ext += (".mzML", ".mzml", ".mzxml")  # FIXME: Check if these work
 
         filenames = _get_peak_filenames(peak_path, ext)
         if not filenames:
