@@ -1,10 +1,14 @@
 """Transformer encoder and decoder for the de novo sequencing task."""
+
 import torch
 from collections.abc import Callable
 
 from depthcharge.tokenizers import Tokenizer
 from depthcharge.encoders import PeakEncoder, FloatEncoder, PositionalEncoder
-from depthcharge.transformers import SpectrumTransformerEncoder, AnalyteTransformerDecoder
+from depthcharge.transformers import (
+    SpectrumTransformerEncoder,
+    AnalyteTransformerDecoder,
+)
 
 
 class PeptideDecoder(AnalyteTransformerDecoder):
@@ -62,7 +66,7 @@ class PeptideDecoder(AnalyteTransformerDecoder):
         self.charge_encoder = torch.nn.Embedding(max_charge, d_model)
         self.mass_encoder = FloatEncoder(d_model)
 
-        # override final layer: 
+        # override final layer:
         # +1 in comparison to version in depthcharge to second dimension
         # This includes padding (=0) as a possible class
         # and avoids problems during beam search decoding
@@ -138,8 +142,9 @@ class SpectrumEncoder(SpectrumTransformerEncoder):
         peak_encoder: PeakEncoder | Callable | bool = True,
     ):
         """Initialize a SpectrumEncoder"""
-        super().__init__(d_model, n_head, dim_feedforward,
-                         n_layers, dropout, peak_encoder)
+        super().__init__(
+            d_model, n_head, dim_feedforward, n_layers, dropout, peak_encoder
+        )
 
         self.latent_spectrum = torch.nn.Parameter(torch.randn(1, 1, d_model))
 
