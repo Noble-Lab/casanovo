@@ -15,8 +15,11 @@ As the official PSI standard format containing the complete information from a m
 
 ### Model Weights
 
-In addition to MS/MS spectra, Casanova also optionally accepts a model weights (.ckpt) input file when running in training, sequencing or evaluating mode.
+In addition to MS/MS spectra, Casanovo also optionally accepts a model weights (.ckpt) input file when running in training, sequencing or evaluating mode.
 If no input weight file is provided, Casanovo will automatically use the most recent compatible weights from the official Casanovo github repo, which will be downloaded and cached if they are not already.
+Model weights are retrieved by matching release version.
+If no model weights for an identical release (major, minor, patch), alternative releases with matching (i) major and minor, or (ii) major versions will be used.
+
 Alternatively, you can input custom model weights in the form of a local file system path or a URL pointing to a compatible Casanovo model weights file.
 If a URL is provided the upstream weights file will be downloaded and cached for later use.
 See the [command line interface documentation](cli.rst) for more details.
