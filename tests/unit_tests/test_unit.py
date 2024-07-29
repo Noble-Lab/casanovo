@@ -263,13 +263,14 @@ def test_get_model_weights(monkeypatch):
             mnk.setattr(github, "Github", mock_github)
             mnk.setattr(requests, "get", mock_get)
 
-            filename = os.path.join(tmp_dir, "casanovo_massivekb_v3_0_0.ckpt")
-            assert not os.path.isfile(filename)
-            result_path = casanovo._get_model_weights(pathlib.Path(tmp_dir))
-            assert str(result_path.resolve()) == filename
-            assert os.path.isfile(filename)
-            result_path = casanovo._get_model_weights(pathlib.Path(tmp_dir))
-            assert str(result_path.resolve()) == filename
+            tmp_path = pathlib.Path(tmp_dir)
+            filename = tmp_path / "casanovo_massivekb_v3_0_0.ckpt"
+            assert not filename.is_file()
+            result_path = casanovo._get_model_weights(tmp_path)
+            assert result_path == filename
+            assert filename.is_file()
+            result_path = casanovo._get_model_weights(tmp_path)
+            assert result_path == filename
 
     # Impossible to find model weights for (i) full version mismatch and (ii)
     # major version mismatch.
