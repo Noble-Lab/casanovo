@@ -386,10 +386,12 @@ def setup_model(
         if _is_valid_url(model):
             model = _get_weights_from_url(model, cache_dir)
         elif not Path(model).is_file():
-            raise ValueError(
+            error_msg = (
                 f"{model} is not a valid URL or checkpoint file path, "
                 "--model argument must be a URL or checkpoint file path"
             )
+            logger.error(error_msg)
+            raise ValueError(error_msg)
 
     # Log the active configuration.
     logger.info("Casanovo version %s", str(__version__))
