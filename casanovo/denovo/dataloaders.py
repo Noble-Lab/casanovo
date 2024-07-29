@@ -37,7 +37,7 @@ class DeNovoDataModule(pl.LightningDataModule):
     ----------
     train_paths : str, optional
             A spectrum lance path for model training.
-    valid_pathas : str, optional
+    valid_paths : str, optional
         A spectrum lance path for validation.
     test_paths : str, optional
         A spectrum lance path for evaluation or inference.
@@ -153,8 +153,8 @@ class DeNovoDataModule(pl.LightningDataModule):
         ]
 
     def make_dataset(self, paths, annotated, mode, shuffle):
-        """
-        Make spectrum datasets
+        """Make spectrum datasets.
+        
         Parameters
         ----------
         paths : Iterable[str]
