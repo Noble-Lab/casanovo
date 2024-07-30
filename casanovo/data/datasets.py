@@ -87,6 +87,7 @@ class SpectrumDataset(Dataset):
         spectrum = self._process_peaks(
             mz_array, int_array, precursor_mz, precursor_charge
         )
+
         return (
             spectrum,
             precursor_mz,
@@ -264,4 +265,11 @@ class AnnotatedSpectrumDataset(SpectrumDataset):
         spectrum = self._process_peaks(
             mz_array, int_array, precursor_mz, precursor_charge
         )
-        return spectrum, precursor_mz, precursor_charge, peptide
+
+        return (
+            spectrum,
+            precursor_mz,
+            precursor_charge,
+            self.get_spectrum_id(idx),
+            peptide,
+        )

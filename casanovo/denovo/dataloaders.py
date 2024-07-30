@@ -202,7 +202,11 @@ def prepare_batch(
         The spectrum identifiers (during de novo sequencing) or peptide
         sequences (during training).
     """
-    spectra, precursor_mzs, precursor_charges, spectrum_ids = list(zip(*batch))
+    batch_list = list(zip(*batch))
+    spectra, precursor_mzs, precursor_charges, spectrum_ids = batch_list[0:4]
+    peptide_sequence = (
+        None if len(batch_list) <= 4 else np.asarray(batch_list[4])
+    )
     spectra = torch.nn.utils.rnn.pad_sequence(spectra, batch_first=True)
     precursor_mzs = torch.tensor(precursor_mzs)
     precursor_charges = torch.tensor(precursor_charges)
@@ -210,4 +214,4 @@ def prepare_batch(
     precursors = torch.vstack(
         [precursor_masses, precursor_charges, precursor_mzs]
     ).T.float()
-    return spectra, precursors, np.asarray(spectrum_ids)
+    return spectra, precursors, np.asarray(spectrum_ids), peptide_sequence
