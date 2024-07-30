@@ -116,36 +116,9 @@ class ModelRunner:
             self.loaders.val_dataloader(),
         )
 
-    def evaluate(self, peak_path: Iterable[str]) -> None:
-        """Evaluate peptide sequence preditions from a trained Casanovo model.
-
-        Parameters
-        ----------
-        peak_path : iterable of str
-            The path with MS data files for predicting peptide sequences.
-
-        Returns
-        -------
-        self
-        """
-        self.writer = ms_io.MztabWriter(Path("foo.mztab"))
-        self.writer.set_metadata(
-            self.config,
-            model=str(self.model_filename),
-            config_filename=self.config.file,
-        )
-
-        self.initialize_trainer(train=False)
-        self.initialize_model(train=False)
-        self.model.out_writer = self.writer
-
-        test_index = self._get_index(peak_path, True, "evaluation")
-        self.writer.set_ms_run(test_index.ms_files)
-        self.initialize_data_module(test_index=test_index)
-        self.loaders.setup(stage="test", annotated=True)
-        self.trainer.validate(self.model, self.loaders.test_dataloader())
-
-    def predict(self, peak_path: Iterable[str], output: str) -> None:
+    def predict(
+        self, peak_path: Iterable[str], output: str, evaluate=False
+    ) -> None:
         """Predict peptide sequences with a trained Casanovo model.
 
         Parameters
@@ -154,6 +127,10 @@ class ModelRunner:
             The path with the MS data files for predicting peptide sequences.
         output : str
             Where should the output be saved?
+        evaluate: str
+            whether to run model evaluation in addition to inference
+            Note: peak_path most point to annotated MS data files when
+            running model evaluation
 
         Returns
         -------
@@ -170,11 +147,17 @@ class ModelRunner:
         self.initialize_model(train=False)
         self.model.out_writer = self.writer
 
-        test_index = self._get_index(peak_path, False, "")
+        test_index = self._get_index(
+            peak_path, evaluate, "evaluation" if evaluate else ""
+        )
         self.writer.set_ms_run(test_index.ms_files)
         self.initialize_data_module(test_index=test_index)
-        self.loaders.setup(stage="test", annotated=False)
-        self.trainer.predict(self.model, self.loaders.test_dataloader())
+        self.loaders.setup(stage="test", annotated=evaluate)
+
+        if evaluate:
+            self.trainer.validate(self.model, self.loaders.test_dataloader())
+        else:
+            self.trainer.predict(self.model, self.loaders.test_dataloader())
 
     def initialize_trainer(self, train: bool) -> None:
         """Initialize the lightning Trainer.
