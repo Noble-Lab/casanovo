@@ -35,22 +35,7 @@ def test_train_and_run(
     assert result.exit_code == 0
     assert model_file.exists()
 
-    # Try evaluating:
-    eval_args = [
-        "evaluate",
-        "--model",
-        str(model_file),
-        "--config",
-        str(tiny_config),
-        "--output",
-        str(tmp_path / "eval"),
-        str(mgf_small),
-    ]
-
-    result = run(eval_args)
-    assert result.exit_code == 0
-
-    # Finally try predicting:
+    # Try predicting:
     output_filename = tmp_path / "test.mztab"
     predict_args = [
         "sequence",
@@ -85,6 +70,39 @@ def test_train_and_run(
     assert psms.loc[3, "spectra_ref"] == "ms_run[2]:scan=17"
     assert psms.loc[4, "sequence"] == "PEPTLDEK"
     assert psms.loc[4, "spectra_ref"] == "ms_run[2]:scan=111"
+
+    # Finally, try evaluating:
+    output_filename = tmp_path / "test-eval.mztab"
+    eval_args = [
+        "sequence",
+        "--model",
+        str(model_file),
+        "--config",
+        tiny_config,
+        "--output",
+        str(output_filename),
+        str(mgf_small),
+        str(mzml_small),
+        "--evaluate",
+    ]
+
+    result = run(eval_args)
+    assert result.exit_code == 0
+    assert output_filename.is_file()
+
+    mztab = pyteomics.mztab.MzTab(str(output_filename))
+    # Verify that both input peak files are listed in the metadata.
+    for i, filename in enumerate(["small.mgf"], 1):
+        assert f"ms_run[{i}]-location" in mztab.metadata
+        assert mztab.metadata[f"ms_run[{i}]-location"].endswith(filename)
+
+    # Verify that the spectrum predictions are correct
+    # and indexed according to the peak input file type.
+    psms = mztab.spectrum_match_table
+    assert psms.loc[1, "sequence"] == "LESLLEK"
+    assert psms.loc[1, "spectra_ref"] == "ms_run[1]:index=0"
+    assert psms.loc[2, "sequence"] == "PEPTLDEK"
+    assert psms.loc[2, "spectra_ref"] == "ms_run[1]:index=1"
 
 
 def test_auxilliary_cli(tmp_path, monkeypatch):
