@@ -123,6 +123,9 @@ class ModelRunner:
     ) -> None:
         """Predict peptide sequences with a trained Casanovo model.
 
+        Can also evaluate model during prediction if provided with annotated
+        peak files.
+
         Parameters
         ----------
         peak_path : iterable of str
@@ -132,7 +135,8 @@ class ModelRunner:
         evaluate: str
             whether to run model evaluation in addition to inference
             Note: peak_path most point to annotated MS data files when
-            running model evaluation
+            running model evaluation. Files that are not an annotated
+            peak file format will be ignored if evaluate is set to true.
 
         Returns
         -------
