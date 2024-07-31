@@ -895,10 +895,11 @@ def test_train_val_step_functions():
     spectra = torch.zeros(1, 5, 2)
     precursors = torch.tensor([[469.25364, 2.0, 235.63410]])
     peptides = ["PEPK"]
-    batch = (spectra, precursors, peptides)
+    spectrum_id = "foobar"
+    batch = (spectra, precursors, spectrum_id, peptides)
 
     train_step_loss = model.training_step(batch)
-    val_step_loss = model.validation_step(batch)
+    val_step_loss, _ = model.validation_step(batch)
 
     # Check if valid loss value returned
     assert train_step_loss > 0

@@ -56,6 +56,7 @@ def test_save_and_load_weights(tmp_path, mgf_small, tiny_config):
     config.max_epochs = 1
     config.n_layers = 1
     ckpt = tmp_path / "test.ckpt"
+    output_file = tmp_path / "out"
 
     with ModelRunner(config=config) as runner:
         runner.train([mgf_small], [mgf_small])
@@ -83,7 +84,7 @@ def test_save_and_load_weights(tmp_path, mgf_small, tiny_config):
     with torch.device("meta"):
         with ModelRunner(other_config, model_filename=str(ckpt)) as runner:
             with pytest.raises(NotImplementedError) as err:
-                runner.evaluate([mgf_small])
+                runner.predict([mgf_small], output_file, evaluate=True)
 
     assert "meta tensor; no data!" in str(err.value)
 
@@ -95,11 +96,11 @@ def test_save_and_load_weights(tmp_path, mgf_small, tiny_config):
     # Shouldn't work:
     with ModelRunner(other_config, model_filename=str(ckpt)) as runner:
         with pytest.raises(RuntimeError):
-            runner.evaluate([mgf_small])
+            runner.predict([mgf_small], output_file, evaluate=True)
 
     # Should work:
     with ModelRunner(config=config, model_filename=str(ckpt)) as runner:
-        runner.evaluate([mgf_small])
+        runner.predict([mgf_small], output_file, evaluate=True)
 
 
 def test_save_and_load_weights_deprecated(tmp_path, mgf_small, tiny_config):
