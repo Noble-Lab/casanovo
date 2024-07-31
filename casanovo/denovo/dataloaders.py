@@ -175,8 +175,8 @@ class DeNovoDataModule(pl.LightningDataModule):
 
 
 def prepare_batch(
-    batch: List[Tuple[torch.Tensor, float, int, str]]
-) -> Tuple[torch.Tensor, torch.Tensor, np.ndarray]:
+    batch: List[Tuple[torch.Tensor, float, int, str, Optional[str]]]
+) -> Tuple[torch.Tensor, torch.Tensor, np.ndarray, np.ndarray | None]:
     """
     Collate MS/MS spectra into a batch.
 
@@ -185,10 +185,11 @@ def prepare_batch(
 
     Parameters
     ----------
-    batch : List[Tuple[torch.Tensor, float, int, str]]
+    batch : List[Tuple[torch.Tensor, float, int, str, Optional[str]]]
         A batch of data from an AnnotatedSpectrumDataset, consisting of for each
         spectrum (i) a tensor with the m/z and intensity peak values, (ii), the
-        precursor m/z, (iii) the precursor charge, (iv) the spectrum identifier.
+        precursor m/z, (iii) the precursor charge, (iv) the spectrum identifier,
+        (v) optionally the peptide sequence annotation
 
     Returns
     -------
@@ -201,6 +202,9 @@ def prepare_batch(
     spectrum_ids : np.ndarray
         The spectrum identifiers (during de novo sequencing) or peptide
         sequences (during training).
+    annotations : np.ndarray | None
+        The peptide annotations of the spectra if provided by the dataset,
+        None otherwise
     """
     batch_list = list(zip(*batch))
     spectra, precursor_mzs, precursor_charges, spectrum_ids = batch_list[0:4]

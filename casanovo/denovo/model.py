@@ -773,7 +773,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         ----------
         batch : Tuple[torch.Tensor, torch.Tensor, List[str]]
             A batch of (i) MS/MS spectra, (ii) precursor information, (iii)
-            peptide sequences.
+            spectrum identifiers, (iv) peptide sequence annotations
 
         Returns
         -------
@@ -788,7 +788,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
 
         # Calculate and log amino acid and peptide match evaluation metrics from
         # the predicted peptides.
-        peptides_pred, peptides_true = [], batch[2]
+        peptides_pred, peptides_true = [], batch[3]
         for spectrum_preds in forward_step:
             for _, _, pred in spectrum_preds:
                 peptides_pred.append(pred)
