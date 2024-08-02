@@ -52,7 +52,11 @@ jobs:
         java-version: '22'
     - name: Run Casanovo sequence command
       run: |
-        casanovo sequence sample_data/sample_preprocessed_spectra.mgf -c tests/ting_config.yaml -o test
+        casanovo sequence \
+          sample_data/sample_preprocessed_spectra.mgf \
+          -c tests/ting_config.yaml \
+          -m tests/tiny_model.ckpt \
+          -o test
     - name: Run jmzTabValidator
       run: |
         java --jar tests/jmzTabValidator.jar --check inFile=test.mztab > result.log
