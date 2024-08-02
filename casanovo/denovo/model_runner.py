@@ -26,6 +26,18 @@ from ..denovo.model import Spec2Pep
 logger = logging.getLogger("casanovo")
 
 
+class SaveBestModelCheckpoint(ModelCheckpoint):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+    def on_validation_end(self, trainer, pl_module):
+        super().on_validation_end(trainer, pl_module)
+        target_path = Path(self.best_model_path)
+        simlink_path = Path(self.dirpath) / "best.ckpt"
+        simlink_path.unlink()
+        simlink_path.symlink_to(target_path)
+
+
 class ModelRunner:
     """A class to run Casanovo models.
 
@@ -64,7 +76,7 @@ class ModelRunner:
 
         if config.save_top_k is not None:
             self.callbacks.append(
-                ModelCheckpoint(
+                SaveBestModelCheckpoint(
                     dirpath=config.model_save_folder_path,
                     monitor="valid_CELoss",
                     mode="min",
