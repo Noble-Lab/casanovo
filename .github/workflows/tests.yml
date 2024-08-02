@@ -50,20 +50,12 @@ jobs:
       with:
         distribution: 'zulu'
         java-version: '22'
-    - name: Run Casanovo sequence
+    - name: Run Casanovo sequence command
       run: |
         casanovo sequence sample_data/sample_preprocessed_spectra.mgf -c tests/ting_config.yaml -o test
-        if [ $? -ne 0 ]; then
-          echo "casanovo command failed with status code $?"
-          exit 1
-        fi
     - name: Run jmzTabValidator
       run: |
         java --jar tests/jmzTabValidator.jar --check inFile=test.mztab > result.log
-        if [ $? -ne 0 ]; then
-          echo "Java command failed with status code $?"
-          exit 1
-        fi
         grep '^\[Error-' result.log
         if [ $? -eq 0 ]; then
           echo "mzTab validation failed:"
