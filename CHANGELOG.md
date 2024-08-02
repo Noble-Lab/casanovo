@@ -6,9 +6,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+### Added
+
+- During training, model checkpoints will now be saved at the end of each training epoch in addition to the checkpoints saved at the end of every validation run.
+
 ### Fixed
 
 - Precursor charges are now exported as integers instead of floats in the mzTab output file, in compliance with the mzTab specification.
+
+## [4.2.1] - 2024-06-25
+
+### Fixed
+
+- Pin NumPy version to below v2.0 to ensure compatibility with current DepthCharge version.
 
 ## [4.2.0] - 2024-05-14
 
@@ -252,7 +262,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 - Initial Casanovo version.
 
-[Unreleased]: https://github.com/Noble-Lab/casanovo/compare/v4.2.0...HEAD
+[Unreleased]: https://github.com/Noble-Lab/casanovo/compare/v4.2.1...HEAD
+[4.2.1]: https://github.com/Noble-Lab/casanovo/compare/v4.2.0...v4.2.1
 [4.2.0]: https://github.com/Noble-Lab/casanovo/compare/v4.1.0...v4.2.0
 [4.1.0]: https://github.com/Noble-Lab/casanovo/compare/v4.0.1...v4.1.0
 [4.0.1]: https://github.com/Noble-Lab/casanovo/compare/v4.0.0...v4.0.1

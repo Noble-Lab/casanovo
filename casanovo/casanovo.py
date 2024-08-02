@@ -7,6 +7,7 @@ import os
 import re
 import shutil
 import sys
+import time
 import warnings
 from pathlib import Path
 from typing import Optional, Tuple
@@ -93,7 +94,9 @@ class _SharedParams(click.RichCommand):
 
 @click.group(context_settings=dict(help_option_names=["-h", "--help"]))
 def main() -> None:
-    """# Casanovo
+    """
+    Casanovo
+    ========
 
     Casanovo de novo sequences peptides from tandem mass spectra using a
     Transformer model. Casanovo currently supports mzML, mzXML, and MGF files
@@ -101,14 +104,17 @@ def main() -> None:
     MassIVE-KB, for training new models.
 
     Links:
-    - Documentation: [https://casanovo.readthedocs.io]()
-    - Official code repository: [https://github.com/Noble-Lab/casanovo]()
+
+    - Documentation: https://casanovo.readthedocs.io
+    - Official code repository: https://github.com/Noble-Lab/casanovo
 
     If you use Casanovo in your work, please cite:
+
     - Yilmaz, M., Fondrie, W. E., Bittremieux, W., Oh, S. & Noble, W. S. De novo
-    mass spectrometry peptide sequencing with a transformer model. Proceedings
-    of the 39th International Conference on Machine Learning - ICML '22 (2022)
-    doi:10.1101/2022.02.07.479481.
+      mass spectrometry peptide sequencing with a transformer model. Proceedings
+      of the 39th International Conference on Machine Learning - ICML '22 (2022)
+      doi:10.1101/2022.02.07.479481.
+
 
     """
     return
@@ -135,14 +141,17 @@ def sequence(
     """
     output = setup_logging(output, verbosity)
     config, model = setup_model(model, config, output, False)
+    start_time = time.time()
     with ModelRunner(config, model) as runner:
         logger.info("Sequencing peptides from:")
         for peak_file in peak_path:
             logger.info("  %s", peak_file)
 
         runner.predict(peak_path, output)
-
-    logger.info("DONE!")
+        psms = runner.writer.psms
+        utils.log_sequencing_report(
+            psms, start_time=start_time, end_time=time.time()
+        )
 
 
 @main.command(cls=_SharedParams)
@@ -166,14 +175,14 @@ def evaluate(
     """
     output = setup_logging(output, verbosity)
     config, model = setup_model(model, config, output, False)
+    start_time = time.time()
     with ModelRunner(config, model) as runner:
         logger.info("Sequencing and evaluating peptides from:")
         for peak_file in annotated_peak_path:
             logger.info("  %s", peak_file)
 
         runner.evaluate(annotated_peak_path)
-
-    logger.info("DONE!")
+        utils.log_run_report(start_time=start_time, end_time=time.time())
 
 
 @main.command(cls=_SharedParams)
@@ -209,6 +218,7 @@ def train(
     """
     output = setup_logging(output, verbosity)
     config, model = setup_model(model, config, output, True)
+    start_time = time.time()
     with ModelRunner(config, model) as runner:
         logger.info("Training a model from:")
         for peak_file in train_peak_path:
@@ -219,8 +229,7 @@ def train(
             logger.info("  %s", peak_file)
 
         runner.train(train_peak_path, validation_peak_path)
-
-    logger.info("DONE!")
+        utils.log_run_report(start_time=start_time, end_time=time.time())
 
 
 @main.command()
@@ -304,7 +313,9 @@ def setup_logging(
     console_handler.setFormatter(console_formatter)
     root_logger.addHandler(console_handler)
     warnings_logger.addHandler(console_handler)
-    file_handler = logging.FileHandler(output.with_suffix(".log"))
+    file_handler = logging.FileHandler(
+        output.with_suffix(".log"), encoding="utf8"
+    )
     file_handler.setFormatter(log_formatter)
     root_logger.addHandler(file_handler)
     warnings_logger.addHandler(file_handler)
