@@ -58,6 +58,9 @@ jobs:
     - name: Check validator output
       run: |
         grep '^\[Error-' results.log
+      continue-on-error: true
+    - name: Finish validation
+      run: |
         if [ $? -eq 0 ]; then
           echo "mzTab validation failed:"
           cat results.log
