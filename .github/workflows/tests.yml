@@ -56,7 +56,7 @@ jobs:
       run: |
         java -jar tests/jmzTabValidator.jar --check inFile=test.mztab | tee results.log
     - name: Check validator output
-    - run: |
+      run: |
         grep '^\[Error-' results.log
         echo "grep_status=$?" >> $GITHUB_ENV
       continue-on-error: true
