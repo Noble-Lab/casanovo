@@ -56,15 +56,18 @@ jobs:
       run: |
         java -jar tests/jmzTabValidator.jar --check inFile=test.mztab | tee results.log
     - name: Check validator output
-      run: |
+    - run: |
         grep '^\[Error-' results.log
-        if [ $? -eq 0 ]; then
+        echo "grep_status=$?" >> $GITHUB_ENV
+      continue-on-error: true
+    - name: Finish mzTab validation
+      run: |
+        if [ "${{ env.grep_status }}" -eq 0 ]; then
           echo "mzTab validation failed:"
           cat results.log
           exit 1
-        fi
-        if [ $? -eq 2 ]; then
-          echo "Output results file not found."
+        elif [ "${{ env.grep_status }}" -eq 2 ]; then
+          echo "Sequence results file not found"
           exit 1
         fi              
     - name: Upload coverage to codecov
