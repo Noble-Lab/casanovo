@@ -26,7 +26,6 @@ jobs:
       uses: actions/setup-python@v5
       with:
         python-version: "3.10"
-
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
@@ -57,7 +56,7 @@ jobs:
       run: |
         java -jar tests/jmzTabValidator.jar --check inFile=test.mztab | tee results.log
     - name: Check validator output
-    - run: |
+      run: |
         grep '^\[Error-' results.log
         if [ $? -eq 0 ]; then
           echo "mzTab validation failed:"
