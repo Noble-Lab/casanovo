@@ -6,10 +6,18 @@ casanovo sequence \
     -c "$SCRIPT_DIR/ting_config.yaml" \
     -m "$SCRIPT_DIR/tiny_model.ckpt" \
     -o test
-java -jar "$SCRIPT_DIR/jmzTabValidator.jar" --check inFile=test.mztab | grep '^\[Error-'
+
+java -jar "$SCRIPT_DIR/jmzTabValidator.jar" --check inFile=test.mztab | tee val.txt
+grep '^\[Error-' val.txt
 if [ $? -eq 0 ]; then
-    echo "mzTab validation failed."
-    rm test.log test.mztab
+    echo "mzTab validation failed:"
+    cat test.log
+    [ -f test.log ] && rm test.log
+    [ -f test.mztab ] && rm test.mztab
+    [ -f test.mztab ] && rm val.txt
     exit 1
 fi
-rm test.log test.mztab
+
+[ -f test.log ] && rm test.log
+[ -f test.mztab ] && rm test.mztab
+[ -f test.mztab ] && rm val.txt
