@@ -41,7 +41,7 @@ jobs:
     - name: Run unit and system tests
       run: |
         pytest --cov=casanovo tests/
-    - name: Set up Java
+    - name: Set up Java on Windows
       uses: actions/setup-java@v3
       with:
         distribution: 'zulu'
