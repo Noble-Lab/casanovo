@@ -11,13 +11,13 @@ java -jar "$SCRIPT_DIR/jmzTabValidator.jar" --check inFile=test.mztab | tee val.
 grep '^\[Error-' val.txt
 if [ $? -eq 0 ]; then
     echo "mzTab validation failed."
-    [ -f test.log ] && rm test.log
-    [ -f test.mztab ] && rm test.mztab
-    [ -f test.mztab ] && rm val.txt
+    rm -f test.log
+    rm -f test.mztab
+    rm -f val.txt
     exit 1
 fi
 
 echo "mzTab validation succedded."
-[ -f test.log ] && rm test.log
-[ -f test.mztab ] && rm test.mztab
-[ -f test.mztab ] && rm val.txt
+rm -f test.log
+rm -f test.mztab
+rm -f val.txt
