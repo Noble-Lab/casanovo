@@ -42,10 +42,6 @@ jobs:
       run: |
         pytest --cov=casanovo tests/
     - name: Set up Java
-      if: runner.os == 'ubuntu-latest' || runner.os == 'macos-13'
-      run: sudo apt-get install -y openjdk-22-jdk
-    - name: Set up Java on Windows
-      if: runner.os == 'windows-latest'
       uses: actions/setup-java@v3
       with:
         distribution: 'zulu'
@@ -59,7 +55,7 @@ jobs:
           -o test
     - name: Run jmzTabValidator
       run: |
-        java --jar tests/jmzTabValidator.jar --check inFile=test.mztab > result.log
+        java -jar tests/jmzTabValidator.jar --check inFile=test.mztab > result.log
         grep '^\[Error-' result.log
         if [ $? -eq 0 ]; then
           echo "mzTab validation failed:"
