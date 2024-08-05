@@ -9,7 +9,7 @@ java -jar "%SCRIPT_DIR%jmzTabValidator.jar" --check inFile=test.mztab > val.txt
 findstr /R "^\[Error-" val.txt >nul
 if %errorlevel% equ 0 (
     echo mzTab validation failed:
-    type test.log
+    type val.txt
     if exist test.log del test.log
     if exist test.mztab del test.mztab
     if exist val.txt del val.txt
