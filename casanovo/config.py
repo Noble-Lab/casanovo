@@ -74,7 +74,6 @@ class Config:
         top_match=int,
         max_epochs=int,
         num_sanity_val_steps=int,
-        save_top_k=int,
         model_save_folder_path=str,
         val_check_interval=int,
         calculate_precision=bool,
