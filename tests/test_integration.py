@@ -41,7 +41,7 @@ def test_train_and_run(
     assert model_file.exists()
     assert best_model.exists()
 
-    # Try predicting:
+    # Finally try predicting:
     output_filename = tmp_path / "test.mztab"
     predict_args = [
         "sequence",

@@ -83,11 +83,12 @@ class SpectrumDataset(Dataset):
             The unique spectrum identifier, formed by its original peak file and
             identifier (index or scan number) therein.
         """
-        mz_array, int_array, precursor_mz, precursor_charge = self.index[idx]
+        mz_array, int_array, precursor_mz, precursor_charge = self.index[idx][
+            :4
+        ]
         spectrum = self._process_peaks(
             mz_array, int_array, precursor_mz, precursor_charge
         )
-
         return (
             spectrum,
             precursor_mz,
@@ -235,9 +236,7 @@ class AnnotatedSpectrumDataset(SpectrumDataset):
             random_state=random_state,
         )
 
-    def __getitem__(
-        self, idx: int
-    ) -> Tuple[torch.Tensor, float, int, Tuple[str, str], str]:
+    def __getitem__(self, idx: int) -> Tuple[torch.Tensor, float, int, str]:
         """
         Return the annotated MS/MS spectrum with the given index.
 
@@ -254,9 +253,6 @@ class AnnotatedSpectrumDataset(SpectrumDataset):
             The precursor m/z.
         precursor_charge : int
             The precursor charge.
-        spectrum_id: Tuple[str, str]
-            The unique spectrum identifier, formed by its original peak file and
-            identifier (index or scan number) therein.
         annotation : str
             The peptide annotation of the spectrum.
         """
@@ -270,11 +266,4 @@ class AnnotatedSpectrumDataset(SpectrumDataset):
         spectrum = self._process_peaks(
             mz_array, int_array, precursor_mz, precursor_charge
         )
-
-        return (
-            spectrum,
-            precursor_mz,
-            precursor_charge,
-            self.get_spectrum_id(idx),
-            peptide,
-        )
+        return spectrum, precursor_mz, precursor_charge, peptide
