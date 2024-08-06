@@ -10,6 +10,7 @@ import warnings
 from pathlib import Path
 from typing import Iterable, List, Optional, Union
 
+import depthcharge.masses
 import lightning.pytorch as pl
 import numpy as np
 import torch
@@ -20,6 +21,7 @@ from lightning.pytorch.callbacks import ModelCheckpoint
 from ..config import Config
 from ..data import ms_io
 from ..denovo.dataloaders import DeNovoDataModule
+from ..denovo.evaluate import aa_match_batch, aa_match_metrics
 from ..denovo.model import Spec2Pep
 
 
@@ -116,8 +118,35 @@ class ModelRunner:
             self.loaders.val_dataloader(),
         )
 
+    def log_metrics(self, test_index: AnnotatedSpectrumIndex) -> None:
+        """Log pep_precision and aa_precision
+
+        Calculate and log peptide precision and amino acid precision
+        based off of model predictions and spectrum annotations
+
+        Parameters
+        ----------
+        test_index : AnnotatedSpectrumIndex
+            Index containing the annotated spectra used to generate model
+            predictions
+        """
+        model_output = [psm[0] for psm in self.writer.psms]
+        spectrum_annotations = [
+            test_index[i][4] for i in range(test_index.n_spectra)
+        ]
+        aa_precision, _, pep_precision = aa_match_metrics(
+            *aa_match_batch(
+                spectrum_annotations,
+                model_output,
+                depthcharge.masses.PeptideMass().masses,
+            )
+        )
+
+        logger.info("Peptide Precision: %f", pep_precision)
+        logger.info("Amino Acid Precision: %f", aa_precision)
+
     def predict(
-        self, peak_path: Iterable[str], output: str, evaluate=False
+        self, peak_path: Iterable[str], output: str, evaluate: bool = False
     ) -> None:
         """Predict peptide sequences with a trained Casanovo model.
 
@@ -130,7 +159,7 @@ class ModelRunner:
             The path with the MS data files for predicting peptide sequences.
         output : str
             Where should the output be saved?
-        evaluate: str
+        evaluate: bool
             whether to run model evaluation in addition to inference
             Note: peak_path most point to annotated MS data files when
             running model evaluation. Files that are not an annotated
@@ -151,17 +180,14 @@ class ModelRunner:
         self.initialize_model(train=False)
         self.model.out_writer = self.writer
 
-        test_index = self._get_index(
-            peak_path, evaluate, "evaluation" if evaluate else ""
-        )
+        test_index = self._get_index(peak_path, evaluate, "")
         self.writer.set_ms_run(test_index.ms_files)
         self.initialize_data_module(test_index=test_index)
-        self.loaders.setup(stage="test", annotated=evaluate)
+        self.loaders.setup(stage="test", annotated=False)
+        self.trainer.predict(self.model, self.loaders.test_dataloader())
 
         if evaluate:
-            self.trainer.validate(self.model, self.loaders.test_dataloader())
-        else:
-            self.trainer.predict(self.model, self.loaders.test_dataloader())
+            self.log_metrics(test_index)
 
     def initialize_trainer(self, train: bool) -> None:
         """Initialize the lightning Trainer.

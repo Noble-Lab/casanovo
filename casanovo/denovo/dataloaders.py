@@ -175,8 +175,8 @@ class DeNovoDataModule(pl.LightningDataModule):
 
 
 def prepare_batch(
-    batch: List[Tuple[torch.Tensor, float, int, str, Optional[str]]]
-) -> Tuple[torch.Tensor, torch.Tensor, np.ndarray, np.ndarray | None]:
+    batch: List[Tuple[torch.Tensor, float, int, str]]
+) -> Tuple[torch.Tensor, torch.Tensor, np.ndarray]:
     """
     Collate MS/MS spectra into a batch.
 
@@ -185,11 +185,10 @@ def prepare_batch(
 
     Parameters
     ----------
-    batch : List[Tuple[torch.Tensor, float, int, str, Optional[str]]]
+    batch : List[Tuple[torch.Tensor, float, int, str]]
         A batch of data from an AnnotatedSpectrumDataset, consisting of for each
         spectrum (i) a tensor with the m/z and intensity peak values, (ii), the
-        precursor m/z, (iii) the precursor charge, (iv) the spectrum identifier,
-        (v) optionally the peptide sequence annotation
+        precursor m/z, (iii) the precursor charge, (iv) the spectrum identifier.
 
     Returns
     -------
@@ -202,15 +201,8 @@ def prepare_batch(
     spectrum_ids : np.ndarray
         The spectrum identifiers (during de novo sequencing) or peptide
         sequences (during training).
-    annotations : np.ndarray | None
-        The peptide annotations of the spectra if provided by the dataset,
-        None otherwise
     """
-    batch_list = list(zip(*batch))
-    spectra, precursor_mzs, precursor_charges, spectrum_ids = batch_list[0:4]
-    peptide_sequence = (
-        None if len(batch_list) <= 4 else np.asarray(batch_list[4])
-    )
+    spectra, precursor_mzs, precursor_charges, spectrum_ids = list(zip(*batch))
     spectra = torch.nn.utils.rnn.pad_sequence(spectra, batch_first=True)
     precursor_mzs = torch.tensor(precursor_mzs)
     precursor_charges = torch.tensor(precursor_charges)
@@ -218,4 +210,4 @@ def prepare_batch(
     precursors = torch.vstack(
         [precursor_masses, precursor_charges, precursor_mzs]
     ).T.float()
-    return spectra, precursors, np.asarray(spectrum_ids), peptide_sequence
+    return spectra, precursors, np.asarray(spectrum_ids)
