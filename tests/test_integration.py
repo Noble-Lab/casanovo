@@ -1,10 +1,13 @@
 import functools
+import subprocess
 from pathlib import Path
 
 import pyteomics.mztab
 from click.testing import CliRunner
 
 from casanovo import casanovo
+
+TEST_DIR = Path(__file__).resolve().parent
 
 
 def test_train_and_run(
@@ -50,7 +53,7 @@ def test_train_and_run(
     result = run(eval_args)
     assert result.exit_code == 0
 
-    # Finally try predicting:
+    # Try predicting:
     output_filename = tmp_path / "test.mztab"
     predict_args = [
         "sequence",
@@ -85,6 +88,30 @@ def test_train_and_run(
     assert psms.loc[3, "spectra_ref"] == "ms_run[2]:scan=17"
     assert psms.loc[4, "sequence"] == "PEPTLDEK"
     assert psms.loc[4, "spectra_ref"] == "ms_run[2]:scan=111"
+
+    # Validate mztab output
+    validate_args = [
+        "java",
+        "-jar",
+        f"{TEST_DIR}/jmzTabValidator.jar",
+        "--check",
+        f"inFile={output_filename}",
+    ]
+
+    validate_result = subprocess.run(
+        validate_args,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+
+    assert validate_result.returncode == 0
+    assert not any(
+        [
+            line.startswith("[Error-")
+            for line in validate_result.stdout.splitlines()
+        ]
+    )
 
 
 def test_auxilliary_cli(tmp_path, monkeypatch):
