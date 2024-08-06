@@ -133,7 +133,12 @@ def main() -> None:
     "-e",
     is_flag=True,
     default=False,
-    help="Run in evaluation mode.",
+    help="""
+    Run in evaluation mode. When this flag is set the peptide and amino
+    acid precision will be calculate and logged at the end of the sequencing
+    run. All input files must be annotated MGF files if running in evaluation
+    mode.
+    """,
 )
 def sequence(
     peak_path: Tuple[str],
@@ -146,7 +151,8 @@ def sequence(
     """De novo sequence peptides from tandem mass spectra.
 
     PEAK_PATH must be one or more mzML, mzXML, or MGF files from which
-    to sequence peptides.
+    to sequence peptides. If evaluate is set to true peak_path must be
+    one or more annotated MGF file.
     """
     output = setup_logging(output, verbosity)
     config, model = setup_model(model, config, output, False)
