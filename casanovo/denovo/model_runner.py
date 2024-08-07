@@ -121,7 +121,7 @@ class ModelRunner:
         )
 
     def log_metrics(self, test_index: AnnotatedSpectrumIndex) -> None:
-        """Log pep_precision and aa_precision
+        """Log peptide precision and amino acid precision
 
         Calculate and log peptide precision and amino acid precision
         based off of model predictions and spectrum annotations
@@ -144,8 +144,8 @@ class ModelRunner:
             )
         )
 
-        logger.info("Peptide Precision: %f", pep_precision)
-        logger.info("Amino Acid Precision: %f", aa_precision)
+        logger.info("Peptide Precision: %.2f%%", 100 * pep_precision)
+        logger.info("Amino Acid Precision: %.2f%%", 100 * aa_precision)
 
     def predict(
         self, peak_path: Iterable[str], output: str, evaluate: bool = False
