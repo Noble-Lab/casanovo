@@ -15,6 +15,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 - Precursor charges are exported as integers instead of floats in the mzTab output file, in compliance with the mzTab specification.
 
+### Removed
+
+- Removed the `save_top_k` option from the Casanovo config, the model with the lowest validation loss during training will now be saved to a fixed filename `best.ckpt`. 
+
 ## [4.2.1] - 2024-06-25
 
 ### Fixed
