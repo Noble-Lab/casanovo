@@ -151,7 +151,7 @@ def sequence(
     """De novo sequence peptides from tandem mass spectra.
 
     PEAK_PATH must be one or more mzML, mzXML, or MGF files from which
-    to sequence peptides. If evaluate is set to true peak_path must be
+    to sequence peptides. If evaluate is set to True PEAK_PATH must be
     one or more annotated MGF file.
     """
     output = setup_logging(output, verbosity)
