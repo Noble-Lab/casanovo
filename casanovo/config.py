@@ -18,6 +18,7 @@ logger = logging.getLogger("casanovo")
 _config_deprecated = dict(
     every_n_train_steps="val_check_interval",
     max_iters="cosine_schedule_period_iters",
+    save_top_k=None,
 )
 
 
@@ -95,10 +96,22 @@ class Config:
                 # Remap deprecated config entries.
                 for old, new in _config_deprecated.items():
                     if old in self._user_config:
-                        self._user_config[new] = self._user_config.pop(old)
+                        warning_msg = (
+                            f"Depreciated config option '{old}' "
+                            "is no longer in use"
+                        )
+
+                        if new is not None:
+                            self._user_config[new] = self._user_config.pop(old)
+                            warning_msg = (
+                                f"Deprecated config option '{old}' "
+                                f"remapped to '{new}'"
+                            )
+                        else:
+                            del self._user_config[old]
+
                         warnings.warn(
-                            f"Deprecated config option '{old}' remapped to "
-                            f"'{new}'",
+                            warning_msg,
                             DeprecationWarning,
                         )
                 # Check for missing entries in config file.
