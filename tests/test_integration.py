@@ -7,6 +7,7 @@ from click.testing import CliRunner
 
 from casanovo import casanovo
 
+
 TEST_DIR = Path(__file__).resolve().parent
 
 
