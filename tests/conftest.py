@@ -15,7 +15,15 @@ def mgf_small(tmp_path):
     return _create_mgf(peptides, mgf_file)
 
 
-def _create_mgf(peptides, mgf_file, random_state=42):
+@pytest.fixture
+def mgf_small_unannotated(tmp_path):
+    """An MGF file with 2 unannotated spectra."""
+    peptides = ["LESLIEK", "PEPTIDEK"]
+    mgf_file = tmp_path / "small_unannotated.mgf"
+    return _create_mgf(peptides, mgf_file, annotate=False)
+
+
+def _create_mgf(peptides, mgf_file, random_state=42, annotate=True):
     """
     Create a fake MGF file from one or more peptides.
 
@@ -27,20 +35,25 @@ def _create_mgf(peptides, mgf_file, random_state=42):
         The MGF file to create.
     random_state : int or numpy.random.Generator, optional
         The random seed. The charge states are chosen to be 2 or 3 randomly.
+    annotate: bool, optional
+        Whether to add peptide annotations to mgf file
 
     Returns
     -------
     mgf_file : Path
     """
     rng = np.random.default_rng(random_state)
-    entries = [_create_mgf_entry(p, rng.choice([2, 3])) for p in peptides]
+    entries = [
+        _create_mgf_entry(p, rng.choice([2, 3]), annotate=annotate)
+        for p in peptides
+    ]
     with mgf_file.open("w+") as mgf_ref:
         mgf_ref.write("\n".join(entries))
 
     return mgf_file
 
 
-def _create_mgf_entry(peptide, charge=2):
+def _create_mgf_entry(peptide, charge=2, annotate=True):
     """
     Create a MassIVE-KB style MGF entry for a single PSM.
 
@@ -50,6 +63,8 @@ def _create_mgf_entry(peptide, charge=2):
         A peptide sequence.
     charge : int, optional
         The peptide charge state.
+    annotate: bool, optional
+        Whether to add peptide annotation to entry
 
     Returns
     -------
@@ -62,12 +77,15 @@ def _create_mgf_entry(peptide, charge=2):
 
     mgf = [
         "BEGIN IONS",
-        f"SEQ={peptide}",
         f"PEPMASS={precursor_mz}",
         f"CHARGE={charge}+",
         f"{frags}",
         "END IONS",
     ]
+
+    if annotate:
+        mgf.insert(1, f"SEQ={peptide}")
+
     return "\n".join(mgf)
 
 

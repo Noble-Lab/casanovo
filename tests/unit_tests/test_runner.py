@@ -175,3 +175,34 @@ def test_save_final_model(tmp_path, mgf_small, tiny_config):
 
     assert model_file.exists()
     assert validation_file.exists()
+
+
+def test_evaluate(
+    tmp_path, mgf_small, mzml_small, mgf_small_unannotated, tiny_config
+):
+    """Test model evaluation during sequencing"""
+    # Train tiny model
+    config = Config(tiny_config)
+    config.max_epochs = 1
+    model_file = tmp_path / "epoch=0-step=1.ckpt"
+    with ModelRunner(config) as runner:
+        runner.train([mgf_small], [mgf_small])
+
+    assert model_file.is_file()
+
+    # Test evaluation with annotated peak file
+    result_file = tmp_path / "result.mzTab"
+    with ModelRunner(config, model_filename=str(model_file)) as runner:
+        runner.predict([mgf_small], result_file, evaluate=True)
+
+    assert result_file.is_file()
+    result_file.unlink()
+
+    # Test evaluation with unannotated peak files
+    with ModelRunner(config, model_filename=str(model_file)) as runner:
+        runner.predict([mgf_small_unannotated], result_file, evaluate=True)
+
+    with ModelRunner(config, model_filename=str(model_file)) as runner:
+        runner.predict([mzml_small], result_file, evaluate=True)
+
+    assert not result_file.is_file()
