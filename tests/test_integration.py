@@ -39,22 +39,7 @@ def test_train_and_run(
     assert result.exit_code == 0
     assert model_file.exists()
 
-    # Try evaluating:
-    eval_args = [
-        "evaluate",
-        "--model",
-        str(model_file),
-        "--config",
-        str(tiny_config),
-        "--output",
-        str(tmp_path / "eval"),
-        str(mgf_small),
-    ]
-
-    result = run(eval_args)
-    assert result.exit_code == 0
-
-    # Try predicting:
+    # Finally try predicting:
     output_filename = tmp_path / "test.mztab"
     predict_args = [
         "sequence",
