@@ -417,9 +417,15 @@ class ModelRunner:
         else:
             index_fname = Path(self.tmp_dir.name) / f"{uuid.uuid4().hex}.hdf5"
 
-        Index = AnnotatedSpectrumIndex if annotated else SpectrumIndex
-        valid_charge = np.arange(1, self.config.max_charge + 1)
-        return Index(index_fname, filenames, valid_charge=valid_charge)
+        try:
+            Index = AnnotatedSpectrumIndex if annotated else SpectrumIndex
+            valid_charge = np.arange(1, self.config.max_charge + 1)
+            return Index(index_fname, filenames, valid_charge=valid_charge)
+        except TypeError:
+            raise ValueError(
+                "MGF peak files must be annotated when constructing "
+                "annotated spectrum indices."
+            )
 
     def _get_strategy(self) -> Union[str, DDPStrategy]:
         """Get the strategy for the Trainer.
@@ -472,5 +478,15 @@ def _get_peak_filenames(
         for fname in glob.glob(path, recursive=True):
             if Path(fname).suffix.lower() in supported_ext:
                 found_files.add(fname)
+            else:
+                warnings.warn(
+                    f"Ignoring unsupported peak file: {fname}", RuntimeWarning
+                )
+
+    if len(found_files) == 0:
+        warnings.warn(
+            f"No supported peak files found under path(s): {list(paths)}",
+            RuntimeWarning,
+        )
 
     return sorted(list(found_files))
