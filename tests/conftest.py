@@ -208,7 +208,6 @@ def tiny_config(tmp_path):
         "random_seed": 454,
         "n_log": 1,
         "tb_summarywriter": None,
-        "save_top_k": 5,
         "n_peaks": 150,
         "min_mz": 50.0,
         "max_mz": 2500.0,

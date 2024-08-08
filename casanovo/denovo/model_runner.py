@@ -59,18 +59,13 @@ class ModelRunner:
             ModelCheckpoint(
                 dirpath=config.model_save_folder_path,
                 save_on_train_epoch_end=True,
-            )
+            ),
+            ModelCheckpoint(
+                dirpath=config.model_save_folder_path,
+                monitor="valid_CELoss",
+                filename="best",
+            ),
         ]
-
-        if config.save_top_k is not None:
-            self.callbacks.append(
-                ModelCheckpoint(
-                    dirpath=config.model_save_folder_path,
-                    monitor="valid_CELoss",
-                    mode="min",
-                    save_top_k=config.save_top_k,
-                )
-            )
 
     def __enter__(self):
         """Enter the context manager"""
