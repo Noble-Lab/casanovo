@@ -96,11 +96,6 @@ class Config:
                 # Remap deprecated config entries.
                 for old, new in _config_deprecated.items():
                     if old in self._user_config:
-                        warning_msg = (
-                            f"Depreciated config option '{old}' "
-                            "is no longer in use"
-                        )
-
                         if new is not None:
                             self._user_config[new] = self._user_config.pop(old)
                             warning_msg = (
@@ -109,11 +104,12 @@ class Config:
                             )
                         else:
                             del self._user_config[old]
+                            warning_msg = (
+                                f"Depreciated config option '{old}' "
+                                "is no longer in use"
+                            )
 
-                        warnings.warn(
-                            warning_msg,
-                            DeprecationWarning,
-                        )
+                        warnings.warn(warning_msg, DeprecationWarning)
                 # Check for missing entries in config file.
                 config_missing = self._params.keys() - self._user_config.keys()
                 if len(config_missing) > 0:
