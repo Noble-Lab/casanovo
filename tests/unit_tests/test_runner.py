@@ -191,7 +191,7 @@ def test_evaluate(
     assert model_file.is_file()
 
     # Test evaluation with annotated peak file
-    result_file = tmp_path / "result.mzTab"
+    result_file = tmp_path / "result.mztab"
     with ModelRunner(config, model_filename=str(model_file)) as runner:
         runner.predict([mgf_small], result_file, evaluate=True)
 
