@@ -199,10 +199,35 @@ def test_evaluate(
     result_file.unlink()
 
     # Test evaluation with unannotated peak files
-    with ModelRunner(config, model_filename=str(model_file)) as runner:
-        runner.predict([mgf_small_unannotated], result_file, evaluate=True)
+    with pytest.raises(FileNotFoundError):
+        with ModelRunner(config, model_filename=str(model_file)) as runner:
+            runner.predict([mzml_small], result_file, evaluate=True)
 
-    with ModelRunner(config, model_filename=str(model_file)) as runner:
-        runner.predict([mzml_small], result_file, evaluate=True)
+    with pytest.raises(ValueError):
+        with ModelRunner(config, model_filename=str(model_file)) as runner:
+            runner.predict([mgf_small_unannotated], result_file, evaluate=True)
 
-    assert not result_file.is_file()
+    with pytest.raises(ValueError):
+        with ModelRunner(config, model_filename=str(model_file)) as runner:
+            runner.predict(
+                [mgf_small_unannotated, mzml_small], result_file, evaluate=True
+            )
+
+    # Test mix of annotated an unannotated peak files
+    with pytest.warns(RuntimeWarning):
+        with ModelRunner(config, model_filename=str(model_file)) as runner:
+            runner.predict([mgf_small, mzml_small], result_file, evaluate=True)
+
+    with pytest.raises(ValueError):
+        with ModelRunner(config, model_filename=str(model_file)) as runner:
+            runner.predict(
+                [mgf_small, mgf_small_unannotated], result_file, evaluate=True
+            )
+
+    with pytest.raises(ValueError):
+        with ModelRunner(config, model_filename=str(model_file)) as runner:
+            runner.predict(
+                [mgf_small, mgf_small_unannotated, mzml_small],
+                result_file,
+                evaluate=True,
+            )
