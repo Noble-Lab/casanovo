@@ -458,7 +458,7 @@ class ModelRunner:
 
 
 def _mgf_is_annotated(mgf_path: TextIO) -> bool:
-    """Check whether MGF file is annotated
+    """Check whether a MGF file is annotated
 
     Parameters
     ----------
