@@ -6,7 +6,7 @@ import pytest
 import torch
 
 from casanovo.config import Config
-from casanovo.denovo.model_runner import ModelRunner
+from casanovo.denovo.model_runner import ModelRunner, _mgf_is_annotated
 
 
 def test_initialize_model(tmp_path, mgf_small):
@@ -203,31 +203,49 @@ def test_evaluate(
         with ModelRunner(config, model_filename=str(model_file)) as runner:
             runner.predict([mzml_small], result_file, evaluate=True)
 
-    with pytest.raises(ValueError):
+    with pytest.raises(FileNotFoundError):
         with ModelRunner(config, model_filename=str(model_file)) as runner:
             runner.predict([mgf_small_unannotated], result_file, evaluate=True)
 
-    with pytest.raises(ValueError):
+    with pytest.raises(FileNotFoundError):
         with ModelRunner(config, model_filename=str(model_file)) as runner:
             runner.predict(
                 [mgf_small_unannotated, mzml_small], result_file, evaluate=True
             )
+
+    # MzTab with just metadata is written in the case of FileNotFound
+    # early exit
+    result_file.unlink()
 
     # Test mix of annotated an unannotated peak files
     with pytest.warns(RuntimeWarning):
         with ModelRunner(config, model_filename=str(model_file)) as runner:
             runner.predict([mgf_small, mzml_small], result_file, evaluate=True)
 
-    with pytest.raises(ValueError):
+    assert result_file.is_file()
+    result_file.unlink()
+
+    with pytest.warns(RuntimeWarning):
         with ModelRunner(config, model_filename=str(model_file)) as runner:
             runner.predict(
                 [mgf_small, mgf_small_unannotated], result_file, evaluate=True
             )
 
-    with pytest.raises(ValueError):
+    assert result_file.is_file()
+    result_file.unlink()
+
+    with pytest.warns(RuntimeWarning):
         with ModelRunner(config, model_filename=str(model_file)) as runner:
             runner.predict(
                 [mgf_small, mgf_small_unannotated, mzml_small],
                 result_file,
                 evaluate=True,
             )
+
+    assert result_file.is_file()
+    result_file.unlink()
+
+
+def test_mgf_is_annotated(mgf_small, mgf_small_unannotated):
+    assert _mgf_is_annotated(mgf_small)
+    assert not _mgf_is_annotated(mgf_small_unannotated)
