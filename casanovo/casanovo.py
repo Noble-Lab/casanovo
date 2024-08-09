@@ -135,7 +135,7 @@ def main() -> None:
     default=False,
     help="""
     Run in evaluation mode. When this flag is set the peptide and amino
-    acid precision will be calculate and logged at the end of the sequencing
+    acid precision will be calculated and logged at the end of the sequencing
     run. All input files must be annotated MGF files if running in evaluation
     mode.
     """,
