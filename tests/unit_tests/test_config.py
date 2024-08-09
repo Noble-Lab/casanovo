@@ -52,7 +52,7 @@ def test_deprecated(tmp_path, tiny_config):
 
     with open(tiny_config, "r") as f_in, open(filename, "w") as f_out:
         cfg = yaml.safe_load(f_in)
-        # Insert non-remapped depreciated config option.
+        # Insert non-remapped deprecated config option.
         cfg["save_top_k"] = 5
         yaml.safe_dump(cfg, f_out)
 

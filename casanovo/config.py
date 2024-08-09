@@ -105,7 +105,7 @@ class Config:
                         else:
                             del self._user_config[old]
                             warning_msg = (
-                                f"Depreciated config option '{old}' "
+                                f"Deprecated config option '{old}' "
                                 "is no longer in use"
                             )
 
