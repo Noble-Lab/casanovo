@@ -8,7 +8,7 @@ import tempfile
 import uuid
 import warnings
 from pathlib import Path
-from typing import Iterable, List, Optional, Union
+from typing import Iterable, List, Optional, Union, TextIO
 
 import depthcharge.masses
 import lightning.pytorch as pl
@@ -399,6 +399,21 @@ class ModelRunner:
 
         msg = msg.strip()
         filenames = _get_peak_filenames(peak_path, ext)
+        if annotated:
+            # Filter unannotated MGF files to avoid Depth Charge exception
+            filtered_fnames = list()
+            for fname in filenames:
+                if Path(
+                    fname
+                ).suffix.lower() == ".mgf" and not _mgf_is_annotated(fname):
+                    warnings.warn(
+                        f"Ignoring unannotated MGF peak file: {fname}",
+                        RuntimeWarning,
+                    )
+                else:
+                    filtered_fnames.append(fname)
+            filenames = filtered_fnames
+
         if not filenames:
             not_found_err = f"Cound not find {msg} peak files"
             logger.error(not_found_err + " from %s", peak_path)
@@ -415,15 +430,9 @@ class ModelRunner:
         else:
             index_fname = Path(self.tmp_dir.name) / f"{uuid.uuid4().hex}.hdf5"
 
-        try:
-            Index = AnnotatedSpectrumIndex if annotated else SpectrumIndex
-            valid_charge = np.arange(1, self.config.max_charge + 1)
-            return Index(index_fname, filenames, valid_charge=valid_charge)
-        except TypeError:
-            raise ValueError(
-                "MGF peak files must be annotated when constructing "
-                "annotated spectrum indices."
-            )
+        Index = AnnotatedSpectrumIndex if annotated else SpectrumIndex
+        valid_charge = np.arange(1, self.config.max_charge + 1)
+        return Index(index_fname, filenames, valid_charge=valid_charge)
 
     def _get_strategy(self) -> Union[str, DDPStrategy]:
         """Get the strategy for the Trainer.
@@ -446,6 +455,32 @@ class ModelRunner:
             return DDPStrategy(find_unused_parameters=False, static_graph=True)
         else:
             return "auto"
+
+
+def _mgf_is_annotated(mgf_path: TextIO) -> bool:
+    """Check whether MGF file is annotated
+
+    Parameters
+    ----------
+    mgf_path : TextIO
+        MGF peak file to check
+
+    Returns
+    -------
+    bool
+        Whether MGF peak file is annotated
+    """
+    num_spectra = 0
+    num_annotations = 0
+
+    with open(mgf_path) as f:
+        for curr_line in f:
+            if curr_line.startswith("BEGIN IONS"):
+                num_spectra += 1
+            elif curr_line.startswith("SEQ="):
+                num_annotations += 1
+
+    return num_spectra == num_annotations
 
 
 def _get_peak_filenames(
