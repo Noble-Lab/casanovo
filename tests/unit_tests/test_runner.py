@@ -6,7 +6,7 @@ import pytest
 import torch
 
 from casanovo.config import Config
-from casanovo.denovo.model_runner import ModelRunner, _mgf_is_annotated
+from casanovo.denovo.model_runner import ModelRunner
 
 
 def test_initialize_model(tmp_path, mgf_small):
@@ -199,22 +199,27 @@ def test_evaluate(
     result_file.unlink()
 
     # Test evaluation with unannotated peak files
+    # NOTE: Depth Charge raises a TypeError exception when an unannotated
+    #   peak file is in the peak file list when initializing a
+    #   AnnotatedSpectrumIndex
+    # TODO: Reexamine after Depth Charge v0.4 release
     with pytest.raises(FileNotFoundError):
         with ModelRunner(config, model_filename=str(model_file)) as runner:
             runner.predict([mzml_small], result_file, evaluate=True)
 
-    with pytest.raises(FileNotFoundError):
+    with pytest.raises(TypeError):
         with ModelRunner(config, model_filename=str(model_file)) as runner:
             runner.predict([mgf_small_unannotated], result_file, evaluate=True)
 
-    with pytest.raises(FileNotFoundError):
+    with pytest.raises(TypeError):
         with ModelRunner(config, model_filename=str(model_file)) as runner:
             runner.predict(
                 [mgf_small_unannotated, mzml_small], result_file, evaluate=True
             )
 
     # MzTab with just metadata is written in the case of FileNotFound
-    # early exit
+    # or TypeError early exit
+    assert result_file.is_file()
     result_file.unlink()
 
     # Test mix of annotated an unannotated peak files
@@ -225,7 +230,7 @@ def test_evaluate(
     assert result_file.is_file()
     result_file.unlink()
 
-    with pytest.warns(RuntimeWarning):
+    with pytest.raises(TypeError):
         with ModelRunner(config, model_filename=str(model_file)) as runner:
             runner.predict(
                 [mgf_small, mgf_small_unannotated], result_file, evaluate=True
@@ -234,7 +239,7 @@ def test_evaluate(
     assert result_file.is_file()
     result_file.unlink()
 
-    with pytest.warns(RuntimeWarning):
+    with pytest.raises(TypeError):
         with ModelRunner(config, model_filename=str(model_file)) as runner:
             runner.predict(
                 [mgf_small, mgf_small_unannotated, mzml_small],
@@ -242,10 +247,4 @@ def test_evaluate(
                 evaluate=True,
             )
 
-    assert result_file.is_file()
     result_file.unlink()
-
-
-def test_mgf_is_annotated(mgf_small, mgf_small_unannotated):
-    assert _mgf_is_annotated(mgf_small)
-    assert not _mgf_is_annotated(mgf_small_unannotated)
