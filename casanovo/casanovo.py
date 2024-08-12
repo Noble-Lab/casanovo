@@ -130,7 +130,7 @@ def sequence(
 ) -> None:
     """De novo sequence peptides from tandem mass spectra.
 
-    PEAK_PATH must be one or more mzMl, mzXML, or MGF files from which
+    PEAK_PATH must be one or more mzML, mzXML, or MGF files from which
     to sequence peptides.
     """
     output = setup_logging(output, verbosity)
@@ -205,7 +205,7 @@ def sequence(
 )
 @click.option(
     "--digestion",
-    help="Digestion: full, partial",
+    help="Full: standard digestion. Semi: Include products of semi-specific cleavage",
     type=click.Choice(
         ["full", "partial"],
         case_sensitive=False,
@@ -214,37 +214,41 @@ def sequence(
 )
 @click.option(
     "--missed_cleavages",
-    help="Number of allowed missed cleavages",
+    help="Number of allowed missed cleavages when digesting protein",
     type=int,
     default=0,
 )
 @click.option(
     "--max_mods",
-    help="Maximum number of modifications per peptide",
+    help="Maximum number of amino acid modifications per peptide",
     type=int,
     default=0,
 )
 @click.option(
-    "--min_length",
-    help="Minimum peptide length",
+    "--min_peptide_length",
+    help="Minimum peptide length to consider",
     type=int,
     default=6,
 )
 @click.option(
-    "--max_length",
-    help="Maximum peptide length",
+    "--max_peptide_length",
+    help="Maximum peptide length to consider",
     type=int,
     default=50,
 )
 @click.option(
     "--precursor_tolerance",
-    help="Precursor tolerance window size (ppm)",
-    type=int,
+    help="Precursor tolerance window size (units: ppm)",
+    type=float,
     default=20,
 )
 @click.option(
     "--isotope_error",
-    help="Isotope error levels to consider (list of ints, e.g: 1,2)",
+    help="Isotope error levels to consider. \
+        Creates multiple mass windows to consider per spectrum \
+        to account for observed mass not matching monoisotopic mass \
+        due to the instrument assigning the 13C isotope \
+        peak as the precursor (list of ints, e.g: 1,2)",
     type=str,
     default="0",
 )
@@ -255,9 +259,9 @@ def db_search(
     digestion: str,
     missed_cleavages: int,
     max_mods: int,
-    min_length: int,
-    max_length: int,
-    precursor_tolerance: int,
+    min_peptide_length: int,
+    max_peptide_length: int,
+    precursor_tolerance: float,
     isotope_error: str,
     model: Optional[str],
     config: Optional[str],
@@ -266,7 +270,8 @@ def db_search(
 ) -> None:
     """Perform a database search on MS/MS data using Casanovo-DB.
 
-    PEAK_PATH must be one MGF file. FASTA_PATH must be one FASTA file.
+    PEAK_PATH must be one or more mzML, mzXML, or MGF files.
+    FASTA_PATH must be one FASTA file.
     """
     output = setup_logging(output, verbosity)
     config, model = setup_model(model, config, output, False)
@@ -284,8 +289,8 @@ def db_search(
             digestion,
             missed_cleavages,
             max_mods,
-            min_length,
-            max_length,
+            min_peptide_length,
+            max_peptide_length,
             precursor_tolerance,
             isotope_error,
             output,

@@ -2,20 +2,20 @@
 
 import functools
 import os
-from typing import List, Optional, Tuple
-from functools import partial
 import logging
+from typing import List, Optional, Tuple
 
+from depthcharge.data import AnnotatedSpectrumIndex
 import lightning.pytorch as pl
 import numpy as np
 import torch
-from depthcharge.data import AnnotatedSpectrumIndex
 
+from ..data import db_utils
 from ..data.datasets import (
     AnnotatedSpectrumDataset,
     SpectrumDataset,
 )
-from ..data import db_utils
+
 
 logger = logging.getLogger("casanovo")
 
@@ -186,7 +186,7 @@ class DeNovoDataModule(pl.LightningDataModule):
         return torch.utils.data.DataLoader(
             self.test_dataset,
             batch_size=self.eval_batch_size,
-            collate_fn=partial(
+            collate_fn=functools.partial(
                 prepare_psm_batch,
                 digest=self.digest,
                 precursor_tolerance=self.precursor_tolerance,

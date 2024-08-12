@@ -16,7 +16,7 @@ from depthcharge.components import ModelMixin, PeptideDecoder, SpectrumEncoder
 
 from . import evaluate
 from .. import config
-from ..data import ms_io, db_utils
+from ..data import ms_io
 
 logger = logging.getLogger("casanovo")
 
@@ -991,7 +991,8 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
 
 class DbSpec2Pep(Spec2Pep):
     """
-    Subclass of Spec2Pep for the use of Casanovo as an MS/MS database search score function.
+    Subclass of Spec2Pep for the use of Casanovo as an \
+    MS/MS database search score function.
 
     Uses teacher forcing to 'query' Casanovo for its score for each AA
     within a candidate peptide, and takes the geometric average of these scores
@@ -1008,7 +1009,6 @@ class DbSpec2Pep(Spec2Pep):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.total_psms = 0
         self.psm_batch_size = 1024
 
     def predict_step(self, batch, *args):
@@ -1029,11 +1029,14 @@ class DbSpec2Pep(Spec2Pep):
             scores, amino acid-level scores, and associated proteins.
         """
         predictions = []
-        while len(batch[0]) > 0:
-            next_batch = [b[self.psm_batch_size :] for b in batch]
-            batch = [b[: self.psm_batch_size] for b in batch]
+        for start_idx in range(0, len(batch[0]), self.psm_batch_size):
+            current_batch = [
+                b[start_idx : start_idx + self.psm_batch_size] for b in batch
+            ]
             pred, truth = self.decoder(
-                batch[3], batch[1], *self.encoder(batch[0])
+                current_batch[3],
+                current_batch[1],
+                *self.encoder(current_batch[0]),
             )
             pred = self.softmax(pred)
             all_scores, per_aa_scores = _calc_match_score(
@@ -1048,13 +1051,13 @@ class DbSpec2Pep(Spec2Pep):
                 peptide,
                 protein,
             ) in zip(
-                batch[1][:, 1].cpu().detach().numpy(),
-                batch[1][:, 2].cpu().detach().numpy(),
-                batch[2],
+                current_batch[1][:, 1].cpu().detach().numpy(),
+                current_batch[1][:, 2].cpu().detach().numpy(),
+                current_batch[2],
                 all_scores.cpu().detach().numpy(),
                 per_aa_scores.cpu().detach().numpy(),
-                batch[3],
-                batch[4],
+                current_batch[3],
+                current_batch[4],
             ):
                 predictions.append(
                     (
@@ -1067,8 +1070,6 @@ class DbSpec2Pep(Spec2Pep):
                         protein,
                     )
                 )
-            batch = next_batch
-        self.total_psms += len(predictions)
         return predictions
 
     def on_predict_batch_end(
@@ -1088,8 +1089,6 @@ class DbSpec2Pep(Spec2Pep):
             aa_scores,
             protein,
         ) in outputs:
-            if len(peptide) == 0:
-                continue
             self.out_writer.psms.append(
                 (
                     peptide,

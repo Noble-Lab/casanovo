@@ -1,14 +1,15 @@
 """Unique methods used within db-search mode"""
 
-import os
-import depthcharge.masses
-from pyteomics import fasta, parser
 import bisect
 import logging
-
+import os
 from typing import List, Tuple
 
+import depthcharge.masses
+from pyteomics import fasta, parser
+
 logger = logging.getLogger("casanovo")
+
 
 # CONSTANTS
 HYDROGEN = 1.007825035
@@ -51,8 +52,8 @@ def digest_fasta(
     digestion: str,
     missed_cleavages: int,
     max_mods: int,
-    min_length: int,
-    max_length: int,
+    min_peptide_length: int,
+    max_peptide_length: int,
 ):
     """
     Digests a FASTA file and returns the peptides, their masses, and associated protein.
@@ -70,9 +71,9 @@ def digest_fasta(
         The number of missed cleavages to allow.
     max_mods : int
         The maximum number of modifications to allow per peptide.
-    min_length : int
+    min_peptide_length : int
         The minimum length of peptides to consider.
-    max_length : int
+    max_peptide_length : int
         The maximum length of peptides to consider.
 
     Returns
@@ -81,35 +82,36 @@ def digest_fasta(
         A list of tuples containing the peptide sequence, mass,
         and associated protein. Sorted by neutral mass in ascending order.
     """
-
-    # Verify the eistence of the file:
+    # Verify the existence of the file:
     if not os.path.isfile(fasta_filename):
-        print(f"File {fasta_filename} does not exist.")
+        logger.error("File %s does not exist.", fasta_filename)
         raise FileNotFoundError(f"File {fasta_filename} does not exist.")
 
     fasta_data = fasta.read(fasta_filename)
     peptide_list = []
-    if digestion in ["full", "partial"]:
-        semi = True if digestion == "partial" else False
-        for header, seq in fasta_data:
-            pep_set = parser.cleave(
-                seq,
-                rule=parser.expasy_rules[enzyme],
-                missed_cleavages=missed_cleavages,
-                semi=semi,
-            )
-            protein = header.split()[0]
-            for pep in pep_set:
-                if len(pep) < min_length or len(pep) > max_length:
-                    continue
-                if "X" in pep or "U" in pep:
-                    logger.warn(
-                        "Skipping peptide with ambiguous amino acids: %s", pep
-                    )
-                    continue
-                peptide_list.append((pep, protein))
-    else:
+    if digestion not in ["full", "partial"]:
+        logger.error("Digestion type %s not recognized.", digestion)
         raise ValueError(f"Digestion type {digestion} not recognized.")
+    semi = digestion == "partial"
+    for header, seq in fasta_data:
+        pep_set = parser.cleave(
+            seq,
+            rule=parser.expasy_rules[enzyme],
+            missed_cleavages=missed_cleavages,
+            semi=semi,
+        )
+        protein = header.split()[0]
+        for pep in pep_set:
+            if len(pep) < min_peptide_length or len(pep) > max_peptide_length:
+                continue
+            if any(
+                aa in pep for aa in "BJOUXZ"
+            ):  # Check for incorrect AA letters
+                logger.warn(
+                    "Skipping peptide with ambiguous amino acids: %s", pep
+                )
+                continue
+            peptide_list.append((pep, protein))
 
     # Generate modified peptides
     mass_calculator = depthcharge.masses.PeptideMass(residues="massivekb")
@@ -136,7 +138,7 @@ def get_candidates(
     precursor_mz: float,
     charge: int,
     peptide_list: List[Tuple[str, float, str]],
-    precursor_tolerance: int,
+    precursor_tolerance: float,
     isotope_error: str,
 ):
     """
@@ -156,7 +158,6 @@ def get_candidates(
     isotope_error : str
         The isotope error levels to consider.
     """
-
     candidates = set()
 
     isotope_error = [int(x) for x in isotope_error.split(",")]
@@ -219,7 +220,9 @@ def _to_raw_mass(mz_mass, charge):
 
 
 def get_mass_indices(masses, m_low, m_high):
-    """Grabs mass indices from a list of mass values that fall within a specified range.
+    """Grabs mass indices that fall within a specified range.
+
+    Pulls from masses, a list of mass values.
     Requires that the mass values are sorted in ascending order.
 
     Parameters

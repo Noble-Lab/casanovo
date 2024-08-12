@@ -17,17 +17,14 @@ def mgf_small(tmp_path):
 
 
 @pytest.fixture
-def tiny_fasta_file(tmp_path, fasta_raw_data):
+def tiny_fasta_file(tmp_path):
     fasta_file = tmp_path / "tiny_fasta.fasta"
     with fasta_file.open("w+") as fasta_ref:
-        fasta_ref.write(fasta_raw_data)
+        fasta_ref.write(
+            ">foo\nMEAPAQLLFLLLLWLPDTTREIVMTQSPPTLSLSPGERVTLSCRASQSVSSSYLTWYQQKPGQAPRLLIYGASTRATSIPARFSGSGSGTDFTLTISSLQPEDFAVYYCQQDYNLP"
+        )
 
     return fasta_file
-
-
-@pytest.fixture
-def fasta_raw_data():
-    return ">foo\nMEAPAQLLFLLLLWLPDTTREIVMTQSPPTLSLSPGERVTLSCRASQSVSSSYLTWYQQKPGQAPRLLIYGASTRATSIPARFSGSGSGTDFTLTISSLQPEDFAVYYCQQDYNLP"
 
 
 @pytest.fixture

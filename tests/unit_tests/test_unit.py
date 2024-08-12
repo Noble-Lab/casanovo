@@ -2,6 +2,7 @@ import collections
 import heapq
 import os
 import platform
+import re
 import shutil
 import tempfile
 
@@ -10,11 +11,10 @@ import github
 import numpy as np
 import pytest
 import torch
-import re
 
 from casanovo import casanovo
 from casanovo import utils
-from casanovo.data import ms_io, db_utils
+from casanovo.data import db_utils, ms_io
 from casanovo.data.datasets import SpectrumDataset, AnnotatedSpectrumDataset
 from casanovo.denovo.evaluate import aa_match_batch, aa_match_metrics
 from casanovo.denovo.model import Spec2Pep, _aa_pep_score, _calc_match_score
@@ -220,10 +220,7 @@ def test_calc_match_score():
     assert np.sum(masked_per_aa_scores.numpy()[3]) == 3
 
 
-def test_digest_fasta_cleave(fasta_raw_data):
-
-    with open("temp_fasta", "w") as file:
-        file.write(fasta_raw_data)
+def test_digest_fasta_cleave(tiny_fasta_file):
 
     # No missed cleavages
     expected_normal = [
@@ -275,49 +272,24 @@ def test_digest_fasta_cleave(fasta_raw_data):
         "EIVMTQSPPTLSLSPGERVTLSC+57.021RASQSVSSSYLTWYQQKPGQAPR",
         "LLIYGASTRATSIPARFSGSGSGTDFTLTISSLQPEDFAVYYC+57.021QQDYNLP",
     ]
-
-    peptide_list = db_utils.digest_fasta(
-        fasta_filename="temp_fasta",
-        enzyme="trypsin",
-        digestion="full",
-        missed_cleavages=0,
-        max_mods=0,
-        min_length=6,
-        max_length=50,
-    )
-    peptide_list = [x[0] for x in peptide_list]
-    assert peptide_list == expected_normal
-
-    peptide_list = db_utils.digest_fasta(
-        fasta_filename="temp_fasta",
-        enzyme="trypsin",
-        digestion="full",
-        missed_cleavages=1,
-        max_mods=0,
-        min_length=6,
-        max_length=50,
-    )
-    peptide_list = [x[0] for x in peptide_list]
-    assert peptide_list == expected_1missedcleavage
-
-    peptide_list = db_utils.digest_fasta(
-        fasta_filename="temp_fasta",
-        enzyme="trypsin",
-        digestion="full",
-        missed_cleavages=3,
-        max_mods=0,
-        min_length=6,
-        max_length=50,
-    )
-    peptide_list = [x[0] for x in peptide_list]
-    assert peptide_list == expected_3missedcleavage
+    for missed_cleavages, expected in zip(
+        (0, 1, 3),
+        (expected_normal, expected_1missedcleavage, expected_3missedcleavage),
+    ):
+        peptide_list = db_utils.digest_fasta(
+            fasta_filename=str(tiny_fasta_file),
+            enzyme="trypsin",
+            digestion="full",
+            missed_cleavages=missed_cleavages,
+            max_mods=0,
+            min_peptide_length=6,
+            max_peptide_length=50,
+        )
+        peptide_list = [x[0] for x in peptide_list]
+        assert peptide_list == expected
 
 
-def test_digest_fasta_mods(fasta_raw_data):
-
-    with open("temp_fasta", "w") as file:
-        file.write(fasta_raw_data)
-
+def test_digest_fasta_mods(tiny_fasta_file):
     # 1 modification allowed
     # fixed: C+57.02146
     # variable: 1M+15.994915,1N+0.984016,1Q+0.984016
@@ -373,13 +345,13 @@ def test_digest_fasta_mods(fasta_raw_data):
     ]
 
     peptide_list = db_utils.digest_fasta(
-        fasta_filename="temp_fasta",
+        fasta_filename=str(tiny_fasta_file),
         enzyme="trypsin",
         digestion="full",
         missed_cleavages=0,
         max_mods=1,
-        min_length=6,
-        max_length=50,
+        min_peptide_length=6,
+        max_peptide_length=50,
     )
     peptide_list = [x[0] for x in peptide_list]
     peptide_list = [
@@ -392,11 +364,7 @@ def test_digest_fasta_mods(fasta_raw_data):
     assert peptide_list == expected_1mod
 
 
-def test_length_restrictions(fasta_raw_data):
-
-    with open("temp_fasta", "w") as file:
-        file.write(fasta_raw_data)
-
+def test_length_restrictions(tiny_fasta_file):
     # length between 20 and 50
     expected_long = [
         "MEAPAQLLFLLLLWLPDTTR",
@@ -408,35 +376,31 @@ def test_length_restrictions(fasta_raw_data):
     expected_short = ["ATSIPAR", "VTLSC+57.021R"]
 
     peptide_list = db_utils.digest_fasta(
-        fasta_filename="temp_fasta",
+        fasta_filename=str(tiny_fasta_file),
         enzyme="trypsin",
         digestion="full",
         missed_cleavages=0,
         max_mods=0,
-        min_length=20,
-        max_length=50,
+        min_peptide_length=20,
+        max_peptide_length=50,
     )
     peptide_list = [x[0] for x in peptide_list]
     assert peptide_list == expected_long
 
     peptide_list = db_utils.digest_fasta(
-        fasta_filename="temp_fasta",
+        fasta_filename=str(tiny_fasta_file),
         enzyme="trypsin",
         digestion="full",
         missed_cleavages=0,
         max_mods=0,
-        min_length=6,
-        max_length=8,
+        min_peptide_length=6,
+        max_peptide_length=8,
     )
     peptide_list = [x[0] for x in peptide_list]
     assert peptide_list == expected_short
 
 
-def test_digest_fasta_enzyme(fasta_raw_data):
-
-    with open("temp_fasta", "w") as file:
-        file.write(fasta_raw_data)
-
+def test_digest_fasta_enzyme(tiny_fasta_file):
     # arg-c enzyme
     expected_argc = [
         "ATSIPAR",
@@ -452,35 +416,31 @@ def test_digest_fasta_enzyme(fasta_raw_data):
     expected_aspn = ["DFAVYYC+57.021QQ", "DFTLTISSLQPE", "MEAPAQLLFLLLLWLP"]
 
     peptide_list = db_utils.digest_fasta(
-        fasta_filename="temp_fasta",
+        fasta_filename=str(tiny_fasta_file),
         enzyme="arg-c",
         digestion="full",
         missed_cleavages=0,
         max_mods=0,
-        min_length=6,
-        max_length=50,
+        min_peptide_length=6,
+        max_peptide_length=50,
     )
     peptide_list = [x[0] for x in peptide_list]
     assert peptide_list == expected_argc
 
     peptide_list = db_utils.digest_fasta(
-        fasta_filename="temp_fasta",
+        fasta_filename=str(tiny_fasta_file),
         enzyme="asp-n",
         digestion="full",
         missed_cleavages=0,
         max_mods=0,
-        min_length=6,
-        max_length=50,
+        min_peptide_length=6,
+        max_peptide_length=50,
     )
     peptide_list = [x[0] for x in peptide_list]
     assert peptide_list == expected_aspn
 
 
-def test_get_candidates(fasta_raw_data):
-
-    with open("temp_fasta", "w") as file:
-        file.write(fasta_raw_data)
-
+def test_get_candidates(tiny_fasta_file):
     # precursor_window is 10000
     expected_smallwindow = ["LLIYGASTR"]
 
@@ -491,13 +451,13 @@ def test_get_candidates(fasta_raw_data):
     expected_widewindow = ["ATSIPAR", "VTLSC+57.021R", "LLIYGASTR"]
 
     peptide_list = db_utils.digest_fasta(
-        fasta_filename="temp_fasta",
+        fasta_filename=str(tiny_fasta_file),
         enzyme="trypsin",
         digestion="full",
         missed_cleavages=1,
         max_mods=0,
-        min_length=6,
-        max_length=50,
+        min_peptide_length=6,
+        max_peptide_length=50,
     )
 
     candidates = db_utils.get_candidates(
@@ -511,13 +471,13 @@ def test_get_candidates(fasta_raw_data):
     assert expected_smallwindow == candidates
 
     peptide_list = db_utils.digest_fasta(
-        fasta_filename="temp_fasta",
+        fasta_filename=str(tiny_fasta_file),
         enzyme="trypsin",
         digestion="full",
         missed_cleavages=1,
         max_mods=0,
-        min_length=6,
-        max_length=50,
+        min_peptide_length=6,
+        max_peptide_length=50,
     )
 
     candidates = db_utils.get_candidates(
@@ -531,13 +491,13 @@ def test_get_candidates(fasta_raw_data):
     assert expected_midwindow == candidates
 
     peptide_list = db_utils.digest_fasta(
-        fasta_filename="temp_fasta",
+        fasta_filename=str(tiny_fasta_file),
         enzyme="trypsin",
         digestion="full",
         missed_cleavages=1,
         max_mods=0,
-        min_length=6,
-        max_length=50,
+        min_peptide_length=6,
+        max_peptide_length=50,
     )
 
     candidates = db_utils.get_candidates(
