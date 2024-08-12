@@ -36,12 +36,15 @@ class ModelRunner:
     model_filename : str, optional
         The model filename is required for eval and de novo modes,
         but not for training a model from scratch.
+    output_rootname : str, optional
+        The rootname for all output files (e.g. checkpoints or results)
     """
 
     def __init__(
         self,
         config: Config,
         model_filename: Optional[str] = None,
+        output_rootname: Optional[str] = None,
     ) -> None:
         """Initialize a ModelRunner"""
         self.config = config
@@ -54,23 +57,22 @@ class ModelRunner:
         self.loaders = None
         self.writer = None
 
+        best_filename = "best"
+        if output_rootname is not None:
+            best_filename = f"{output_rootname}.{best_filename}"
+
         # Configure checkpoints.
         self.callbacks = [
             ModelCheckpoint(
                 dirpath=config.model_save_folder_path,
                 save_on_train_epoch_end=True,
-            )
+            ),
+            ModelCheckpoint(
+                dirpath=config.model_save_folder_path,
+                monitor="valid_CELoss",
+                filename=best_filename,
+            ),
         ]
-
-        if config.save_top_k is not None:
-            self.callbacks.append(
-                ModelCheckpoint(
-                    dirpath=config.model_save_folder_path,
-                    monitor="valid_CELoss",
-                    mode="min",
-                    save_top_k=config.save_top_k,
-                )
-            )
 
     def __enter__(self):
         """Enter the context manager"""

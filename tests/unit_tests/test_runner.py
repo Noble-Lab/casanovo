@@ -168,8 +168,8 @@ def test_save_final_model(tmp_path, mgf_small, tiny_config):
 
     # Test checkpoint saving when val_check_interval is not a factor of training steps
     config.val_check_interval = 15
-    validation_file = tmp_path / "epoch=14-step=15.ckpt"
-    with ModelRunner(config) as runner:
+    validation_file = tmp_path / "foobar.best.ckpt"
+    with ModelRunner(config, output_rootname="foobar") as runner:
         runner.train([mgf_small], [mgf_small])
 
     assert model_file.exists()

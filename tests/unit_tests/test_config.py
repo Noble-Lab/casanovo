@@ -43,8 +43,17 @@ def test_deprecated(tmp_path, tiny_config):
     filename = str(tmp_path / "config_deprecated.yml")
     with open(tiny_config, "r") as f_in, open(filename, "w") as f_out:
         cfg = yaml.safe_load(f_in)
-        # Insert deprecated config option.
+        # Insert remapped deprecated config option.
         cfg["max_iters"] = 1
+        yaml.safe_dump(cfg, f_out)
+
+    with pytest.warns(DeprecationWarning):
+        Config(filename)
+
+    with open(tiny_config, "r") as f_in, open(filename, "w") as f_out:
+        cfg = yaml.safe_load(f_in)
+        # Insert non-remapped deprecated config option.
+        cfg["save_top_k"] = 5
         yaml.safe_dump(cfg, f_out)
 
     with pytest.warns(DeprecationWarning):
