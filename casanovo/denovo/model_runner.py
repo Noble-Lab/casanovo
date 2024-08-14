@@ -419,7 +419,19 @@ class ModelRunner:
 
         Index = AnnotatedSpectrumIndex if annotated else SpectrumIndex
         valid_charge = np.arange(1, self.config.max_charge + 1)
-        return Index(index_fname, filenames, valid_charge=valid_charge)
+
+        try:
+            return Index(index_fname, filenames, valid_charge=valid_charge)
+        except TypeError as e:
+            if Index == AnnotatedSpectrumIndex:
+                raise TypeError(
+                    "Error creating annotated spectrum index. "
+                    "This may be the result of having an unannotated MGF file "
+                    "present in the validation peak file path list.\n"
+                    f"Original error message: {e}"
+                )
+
+            raise e
 
     def _get_strategy(self) -> Union[str, DDPStrategy]:
         """Get the strategy for the Trainer.
