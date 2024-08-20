@@ -158,111 +158,9 @@ def sequence(
     nargs=1,
     type=click.Path(exists=True, dir_okay=False),
 )
-@click.option(
-    "--enzyme",
-    help="Enzyme for in silico digestion, \
-    See pyteomics.parser.expasy_rules for valid enzymes",
-    type=click.Choice(
-        [
-            "arg-c",
-            "asp-n",
-            "bnps-skatole",
-            "caspase 1",
-            "caspase 2",
-            "caspase 3",
-            "caspase 4",
-            "caspase 5",
-            "caspase 6",
-            "caspase 7",
-            "caspase 8",
-            "caspase 9",
-            "caspase 10",
-            "chymotrypsin high specificity",
-            "chymotrypsin low specificity",
-            "clostripain",
-            "cnbr",
-            "enterokinase",
-            "factor xa",
-            "formic acid",
-            "glutamyl endopeptidase",
-            "granzyme b",
-            "hydroxylamine",
-            "iodosobenzoic acid",
-            "lysc",
-            "ntcb",
-            "pepsin ph1.3",
-            "pepsin ph2.0",
-            "proline endopeptidase",
-            "proteinase k",
-            "staphylococcal peptidase i",
-            "thermolysin",
-            "thrombin",
-            "trypsin",
-            "trypsin_exception",
-        ]
-    ),
-    default="trypsin",
-)
-@click.option(
-    "--digestion",
-    help="Full: standard digestion. Semi: Include products of semi-specific cleavage",
-    type=click.Choice(
-        ["full", "partial"],
-        case_sensitive=False,
-    ),
-    default="full",
-)
-@click.option(
-    "--missed_cleavages",
-    help="Number of allowed missed cleavages when digesting protein",
-    type=int,
-    default=0,
-)
-@click.option(
-    "--max_mods",
-    help="Maximum number of amino acid modifications per peptide",
-    type=int,
-    default=0,
-)
-@click.option(
-    "--min_peptide_length",
-    help="Minimum peptide length to consider",
-    type=int,
-    default=6,
-)
-@click.option(
-    "--max_peptide_length",
-    help="Maximum peptide length to consider",
-    type=int,
-    default=50,
-)
-@click.option(
-    "--precursor_tolerance",
-    help="Precursor tolerance window size (units: ppm)",
-    type=float,
-    default=20,
-)
-@click.option(
-    "--isotope_error",
-    help="Isotope error levels to consider. \
-        Creates multiple mass windows to consider per spectrum \
-        to account for observed mass not matching monoisotopic mass \
-        due to the instrument assigning the 13C isotope \
-        peak as the precursor (list of ints, e.g: 1,2)",
-    type=str,
-    default="0",
-)
 def db_search(
     peak_path: Tuple[str],
     fasta_path: str,
-    enzyme: str,
-    digestion: str,
-    missed_cleavages: int,
-    max_mods: int,
-    min_peptide_length: int,
-    max_peptide_length: int,
-    precursor_tolerance: float,
-    isotope_error: str,
     model: Optional[str],
     config: Optional[str],
     output: Optional[str],
@@ -285,14 +183,6 @@ def db_search(
         runner.db_search(
             peak_path,
             fasta_path,
-            enzyme,
-            digestion,
-            missed_cleavages,
-            max_mods,
-            min_peptide_length,
-            max_peptide_length,
-            precursor_tolerance,
-            isotope_error,
             output,
         )
 

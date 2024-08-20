@@ -24,8 +24,6 @@ def test_db_search(
         tiny_config,
         "--output",
         str(output_path),
-        "--precursor_tolerance",
-        str(100),
         str(mgf_db_search),
         str(tiny_fasta_file),
     ]

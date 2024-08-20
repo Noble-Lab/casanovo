@@ -83,14 +83,6 @@ class ModelRunner:
         self,
         peak_path: Iterable[str],
         fasta_path: str,
-        enzyme: str,
-        digestion: str,
-        missed_cleavages: int,
-        max_mods: int,
-        min_peptide_length: int,
-        max_peptide_length: int,
-        precursor_tolerance: float,
-        isotope_error: str,
         output: str,
     ) -> None:
         """Perform database search with Casanovo.
@@ -101,22 +93,6 @@ class ModelRunner:
             The paths to the .mgf data files for database search.
         fasta_path : str
             The path to the FASTA file for database search.
-        enzyme : str
-            The enzyme used for digestion.
-        digestion : str
-            The digestion type, full or partial.
-        missed_cleavages : int
-            The number of missed cleavages allowed.
-        max_mods : int
-            The maximum number of modifications allowed per peptide.
-        min_peptide_length : int
-            The minimum peptide length.
-        max_peptide_length : int
-            The maximum peptide length.
-        precursor_tolerance : float
-            The precursor mass tolerance in ppm.
-        isotope_error : str
-            Isotope error levels to consider, in comma-delineated string form.
         output : str
             Where should the output be saved?
 
@@ -138,19 +114,18 @@ class ModelRunner:
         self.writer.set_ms_run(test_index.ms_files)
 
         self.initialize_data_module(test_index=test_index)
-        self.loaders.setup(stage="test", annotated=False)
-        self.loaders.digest = db_utils.digest_fasta(
+        self.loaders.pdb = db_utils.ProteinDatabase(
             fasta_path,
-            enzyme,
-            digestion,
-            missed_cleavages,
-            max_mods,
-            min_peptide_length,
-            max_peptide_length,
+            self.config.enzyme,
+            self.config.digestion,
+            self.config.missed_cleavages,
+            self.config.min_peptide_len,
+            self.config.max_peptide_len,
+            self.config.max_mods,
+            self.config.precursor_mass_tol,
+            self.config.isotope_error_range,
         )
-        self.loaders.precursor_tolerance = precursor_tolerance
-        self.loaders.isotope_error = isotope_error
-
+        self.loaders.setup(stage="test", annotated=False)
         self.trainer.predict(self.model, self.loaders.db_dataloader())
 
     def train(

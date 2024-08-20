@@ -5,18 +5,26 @@
 
 ###
 # The following parameters can be modified when running inference or when
-# fine-tuning an existing Casanovo model.
+# fine-tuning an existing Casanovo model. They also affect database search
+# parameters when running Casanovo in DB-search mode.
 ###
 
 # Max absolute difference allowed with respect to observed precursor m/z.
-# Predictions outside the tolerance range are assigned a negative peptide score.
+# denovo: Predictions outside the tolerance range are assigned a negative peptide score.
+# db-search: Used to create mas windows for candidate generation.
 precursor_mass_tol: 50  # ppm
 # Isotopes to consider when comparing predicted and observed precursor m/z's.
 isotope_error_range: [0, 1]
-# The minimum length of predicted peptides.
+# The minimum length of predicted/scored peptides.
 min_peptide_len: 6
-# Number of spectra in one inference batch.
+# Number of spectra or psms in one inference batch.
 predict_batch_size: 1024
+
+
+###
+# The following parameters are unique to Casanovo's inference/finetuning mode.
+###
+
 # Number of beams used in beam search.
 n_beams: 1
 # Number of PSMs for each spectrum.
@@ -28,6 +36,26 @@ accelerator: "auto"
 # indicate all available devices should be used. If left empty, the appropriate
 # number will be automatically selected for based on the chosen accelerator.
 devices:
+
+
+###
+# The following parameters are unique to Casanovo's database search mode.
+###
+
+# Enzyme for in silico digestion, used to generate candidate peptides.
+# See pyteomics.parser.expasy_rules for valid enzymes
+enzyme: "trypsin"
+# Digestion type for candidate peptide generation.
+# Full: standard digestion. Semi: Include products of semi-specific cleavage
+digestion: "full"
+# Number of allowed missed cleavages when digesting protein
+missed_cleavages: 0
+# Maximum number of amino acid modifications per peptide.
+# None generates all possible isoforms as candidates.
+max_mods: 
+# Maximum peptide length to consider
+max_peptide_len: 50
+
 
 ###
 # The following parameters should only be modified if you are training a new

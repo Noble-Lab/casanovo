@@ -276,15 +276,18 @@ def test_digest_fasta_cleave(tiny_fasta_file):
         (0, 1, 3),
         (expected_normal, expected_1missedcleavage, expected_3missedcleavage),
     ):
-        peptide_list = db_utils.digest_fasta(
-            fasta_filename=str(tiny_fasta_file),
+        pdb = db_utils.ProteinDatabase(
+            fasta_path=str(tiny_fasta_file),
             enzyme="trypsin",
             digestion="full",
             missed_cleavages=missed_cleavages,
+            min_peptide_len=6,
+            max_peptide_len=50,
             max_mods=0,
-            min_peptide_length=6,
-            max_peptide_length=50,
+            precursor_tolerance=20,
+            isotope_error=[0],
         )
+        peptide_list = pdb.digest
         peptide_list = [x[0] for x in peptide_list]
         assert peptide_list == expected
 
@@ -343,16 +346,18 @@ def test_digest_fasta_mods(tiny_fasta_file):
         "+42.011FSGSGSGTDFTLTISSLQPEDFAVYYC+57.021QQDYNLP",
         "+43.006FSGSGSGTDFTLTISSLQPEDFAVYYC+57.021QQDYNLP",
     ]
-
-    peptide_list = db_utils.digest_fasta(
-        fasta_filename=str(tiny_fasta_file),
+    pdb = db_utils.ProteinDatabase(
+        fasta_path=str(tiny_fasta_file),
         enzyme="trypsin",
         digestion="full",
         missed_cleavages=0,
+        min_peptide_len=6,
+        max_peptide_len=50,
         max_mods=1,
-        min_peptide_length=6,
-        max_peptide_length=50,
+        precursor_tolerance=20,
+        isotope_error=[0],
     )
+    peptide_list = pdb.digest
     peptide_list = [x[0] for x in peptide_list]
     peptide_list = [
         x
@@ -375,27 +380,33 @@ def test_length_restrictions(tiny_fasta_file):
     # length between 6 and 8
     expected_short = ["ATSIPAR", "VTLSC+57.021R"]
 
-    peptide_list = db_utils.digest_fasta(
-        fasta_filename=str(tiny_fasta_file),
+    pdb = db_utils.ProteinDatabase(
+        fasta_path=str(tiny_fasta_file),
         enzyme="trypsin",
         digestion="full",
         missed_cleavages=0,
+        min_peptide_len=20,
+        max_peptide_len=50,
         max_mods=0,
-        min_peptide_length=20,
-        max_peptide_length=50,
+        precursor_tolerance=20,
+        isotope_error=[0],
     )
+    peptide_list = pdb.digest
     peptide_list = [x[0] for x in peptide_list]
     assert peptide_list == expected_long
 
-    peptide_list = db_utils.digest_fasta(
-        fasta_filename=str(tiny_fasta_file),
+    pdb = db_utils.ProteinDatabase(
+        fasta_path=str(tiny_fasta_file),
         enzyme="trypsin",
         digestion="full",
         missed_cleavages=0,
+        min_peptide_len=6,
+        max_peptide_len=8,
         max_mods=0,
-        min_peptide_length=6,
-        max_peptide_length=8,
+        precursor_tolerance=20,
+        isotope_error=[0],
     )
+    peptide_list = pdb.digest
     peptide_list = [x[0] for x in peptide_list]
     assert peptide_list == expected_short
 
@@ -415,27 +426,33 @@ def test_digest_fasta_enzyme(tiny_fasta_file):
     # asp-n enzyme
     expected_aspn = ["DFAVYYC+57.021QQ", "DFTLTISSLQPE", "MEAPAQLLFLLLLWLP"]
 
-    peptide_list = db_utils.digest_fasta(
-        fasta_filename=str(tiny_fasta_file),
+    pdb = db_utils.ProteinDatabase(
+        fasta_path=str(tiny_fasta_file),
         enzyme="arg-c",
         digestion="full",
         missed_cleavages=0,
+        min_peptide_len=6,
+        max_peptide_len=50,
         max_mods=0,
-        min_peptide_length=6,
-        max_peptide_length=50,
+        precursor_tolerance=20,
+        isotope_error=[0],
     )
+    peptide_list = pdb.digest
     peptide_list = [x[0] for x in peptide_list]
     assert peptide_list == expected_argc
 
-    peptide_list = db_utils.digest_fasta(
-        fasta_filename=str(tiny_fasta_file),
+    pdb = db_utils.ProteinDatabase(
+        fasta_path=str(tiny_fasta_file),
         enzyme="asp-n",
         digestion="full",
         missed_cleavages=0,
+        min_peptide_len=6,
+        max_peptide_len=50,
         max_mods=0,
-        min_peptide_length=6,
-        max_peptide_length=50,
+        precursor_tolerance=20,
+        isotope_error=[0],
     )
+    peptide_list = pdb.digest
     peptide_list = [x[0] for x in peptide_list]
     assert peptide_list == expected_aspn
 
@@ -450,68 +467,53 @@ def test_get_candidates(tiny_fasta_file):
     # precursor window is 600000
     expected_widewindow = ["ATSIPAR", "VTLSC+57.021R", "LLIYGASTR"]
 
-    peptide_list = db_utils.digest_fasta(
-        fasta_filename=str(tiny_fasta_file),
+    pdb = db_utils.ProteinDatabase(
+        fasta_path=str(tiny_fasta_file),
         enzyme="trypsin",
         digestion="full",
         missed_cleavages=1,
+        min_peptide_len=6,
+        max_peptide_len=50,
         max_mods=0,
-        min_peptide_length=6,
-        max_peptide_length=50,
-    )
-
-    candidates = db_utils.get_candidates(
-        precursor_mz=496.2,
-        charge=2,
-        peptide_list=peptide_list,
         precursor_tolerance=10000,
-        isotope_error="0",
+        isotope_error=[0],
     )
+    candidates = pdb.get_candidates(precursor_mz=496.2, charge=2)
     candidates = [x[0] for x in candidates]
     assert expected_smallwindow == candidates
 
-    peptide_list = db_utils.digest_fasta(
-        fasta_filename=str(tiny_fasta_file),
+    pdb = db_utils.ProteinDatabase(
+        fasta_path=str(tiny_fasta_file),
         enzyme="trypsin",
         digestion="full",
         missed_cleavages=1,
+        min_peptide_len=6,
+        max_peptide_len=50,
         max_mods=0,
-        min_peptide_length=6,
-        max_peptide_length=50,
-    )
-
-    candidates = db_utils.get_candidates(
-        precursor_mz=496.2,
-        charge=2,
-        peptide_list=peptide_list,
         precursor_tolerance=150000,
-        isotope_error="0",
+        isotope_error=[0],
     )
+    candidates = pdb.get_candidates(precursor_mz=496.2, charge=2)
     candidates = [x[0] for x in candidates]
     assert expected_midwindow == candidates
 
-    peptide_list = db_utils.digest_fasta(
-        fasta_filename=str(tiny_fasta_file),
+    pdb = db_utils.ProteinDatabase(
+        fasta_path=str(tiny_fasta_file),
         enzyme="trypsin",
         digestion="full",
         missed_cleavages=1,
+        min_peptide_len=6,
+        max_peptide_len=50,
         max_mods=0,
-        min_peptide_length=6,
-        max_peptide_length=50,
-    )
-
-    candidates = db_utils.get_candidates(
-        precursor_mz=496.2,
-        charge=2,
-        peptide_list=peptide_list,
         precursor_tolerance=600000,
-        isotope_error="0",
+        isotope_error=[0],
     )
+    candidates = pdb.get_candidates(precursor_mz=496.2, charge=2)
     candidates = [x[0] for x in candidates]
     assert expected_widewindow == candidates
 
 
-def test_get_candidates_isotope_error():
+def test_get_candidates_isotope_error(tiny_fasta_file):
 
     # Tide isotope error windows for 496.2, 2+:
     # 0: [980.481617, 1000.289326]
@@ -556,53 +558,83 @@ def test_get_candidates_isotope_error():
     expected_isotope3 = list("XWVUTSRQPONMLKJIHGFE")
     expected_isotope0123 = list("XWVUTSRQPONMLKJIHGFEDCB")
 
-    candidates = db_utils.get_candidates(
-        precursor_mz=496.2,
-        charge=2,
-        peptide_list=peptide_list,
+    pdb = db_utils.ProteinDatabase(
+        fasta_path=str(tiny_fasta_file),
+        enzyme="trypsin",
+        digestion="full",
+        missed_cleavages=0,
+        min_peptide_len=0,
+        max_peptide_len=0,
+        max_mods=0,
         precursor_tolerance=10000,
-        isotope_error="0",
+        isotope_error=[0],
     )
+    pdb.digest = peptide_list
+    candidates = pdb.get_candidates(precursor_mz=496.2, charge=2)
     candidates = [x[0] for x in candidates]
     assert expected_isotope0 == candidates
 
-    candidates = db_utils.get_candidates(
-        precursor_mz=496.2,
-        charge=2,
-        peptide_list=peptide_list,
+    pdb = db_utils.ProteinDatabase(
+        fasta_path=str(tiny_fasta_file),
+        enzyme="trypsin",
+        digestion="full",
+        missed_cleavages=0,
+        min_peptide_len=0,
+        max_peptide_len=0,
+        max_mods=0,
         precursor_tolerance=10000,
-        isotope_error="1",
+        isotope_error=[1],
     )
+    pdb.digest = peptide_list
+    candidates = pdb.get_candidates(precursor_mz=496.2, charge=2)
     candidates = [x[0] for x in candidates]
     assert expected_isotope1 == candidates
 
-    candidates = db_utils.get_candidates(
-        precursor_mz=496.2,
-        charge=2,
-        peptide_list=peptide_list,
+    pdb = db_utils.ProteinDatabase(
+        fasta_path=str(tiny_fasta_file),
+        enzyme="trypsin",
+        digestion="full",
+        missed_cleavages=0,
+        min_peptide_len=0,
+        max_peptide_len=0,
+        max_mods=0,
         precursor_tolerance=10000,
-        isotope_error="2",
+        isotope_error=[2],
     )
+    pdb.digest = peptide_list
+    candidates = pdb.get_candidates(precursor_mz=496.2, charge=2)
     candidates = [x[0] for x in candidates]
     assert expected_isotope2 == candidates
 
-    candidates = db_utils.get_candidates(
-        precursor_mz=496.2,
-        charge=2,
-        peptide_list=peptide_list,
+    pdb = db_utils.ProteinDatabase(
+        fasta_path=str(tiny_fasta_file),
+        enzyme="trypsin",
+        digestion="full",
+        missed_cleavages=0,
+        min_peptide_len=0,
+        max_peptide_len=0,
+        max_mods=0,
         precursor_tolerance=10000,
-        isotope_error="3",
+        isotope_error=[3],
     )
+    pdb.digest = peptide_list
+    candidates = pdb.get_candidates(precursor_mz=496.2, charge=2)
     candidates = [x[0] for x in candidates]
     assert expected_isotope3 == candidates
 
-    candidates = db_utils.get_candidates(
-        precursor_mz=496.2,
-        charge=2,
-        peptide_list=peptide_list,
+    pdb = db_utils.ProteinDatabase(
+        fasta_path=str(tiny_fasta_file),
+        enzyme="trypsin",
+        digestion="full",
+        missed_cleavages=0,
+        min_peptide_len=0,
+        max_peptide_len=0,
+        max_mods=0,
         precursor_tolerance=10000,
-        isotope_error="0,1,2,3",
+        isotope_error=[0, 1, 2, 3],
     )
+    pdb.digest = peptide_list
+    candidates = pdb.get_candidates(precursor_mz=496.2, charge=2)
     candidates = [x[0] for x in candidates]
     assert expected_isotope0123 == candidates
 
