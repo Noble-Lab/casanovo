@@ -11,6 +11,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - During training, model checkpoints will be saved at the end of each training epoch in addition to the checkpoints saved at the end of every validation run.
 - Besides as a local file, model weights can be specified from a URL. Upon initial download, the weights file is cached for future re-use.
 
+### Changed
+
+- Removed the `evaluate` sub-command, and all model evaluation functionality has been moved to the `sequence` command using the new `--evaluate` flag.
+
 ### Fixed
 
 - Precursor charges are exported as integers instead of floats in the mzTab output file, in compliance with the mzTab specification.

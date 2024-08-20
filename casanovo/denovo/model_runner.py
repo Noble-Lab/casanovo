@@ -424,12 +424,15 @@ class ModelRunner:
             return Index(index_fname, filenames, valid_charge=valid_charge)
         except TypeError as e:
             if Index == AnnotatedSpectrumIndex:
-                raise TypeError(
+                error_msg = (
                     "Error creating annotated spectrum index. "
                     "This may be the result of having an unannotated MGF file "
                     "present in the validation peak file path list.\n"
                     f"Original error message: {e}"
                 )
+
+                logger.error(error_msg)
+                raise TypeError(error_msg)
 
             raise e
 
