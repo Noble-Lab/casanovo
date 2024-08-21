@@ -83,7 +83,9 @@ class SpectrumDataset(Dataset):
             The unique spectrum identifier, formed by its original peak file and
             identifier (index or scan number) therein.
         """
-        mz_array, int_array, precursor_mz, precursor_charge = self.index[idx]
+        mz_array, int_array, precursor_mz, precursor_charge = self.index[idx][
+            :4
+        ]
         spectrum = self._process_peaks(
             mz_array, int_array, precursor_mz, precursor_charge
         )

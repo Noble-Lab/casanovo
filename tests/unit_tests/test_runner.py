@@ -56,6 +56,7 @@ def test_save_and_load_weights(tmp_path, mgf_small, tiny_config):
     config.max_epochs = 1
     config.n_layers = 1
     ckpt = tmp_path / "test.ckpt"
+    mztab = tmp_path / "test.mztab"
 
     with ModelRunner(config=config) as runner:
         runner.train([mgf_small], [mgf_small])
@@ -83,7 +84,7 @@ def test_save_and_load_weights(tmp_path, mgf_small, tiny_config):
     with torch.device("meta"):
         with ModelRunner(other_config, model_filename=str(ckpt)) as runner:
             with pytest.raises(NotImplementedError) as err:
-                runner.evaluate([mgf_small])
+                runner.predict([mgf_small], mztab)
 
     assert "meta tensor; no data!" in str(err.value)
 
@@ -95,11 +96,11 @@ def test_save_and_load_weights(tmp_path, mgf_small, tiny_config):
     # Shouldn't work:
     with ModelRunner(other_config, model_filename=str(ckpt)) as runner:
         with pytest.raises(RuntimeError):
-            runner.evaluate([mgf_small])
+            runner.predict([mgf_small], mztab)
 
     # Should work:
     with ModelRunner(config=config, model_filename=str(ckpt)) as runner:
-        runner.evaluate([mgf_small])
+        runner.predict([mgf_small], mztab)
 
 
 def test_save_and_load_weights_deprecated(tmp_path, mgf_small, tiny_config):
@@ -174,3 +175,77 @@ def test_save_final_model(tmp_path, mgf_small, tiny_config):
 
     assert model_file.exists()
     assert validation_file.exists()
+
+
+def test_evaluate(
+    tmp_path, mgf_small, mzml_small, mgf_small_unannotated, tiny_config
+):
+    """Test model evaluation during sequencing"""
+    # Train tiny model
+    config = Config(tiny_config)
+    config.max_epochs = 1
+    model_file = tmp_path / "epoch=0-step=1.ckpt"
+    with ModelRunner(config) as runner:
+        runner.train([mgf_small], [mgf_small])
+
+    assert model_file.is_file()
+
+    # Test evaluation with annotated peak file
+    result_file = tmp_path / "result.mztab"
+    with ModelRunner(config, model_filename=str(model_file)) as runner:
+        runner.predict([mgf_small], result_file, evaluate=True)
+
+    assert result_file.is_file()
+    result_file.unlink()
+
+    exception_string = (
+        "Error creating annotated spectrum index. "
+        "This may be the result of having an unannotated MGF file "
+        "present in the validation peak file path list.\n"
+    )
+
+    with pytest.raises(FileNotFoundError):
+        with ModelRunner(config, model_filename=str(model_file)) as runner:
+            runner.predict([mzml_small], result_file, evaluate=True)
+
+    with pytest.raises(TypeError, match=exception_string):
+        with ModelRunner(config, model_filename=str(model_file)) as runner:
+            runner.predict([mgf_small_unannotated], result_file, evaluate=True)
+
+    with pytest.raises(TypeError, match=exception_string):
+        with ModelRunner(config, model_filename=str(model_file)) as runner:
+            runner.predict(
+                [mgf_small_unannotated, mzml_small], result_file, evaluate=True
+            )
+
+    # MzTab with just metadata is written in the case of FileNotFound
+    # or TypeError early exit
+    assert result_file.is_file()
+    result_file.unlink()
+
+    # Test mix of annotated an unannotated peak files
+    with pytest.warns(RuntimeWarning):
+        with ModelRunner(config, model_filename=str(model_file)) as runner:
+            runner.predict([mgf_small, mzml_small], result_file, evaluate=True)
+
+    assert result_file.is_file()
+    result_file.unlink()
+
+    with pytest.raises(TypeError, match=exception_string):
+        with ModelRunner(config, model_filename=str(model_file)) as runner:
+            runner.predict(
+                [mgf_small, mgf_small_unannotated], result_file, evaluate=True
+            )
+
+    assert result_file.is_file()
+    result_file.unlink()
+
+    with pytest.raises(TypeError, match=exception_string):
+        with ModelRunner(config, model_filename=str(model_file)) as runner:
+            runner.predict(
+                [mgf_small, mgf_small_unannotated, mzml_small],
+                result_file,
+                evaluate=True,
+            )
+
+    result_file.unlink()
