@@ -284,11 +284,11 @@ def prepare_psm_batch(
     all_proteins = []
     for idx in range(len(batch)):
         digest_data = pdb.get_candidates(
-            precursor_mzs[idx],
-            precursor_charges[idx],
+            float(precursor_mzs[idx]),
+            float(precursor_charges[idx]),
         )
         try:
-            spec_peptides, _, pep_protein = list(zip(*digest_data))
+            spec_peptides, pep_protein = digest_data
             all_spectra.append(
                 spectra[idx].unsqueeze(0).repeat(len(spec_peptides), 1, 1)
             )

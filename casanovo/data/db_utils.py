@@ -1,12 +1,12 @@
 """Unique methods used within db-search mode"""
 
-import bisect
 import logging
 import os
-from typing import List, Tuple
+from typing import List
 
 import depthcharge.masses
 from numba import jit
+import pandas as pd
 from pyteomics import fasta, parser
 
 logger = logging.getLogger("casanovo")
@@ -28,11 +28,29 @@ fixed_mods = {"carbm": ["C"]}
 
 class ProteinDatabase:
     """
-    TODO
+    Store digested .fasta data and return candidate peptides for a given precursor mass.
 
     Parameters
     ----------
-    TODO
+    fasta_path : str
+        Path to the FASTA file.
+    enzyme : str
+        The enzyme to use for digestion.
+        See pyteomics.parser.expasy_rules for valid enzymes.
+    digestion : str
+        The type of digestion to perform. Either 'full' or 'partial'.
+    missed_cleavages : int
+        The number of missed cleavages to allow.
+    min_peptide_len : int
+        The minimum length of peptides to consider.
+    max_peptide_len : int
+        The maximum length of peptides to consider.
+    max_mods : int
+        The maximum number of modifications to allow per peptide.
+    precursor_tolerance : float
+        The precursor mass tolerance in ppm.
+    isotope_error : List[int]
+        Isotopes to consider when comparing predicted and observed precursor m/z's.
     """
 
     def __init__(
@@ -73,27 +91,34 @@ class ProteinDatabase:
             The precursor mass-to-charge ratio.
         charge : int
             The precursor charge.
+
+        Returns
+        -------
+        candidates : List[Tuple[str, str]]
+            A list of candidate peptides and associated
+            protein.
         """
-        candidates = set()
+        candidates = []
 
         for e in self.isotope_error:
             iso_shift = ISOTOPE_SPACING * e
-            upper_bound = (
+            upper_bound = float(
                 ProteinDatabase._to_raw_mass(precursor_mz, charge) - iso_shift
             ) * (1 + (self.precursor_tolerance / 1e6))
-            lower_bound = (
+            lower_bound = float(
                 ProteinDatabase._to_raw_mass(precursor_mz, charge) - iso_shift
             ) * (1 - (self.precursor_tolerance / 1e6))
 
-            start, end = ProteinDatabase._get_mass_indices(
-                [x[1] for x in self.digest], lower_bound, upper_bound
-            )
+            window = self.digest[
+                (self.digest["calc_mass"] >= lower_bound)
+                & (self.digest["calc_mass"] <= upper_bound)
+            ]
+            candidates.append(window[["peptide", "calc_mass", "protein"]])
 
-            candidates.update(self.digest[start:end])
-
-        candidates = list(candidates)
-        candidates.sort(key=lambda x: x[1])
-        return candidates
+        candidates = pd.concat(candidates)
+        candidates.drop_duplicates(inplace=True)
+        candidates.sort_values(by=["calc_mass", "peptide"], inplace=True)
+        return list(candidates["peptide"]), list(candidates["protein"])
 
     def _digest_fasta(
         self,
@@ -128,9 +153,9 @@ class ProteinDatabase:
 
         Returns
         -------
-        mod_peptide_list : List[Tuple[str, float, str]]
-            A list of tuples containing the peptide sequence, mass,
-            and associated protein. Sorted by neutral mass in ascending order.
+        mod_peptide_list : pd.DataFrame
+            A Pandas DataFrame with peptide, mass,
+            and protein columns. Sorted by neutral mass in ascending order.
         """
         # Verify the existence of the file:
         if not os.path.isfile(fasta_filename):
@@ -180,17 +205,20 @@ class ProteinDatabase:
                 map(ProteinDatabase._convert_from_modx, peptide_isoforms)
             )
             mod_peptide_list.extend(
-                (mod_pep, mass_calculator.mass(mod_pep), prot)
+                [mod_pep, mass_calculator.mass(mod_pep), prot]
                 for mod_pep in peptide_isoforms
             )
 
-        # Sort the peptides by mass and return.
-        mod_peptide_list.sort(key=lambda x: x[1])
-        logger.info(
-            "Digestion complete. %d peptides generated.", len(mod_peptide_list)
+        # Create a DataFrame for easy sorting and filtering
+        pdb_df = pd.DataFrame(
+            mod_peptide_list, columns=["peptide", "calc_mass", "protein"]
         )
-        return mod_peptide_list
+        pdb_df.sort_values(by=["calc_mass", "peptide"], inplace=True)
 
+        logger.info("Digestion complete. %d peptides generated.", len(pdb_df))
+        return pdb_df
+
+    @jit
     def _to_mz(precursor_mass, charge):
         """
         Convert precursor neutral mass to m/z value.
@@ -209,6 +237,7 @@ class ProteinDatabase:
         """
         return (precursor_mass + (charge * PROTON)) / charge
 
+    @jit
     def _to_raw_mass(mz_mass, charge):
         """
         Convert precursor m/z value to neutral mass.
@@ -226,30 +255,6 @@ class ProteinDatabase:
             The calculated precursor neutral mass.
         """
         return charge * (mz_mass - PROTON)
-
-    def _get_mass_indices(masses, m_low, m_high):
-        """Grabs mass indices that fall within a specified range.
-
-        Pulls from masses, a list of mass values.
-        Requires that the mass values are sorted in ascending order.
-
-        Parameters
-        ----------
-        masses : List[int]
-            List of mass values
-        m_low : int
-            Lower bound of mass range (inclusive)
-        m_high : int
-            Upper bound of mass range (inclusive)
-
-        Return
-        ------
-        indices : Tuple[int, int]
-            Indices of mass values that fall within the specified range
-        """
-        start = bisect.bisect_left(masses, m_low)
-        end = bisect.bisect_right(masses, m_high)
-        return start, end
 
     def _convert_from_modx(seq: str):
         """Converts peptide sequence from modX format to Casanovo-acceptable modifications.
