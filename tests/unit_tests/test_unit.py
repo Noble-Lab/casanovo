@@ -1845,7 +1845,7 @@ def test_spectrum_id_mgf(mgf_small, tmp_path):
 
 
 def test_spectrum_id_mzml(mzml_small, tmp_path):
-    """Test that spectra from mzML files are specified by their scan number."""
+    """Test that spectra from mzML files are specified by their scan id."""
     mzml_small2 = tmp_path / "mzml_small2.mzml"
     shutil.copy(mzml_small, mzml_small2)
     data_module = DeNovoDataModule(
@@ -1857,16 +1857,16 @@ def test_spectrum_id_mzml(mzml_small, tmp_path):
     data_module.setup(stage="test", annotated=False)
 
     dataset = data_module.test_dataset
-    for i, (filename, scan_nr) in enumerate(
+    for i, (filename, scan_id) in enumerate(
         [
-            (mzml_small, 17),
-            (mzml_small, 111),
-            (mzml_small2, 17),
-            (mzml_small2, 111),
+            (mzml_small, "scan=17"),
+            (mzml_small, "merged=11 frame=12 scanStart=763 scanEnd=787"),
+            (mzml_small2, "scan=17"),
+            (mzml_small2, "merged=11 frame=12 scanStart=763 scanEnd=787"),
         ]
     ):
         assert dataset[i]["peak_file"][0] == filename.name
-        assert dataset[i]["scan_id"][0] == f"scan={scan_nr}"
+        assert dataset[i]["scan_id"][0] == scan_id
 
 
 def test_train_val_step_functions():

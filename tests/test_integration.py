@@ -84,10 +84,13 @@ def test_train_and_run(
     assert psms.loc[1, "spectra_ref"] == "ms_run[1]:index=0"
     assert psms.loc[2, "sequence"] == "PEPTLDEK"
     assert psms.loc[2, "spectra_ref"] == "ms_run[1]:index=1"
-    assert psms.loc[3, "sequence"] == "LESLLEK"
-    assert psms.loc[3, "spectra_ref"] == "ms_run[2]:scan=17"
-    assert psms.loc[4, "sequence"] == "PEPTLDEK"
-    assert psms.loc[4, "spectra_ref"] == "ms_run[2]:scan=111"
+    assert psms.loc[3, "sequence"] == "PEPTLDEK"
+    assert (
+        psms.loc[3, "spectra_ref"]
+        == "ms_run[2]:merged=11 frame=12 scanStart=763 scanEnd=787"
+    )
+    assert psms.loc[4, "sequence"] == "LESLLEK"
+    assert psms.loc[4, "spectra_ref"] == "ms_run[2]:scan=17"
 
     # Run Casanovo in de novo evaluation mode.
     output_rootname = "test-eval"
