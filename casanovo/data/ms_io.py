@@ -7,7 +7,7 @@ import operator
 import os
 import re
 from pathlib import Path
-from typing import List, Tuple
+from typing import List, Tuple, Iterable
 
 import natsort
 
@@ -28,18 +28,18 @@ class PepSpecMatch:
         A tuple containing the spectrum identifier in the form
         (spectrum file name, spectrum file idx)
     peptide_score : float
-        Confidence score of the match between the full peptide sequence and the
+        Score of the match between the full peptide sequence and the
         spectrum.
     charge : int
-        The charge state of the peptide ion observed in the spectrum.
-    expected_mz : float
-        The expected mass-to-charge ratio (m/z) of the peptide based on its
+        The precursor charge state of the peptide ion observed in the spectrum.
+    calc_mz : float
+        The calculated mass-to-charge ratio (m/z) of the peptide based on its
         sequence and charge state.
-    actual_mz : float
-        The observed mass-to-charge ratio (m/z) of the peptide as detected in
-        the spectrum.
-    aa_scores : List[float]
-        A list of confidence scores for individual amino acids in the peptide
+    exp_mz : float
+        The observed (experimental) precursor mass-to-charge ratio (m/z) of the
+        peptide as detected in the spectrum.
+    aa_scores : Iterable[float]
+        A list of scores for individual amino acids in the peptide
         sequence, where len(aa_scores) == len(sequence)
     """
 
@@ -47,9 +47,9 @@ class PepSpecMatch:
     spectrum_id: Tuple[str, str]
     peptide_score: float
     charge: int
-    expected_mz: float
-    actual_mz: float
-    aa_scores: List[float]
+    calc_mz: float
+    exp_mz: float
+    aa_scores: Iterable[float]
 
 
 class MztabWriter:
@@ -221,10 +221,8 @@ class MztabWriter:
                 ),
                 1,
             ):
-                filename, idx = (
-                    os.path.abspath(psm.spectrum_id[0]),
-                    psm.spectrum_id[1],
-                )
+                filename = os.path.abspath(psm.spectrum_id[0])
+                idx = psm.spectrum_id[1]
                 writer.writerow(
                     [
                         "PSM",
@@ -243,8 +241,8 @@ class MztabWriter:
                         #  loader?
                         "null",  # retention_time
                         psm.charge,  # charge
-                        psm.expected_mz,  # exp_mass_to_charge
-                        psm.actual_mz,  # calc_mass_to_charge
+                        psm.exp_mz,  # exp_mass_to_charge
+                        psm.calc_mz,  # calc_mass_to_charge
                         f"ms_run[{self._run_map[filename]}]:{idx}",
                         "null",  # pre
                         "null",  # post
