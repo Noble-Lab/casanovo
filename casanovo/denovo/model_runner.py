@@ -132,7 +132,7 @@ class ModelRunner:
             Index containing the annotated spectra used to generate model
             predictions
         """
-        model_output = [psm[0] for psm in self.writer.psms]
+        model_output = [psm.sequence for psm in self.writer.psms]
         spectrum_annotations = [
             test_index[i][4] for i in range(test_index.n_spectra)
         ]
