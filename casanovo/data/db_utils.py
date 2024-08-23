@@ -15,16 +15,6 @@ logger = logging.getLogger("casanovo")
 PROTON = 1.00727646677
 ISOTOPE_SPACING = 1.003355
 
-var_mods = {
-    "d": ["N", "Q"],
-    "ox": ["M"],
-    "ace-": True,
-    "carb-": True,
-    "nh3x-": True,
-    "carbnh3x-": True,
-}
-fixed_mods = {"carbm": ["C"]}
-
 
 class ProteinDatabase:
     """
@@ -51,6 +41,8 @@ class ProteinDatabase:
         The precursor mass tolerance in ppm.
     isotope_error : List[int]
         Isotopes to consider when comparing predicted and observed precursor m/z's.
+    allowed_mods : List[str]
+        A list of allowed modifications to consider.
     """
 
     def __init__(
@@ -64,7 +56,11 @@ class ProteinDatabase:
         max_mods: int,
         precursor_tolerance: float,
         isotope_error: List[int],
+        allowed_mods: List[str],
     ):
+        self.fixed_mods, self.var_mods = self._construct_mods_dict(
+            allowed_mods
+        )
         self.digest = self._digest_fasta(
             fasta_path,
             enzyme,
@@ -197,8 +193,8 @@ class ProteinDatabase:
         for pep, prot in peptide_list:
             peptide_isoforms = parser.isoforms(
                 pep,
-                variable_mods=var_mods,
-                fixed_mods=fixed_mods,
+                variable_mods=self.var_mods,
+                fixed_mods=self.fixed_mods,
                 max_mods=max_mods,
             )
             peptide_isoforms = list(
@@ -217,6 +213,54 @@ class ProteinDatabase:
 
         logger.info("Digestion complete. %d peptides generated.", len(pdb_df))
         return pdb_df
+
+    def _construct_mods_dict(self, allowed_mods):
+        """
+        Constructs dictionaries of fixed and variable modifications.
+
+        Parameters
+        ----------
+        allowed_mods : str
+            A comma-separated list of allowed modifications.
+
+        Returns
+        -------
+        fixed_mods : dict
+            A dictionary of fixed modifications.
+        var_mods : dict
+            A dictionary of variable modifications.
+        """
+        fixed_mods = {"carbm": ["C"]}
+        var_mods = {}
+
+        if allowed_mods is "" or None:
+            return fixed_mods, var_mods
+        for mod in allowed_mods.split(","):
+            if mod == "M+15.995":
+                if "ox" not in var_mods:
+                    var_mods["ox"] = []
+                var_mods["ox"].append("M")
+            elif mod == "N+0.984":
+                if "d" not in var_mods:
+                    var_mods["d"] = []
+                var_mods["d"].append("N")
+            elif mod == "Q+0.984":
+                if "d" not in var_mods:
+                    var_mods["d"] = []
+                var_mods["d"].append("Q")
+            elif mod == "+42.011":
+                var_mods["ace-"] = True
+            elif mod == "+43.006":
+                var_mods["carb-"] = True
+            elif mod == "-17.027":
+                var_mods["nh3x-"] = True
+            elif mod == "+43.006-17.027":
+                var_mods["carbnh3x-"] = True
+            else:
+                logger.error("Modification %s not recognized.", mod)
+                raise ValueError(f"Modification {mod} not recognized.")
+
+        return fixed_mods, var_mods
 
     @jit
     def _to_mz(precursor_mass, charge):

@@ -124,6 +124,7 @@ class ModelRunner:
             self.config.max_mods,
             self.config.precursor_mass_tol,
             self.config.isotope_error_range,
+            self.config.allowed_mods,
         )
         self.loaders.setup(stage="test", annotated=False)
         self.trainer.predict(self.model, self.loaders.db_dataloader())

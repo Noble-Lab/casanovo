@@ -46,7 +46,7 @@ devices:
 # See pyteomics.parser.expasy_rules for valid enzymes
 enzyme: "trypsin"
 # Digestion type for candidate peptide generation.
-# Full: standard digestion. Semi: Include products of semi-specific cleavage
+# full: standard digestion. semi: Include products of semi-specific cleavage
 digestion: "full"
 # Number of allowed missed cleavages when digesting protein
 missed_cleavages: 0
@@ -55,6 +55,11 @@ missed_cleavages: 0
 max_mods: 
 # Maximum peptide length to consider
 max_peptide_len: 50
+# Toggle allowed modifications on/off
+# Permanent fixed mod (don't include): C+57.021
+# Allowed variable mods: M+15.995, N+0.984, Q+0.984, 
+# Allowed N-terminal mods: +42.011, +43.006, -17.027, +43.006-17.027
+allowed_mods: "M+15.995,N+0.984,Q+0.984,+42.011,+43.006,-17.027,+43.006-17.027"
 
 
 ###
