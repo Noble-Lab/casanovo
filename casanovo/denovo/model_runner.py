@@ -4,6 +4,7 @@ model."""
 import glob
 import logging
 import os
+import re
 import tempfile
 import uuid
 import warnings
@@ -18,6 +19,7 @@ from depthcharge.data import AnnotatedSpectrumIndex, SpectrumIndex
 from lightning.pytorch.strategies import DDPStrategy
 from lightning.pytorch.callbacks import ModelCheckpoint
 
+from .. import utils
 from ..config import Config
 from ..data import ms_io
 from ..denovo.dataloaders import DeNovoDataModule
@@ -47,6 +49,8 @@ class ModelRunner:
         config: Config,
         model_filename: Optional[str] = None,
         output_rootname: Optional[str] = None,
+        output_dir: Optional[str] = None,
+        overwrite_ckpt_check: bool = True,
     ) -> None:
         """Initialize a ModelRunner"""
         self.config = config
@@ -59,20 +63,35 @@ class ModelRunner:
         self.loaders = None
         self.writer = None
 
-        best_filename = "best"
+        filenames = ("{epoch}-{step}", "best")
         if output_rootname is not None:
-            best_filename = f"{output_rootname}.{best_filename}"
+            filenames = tuple(
+                f"{output_rootname}.{curr_name}" for curr_name in filenames
+            )
+        curr_filename, best_filename = filenames
+
+        if overwrite_ckpt_check:
+            patterns = [r"epoch=\d+\-step=\d+\.ckpt", r"best\.ckpt"]
+            if output_rootname is not None:
+                patterns = [
+                    re.escape(output_rootname + ".") + pattern
+                    for pattern in patterns
+                ]
+            utils.check_dir(output_dir, patterns)
 
         # Configure checkpoints.
         self.callbacks = [
             ModelCheckpoint(
-                dirpath=config.model_save_folder_path,
+                dirpath=output_dir,
                 save_on_train_epoch_end=True,
+                filename=curr_filename,
+                enable_version_counter=False,
             ),
             ModelCheckpoint(
-                dirpath=config.model_save_folder_path,
+                dirpath=output_dir,
                 monitor="valid_CELoss",
                 filename=best_filename,
+                enable_version_counter=False,
             ),
         ]
 

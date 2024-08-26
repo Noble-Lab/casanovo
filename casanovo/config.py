@@ -19,6 +19,7 @@ _config_deprecated = dict(
     every_n_train_steps="val_check_interval",
     max_iters="cosine_schedule_period_iters",
     save_top_k=None,
+    model_save_folder_path=None,
 )
 
 
@@ -75,7 +76,6 @@ class Config:
         top_match=int,
         max_epochs=int,
         num_sanity_val_steps=int,
-        model_save_folder_path=str,
         val_check_interval=int,
         calculate_precision=bool,
         accelerator=str,
