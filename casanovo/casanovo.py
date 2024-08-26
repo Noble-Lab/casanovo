@@ -67,12 +67,12 @@ class _SharedParams(click.RichCommand):
                 """,
             ),
             click.Option(
-                ("-f", "--output-dir"),
+                ("-f", "--output_dir"),
                 help="The destination directory for output files",
                 type=click.Path(dir_okay=True),
             ),
             click.Option(
-                ("-o", "--output-root"),
+                ("-o", "--output_root"),
                 help="The root name for all output files",
                 type=click.Path(dir_okay=False),
             ),
@@ -171,12 +171,13 @@ def sequence(
     one or more annotated MGF file.
     """
     output_dir = Path(output_dir) if output_dir is not None else Path.cwd()
-    output_base_name = output_dir / output_root
+    output_base_name = None
     if output_root is not None and not overwrite:
+        output_base_name = output_dir / output_root
         base_pattern = re.escape(output_root)
         patterns = [base_pattern + r"\.log", base_pattern + r"\.mztab"]
         utils.check_dir(output_dir, patterns)
-    output = setup_logging(str(output_base_name), verbosity)
+    output = setup_logging(output_base_name, verbosity)
 
     config, model = setup_model(model, config, output, False)
     start_time = time.time()
@@ -209,13 +210,13 @@ def sequence(
     An annotated MGF file for validation, like from MassIVE-KB. Use this
     option multiple times to specify multiple files.
     """,
-    required=True,
+    required=False,
     multiple=True,
     type=click.Path(exists=True, dir_okay=False),
 )
 def train(
     train_peak_path: Tuple[str],
-    validation_peak_path: Tuple[str],
+    validation_peak_path: Optional[Tuple[str]],
     model: Optional[str],
     config: Optional[str],
     output_dir: Optional[str],
@@ -243,6 +244,9 @@ def train(
         logger.info("Training a model from:")
         for peak_file in train_peak_path:
             logger.info("  %s", peak_file)
+
+        if len(validation_peak_path) == 0:
+            validation_peak_path = train_peak_path
 
         logger.info("Using the following validation files:")
         for peak_file in validation_peak_path:

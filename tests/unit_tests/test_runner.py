@@ -161,8 +161,15 @@ def test_save_final_model(tmp_path, mgf_small, tiny_config):
     config = Config(tiny_config)
     config.val_check_interval = 50
     model_file = tmp_path / "epoch=19-step=20.ckpt"
-    with ModelRunner(config) as runner:
+    with ModelRunner(config, output_dir=tmp_path) as runner:
         runner.train([mgf_small], [mgf_small])
+
+    assert model_file.exists()
+
+    # Test that training again raises file exists error
+    with pytest.raises(FileExistsError):
+        with ModelRunner(config, output_dir=tmp_path) as runner:
+            runner.train([mgf_small], [mgf_small])
 
     assert model_file.exists()
     Path.unlink(model_file)
@@ -170,7 +177,10 @@ def test_save_final_model(tmp_path, mgf_small, tiny_config):
     # Test checkpoint saving when val_check_interval is not a factor of training steps
     config.val_check_interval = 15
     validation_file = tmp_path / "foobar.best.ckpt"
-    with ModelRunner(config, output_rootname="foobar") as runner:
+    model_file = tmp_path / "foobar.epoch=19-step=20.ckpt"
+    with ModelRunner(
+        config, output_dir=tmp_path, output_rootname="foobar"
+    ) as runner:
         runner.train([mgf_small], [mgf_small])
 
     assert model_file.exists()
@@ -185,14 +195,16 @@ def test_evaluate(
     config = Config(tiny_config)
     config.max_epochs = 1
     model_file = tmp_path / "epoch=0-step=1.ckpt"
-    with ModelRunner(config) as runner:
+    with ModelRunner(config, output_dir=tmp_path) as runner:
         runner.train([mgf_small], [mgf_small])
 
     assert model_file.is_file()
 
     # Test evaluation with annotated peak file
     result_file = tmp_path / "result.mztab"
-    with ModelRunner(config, model_filename=str(model_file)) as runner:
+    with ModelRunner(
+        config, model_filename=str(model_file), overwrite_ckpt_check=False
+    ) as runner:
         runner.predict([mgf_small], result_file, evaluate=True)
 
     assert result_file.is_file()
@@ -205,15 +217,21 @@ def test_evaluate(
     )
 
     with pytest.raises(FileNotFoundError):
-        with ModelRunner(config, model_filename=str(model_file)) as runner:
+        with ModelRunner(
+            config, model_filename=str(model_file), overwrite_ckpt_check=False
+        ) as runner:
             runner.predict([mzml_small], result_file, evaluate=True)
 
     with pytest.raises(TypeError, match=exception_string):
-        with ModelRunner(config, model_filename=str(model_file)) as runner:
+        with ModelRunner(
+            config, model_filename=str(model_file), overwrite_ckpt_check=False
+        ) as runner:
             runner.predict([mgf_small_unannotated], result_file, evaluate=True)
 
     with pytest.raises(TypeError, match=exception_string):
-        with ModelRunner(config, model_filename=str(model_file)) as runner:
+        with ModelRunner(
+            config, model_filename=str(model_file), overwrite_ckpt_check=False
+        ) as runner:
             runner.predict(
                 [mgf_small_unannotated, mzml_small], result_file, evaluate=True
             )
@@ -225,14 +243,18 @@ def test_evaluate(
 
     # Test mix of annotated an unannotated peak files
     with pytest.warns(RuntimeWarning):
-        with ModelRunner(config, model_filename=str(model_file)) as runner:
+        with ModelRunner(
+            config, model_filename=str(model_file), overwrite_ckpt_check=False
+        ) as runner:
             runner.predict([mgf_small, mzml_small], result_file, evaluate=True)
 
     assert result_file.is_file()
     result_file.unlink()
 
     with pytest.raises(TypeError, match=exception_string):
-        with ModelRunner(config, model_filename=str(model_file)) as runner:
+        with ModelRunner(
+            config, model_filename=str(model_file), overwrite_ckpt_check=False
+        ) as runner:
             runner.predict(
                 [mgf_small, mgf_small_unannotated], result_file, evaluate=True
             )
@@ -241,7 +263,9 @@ def test_evaluate(
     result_file.unlink()
 
     with pytest.raises(TypeError, match=exception_string):
-        with ModelRunner(config, model_filename=str(model_file)) as runner:
+        with ModelRunner(
+            config, model_filename=str(model_file), overwrite_ckpt_check=False
+        ) as runner:
             runner.predict(
                 [mgf_small, mgf_small_unannotated, mzml_small],
                 result_file,
