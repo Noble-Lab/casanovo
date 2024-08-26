@@ -67,12 +67,12 @@ class _SharedParams(click.RichCommand):
                 """,
             ),
             click.Option(
-                ("-o", "--output-dir"),
+                ("-f", "--output-dir"),
                 help="The destination directory for output files",
                 type=click.Path(dir_okay=True),
             ),
             click.Option(
-                ("-r", "--output-root"),
+                ("-o", "--output-root"),
                 help="The root name for all output files",
                 type=click.Path(dir_okay=False),
             ),
@@ -170,10 +170,17 @@ def sequence(
     to sequence peptides. If evaluate is set to True PEAK_PATH must be
     one or more annotated MGF file.
     """
-    output = setup_logging(output, verbosity)
+    output_dir = Path(output_dir) if output_dir is not None else Path.cwd()
+    output_base_name = output_dir / output_root
+    if output_root is not None and not overwrite:
+        base_pattern = re.escape(output_root)
+        patterns = [base_pattern + r"\.log", base_pattern + r"\.mztab"]
+        utils.check_dir(output_dir, patterns)
+    output = setup_logging(str(output_base_name), verbosity)
+
     config, model = setup_model(model, config, output, False)
     start_time = time.time()
-    with ModelRunner(config, model) as runner:
+    with ModelRunner(config, model, output_root, output_dir, False) as runner:
         logger.info(
             "Sequencing %speptides from:",
             "and evaluating " if evaluate else "",
@@ -221,10 +228,18 @@ def train(
     TRAIN_PEAK_PATH must be one or more annoated MGF files, such as those
     provided by MassIVE-KB, from which to train a new Casnovo model.
     """
-    output = setup_logging(output, verbosity)
+    output_dir = Path(output_dir) if output_dir is not None else Path.cwd()
+    output_base_name = None
+    if output_root is not None and not overwrite:
+        output_base_name = output_dir / output_root
+        utils.check_dir(output_dir, [re.escape(output_root) + r"\.log"])
+    output = setup_logging(output_base_name, verbosity)
+
     config, model = setup_model(model, config, output, True)
     start_time = time.time()
-    with ModelRunner(config, model) as runner:
+    with ModelRunner(
+        config, model, output_root, output_dir, not overwrite
+    ) as runner:
         logger.info("Training a model from:")
         for peak_file in train_peak_path:
             logger.info("  %s", peak_file)
