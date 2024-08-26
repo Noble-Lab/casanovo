@@ -70,7 +70,7 @@ class ModelRunner:
             )
         curr_filename, best_filename = filenames
 
-        if overwrite_ckpt_check:
+        if overwrite_ckpt_check and output_dir is not None:
             patterns = [r"epoch=\d+\-step=\d+\.ckpt", r"best\.ckpt"]
             if output_rootname is not None:
                 patterns = [

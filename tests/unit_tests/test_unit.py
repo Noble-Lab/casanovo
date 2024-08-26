@@ -920,3 +920,15 @@ def test_run_map(mgf_small):
     out_writer.set_ms_run([os.path.abspath(mgf_small.name)])
     assert os.path.basename(mgf_small.name) not in out_writer._run_map
     assert os.path.abspath(mgf_small.name) in out_writer._run_map
+
+
+def test_check_dir(tmp_path):
+    exists_path = tmp_path / "exists-1234.ckpt"
+    exists_pattern = r"exists\-\d+\.ckpt"
+    exists_path.touch()
+    dne_pattern = r"dne\-\d+\.ckpt"
+
+    with pytest.raises(FileExistsError):
+        utils.check_dir(tmp_path, [exists_pattern, dne_pattern])
+
+    utils.check_dir(tmp_path, [dne_pattern])
