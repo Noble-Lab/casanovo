@@ -67,8 +67,13 @@ class _SharedParams(click.RichCommand):
                 """,
             ),
             click.Option(
-                ("-o", "--output"),
-                help="The mzTab file to which results will be written.",
+                ("-o", "--output-dir"),
+                help="The destination directory for output files",
+                type=click.Path(dir_okay=True),
+            ),
+            click.Option(
+                ("-r", "--output-root"),
+                help="The root name for all output files",
                 type=click.Path(dir_okay=False),
             ),
             click.Option(
@@ -89,6 +94,15 @@ class _SharedParams(click.RichCommand):
                     case_sensitive=False,
                 ),
                 default="info",
+            ),
+            click.Option(
+                ("-d", "--overwrite"),
+                help="""
+                Whether to overwrite output files.
+                """,
+                is_flag=True,
+                show_default=True,
+                default=False,
             ),
         ]
 
@@ -144,8 +158,10 @@ def sequence(
     peak_path: Tuple[str],
     model: Optional[str],
     config: Optional[str],
-    output: Optional[str],
+    output_dir: Optional[str],
+    output_root: Optional[str],
     verbosity: str,
+    overwrite: bool,
     evaluate: bool,
 ) -> None:
     """De novo sequence peptides from tandem mass spectra.
@@ -195,8 +211,10 @@ def train(
     validation_peak_path: Tuple[str],
     model: Optional[str],
     config: Optional[str],
-    output: Optional[str],
+    output_dir: Optional[str],
+    output_root: Optional[str],
     verbosity: str,
+    overwrite: bool,
 ) -> None:
     """Train a Casanovo model on your own data.
 
