@@ -15,8 +15,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 - Removed the `evaluate` sub-command, and all model evaluation functionality has been moved to the `sequence` command using the new `--evaluate` flag.
 - The `--output` option has been split into two options, `--output_dir` and `--output_root`.
-- The `model_save_folder_path` config option has been eliminated; model checkpoints will now be saved to `--output_dir` during training.
-- The `--validation_peak_path` is now optional during training; if `--validation_peak_path` is not set then the `train_peak_path` will also be used for evaluation.
+- The `--validation_peak_path` is now optional when training; if `--validation_peak_path` is not set then the `train_peak_path` will also be used for validation.
 
 ### Fixed
 
@@ -24,7 +23,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Removed
 
-- Removed the `save_top_k` option from the Casanovo config, the model with the lowest validation loss during training will now be saved to a fixed filename `<output_root>.best.ckpt`. 
+- Removed the `save_top_k` option from the Casanovo config, the model with the lowest validation loss during training will now be saved to a fixed filename `<output_root>.best.ckpt`.
+- The `model_save_folder_path` config option has been eliminated; model checkpoints will now be saved to `--output_dir` during training.
 
 ## [4.2.1] - 2024-06-25
 
