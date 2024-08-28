@@ -114,7 +114,7 @@ class ModelRunner:
         self.writer.set_ms_run(test_index.ms_files)
 
         self.initialize_data_module(test_index=test_index)
-        self.loaders.pdb = db_utils.ProteinDatabase(
+        self.loaders.protein_database = db_utils.ProteinDatabase(
             fasta_path,
             self.config.enzyme,
             self.config.digestion,

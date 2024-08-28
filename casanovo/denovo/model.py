@@ -991,7 +991,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
 
 class DbSpec2Pep(Spec2Pep):
     """
-    Subclass of Spec2Pep for the use of Casanovo as an \
+    Subclass of Spec2Pep for the use of Casanovo as an
     MS/MS database search score function.
 
     Uses teacher forcing to 'query' Casanovo for its score for each AA

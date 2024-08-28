@@ -11,13 +11,13 @@
 
 # Max absolute difference allowed with respect to observed precursor m/z.
 # denovo: Predictions outside the tolerance range are assigned a negative peptide score.
-# db-search: Used to create mas windows for candidate generation.
+# db-search: Select candidate peptides within the specified precursor m/z tolerance.
 precursor_mass_tol: 50  # ppm
 # Isotopes to consider when comparing predicted and observed precursor m/z's.
 isotope_error_range: [0, 1]
-# The minimum length of predicted/scored peptides.
+# The minimum length of considered peptides.
 min_peptide_len: 6
-# Number of spectra or psms in one inference batch.
+# Number of spectra in one inference batch.
 predict_batch_size: 1024
 
 
@@ -43,21 +43,21 @@ devices:
 ###
 
 # Enzyme for in silico digestion, used to generate candidate peptides.
-# See pyteomics.parser.expasy_rules for valid enzymes
+# See pyteomics.parser.expasy_rules for valid enzymes.
 enzyme: "trypsin"
 # Digestion type for candidate peptide generation.
-# full: standard digestion. semi: Include products of semi-specific cleavage
+# full: standard digestion. semi: Include products of semi-specific cleavage.
 digestion: "full"
-# Number of allowed missed cleavages when digesting protein
+# Number of allowed missed cleavages when digesting protein.
 missed_cleavages: 0
-# Maximum number of amino acid modifications per peptide.
+# Maximum number of amino acid modifications per peptide,
 # None generates all possible isoforms as candidates.
-max_mods: 
-# Maximum peptide length to consider
+max_mods: 0
+# Maximum peptide length to consider.
 max_peptide_len: 50
-# Toggle allowed modifications on/off
+# Select which modifications from the vocabulary can be used in candidate creation.
 # Permanent fixed mod (don't include): C+57.021
-# Allowed variable mods: M+15.995, N+0.984, Q+0.984, 
+# Allowed variable mods: M+15.995, N+0.984, Q+0.984
 # Allowed N-terminal mods: +42.011, +43.006, -17.027, +43.006-17.027
 allowed_mods: "M+15.995,N+0.984,Q+0.984,+42.011,+43.006,-17.027,+43.006-17.027"
 

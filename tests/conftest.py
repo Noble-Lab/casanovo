@@ -28,7 +28,7 @@ def tiny_fasta_file(tmp_path):
 
 
 @pytest.fixture
-def mgf_db_search(tmp_path):
+def mgf_medium(tmp_path):
     """An MGF file with 7 spectra and scan numbers, C+57.021 mass modification considered"""
     peptides = [
         "ATSIPAR",
@@ -40,10 +40,10 @@ def mgf_db_search(tmp_path):
         "FSGSGSGTDFTLTISSLQPEDFAVYYCQQDYNLP",
     ]
     mgf_file = tmp_path / "db_search.mgf"
-    return _create_mgf(peptides, mgf_file, c_mod=True)
+    return _create_mgf(peptides, mgf_file, mod_aa_mass={"C": 160.030649})
 
 
-def _create_mgf(peptides, mgf_file, random_state=42, c_mod=False):
+def _create_mgf(peptides, mgf_file, random_state=42, mod_aa_mass=None):
     """
     Create a fake MGF file from one or more peptides.
 
@@ -55,9 +55,9 @@ def _create_mgf(peptides, mgf_file, random_state=42, c_mod=False):
         The MGF file to create.
     random_state : int or numpy.random.Generator, optional
         The random seed. The charge states are chosen to be 2 or 3 randomly.
-    c_mod : bool, optional
-        Whether to use the constant carbamidomethylation
-        of C in mass calculations.
+    mod_aa_mass : dict, optional
+        A dictionary that specifies the modified masses of amino acids.
+        e.g. {"C": 160.030649} for carbamidomethylated C.
 
     Returns
     -------
@@ -65,7 +65,7 @@ def _create_mgf(peptides, mgf_file, random_state=42, c_mod=False):
     """
     rng = np.random.default_rng(random_state)
     entries = [
-        _create_mgf_entry(p, rng.choice([2, 3]), c_mod) for p in peptides
+        _create_mgf_entry(p, rng.choice([2, 3]), mod_aa_mass) for p in peptides
     ]
     with mgf_file.open("w+") as mgf_ref:
         mgf_ref.write("\n".join(entries))
@@ -73,7 +73,7 @@ def _create_mgf(peptides, mgf_file, random_state=42, c_mod=False):
     return mgf_file
 
 
-def _create_mgf_entry(peptide, charge=2, c_mod=False):
+def _create_mgf_entry(peptide, charge=2, mod_aa_mass=None):
     """
     Create a MassIVE-KB style MGF entry for a single PSM.
 
@@ -83,20 +83,19 @@ def _create_mgf_entry(peptide, charge=2, c_mod=False):
         A peptide sequence.
     charge : int, optional
         The peptide charge state.
-    c_mod : bool, optional
-        Whether to use the constant carbamidomethylation
-        of C in mass calculations.
+    mod_aa_mass : dict, optional
+        A dictionary that specifies the modified masses of amino acids.
 
     Returns
     -------
     str
         The PSM entry in an MGF file format.
     """
-    if not c_mod:
+    if mod_aa_mass is None:
         precursor_mz = calculate_mass(peptide, charge=int(charge))
     else:
         aa_mass = std_aa_mass
-        aa_mass.update({"C": 160.030649})  # Carbamidomethylated C mass
+        aa_mass.update(mod_aa_mass)
         precursor_mz = fast_mass(peptide, charge=int(charge), aa_mass=aa_mass)
     mzs, intensities = _peptide_to_peaks(peptide, charge)
     frags = "\n".join([f"{m} {i}" for m, i in zip(mzs, intensities)])

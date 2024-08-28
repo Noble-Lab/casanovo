@@ -8,7 +8,7 @@ from casanovo import casanovo
 
 
 def test_db_search(
-    mgf_db_search, tiny_fasta_file, tiny_config, tmp_path, monkeypatch
+    mgf_medium, tiny_fasta_file, tiny_config, tmp_path, monkeypatch
 ):
     # Run a command:
     monkeypatch.setattr(casanovo, "__version__", "4.1.0")
@@ -24,7 +24,7 @@ def test_db_search(
         tiny_config,
         "--output",
         str(output_path),
-        str(mgf_db_search),
+        str(mgf_medium),
         str(tiny_fasta_file),
     ]
 

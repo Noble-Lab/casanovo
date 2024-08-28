@@ -1,14 +1,14 @@
 """Data loaders for the de novo sequencing task."""
 
 import functools
-import os
 import logging
+import os
 from typing import List, Optional, Tuple
 
-from depthcharge.data import AnnotatedSpectrumIndex
 import lightning.pytorch as pl
 import numpy as np
 import torch
+from depthcharge.data import AnnotatedSpectrumIndex
 
 from ..data import db_utils
 from ..data.datasets import (
@@ -89,7 +89,7 @@ class DeNovoDataModule(pl.LightningDataModule):
         self.train_dataset = None
         self.valid_dataset = None
         self.test_dataset = None
-        self.pdb = None
+        self.protein_database = None
 
     def setup(self, stage: str = None, annotated: bool = True) -> None:
         """
@@ -187,7 +187,9 @@ class DeNovoDataModule(pl.LightningDataModule):
         return torch.utils.data.DataLoader(
             self.test_dataset,
             batch_size=self.eval_batch_size,
-            collate_fn=functools.partial(prepare_psm_batch, pdb=self.pdb),
+            collate_fn=functools.partial(
+                prepare_psm_batch, protein_database=self.protein_database
+            ),
             pin_memory=True,
             num_workers=self.n_workers,
             shuffle=False,
@@ -235,8 +237,8 @@ def prepare_batch(
 
 def prepare_psm_batch(
     batch: List[Tuple[torch.Tensor, float, int, str]],
-    pdb: db_utils.ProteinDatabase,
-):
+    protein_database: db_utils.ProteinDatabase,
+) -> Tuple[torch.Tensor, torch.Tensor, np.ndarray, List[str], List[str]]:
     """
     Collate MS/MS spectra into a batch for DB search.
 
@@ -249,7 +251,7 @@ def prepare_psm_batch(
         A batch of data from an AnnotatedSpectrumDataset, consisting of for each
         spectrum (i) a tensor with the m/z and intensity peak values, (ii), the
         precursor m/z, (iii) the precursor charge, (iv) the spectrum identifier.
-    pdb : db_utils.ProteinDatabase
+    protein_database : db_utils.ProteinDatabase
         The protein database to use for candidate peptide retrieval.
 
     Returns
@@ -283,9 +285,9 @@ def prepare_psm_batch(
     all_peptides = []
     all_proteins = []
     for idx in range(len(batch)):
-        digest_data = pdb.get_candidates(
-            float(precursor_mzs[idx]),
-            float(precursor_charges[idx]),
+        digest_data = protein_database.get_candidates(
+            precursor_mzs[idx].type(torch.float64).item(),
+            precursor_charges[idx].type(torch.int64).item(),
         )
         try:
             spec_peptides, pep_protein = digest_data
