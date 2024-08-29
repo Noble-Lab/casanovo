@@ -63,14 +63,14 @@ class ModelRunner:
         self.loaders = None
         self.writer = None
 
-        filenames = ("{epoch}-{step}", "best")
-        if output_rootname is not None:
-            filenames = tuple(
-                f"{output_rootname}.{curr_name}" for curr_name in filenames
-            )
-        curr_filename, best_filename = filenames
+        output_dir = Path.cwd() if output_dir is None else output_dir
+        prefix = f"{output_rootname}." if output_rootname is not None else ""
+        curr_filename, best_filename = (
+            prefix + "{epoch}-{step}",
+            prefix + "best",
+        )
 
-        if overwrite_ckpt_check and output_dir is not None:
+        if overwrite_ckpt_check:
             patterns = [r"epoch=\d+\-step=\d+\.ckpt", r"best\.ckpt"]
             if output_rootname is not None:
                 patterns = [

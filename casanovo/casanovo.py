@@ -67,7 +67,7 @@ class _SharedParams(click.RichCommand):
                 """,
             ),
             click.Option(
-                ("-f", "--output_dir"),
+                ("-d", "--output_dir"),
                 help="The destination directory for output files",
                 type=click.Path(dir_okay=True),
             ),
@@ -96,10 +96,8 @@ class _SharedParams(click.RichCommand):
                 default="info",
             ),
             click.Option(
-                ("-d", "--overwrite"),
-                help="""
-                Whether to overwrite output files.
-                """,
+                ("-f", "--overwrite"),
+                help="Whether to overwrite output files.",
                 is_flag=True,
                 show_default=True,
                 default=False,
@@ -170,14 +168,10 @@ def sequence(
     to sequence peptides. If evaluate is set to True PEAK_PATH must be
     one or more annotated MGF file.
     """
-    output_dir = Path(output_dir) if output_dir is not None else Path.cwd()
-    output_base_name = None
+    output, output_dir = _resolve_output(output_dir, output_root, verbosity)
     if output_root is not None and not overwrite:
-        output_base_name = output_dir / output_root
-        base_pattern = re.escape(output_root)
-        patterns = [base_pattern + r"\.log", base_pattern + r"\.mztab"]
-        utils.check_dir(output_dir, patterns)
-    output = setup_logging(output_base_name, verbosity)
+        file_pattern = re.escape(output_root) + r"\.(?:log|mztab)"
+        utils.check_dir(output_dir, [file_pattern])
 
     config, model = setup_model(model, config, output, False)
     start_time = time.time()
@@ -229,12 +223,9 @@ def train(
     TRAIN_PEAK_PATH must be one or more annoated MGF files, such as those
     provided by MassIVE-KB, from which to train a new Casnovo model.
     """
-    output_dir = Path(output_dir) if output_dir is not None else Path.cwd()
-    output_base_name = None
+    output, output_dir = _resolve_output(output_dir, output_root, verbosity)
     if output_root is not None and not overwrite:
-        output_base_name = output_dir / output_root
         utils.check_dir(output_dir, [re.escape(output_root) + r"\.log"])
-    output = setup_logging(output_base_name, verbosity)
 
     config, model = setup_model(model, config, output, True)
     start_time = time.time()
@@ -524,6 +515,19 @@ def _get_model_weights(cache_dir: Path) -> str:
                 f"please specify your model weights explicitly using the "
                 f"`--model` parameter"
             )
+
+
+def _resolve_output(
+    output_dir: str | None,
+    output_root: str | None,
+    verbosity: str,
+) -> Tuple[Path, str]:
+    output_dir = Path(output_dir) if output_dir is not None else Path.cwd()
+    output_base_name = (
+        None if output_root is None else (output_dir / output_root)
+    )
+    output = setup_logging(output_base_name, verbosity)
+    return output, output_dir
 
 
 def _get_weights_from_url(
