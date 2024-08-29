@@ -15,6 +15,8 @@ import pandas as pd
 import psutil
 import torch
 
+from .data.ms_io import PepSpecMatch
+
 
 SCORE_BINS = [0.0, 0.5, 0.9, 0.95, 0.99]
 
@@ -194,7 +196,7 @@ def log_run_report(
 
 
 def log_sequencing_report(
-    predictions: Tuple[str, Tuple[str, str], float, float, float, float, str],
+    predictions: List[PepSpecMatch],
     start_time: Optional[int] = None,
     end_time: Optional[int] = None,
     score_bins: List[float] = SCORE_BINS,
@@ -220,8 +222,8 @@ def log_sequencing_report(
     run_report = get_report_dict(
         pd.DataFrame(
             {
-                "sequence": [psm[0] for psm in predictions],
-                "score": [psm[2] for psm in predictions],
+                "sequence": [psm.sequence for psm in predictions],
+                "score": [psm.peptide_score for psm in predictions],
             }
         ),
         score_bins=score_bins,
