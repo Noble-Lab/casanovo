@@ -96,7 +96,7 @@ class _SharedParams(click.RichCommand):
                 default="info",
             ),
             click.Option(
-                ("-f", "--overwrite"),
+                ("-f", "--force_overwrite"),
                 help="Whether to overwrite output files.",
                 is_flag=True,
                 show_default=True,
@@ -159,7 +159,7 @@ def sequence(
     output_dir: Optional[str],
     output_root: Optional[str],
     verbosity: str,
-    overwrite: bool,
+    force_overwrite: bool,
     evaluate: bool,
 ) -> None:
     """De novo sequence peptides from tandem mass spectra.
@@ -168,11 +168,13 @@ def sequence(
     to sequence peptides. If evaluate is set to True PEAK_PATH must be
     one or more annotated MGF file.
     """
-    output, output_dir = _resolve_output(output_dir, output_root, verbosity)
-    if output_root is not None and not overwrite:
-        file_pattern = re.escape(output_root) + r"\.(?:log|mztab)"
-        utils.check_dir(output_dir, [file_pattern])
+    file_patterns = list()
+    if output_root is not None and not force_overwrite:
+        file_patterns = [f"{output_root}.log", f"{output_root}.mztab"]
 
+    output, output_dir = _resolve_output(
+        output_dir, output_root, file_patterns, verbosity
+    )
     config, model = setup_model(model, config, output, False)
     start_time = time.time()
     with ModelRunner(config, model, output_root, output_dir, False) as runner:
@@ -216,21 +218,24 @@ def train(
     output_dir: Optional[str],
     output_root: Optional[str],
     verbosity: str,
-    overwrite: bool,
+    force_overwrite: bool,
 ) -> None:
     """Train a Casanovo model on your own data.
 
     TRAIN_PEAK_PATH must be one or more annoated MGF files, such as those
     provided by MassIVE-KB, from which to train a new Casnovo model.
     """
-    output, output_dir = _resolve_output(output_dir, output_root, verbosity)
-    if output_root is not None and not overwrite:
-        utils.check_dir(output_dir, [re.escape(output_root) + r"\.log"])
+    file_patterns = list()
+    if output_root is not None and not force_overwrite:
+        file_patterns = [f"{output_root}.log"]
 
+    output, output_dir = _resolve_output(
+        output_dir, output_root, file_patterns, verbosity
+    )
     config, model = setup_model(model, config, output, True)
     start_time = time.time()
     with ModelRunner(
-        config, model, output_root, output_dir, not overwrite
+        config, model, output_root, output_dir, not force_overwrite
     ) as runner:
         logger.info("Training a model from:")
         for peak_file in train_peak_path:
@@ -520,12 +525,37 @@ def _get_model_weights(cache_dir: Path) -> str:
 def _resolve_output(
     output_dir: str | None,
     output_root: str | None,
+    file_patterns: list[str],
     verbosity: str,
 ) -> Tuple[Path, str]:
+    """
+    Resolves the output directory and sets up logging.
+
+    Parameters:
+    -----------
+    output_dir : str | None
+        The path to the output directory. If `None`, the current working
+        directory will be used.
+    output_root : str | None
+        The base name for the output files. If `None`, no specific base name is
+        set, and logging will be configured accordingly to the behavior of
+        `setup_logging`.
+    file_patterns : list[str]
+        A list of file patterns that should be checked within the `output_dir`.
+    verbosity : str
+        The verbosity level for logging.
+
+    Returns:
+    --------
+    Tuple[Path, str]
+        The output directory and the base name for log and results files (if
+        applicable).
+    """
     output_dir = Path(output_dir) if output_dir is not None else Path.cwd()
     output_base_name = (
         None if output_root is None else (output_dir / output_root)
     )
+    utils.check_dir(output_dir, file_patterns)
     output = setup_logging(output_base_name, verbosity)
     return output, output_dir
 

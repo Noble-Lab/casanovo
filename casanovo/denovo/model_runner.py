@@ -71,13 +71,13 @@ class ModelRunner:
         )
 
         if overwrite_ckpt_check:
-            patterns = [r"epoch=\d+\-step=\d+\.ckpt", r"best\.ckpt"]
-            if output_rootname is not None:
-                patterns = [
-                    re.escape(output_rootname + ".") + pattern
-                    for pattern in patterns
-                ]
-            utils.check_dir(output_dir, patterns)
+            utils.check_dir(
+                output_dir,
+                [
+                    f"{curr_filename.format(epoch='*', step='*')}.ckpt",
+                    f"{best_filename}.ckpt",
+                ],
+            )
 
         # Configure checkpoints.
         self.callbacks = [

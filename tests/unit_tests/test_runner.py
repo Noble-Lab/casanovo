@@ -121,12 +121,17 @@ def test_save_and_load_weights_deprecated(tmp_path, mgf_small, tiny_config):
     torch.save(ckpt_data, str(ckpt))
 
     # Inference.
-    with ModelRunner(config=config, model_filename=str(ckpt)) as runner:
+    with ModelRunner(
+        config=config, model_filename=str(ckpt), overwrite_ckpt_check=False
+    ) as runner:
         runner.initialize_model(train=False)
         assert runner.model.cosine_schedule_period_iters == 5
     # Fine-tuning.
     with ModelRunner(
-        config=config, model_filename=str(ckpt), output_dir=tmp_path
+        config=config,
+        model_filename=str(ckpt),
+        output_dir=tmp_path,
+        overwrite_ckpt_check=False,
     ) as runner:
         with pytest.warns(DeprecationWarning):
             runner.train([mgf_small], [mgf_small])
@@ -149,7 +154,9 @@ def test_calculate_precision(tmp_path, mgf_small, tiny_config):
     assert "valid_pep_precision" not in runner.model.history.columns
 
     config.calculate_precision = True
-    runner = ModelRunner(config=config, output_dir=tmp_path)
+    runner = ModelRunner(
+        config=config, output_dir=tmp_path, overwrite_ckpt_check=False
+    )
     with runner:
         runner.train([mgf_small], [mgf_small])
 

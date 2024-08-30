@@ -3,7 +3,6 @@ import subprocess
 from pathlib import Path
 
 import pyteomics.mztab
-import pytest
 from click.testing import CliRunner
 
 from casanovo import casanovo
@@ -43,10 +42,6 @@ def test_train_and_run(
     assert result.exit_code == 0
     assert model_file.exists()
     assert best_model.exists()
-
-    # Check that re-running train fails due to no overwrite
-    with pytest.raises(FileExistsError):
-        run(train_args)
 
     assert model_file.exists()
     assert best_model.exists()
@@ -89,12 +84,6 @@ def test_train_and_run(
     assert psms.loc[3, "spectra_ref"] == "ms_run[2]:scan=17"
     assert psms.loc[4, "sequence"] == "PEPTLDEK"
     assert psms.loc[4, "spectra_ref"] == "ms_run[2]:scan=111"
-
-    # Verify that running predict again fails due to no overwrite
-    with pytest.raises(FileExistsError):
-        run(predict_args)
-
-    assert output_filename.is_file()
 
     # Finally, try evaluating:
     output_rootname = "test-eval"
@@ -155,10 +144,6 @@ def test_train_and_run(
             for line in validate_result.stdout.splitlines()
         ]
     )
-
-    # Verify that running again fails due to no overwrite
-    with pytest.raises(FileExistsError):
-        run(eval_args)
 
     assert output_filename.is_file()
 

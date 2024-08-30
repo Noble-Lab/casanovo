@@ -924,9 +924,9 @@ def test_run_map(mgf_small):
 
 def test_check_dir(tmp_path):
     exists_path = tmp_path / "exists-1234.ckpt"
-    exists_pattern = r"exists\-\d+\.ckpt"
+    exists_pattern = "exists-*.ckpt"
     exists_path.touch()
-    dne_pattern = r"dne\-\d+\.ckpt"
+    dne_pattern = "dne-*.ckpt"
 
     with pytest.raises(FileExistsError):
         utils.check_dir(tmp_path, [exists_pattern, dne_pattern])
