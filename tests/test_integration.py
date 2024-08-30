@@ -3,6 +3,7 @@ import subprocess
 from pathlib import Path
 
 import pyteomics.mztab
+import pytest
 from click.testing import CliRunner
 
 from casanovo import casanovo
@@ -29,43 +30,40 @@ def test_train_and_run(
         str(mgf_small),
         "--config",
         tiny_config,
-        "--output",
-        str(tmp_path / "train"),
+        "--output_dir",
+        str(tmp_path),
+        "--output_root",
+        "train",
         str(mgf_small),  # The training files.
     ]
 
     result = run(train_args)
-    model_file = tmp_path / "epoch=19-step=20.ckpt"
-    best_model = tmp_path / "best.ckpt"
+    model_file = tmp_path / "train.epoch=19-step=20.ckpt"
+    best_model = tmp_path / "train.best.ckpt"
     assert result.exit_code == 0
     assert model_file.exists()
     assert best_model.exists()
 
-    # Try evaluating:
-    eval_args = [
-        "evaluate",
-        "--model",
-        str(model_file),
-        "--config",
-        str(tiny_config),
-        "--output",
-        str(tmp_path / "eval"),
-        str(mgf_small),
-    ]
+    # Check that re-running train fails due to no overwrite
+    with pytest.raises(FileExistsError):
+        run(train_args)
 
-    result = run(eval_args)
-    assert result.exit_code == 0
+    assert model_file.exists()
+    assert best_model.exists()
 
     # Try predicting:
-    output_filename = tmp_path / "test.mztab"
+    output_rootname = "test"
+    output_filename = (tmp_path / output_rootname).with_suffix(".mztab")
     predict_args = [
         "sequence",
         "--model",
         str(model_file),
         "--config",
         tiny_config,
-        "--output",
-        str(output_filename),
+        "--output_dir",
+        str(tmp_path),
+        "--output_root",
+        output_rootname,
         str(mgf_small),
         str(mzml_small),
     ]
@@ -92,6 +90,48 @@ def test_train_and_run(
     assert psms.loc[4, "sequence"] == "PEPTLDEK"
     assert psms.loc[4, "spectra_ref"] == "ms_run[2]:scan=111"
 
+    # Verify that running predict again fails due to no overwrite
+    with pytest.raises(FileExistsError):
+        run(predict_args)
+
+    assert output_filename.is_file()
+
+    # Finally, try evaluating:
+    output_rootname = "test-eval"
+    output_filename = (tmp_path / output_rootname).with_suffix(".mztab")
+    eval_args = [
+        "sequence",
+        "--model",
+        str(model_file),
+        "--config",
+        tiny_config,
+        "--output_dir",
+        str(tmp_path),
+        "--output_root",
+        output_rootname,
+        str(mgf_small),
+        str(mzml_small),
+        "--evaluate",
+    ]
+
+    result = run(eval_args)
+    assert result.exit_code == 0
+    assert output_filename.is_file()
+
+    mztab = pyteomics.mztab.MzTab(str(output_filename))
+    filename = "small.mgf"
+    # Verify that the input annotated peak file is listed in the metadata.
+    assert f"ms_run[1]-location" in mztab.metadata
+    assert mztab.metadata[f"ms_run[1]-location"].endswith(filename)
+
+    # Verify that the spectrum predictions are correct
+    # and indexed according to the peak input file type.
+    psms = mztab.spectrum_match_table
+    assert psms.loc[1, "sequence"] == "LESLLEK"
+    assert psms.loc[1, "spectra_ref"] == "ms_run[1]:index=0"
+    assert psms.loc[2, "sequence"] == "PEPTLDEK"
+    assert psms.loc[2, "spectra_ref"] == "ms_run[1]:index=1"
+
     # Validate mztab output
     validate_args = [
         "java",
@@ -115,6 +155,12 @@ def test_train_and_run(
             for line in validate_result.stdout.splitlines()
         ]
     )
+
+    # Verify that running again fails due to no overwrite
+    with pytest.raises(FileExistsError):
+        run(eval_args)
+
+    assert output_filename.is_file()
 
 
 def test_auxilliary_cli(tmp_path, monkeypatch):

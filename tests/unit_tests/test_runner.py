@@ -29,7 +29,7 @@ def test_initialize_model(tmp_path, mgf_small):
     config.max_epochs = 1
     config.n_layers = 1
     ckpt = tmp_path / "existing.ckpt"
-    with ModelRunner(config=config) as runner:
+    with ModelRunner(config=config, output_dir=tmp_path) as runner:
         runner.train([mgf_small], [mgf_small])
         runner.trainer.save_checkpoint(ckpt)
 
@@ -58,7 +58,7 @@ def test_save_and_load_weights(tmp_path, mgf_small, tiny_config):
     ckpt = tmp_path / "test.ckpt"
     mztab = tmp_path / "test.mztab"
 
-    with ModelRunner(config=config) as runner:
+    with ModelRunner(config=config, output_dir=tmp_path) as runner:
         runner.train([mgf_small], [mgf_small])
         runner.trainer.save_checkpoint(ckpt)
 
@@ -110,7 +110,7 @@ def test_save_and_load_weights_deprecated(tmp_path, mgf_small, tiny_config):
     config.cosine_schedule_period_iters = 5
     ckpt = tmp_path / "test.ckpt"
 
-    with ModelRunner(config=config) as runner:
+    with ModelRunner(config=config, output_dir=tmp_path) as runner:
         runner.train([mgf_small], [mgf_small])
         runner.trainer.save_checkpoint(ckpt)
 
@@ -125,7 +125,9 @@ def test_save_and_load_weights_deprecated(tmp_path, mgf_small, tiny_config):
         runner.initialize_model(train=False)
         assert runner.model.cosine_schedule_period_iters == 5
     # Fine-tuning.
-    with ModelRunner(config=config, model_filename=str(ckpt)) as runner:
+    with ModelRunner(
+        config=config, model_filename=str(ckpt), output_dir=tmp_path
+    ) as runner:
         with pytest.warns(DeprecationWarning):
             runner.train([mgf_small], [mgf_small])
             assert "max_iters" not in runner.model.opt_kwargs
@@ -139,7 +141,7 @@ def test_calculate_precision(tmp_path, mgf_small, tiny_config):
     config.calculate_precision = False
     config.tb_summarywriter = str(tmp_path)
 
-    runner = ModelRunner(config=config)
+    runner = ModelRunner(config=config, output_dir=tmp_path)
     with runner:
         runner.train([mgf_small], [mgf_small])
 
@@ -147,7 +149,7 @@ def test_calculate_precision(tmp_path, mgf_small, tiny_config):
     assert "valid_pep_precision" not in runner.model.history.columns
 
     config.calculate_precision = True
-    runner = ModelRunner(config=config)
+    runner = ModelRunner(config=config, output_dir=tmp_path)
     with runner:
         runner.train([mgf_small], [mgf_small])
 
