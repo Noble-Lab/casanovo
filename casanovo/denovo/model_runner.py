@@ -46,6 +46,9 @@ class ModelRunner:
     output_rootname : str | None, optional
         The root name for checkpoint files (e.g., checkpoints or results). If
         `None` no base name will be used for checkpoint files.
+    overwrite_ckpt_check: bool, optional
+        Whether to check output_dir (if not `None`) for conflicting checkpoint
+        files.
     """
 
     def __init__(
