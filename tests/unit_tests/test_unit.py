@@ -290,7 +290,7 @@ def test_digest_fasta_cleave(tiny_fasta_file, residues_dict):
             allowed_fixed_mods="C:C+57.021",
             allowed_var_mods=(
                 "M:M+15.995,N:N+0.984,Q:Q+0.984,"
-                "X:+42.011,X:+43.006,X:-17.027,X:+43.006-17.027"
+                "nterm:+42.011,nterm:+43.006,nterm:-17.027,nterm:+43.006-17.027"
             ),
             residues=residues_dict,
         )
@@ -365,7 +365,7 @@ def test_digest_fasta_mods(tiny_fasta_file, residues_dict):
         allowed_fixed_mods="C:C+57.021",
         allowed_var_mods=(
             "M:M+15.995,N:N+0.984,Q:Q+0.984,"
-            "X:+42.011,X:+43.006,X:-17.027,X:+43.006-17.027"
+            "nterm:+42.011,nterm:+43.006,nterm:-17.027,nterm:+43.006-17.027"
         ),
         residues=residues_dict,
     )
@@ -404,7 +404,7 @@ def test_length_restrictions(tiny_fasta_file, residues_dict):
         allowed_fixed_mods="C:C+57.021",
         allowed_var_mods=(
             "M:M+15.995,N:N+0.984,Q:Q+0.984,"
-            "X:+42.011,X:+43.006,X:-17.027,X:+43.006-17.027"
+            "nterm:+42.011,nterm:+43.006,nterm:-17.027,nterm:+43.006-17.027"
         ),
         residues=residues_dict,
     )
@@ -424,7 +424,7 @@ def test_length_restrictions(tiny_fasta_file, residues_dict):
         allowed_fixed_mods="C:C+57.021",
         allowed_var_mods=(
             "M:M+15.995,N:N+0.984,Q:Q+0.984,"
-            "X:+42.011,X:+43.006,X:-17.027,X:+43.006-17.027"
+            "nterm:+42.011,nterm:+43.006,nterm:-17.027,nterm:+43.006-17.027"
         ),
         residues=residues_dict,
     )
@@ -460,7 +460,7 @@ def test_digest_fasta_enzyme(tiny_fasta_file, residues_dict):
         allowed_fixed_mods="C:C+57.021",
         allowed_var_mods=(
             "M:M+15.995,N:N+0.984,Q:Q+0.984,"
-            "X:+42.011,X:+43.006,X:-17.027,X:+43.006-17.027"
+            "nterm:+42.011,nterm:+43.006,nterm:-17.027,nterm:+43.006-17.027"
         ),
         residues=residues_dict,
     )
@@ -480,7 +480,7 @@ def test_digest_fasta_enzyme(tiny_fasta_file, residues_dict):
         allowed_fixed_mods="C:C+57.021",
         allowed_var_mods=(
             "M:M+15.995,N:N+0.984,Q:Q+0.984,"
-            "X:+42.011,X:+43.006,X:-17.027,X:+43.006-17.027"
+            "nterm:+42.011,nterm:+43.006,nterm:-17.027,nterm:+43.006-17.027"
         ),
         residues=residues_dict,
     )
@@ -501,7 +501,7 @@ def test_digest_fasta_enzyme(tiny_fasta_file, residues_dict):
         allowed_fixed_mods="C:C+57.021",
         allowed_var_mods=(
             "M:M+15.995,N:N+0.984,Q:Q+0.984,"
-            "X:+42.011,X:+43.006,X:-17.027,X:+43.006-17.027"
+            "nterm:+42.011,nterm:+43.006,nterm:-17.027,nterm:+43.006-17.027"
         ),
         residues=residues_dict,
     )
@@ -532,7 +532,7 @@ def test_get_candidates(tiny_fasta_file, residues_dict):
         allowed_fixed_mods="C:C+57.021",
         allowed_var_mods=(
             "M:M+15.995,N:N+0.984,Q:Q+0.984,"
-            "X:+42.011,X:+43.006,X:-17.027,X:+43.006-17.027"
+            "nterm:+42.011,nterm:+43.006,nterm:-17.027,nterm:+43.006-17.027"
         ),
         residues=residues_dict,
     )
@@ -552,7 +552,7 @@ def test_get_candidates(tiny_fasta_file, residues_dict):
         allowed_fixed_mods="C:C+57.021",
         allowed_var_mods=(
             "M:M+15.995,N:N+0.984,Q:Q+0.984,"
-            "X:+42.011,X:+43.006,X:-17.027,X:+43.006-17.027"
+            "nterm:+42.011,nterm:+43.006,nterm:-17.027,nterm:+43.006-17.027"
         ),
         residues=residues_dict,
     )
@@ -572,7 +572,7 @@ def test_get_candidates(tiny_fasta_file, residues_dict):
         allowed_fixed_mods="C:C+57.021",
         allowed_var_mods=(
             "M:M+15.995,N:N+0.984,Q:Q+0.984,"
-            "X:+42.011,X:+43.006,X:-17.027,X:+43.006-17.027"
+            "nterm:+42.011,nterm:+43.006,nterm:-17.027,nterm:+43.006-17.027"
         ),
         residues=residues_dict,
     )
@@ -640,7 +640,7 @@ def test_get_candidates_isotope_error(tiny_fasta_file, residues_dict):
         allowed_fixed_mods="C:C+57.021",
         allowed_var_mods=(
             "M:M+15.995,N:N+0.984,Q:Q+0.984,"
-            "X:+42.011,X:+43.006,X:-17.027,X:+43.006-17.027"
+            "nterm:+42.011,nterm:+43.006,nterm:-17.027,nterm:+43.006-17.027"
         ),
         residues=residues_dict,
     )
@@ -661,7 +661,7 @@ def test_get_candidates_isotope_error(tiny_fasta_file, residues_dict):
         allowed_fixed_mods="C:C+57.021",
         allowed_var_mods=(
             "M:M+15.995,N:N+0.984,Q:Q+0.984,"
-            "X:+42.011,X:+43.006,X:-17.027,X:+43.006-17.027"
+            "nterm:+42.011,nterm:+43.006,nterm:-17.027,nterm:+43.006-17.027"
         ),
         residues=residues_dict,
     )
@@ -682,7 +682,7 @@ def test_get_candidates_isotope_error(tiny_fasta_file, residues_dict):
         allowed_fixed_mods="C:C+57.021",
         allowed_var_mods=(
             "M:M+15.995,N:N+0.984,Q:Q+0.984,"
-            "X:+42.011,X:+43.006,X:-17.027,X:+43.006-17.027"
+            "nterm:+42.011,nterm:+43.006,nterm:-17.027,nterm:+43.006-17.027"
         ),
         residues=residues_dict,
     )
@@ -703,7 +703,7 @@ def test_get_candidates_isotope_error(tiny_fasta_file, residues_dict):
         allowed_fixed_mods="C:C+57.021",
         allowed_var_mods=(
             "M:M+15.995,N:N+0.984,Q:Q+0.984,"
-            "X:+42.011,X:+43.006,X:-17.027,X:+43.006-17.027"
+            "nterm:+42.011,nterm:+43.006,nterm:-17.027,nterm:+43.006-17.027"
         ),
         residues=residues_dict,
     )

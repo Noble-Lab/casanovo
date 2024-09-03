@@ -77,7 +77,7 @@ class ProteinDatabase:
         self.swap_regex = re.compile(
             "(%s)" % "|".join(map(re.escape, self.swap_map.keys()))
         )
-        self.db_peptides = self._digest_fasta(
+        self.db_peptides, self.prot_map = self._digest_fasta(
             fasta_path,
             enzyme,
             digestion,
@@ -146,11 +146,9 @@ class ProteinDatabase:
         Returns
         -------
         protein : str
-            The associated protein.
+            The associated protein(s).
         """
-        return self.db_peptides[self.db_peptides["peptide"] == peptide][
-            "protein"
-        ].values[0]
+        return ",".join(self.prot_map[peptide])
 
     def _digest_fasta(
         self,
@@ -186,9 +184,11 @@ class ProteinDatabase:
 
         Returns
         -------
-        mod_peptide_list : pd.DataFrame
+        pep_table : pd.DataFrame
             A Pandas DataFrame with peptide, mass,
             and protein columns. Sorted by neutral mass in ascending order.
+        prot_map : dict
+            A dictionary mapping peptides to associated proteins.
         """
         # Verify the existence of the file:
         if not os.path.isfile(fasta_filename):
@@ -217,7 +217,7 @@ class ProteinDatabase:
             for pep in pep_set:
                 if (
                     len(pep) >= min_peptide_length
-                    or len(pep) <= max_peptide_length
+                    and len(pep) <= max_peptide_length
                 ):
                     if any(aa not in valid_aa for aa in pep):
                         logger.warn(
@@ -259,10 +259,15 @@ class ProteinDatabase:
         )
         pep_table.sort_values(by=["calc_mass", "peptide"], inplace=True)
 
+        # Create a dictionary mapping for easy accession of associated proteins
+        prot_map = defaultdict(list)
+        for pep, _, prot in mod_peptide_list:
+            prot_map[pep].append(prot)
+
         logger.info(
             "Digestion complete. %d peptides generated.", len(pep_table)
         )
-        return pep_table
+        return pep_table, prot_map
 
 
 @njit
