@@ -46,23 +46,23 @@ devices:
 
 # Enzyme for in silico digestion, used to generate candidate peptides.
 # See pyteomics.parser.expasy_rules for valid enzymes.
+# Can also take a regex expression to specify custom digestion rules.
 enzyme: "trypsin"
 # Digestion type for candidate peptide generation.
 # full: standard digestion. semi: Include products of semi-specific cleavage.
-# Can also take a regex expression to specify custom digestion rules.
 digestion: "full"
 # Number of allowed missed cleavages when digesting protein.
 missed_cleavages: 0
-# Maximum number of amino acid modifications per peptide,
+# Maximum number of variable amino acid modifications per peptide,
 # None generates all possible isoforms as candidates.
 max_mods: 1
 # Select which modifications from the vocabulary can be used in candidate creation.
 # Format: Comma-separated list of "aa:mod_residue", 
-# where aa is a standard amino acid or "X" for an N-terminal mod
+# where aa is a standard amino acid or "nterm" for an N-terminal mod
 # and mod_residue is a key from the "residues" dictionary.
 # Example: "M:M+15.995,X:+43.006-17.027"
 allowed_fixed_mods: "C:C+57.021"
-allowed_var_mods: "M:M+15.995,N:N+0.984,Q:Q+0.984,X:+42.011,X:+43.006,X:-17.027,X:+43.006-17.027"
+allowed_var_mods: "M:M+15.995,N:N+0.984,Q:Q+0.984,nterm:+42.011,nterm:+43.006,nterm:-17.027,nterm:+43.006-17.027"
 
 
 ###

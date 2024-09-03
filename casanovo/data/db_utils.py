@@ -5,6 +5,7 @@ import logging
 import os
 import re
 import string
+from collections import defaultdict
 from typing import List, Tuple
 
 import depthcharge.masses
@@ -12,6 +13,7 @@ import pandas as pd
 import pyteomics.fasta as fasta
 import pyteomics.parser as parser
 from numba import njit
+
 
 logger = logging.getLogger("casanovo")
 
@@ -71,6 +73,9 @@ class ProteinDatabase:
         self.residues = residues
         self.fixed_mods, self.var_mods, self.swap_map = _construct_mods_dict(
             allowed_fixed_mods, allowed_var_mods
+        )
+        self.swap_regex = re.compile(
+            "(%s)" % "|".join(map(re.escape, self.swap_map.keys()))
         )
         self.db_peptides = self._digest_fasta(
             fasta_path,
@@ -167,6 +172,7 @@ class ProteinDatabase:
         enzyme : str
             The enzyme to use for digestion.
             See pyteomics.parser.expasy_rules for valid enzymes.
+            Can also be a regex pattern.
         digestion : str
             The type of digestion to perform. Either 'full' or 'partial'.
         missed_cleavages : int
@@ -199,9 +205,7 @@ class ProteinDatabase:
                 enzyme,
             )
         semi = digestion == "partial"
-        valid_aa = set(
-            [re.sub(r"[^A-Z]+", "", res) for res in self.residues.keys()]
-        )
+        valid_aa = set(list(self.residues.keys()) + ["C"])
         for header, seq in fasta.read(fasta_filename):
             pep_set = parser.cleave(
                 seq,
@@ -212,17 +216,16 @@ class ProteinDatabase:
             protein = header.split()[0]
             for pep in pep_set:
                 if (
-                    len(pep) < min_peptide_length
-                    or len(pep) > max_peptide_length
+                    len(pep) >= min_peptide_length
+                    or len(pep) <= max_peptide_length
                 ):
-                    continue
-
-                if any(aa not in valid_aa for aa in pep):
-                    logger.warn(
-                        "Skipping peptide with unknown amino acids: %s", pep
-                    )
-                    continue
-                peptide_list.append((pep, protein))
+                    if any(aa not in valid_aa for aa in pep):
+                        logger.warn(
+                            "Skipping peptide with unknown amino acids: %s",
+                            pep,
+                        )
+                    else:
+                        peptide_list.append((pep, protein))
 
         # Generate modified peptides
         mass_calculator = depthcharge.masses.PeptideMass(residues="massivekb")
@@ -242,7 +245,11 @@ class ProteinDatabase:
             (mod_pep, mass_calculator.mass(mod_pep), prot)
             for isos, prot in peptide_isoforms
             for mod_pep in map(
-                functools.partial(_convert_from_modx, swap_map=self.swap_map),
+                functools.partial(
+                    _convert_from_modx,
+                    swap_map=self.swap_map,
+                    swap_regex=self.swap_regex,
+                ),
                 isos,
             )
         ]
@@ -259,7 +266,7 @@ class ProteinDatabase:
 
 
 @njit
-def _to_mz(precursor_mass, charge):
+def _to_mz(precursor_mass: float, charge: int) -> float:
     """
     Convert precursor neutral mass to m/z value.
 
@@ -279,7 +286,7 @@ def _to_mz(precursor_mass, charge):
 
 
 @njit
-def _to_raw_mass(mz_mass, charge):
+def _to_raw_mass(mz_mass: float, charge: int) -> float:
     """
     Convert precursor m/z value to neutral mass.
 
@@ -298,7 +305,7 @@ def _to_raw_mass(mz_mass, charge):
     return charge * (mz_mass - PROTON)
 
 
-def _convert_from_modx(seq: str, swap_map: dict) -> str:
+def _convert_from_modx(seq: str, swap_map: dict, swap_regex: str) -> str:
     """Converts peptide sequence from modX format to Casanovo-acceptable modifications.
 
     Args:
@@ -306,12 +313,15 @@ def _convert_from_modx(seq: str, swap_map: dict) -> str:
             Peptide in modX format
         swap_map : dict
             Dictionary that allows for swapping of modX to Casanovo-acceptable modifications.
+        swap_regex : str
+            Regular expression to match modX format.
     """
-    regex = re.compile("(%s)" % "|".join(map(re.escape, swap_map.keys())))
-    return regex.sub(lambda x: swap_map[x.group()], seq)
+    return swap_regex.sub(lambda x: swap_map[x.group()], seq)
 
 
-def _construct_mods_dict(allowed_fixed_mods, allowed_var_mods):
+def _construct_mods_dict(
+    allowed_fixed_mods: str, allowed_var_mods: str
+) -> Tuple[dict, dict, dict]:
     """
     Constructs dictionaries of fixed and variable modifications.
 
@@ -343,7 +353,7 @@ def _construct_mods_dict(allowed_fixed_mods, allowed_var_mods):
     for idx, mod in enumerate(allowed_var_mods.split(",")):
         aa, mod_aa = mod.split(":")
         mod_id = string.ascii_lowercase[idx]
-        if aa == "X":
+        if aa == "nterm":
             var_mods[f"{mod_id}-"] = True
             swap_map[f"{mod_id}-"] = f"{mod_aa}"
         else:

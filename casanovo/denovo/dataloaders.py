@@ -272,11 +272,11 @@ def prepare_psm_batch(
     spectra, precursor_mzs, precursor_charges, spectrum_ids = list(zip(*batch))
     spectra = torch.nn.utils.rnn.pad_sequence(spectra, batch_first=True)
 
-    precursor_mzs = torch.tensor(precursor_mzs)
-    precursor_charges = torch.tensor(precursor_charges)
-    precursor_masses = (precursor_mzs - 1.007276) * precursor_charges
+    precursor_mzs_t = torch.tensor(precursor_mzs)
+    precursor_charges_t = torch.tensor(precursor_charges)
+    precursor_masses_t = (precursor_mzs_t - 1.007276) * precursor_charges_t
     precursors = torch.vstack(
-        [precursor_masses, precursor_charges, precursor_mzs]
+        [precursor_masses_t, precursor_charges_t, precursor_mzs_t]
     ).T.float()
 
     all_spectra = []
@@ -286,8 +286,8 @@ def prepare_psm_batch(
     all_proteins = []
     for idx in range(len(batch)):
         spec_peptides, spec_proteins = protein_database.get_candidates(
-            precursor_mzs[idx].type(torch.float64).item(),
-            precursor_charges[idx].type(torch.int64).item(),
+            precursor_mzs[idx],
+            precursor_charges[idx],
         )
         try:
             all_spectra.append(
@@ -303,7 +303,6 @@ def prepare_psm_batch(
             logger.warning(
                 "No candidates found for spectrum %s", spectrum_ids[idx]
             )
-            continue
 
     return (
         torch.cat(all_spectra, dim=0),

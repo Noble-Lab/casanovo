@@ -1009,7 +1009,7 @@ class DbSpec2Pep(Spec2Pep):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.psm_batch_size = 1024
+        self.psm_batch_size = None
 
     def predict_step(self, batch, *args):
         """
