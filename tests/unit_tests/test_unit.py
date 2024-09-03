@@ -327,12 +327,16 @@ def test_digest_fasta_mods(tiny_fasta_file, residues_dict):
         "+42.011EIVMTQSPPTLSLSPGER",
         "+43.006EIVMTQSPPTLSLSPGER",
         "-17.027MEAPAQLLFLLLLWLPDTTR",
+        "-17.027M+15.995EAPAQLLFLLLLWLPDTTR",  #
         "MEAPAQLLFLLLLWLPDTTR",
         "MEAPAQ+0.984LLFLLLLWLPDTTR",
         "M+15.995EAPAQLLFLLLLWLPDTTR",
         "+43.006-17.027MEAPAQLLFLLLLWLPDTTR",
+        "+43.006-17.027M+15.995EAPAQLLFLLLLWLPDTTR",  #
         "+42.011MEAPAQLLFLLLLWLPDTTR",
         "+43.006MEAPAQLLFLLLLWLPDTTR",
+        "+42.011M+15.995EAPAQLLFLLLLWLPDTTR",  #
+        "+43.006M+15.995EAPAQLLFLLLLWLPDTTR",  #
         "-17.027ASQSVSSSYLTWYQQKPGQAPR",
         "ASQSVSSSYLTWYQQKPGQAPR",
         "ASQ+0.984SVSSSYLTWYQQKPGQAPR",
@@ -370,13 +374,6 @@ def test_digest_fasta_mods(tiny_fasta_file, residues_dict):
         residues=residues_dict,
     )
     peptide_list = list(pdb.db_peptides["peptide"])
-    peptide_list = [
-        x
-        for x in peptide_list
-        if not re.search(
-            r"(\+42\.011|\+43\.006|\-17\.027|\+43\.006\-17\.027)+[A-Z]\+", x
-        )
-    ]
     assert peptide_list == expected_1mod
 
 
@@ -447,6 +444,136 @@ def test_digest_fasta_enzyme(tiny_fasta_file, residues_dict):
     # asp-n enzyme
     expected_aspn = ["DFAVYYC+57.021QQ", "DFTLTISSLQPE", "MEAPAQLLFLLLLWLP"]
 
+    expected_semispecific = [
+        "FSGSGS",
+        "ATSIPA",
+        "ASQSVS",
+        "PGQAPR",
+        "TSIPAR",
+        "MEAPAQ",
+        "LLIYGA",
+        "YGASTR",
+        "LSPGER",
+        "LPDTTR",
+        "EIVMTQ",
+        "VTLSC+57.021R",
+        "QDYNLP",
+    ]
+
+    expected_nonspecific = [
+        "SGSGSG",
+        "GSGSGT",
+        "SGSGTD",
+        "FSGSGS",
+        "ATSIPA",
+        "GASTRA",
+        "LSLSPG",
+        "ASQSVS",
+        "GSGTDF",
+        "SLSPGE",
+        "QSVSSS",
+        "SQSVSS",
+        "KPGQAP",
+        "SPPTLS",
+        "ASTRAT",
+        "RFSGSG",
+        "IYGAST",
+        "APAQLL",
+        "PTLSLS",
+        "TLSLSP",
+        "TLTISS",
+        "STRATS",
+        "LIYGAS",
+        "ARFSGS",
+        "PGQAPR",
+        "SGTDFT",
+        "PPTLSL",
+        "EAPAQL",
+        "QKPGQA",
+        "SVSSSY",
+        "TQSPPT",
+        "LTISSL",
+        "PARFSG",
+        "GQAPRL",
+        "QSPPTL",
+        "SPGERV",
+        "ISSLQP",
+        "RATSIP",
+        "TSIPAR",
+        "MEAPAQ",
+        "RASQSV",
+        "TISSLQ",
+        "TRATSI",
+        "LLIYGA",
+        "GTDFTL",
+        "YGASTR",
+        "VSSSYL",
+        "SSSYLT",
+        "LSPGER",
+        "PGERVT",
+        "MTQSPP",
+        "SSLQPE",
+        "VMTQSP",
+        "GERVTL",
+        "PEDFAV",
+        "IVMTQS",
+        "FTLTIS",
+        "APRLLI",
+        "QQKPGQ",
+        "SLQPED",
+        "PAQLLF",
+        "IPARFS",
+        "SIPARF",
+        "LSC+57.021RAS",
+        "TDFTLT",
+        "QAPRLL",
+        "LPDTTR",
+        "ERVTLS",
+        "AQLLFL",
+        "QPEDFA",
+        "TLSC+57.021RA",
+        "C+57.021RASQS",
+        "SC+57.021RASQ",
+        "DFTLTI",
+        "PDTTRE",
+        "TTREIV",
+        "EIVMTQ",
+        "YQQKPG",
+        "LFLLLL",
+        "LLFLLL",
+        "WLPDTT",
+        "DTTREI",
+        "RLLIYG",
+        "RVTLSC+57.021",
+        "VTLSC+57.021R",
+        "EDFAVY",
+        "LWLPDT",
+        "QLLFLL",
+        "LQPEDF",
+        "REIVMT",
+        "TREIVM",
+        "QDYNLP",
+        "LLLWLP",
+        "SSYLTW",
+        "LLWLPD",
+        "LLLLWL",
+        "PRLLIY",
+        "DFAVYY",
+        "QQDYNL",
+        "AVYYC+57.021Q",
+        "FLLLLW",
+        "FAVYYC+57.021",
+        "C+57.021QQDYN",
+        "SYLTWY",
+        "LTWYQQ",
+        "WYQQKP",
+        "TWYQQK",
+        "VYYC+57.021QQ",
+        "YLTWYQ",
+        "YC+57.021QQDY",
+        "YYC+57.021QQD",
+    ]
+
     pdb = db_utils.ProteinDatabase(
         fasta_path=str(tiny_fasta_file),
         enzyme="arg-c",
@@ -487,7 +614,7 @@ def test_digest_fasta_enzyme(tiny_fasta_file, residues_dict):
     peptide_list = list(pdb.db_peptides["peptide"])
     assert peptide_list == expected_aspn
 
-    # Tesr regex rule instead of named enzyme
+    # Test regex rule instead of named enzyme
     pdb = db_utils.ProteinDatabase(
         fasta_path=str(tiny_fasta_file),
         enzyme="R",
@@ -507,6 +634,48 @@ def test_digest_fasta_enzyme(tiny_fasta_file, residues_dict):
     )
     peptide_list = list(pdb.db_peptides["peptide"])
     assert peptide_list == expected_argc
+
+    # Test semispecific digest
+    pdb = db_utils.ProteinDatabase(
+        fasta_path=str(tiny_fasta_file),
+        enzyme="trypsin",
+        digestion="partial",
+        missed_cleavages=0,
+        min_peptide_len=6,
+        max_peptide_len=6,
+        max_mods=0,
+        precursor_tolerance=10000,
+        isotope_error=[0, 0],
+        allowed_fixed_mods="C:C+57.021",
+        allowed_var_mods=(
+            "M:M+15.995,N:N+0.984,Q:Q+0.984,"
+            "nterm:+42.011,nterm:+43.006,nterm:-17.027,nterm:+43.006-17.027"
+        ),
+        residues=residues_dict,
+    )
+    peptide_list = list(pdb.db_peptides["peptide"])
+    assert peptide_list == expected_semispecific
+
+    # Test nonspecific digest
+    pdb = db_utils.ProteinDatabase(
+        fasta_path=str(tiny_fasta_file),
+        enzyme="trypsin",
+        digestion="non-specific",
+        missed_cleavages=0,
+        min_peptide_len=6,
+        max_peptide_len=6,
+        max_mods=0,
+        precursor_tolerance=10000,
+        isotope_error=[0, 0],
+        allowed_fixed_mods="C:C+57.021",
+        allowed_var_mods=(
+            "M:M+15.995,N:N+0.984,Q:Q+0.984,"
+            "nterm:+42.011,nterm:+43.006,nterm:-17.027,nterm:+43.006-17.027"
+        ),
+        residues=residues_dict,
+    )
+    peptide_list = list(pdb.db_peptides["peptide"])
+    assert peptide_list == expected_nonspecific
 
 
 def test_get_candidates(tiny_fasta_file, residues_dict):

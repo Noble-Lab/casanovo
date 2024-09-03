@@ -49,7 +49,9 @@ devices:
 # Can also take a regex expression to specify custom digestion rules.
 enzyme: "trypsin"
 # Digestion type for candidate peptide generation.
-# full: standard digestion. semi: Include products of semi-specific cleavage.
+# full: standard digestion. 
+# semi: Include products of semi-specific cleavage.
+# non-specific: Include products of non-specific cleavage.
 digestion: "full"
 # Number of allowed missed cleavages when digesting protein.
 missed_cleavages: 0
