@@ -59,7 +59,7 @@ class Config:
         n_layers=int,
         dropout=float,
         dim_intensity=int,
-        max_length=int,
+        max_peptide_len=int,
         residues=dict,
         n_log=int,
         tb_summarywriter=str,

@@ -722,7 +722,7 @@ def test_beam_search_decode():
 
     # Sizes.
     batch = 1  # B
-    length = model.max_length + 1  # L
+    length = model.max_peptide_len + 1  # L
     vocab = model.decoder.vocab_size + 1  # V
     beam = model.n_beams  # S
     step = 3
@@ -839,12 +839,12 @@ def test_beam_search_decode():
     assert torch.equal(new_scores[:, step, :], expected_scores)
 
     # Test output if decoding loop isn't stopped with termination of all beams.
-    model.max_length = 0
+    model.max_peptide_len = 0
     # 1 spectrum with 5 peaks (2 values: m/z and intensity).
     spectra = torch.zeros(1, 5, 2)
     precursors = torch.tensor([[469.25364, 2.0, 235.63410]])
     assert len(list(model.beam_search_decode(spectra, precursors))[0]) == 0
-    model.max_length = 100
+    model.max_peptide_len = 100
 
     # Re-initialize scores and tokens to further test caching functionality.
     scores = torch.full(
@@ -1004,7 +1004,7 @@ def test_beam_search_decode():
     batch = 2  # B
     beam = model.n_beams  # S
     model.decoder.reverse = True
-    length = model.max_length + 1  # L
+    length = model.max_peptide_len + 1  # L
     vocab = model.decoder.vocab_size + 1  # V
     step = 4
 
@@ -1045,7 +1045,7 @@ def test_beam_search_decode():
     batch = 2  # B
     beam = model.n_beams  # S
     model.decoder.reverse = True
-    length = model.max_length + 1  # L
+    length = model.max_peptide_len + 1  # L
     vocab = model.decoder.vocab_size + 1  # V
     step = 4
 

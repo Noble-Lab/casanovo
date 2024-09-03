@@ -116,7 +116,7 @@ class ModelRunner:
             self.config.digestion,
             self.config.missed_cleavages,
             self.config.min_peptide_len,
-            self.config.max_length,
+            self.config.max_peptide_len,
             self.config.max_mods,
             self.config.precursor_mass_tol,
             self.config.isotope_error_range,
@@ -271,7 +271,7 @@ class ModelRunner:
             n_layers=self.config.n_layers,
             dropout=self.config.dropout,
             dim_intensity=self.config.dim_intensity,
-            max_length=self.config.max_length,
+            max_peptide_len=self.config.max_peptide_len,
             residues=self.config.residues,
             max_charge=self.config.max_charge,
             precursor_mass_tol=self.config.precursor_mass_tol,
@@ -292,7 +292,7 @@ class ModelRunner:
 
         # Reconfigurable non-architecture related parameters for a loaded model.
         loaded_model_params = dict(
-            max_length=self.config.max_length,
+            max_peptide_len=self.config.max_peptide_len,
             precursor_mass_tol=self.config.precursor_mass_tol,
             isotope_error_range=self.config.isotope_error_range,
             n_beams=self.config.n_beams,

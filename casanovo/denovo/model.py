@@ -46,7 +46,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         (``dim_model - dim_intensity``) are reserved for encoding the m/z value.
         If ``None``, the intensity will be projected up to ``dim_model`` using a
         linear layer, then summed with the m/z encoding for each peak.
-    max_length : int
+    max_peptide_len : int
         The maximum peptide length to decode.
     residues : Union[Dict[str, float], str]
         The amino acid dictionary and their masses. By default ("canonical) this
@@ -99,7 +99,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         n_layers: int = 9,
         dropout: float = 0.0,
         dim_intensity: Optional[int] = None,
-        max_length: int = 100,
+        max_peptide_len: int = 100,
         residues: Union[Dict[str, float], str] = "canonical",
         max_charge: int = 5,
         precursor_mass_tol: float = 50,
@@ -158,7 +158,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         self.opt_kwargs = kwargs
 
         # Data properties.
-        self.max_length = max_length
+        self.max_peptide_len = max_peptide_len
         self.residues = residues
         self.precursor_mass_tol = precursor_mass_tol
         self.isotope_error_range = isotope_error_range
@@ -241,7 +241,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
 
         # Sizes.
         batch = spectra.shape[0]  # B
-        length = self.max_length + 1  # L
+        length = self.max_peptide_len + 1  # L
         vocab = self.decoder.vocab_size + 1  # V
         beam = self.n_beams  # S
 
@@ -269,7 +269,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         scores = einops.rearrange(scores, "B L V S -> (B S) L V")
 
         # The main decoding loop.
-        for step in range(0, self.max_length):
+        for step in range(0, self.max_peptide_len):
             # Terminate beams exceeding the precursor m/z tolerance and track
             # all finished beams (either terminated or stop token predicted).
             (
@@ -323,10 +323,10 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
 
         Parameters
         ----------
-        tokens : torch.Tensor of shape (n_spectra * n_beams, max_length)
+        tokens : torch.Tensor of shape (n_spectra * n_beams, max_peptide_len)
             Predicted amino acid tokens for all beams and all spectra.
          scores : torch.Tensor of shape
-         (n_spectra *  n_beams, max_length, n_amino_acids)
+         (n_spectra *  n_beams, max_peptide_len, n_amino_acids)
             Scores for the predicted amino acid tokens for all beams and all
             spectra.
         step : int
@@ -491,10 +491,10 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
 
         Parameters
         ----------
-        tokens : torch.Tensor of shape (n_spectra * n_beams, max_length)
+        tokens : torch.Tensor of shape (n_spectra * n_beams, max_peptide_len)
             Predicted amino acid tokens for all beams and all spectra.
          scores : torch.Tensor of shape
-         (n_spectra *  n_beams, max_length, n_amino_acids)
+         (n_spectra *  n_beams, max_peptide_len, n_amino_acids)
             Scores for the predicted amino acid tokens for all beams and all
             spectra.
         step : int
@@ -576,10 +576,10 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
 
         Parameters
         ----------
-        tokens : torch.Tensor of shape (n_spectra * n_beams, max_length)
+        tokens : torch.Tensor of shape (n_spectra * n_beams, max_peptide_len)
             Predicted amino acid tokens for all beams and all spectra.
          scores : torch.Tensor of shape
-         (n_spectra *  n_beams, max_length, n_amino_acids)
+         (n_spectra *  n_beams, max_peptide_len, n_amino_acids)
             Scores for the predicted amino acid tokens for all beams and all
             spectra.
         finished_beams : torch.Tensor of shape (n_spectra * n_beams)
@@ -592,10 +592,10 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
 
         Returns
         -------
-        tokens : torch.Tensor of shape (n_spectra * n_beams, max_length)
+        tokens : torch.Tensor of shape (n_spectra * n_beams, max_peptide_len)
             Predicted amino acid tokens for all beams and all spectra.
          scores : torch.Tensor of shape
-         (n_spectra *  n_beams, max_length, n_amino_acids)
+         (n_spectra *  n_beams, max_peptide_len, n_amino_acids)
             Scores for the predicted amino acid tokens for all beams and all
             spectra.
         """

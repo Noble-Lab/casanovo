@@ -241,7 +241,7 @@ def tiny_config(tmp_path):
         "precursor_mass_tol": 5,
         "isotope_error_range": [0, 1],
         "min_peptide_len": 6,
-        "max_length": 100,
+        "max_peptide_len": 100,
         "enzyme": "trypsin",
         "digestion": "full",
         "missed_cleavages": 0,

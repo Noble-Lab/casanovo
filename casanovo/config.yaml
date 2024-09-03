@@ -18,7 +18,7 @@ isotope_error_range: [0, 1]
 # The minimum length of considered peptides.
 min_peptide_len: 6
 # The maximum length of considered peptides.
-max_length: 100
+max_peptide_len: 100
 # Number of spectra in one inference batch.
 predict_batch_size: 1024
 
