@@ -40,17 +40,21 @@ class ModelRunner:
     model_filename : str, optional
         The model filename is required for eval and de novo modes,
         but not for training a model from scratch.
-    output_rootname : str, optional
-        The rootname for all output files (e.g. checkpoints or results)
+    output_dir : Path | None, optional
+        The directory where checkpoint files will be saved. If `None` no
+        checkpoint files will be saved and a warning will be triggered.
+    output_rootname : str | None, optional
+        The root name for checkpoint files (e.g., checkpoints or results). If
+        `None` no base name will be used for checkpoint files.
     """
 
     def __init__(
         self,
         config: Config,
         model_filename: Optional[str] = None,
-        output_rootname: Optional[str] = None,
-        output_dir: Optional[str] = None,
-        overwrite_ckpt_check: bool = True,
+        output_dir: Optional[Path | None] = None,
+        output_rootname: Optional[str | None] = None,
+        overwrite_ckpt_check: Optional[bool] = True,
     ) -> None:
         """Initialize a ModelRunner"""
         self.config = config
@@ -63,15 +67,19 @@ class ModelRunner:
         self.loaders = None
         self.writer = None
 
-        output_dir = Path.cwd() if output_dir is None else output_dir
-        prefix = f"{output_rootname}." if output_rootname is not None else ""
-        curr_filename, best_filename = (
-            prefix + "{epoch}-{step}",
-            prefix + "best",
-        )
+        if output_dir is None:
+            self.callbacks = []
+            warnings.warn(
+                "Checkpoint directory not set in ModelRunner, "
+                "no checkpoint files will be saved."
+            )
+            return
 
+        prefix = f"{output_rootname}." if output_rootname is not None else ""
+        curr_filename = prefix + "{epoch}-{step}"
+        best_filename = prefix + "best"
         if overwrite_ckpt_check:
-            utils.check_dir(
+            utils.check_dir_file_exists(
                 output_dir,
                 [
                     f"{curr_filename.format(epoch='*', step='*')}.ckpt",
@@ -167,7 +175,10 @@ class ModelRunner:
         logger.info("Amino Acid Precision: %.2f%%", 100 * aa_precision)
 
     def predict(
-        self, peak_path: Iterable[str], output: str, evaluate: bool = False
+        self,
+        peak_path: Iterable[str],
+        results_path: str,
+        evaluate: bool = False,
     ) -> None:
         """Predict peptide sequences with a trained Casanovo model.
 
@@ -178,8 +189,8 @@ class ModelRunner:
         ----------
         peak_path : iterable of str
             The path with the MS data files for predicting peptide sequences.
-        output : str
-            Where should the output be saved?
+        results_path : str
+            Sequencing results file path
         evaluate: bool
             whether to run model evaluation in addition to inference
             Note: peak_path most point to annotated MS data files when
@@ -190,7 +201,7 @@ class ModelRunner:
         -------
         self
         """
-        self.writer = ms_io.MztabWriter(Path(output).with_suffix(".mztab"))
+        self.writer = ms_io.MztabWriter(results_path)
         self.writer.set_metadata(
             self.config,
             model=str(self.model_filename),

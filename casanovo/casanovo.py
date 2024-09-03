@@ -12,7 +12,7 @@ import time
 import urllib.parse
 import warnings
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import Optional, Tuple, List
 
 warnings.formatwarning = lambda message, category, *args, **kwargs: (
     f"{category.__name__}: {message}"
@@ -168,16 +168,13 @@ def sequence(
     to sequence peptides. If evaluate is set to True PEAK_PATH must be
     one or more annotated MGF file.
     """
-    file_patterns = list()
-    if output_root is not None and not force_overwrite:
-        file_patterns = [f"{output_root}.log", f"{output_root}.mztab"]
-
-    output, output_dir = _resolve_output(
-        output_dir, output_root, file_patterns, verbosity
+    output_path, output_root = _setup_output(
+        output_dir, output_root, force_overwrite, verbosity
     )
-    config, model = setup_model(model, config, output, False)
+    utils.check_dir_file_exists(output_path, f"{output_root}.mztab")
+    config, model = setup_model(model, config, output_dir, output_root, False)
     start_time = time.time()
-    with ModelRunner(config, model, output_root, output_dir, False) as runner:
+    with ModelRunner(config, model, output_path, output_root, False) as runner:
         logger.info(
             "Sequencing %speptides from:",
             "and evaluating " if evaluate else "",
@@ -185,7 +182,11 @@ def sequence(
         for peak_file in peak_path:
             logger.info("  %s", peak_file)
 
-        runner.predict(peak_path, output, evaluate=evaluate)
+        runner.predict(
+            peak_path,
+            str((output_path / output_root).with_suffix(".mztab")),
+            evaluate=evaluate,
+        )
         psms = runner.writer.psms
         utils.log_sequencing_report(
             psms, start_time=start_time, end_time=time.time()
@@ -225,17 +226,13 @@ def train(
     TRAIN_PEAK_PATH must be one or more annoated MGF files, such as those
     provided by MassIVE-KB, from which to train a new Casnovo model.
     """
-    file_patterns = list()
-    if output_root is not None and not force_overwrite:
-        file_patterns = [f"{output_root}.log"]
-
-    output, output_dir = _resolve_output(
-        output_dir, output_root, file_patterns, verbosity
+    output_path, output_root = _setup_output(
+        output_dir, output_root, force_overwrite, verbosity
     )
-    config, model = setup_model(model, config, output, True)
+    config, model = setup_model(model, config, output_path, output_root, True)
     start_time = time.time()
     with ModelRunner(
-        config, model, output_root, output_dir, not force_overwrite
+        config, model, output_path, output_root, not force_overwrite
     ) as runner:
         logger.info("Training a model from:")
         for peak_file in train_peak_path:
@@ -283,7 +280,7 @@ def configure(output: str) -> None:
 
 
 def setup_logging(
-    output: Optional[str],
+    log_file_path: Path,
     verbosity: str,
 ) -> Path:
     """Set up the logger.
@@ -292,21 +289,11 @@ def setup_logging(
 
     Parameters
     ----------
-    output : Optional[str]
-        The provided output file name.
+    log_file_path: Path
+        The log file path.
     verbosity : str
         The logging level to use in the console.
-
-    Return
-    ------
-    output : Path
-        The output file path.
     """
-    if output is None:
-        output = f"casanovo_{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}"
-
-    output = Path(output).expanduser().resolve()
-
     logging_levels = {
         "debug": logging.DEBUG,
         "info": logging.INFO,
@@ -333,9 +320,7 @@ def setup_logging(
     console_handler.setFormatter(console_formatter)
     root_logger.addHandler(console_handler)
     warnings_logger.addHandler(console_handler)
-    file_handler = logging.FileHandler(
-        output.with_suffix(".log"), encoding="utf8"
-    )
+    file_handler = logging.FileHandler(log_file_path, encoding="utf8")
     file_handler.setFormatter(log_formatter)
     root_logger.addHandler(file_handler)
     warnings_logger.addHandler(file_handler)
@@ -352,13 +337,12 @@ def setup_logging(
     logging.getLogger("torch").setLevel(logging.WARNING)
     logging.getLogger("urllib3").setLevel(logging.WARNING)
 
-    return output
-
 
 def setup_model(
     model: Optional[str],
     config: Optional[str],
-    output: Optional[Path],
+    output_dir: Optional[Path | str],
+    output_root_name: Optional[str],
     is_train: bool,
 ) -> Config:
     """Setup Casanovo for most commands.
@@ -418,7 +402,8 @@ def setup_model(
     logger.info("Casanovo version %s", str(__version__))
     logger.debug("model = %s", model)
     logger.debug("config = %s", config.file)
-    logger.debug("output = %s", output)
+    logger.debug("output directory = %s", output_dir)
+    logger.debug("output root name = %s", output_root_name)
     for key, value in config.items():
         logger.debug("%s = %s", str(key), str(value))
 
@@ -522,42 +507,54 @@ def _get_model_weights(cache_dir: Path) -> str:
             )
 
 
-def _resolve_output(
+def _setup_output(
     output_dir: str | None,
     output_root: str | None,
-    file_patterns: list[str],
+    overwrite: bool,
     verbosity: str,
 ) -> Tuple[Path, str]:
     """
-    Resolves the output directory and sets up logging.
+    Set up the output directory, output file root name, and logging.
 
     Parameters:
     -----------
     output_dir : str | None
-        The path to the output directory. If `None`, the current working
-        directory will be used.
+        The path to the output directory. If `None`, the output directory will
+        be resolved to the current working directory.
     output_root : str | None
-        The base name for the output files. If `None`, no specific base name is
-        set, and logging will be configured accordingly to the behavior of
-        `setup_logging`.
-    file_patterns : list[str]
-        A list of file patterns that should be checked within the `output_dir`.
+        The base name for the output files. If `None` the output root name will
+        be resolved to casanovo_<current data and time>
+    overwrite: bool
+        Whether to overwrite log file if it already exists in the output
+        directory.
     verbosity : str
         The verbosity level for logging.
 
     Returns:
     --------
     Tuple[Path, str]
-        The output directory and the base name for log and results files (if
-        applicable).
+        A tuple containing the resolved output directory and root name for
+        output files.
     """
-    output_dir = Path(output_dir) if output_dir is not None else Path.cwd()
-    output_base_name = (
-        None if output_root is None else (output_dir / output_root)
-    )
-    utils.check_dir(output_dir, file_patterns)
-    output = setup_logging(output_base_name, verbosity)
-    return output, output_dir
+    if output_root is None:
+        output_root = (
+            f"casanovo_{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}"
+        )
+
+    if output_dir is None:
+        output_path = Path.cwd()
+    else:
+        output_path = Path(output_dir)
+        if not output_path.is_dir():
+            raise FileNotFoundError(
+                f"Target output directory {output_dir} does not exists."
+            )
+
+    if not overwrite:
+        utils.check_dir_file_exists(output_path, f"{output_root}.log")
+
+    setup_logging((output_path / output_root).with_suffix(".log"), verbosity)
+    return output_path, output_root
 
 
 def _get_weights_from_url(

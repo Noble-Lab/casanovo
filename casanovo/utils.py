@@ -256,7 +256,9 @@ def log_sequencing_report(
         )
 
 
-def check_dir(dir: pathlib.Path, file_patterns: Iterable[str]) -> None:
+def check_dir_file_exists(
+    dir: pathlib.Path, file_patterns: Iterable[str] | str
+) -> None:
     """
     Check that no file names in dir match any of file_patterns
 
@@ -264,18 +266,20 @@ def check_dir(dir: pathlib.Path, file_patterns: Iterable[str]) -> None:
     ----------
     dir : pathlib.Path
         The directory to check for matching file names
-    file_patterns : Iterable[str]
-        UNIX style wildcard pattern to test file names against
+    file_patterns : Iterable[str] | str
+        UNIX style wildcard pattern(s) to test file names against
 
     Raises
     ------
     FileExistsError
         If matching file name is found in dir
     """
+    if isinstance(file_patterns, str):
+        file_patterns = [file_patterns]
+
     for pattern in file_patterns:
-        matches = list(dir.glob(pattern))
-        if len(matches) > 0:
+        if next(dir.glob(pattern), None) is not None:
             raise FileExistsError(
-                f"File {matches[0].name} already exists in {dir} "
-                "and can not be overwritten."
+                f"File matching wildcard pattern {pattern} already exist in"
+                f"{dir} and can not be overwritten."
             )

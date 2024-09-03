@@ -169,14 +169,14 @@ def test_setup_model(monkeypatch):
         filename = pathlib.Path(tmp_dir) / "casanovo_massivekb_v3_0_0.ckpt"
 
         assert not filename.is_file()
-        _, result_path = casanovo.setup_model(None, None, None, False)
+        _, result_path = casanovo.setup_model(None, None, None, None, False)
         assert result_path.resolve() == filename.resolve()
         assert filename.is_file()
         assert mock_get.request_counter == 1
         os.remove(result_path)
 
         assert not filename.is_file()
-        _, result = casanovo.setup_model(None, None, None, True)
+        _, result = casanovo.setup_model(None, None, None, None, True)
         assert result is None
         assert not filename.is_file()
         assert mock_get.request_counter == 1
@@ -195,14 +195,18 @@ def test_setup_model(monkeypatch):
         cache_file_path = cache_file_dir / cache_file_name
 
         assert not cache_file_path.is_file()
-        _, result_path = casanovo.setup_model(file_url, None, None, False)
+        _, result_path = casanovo.setup_model(
+            file_url, None, None, None, False
+        )
         assert cache_file_path.is_file()
         assert result_path.resolve() == cache_file_path.resolve()
         assert mock_get.request_counter == 2
         os.remove(result_path)
 
         assert not cache_file_path.is_file()
-        _, result_path = casanovo.setup_model(file_url, None, None, False)
+        _, result_path = casanovo.setup_model(
+            file_url, None, None, None, False
+        )
         assert cache_file_path.is_file()
         assert result_path.resolve() == cache_file_path.resolve()
         assert mock_get.request_counter == 3
@@ -217,11 +221,15 @@ def test_setup_model(monkeypatch):
         mnk.setattr(requests, "get", mock_get)
 
         temp_file_path = temp_file.name
-        _, result = casanovo.setup_model(temp_file_path, None, None, False)
+        _, result = casanovo.setup_model(
+            temp_file_path, None, None, None, False
+        )
         assert mock_get.request_counter == 3
         assert result == temp_file_path
 
-        _, result = casanovo.setup_model(temp_file_path, None, None, True)
+        _, result = casanovo.setup_model(
+            temp_file_path, None, None, None, True
+        )
         assert mock_get.request_counter == 3
         assert result == temp_file_path
 
@@ -233,12 +241,12 @@ def test_setup_model(monkeypatch):
         mnk.setattr(requests, "get", mock_get)
 
         with pytest.raises(ValueError):
-            casanovo.setup_model("FooBar", None, None, False)
+            casanovo.setup_model("FooBar", None, None, None, False)
 
         assert mock_get.request_counter == 3
 
         with pytest.raises(ValueError):
-            casanovo.setup_model("FooBar", None, None, False)
+            casanovo.setup_model("FooBar", None, None, None, False)
 
         assert mock_get.request_counter == 3
 
@@ -929,6 +937,10 @@ def test_check_dir(tmp_path):
     dne_pattern = "dne-*.ckpt"
 
     with pytest.raises(FileExistsError):
-        utils.check_dir(tmp_path, [exists_pattern, dne_pattern])
+        utils.check_dir_file_exists(tmp_path, [exists_pattern, dne_pattern])
 
-    utils.check_dir(tmp_path, [dne_pattern])
+    with pytest.raises(FileExistsError):
+        utils.check_dir_file_exists(tmp_path, exists_pattern)
+
+    utils.check_dir_file_exists(tmp_path, [dne_pattern])
+    utils.check_dir_file_exists(tmp_path, dne_pattern)
