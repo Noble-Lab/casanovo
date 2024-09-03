@@ -241,7 +241,7 @@ def tiny_config(tmp_path):
         "precursor_mass_tol": 5,
         "isotope_error_range": [0, 1],
         "min_peptide_len": 6,
-        "max_peptide_len": 50,
+        "max_length": 100,
         "enzyme": "trypsin",
         "digestion": "full",
         "missed_cleavages": 0,
@@ -263,7 +263,6 @@ def tiny_config(tmp_path):
         "dim_model": 512,
         "dropout": 0.0,
         "dim_intensity": None,
-        "max_length": 100,
         "learning_rate": 5e-4,
         "weight_decay": 1e-5,
         "train_batch_size": 32,
@@ -298,9 +297,10 @@ def tiny_config(tmp_path):
             "-17.027": -17.026549,
             "+43.006-17.027": 25.980265,
         },
-        "allowed_mods": (
-            "M+15.995,N+0.984,Q+0.984,"
-            "+42.011,+43.006,-17.027,+43.006-17.027"
+        "allowed_fixed_mods": "C:C+57.021",
+        "allowed_var_mods": (
+            "M:M+15.995,N:N+0.984,Q:Q+0.984,"
+            "X:+42.011,X:+43.006,X:-17.027,X:+43.006-17.027"
         ),
     }
 
@@ -309,6 +309,39 @@ def tiny_config(tmp_path):
         yaml.dump(cfg, out_file)
 
     return cfg_file
+
+
+@pytest.fixture
+def residues_dict():
+    return {
+        "G": 57.021464,
+        "A": 71.037114,
+        "S": 87.032028,
+        "P": 97.052764,
+        "V": 99.068414,
+        "T": 101.047670,
+        "C+57.021": 160.030649,
+        "L": 113.084064,
+        "I": 113.084064,
+        "N": 114.042927,
+        "D": 115.026943,
+        "Q": 128.058578,
+        "K": 128.094963,
+        "E": 129.042593,
+        "M": 131.040485,
+        "H": 137.058912,
+        "F": 147.068414,
+        "R": 156.101111,
+        "Y": 163.063329,
+        "W": 186.079313,
+        "M+15.995": 147.035400,
+        "N+0.984": 115.026943,
+        "Q+0.984": 129.042594,
+        "+42.011": 42.010565,
+        "+43.006": 43.005814,
+        "-17.027": -17.026549,
+        "+43.006-17.027": 25.980265,
+    }
 
 
 @pytest.fixture

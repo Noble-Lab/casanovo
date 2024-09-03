@@ -1,13 +1,17 @@
 """Unique methods used within db-search mode"""
 
+import functools
 import logging
 import os
+import re
+import string
 from typing import List, Tuple
 
 import depthcharge.masses
 import pandas as pd
+import pyteomics.fasta as fasta
+import pyteomics.parser as parser
 from numba import njit
-from pyteomics import fasta, parser
 
 logger = logging.getLogger("casanovo")
 
@@ -41,8 +45,12 @@ class ProteinDatabase:
         The precursor mass tolerance in ppm.
     isotope_error : Tuple[int, int]
         Isotope range [min, max] to consider when comparing predicted and observed precursor m/z's.
-    allowed_mods : str
-        A comma separated string of allowed modifications to consider.
+    allowed_fixed_mods : str
+        A comma separated string of fixed modifications to consider.
+    allowed_var_mods : str
+        A comma separated string of variable modifications to consider.
+    residues : dict
+        A dictionary of amino acid masses.
     """
 
     def __init__(
@@ -56,9 +64,14 @@ class ProteinDatabase:
         max_mods: int,
         precursor_tolerance: float,
         isotope_error: Tuple[int, int],
-        allowed_mods: str,
+        allowed_fixed_mods: str,
+        allowed_var_mods: str,
+        residues: dict,
     ):
-        self.fixed_mods, self.var_mods = _construct_mods_dict(allowed_mods)
+        self.residues = residues
+        self.fixed_mods, self.var_mods, self.swap_map = _construct_mods_dict(
+            allowed_fixed_mods, allowed_var_mods
+        )
         self.db_peptides = self._digest_fasta(
             fasta_path,
             enzyme,
@@ -88,20 +101,22 @@ class ProteinDatabase:
 
         Returns
         -------
-        candidates : List[Tuple[str, str]]
-            A list of candidate peptides and associated
-            protein.
+        candidates : pd.Series
+            A series of candidate peptides.
         """
         candidates = []
 
         for e in range(self.isotope_error[0], self.isotope_error[1] + 1):
             iso_shift = ISOTOPE_SPACING * e
-            upper_bound = float(
+            shift_raw_mass = float(
                 _to_raw_mass(precursor_mz, charge) - iso_shift
-            ) * (1 + (self.precursor_tolerance / 1e6))
-            lower_bound = float(
-                _to_raw_mass(precursor_mz, charge) - iso_shift
-            ) * (1 - (self.precursor_tolerance / 1e6))
+            )
+            upper_bound = shift_raw_mass * (
+                1 + (self.precursor_tolerance / 1e6)
+            )
+            lower_bound = shift_raw_mass * (
+                1 - (self.precursor_tolerance / 1e6)
+            )
 
             window = self.db_peptides[
                 (self.db_peptides["calc_mass"] >= lower_bound)
@@ -112,7 +127,25 @@ class ProteinDatabase:
         candidates = pd.concat(candidates)
         candidates.drop_duplicates(inplace=True)
         candidates.sort_values(by=["calc_mass", "peptide"], inplace=True)
-        return list(candidates["peptide"]), list(candidates["protein"])
+        return candidates["peptide"], candidates["protein"]
+
+    def get_associated_protein(self, peptide: str) -> str:
+        """
+        Returns the associated protein for a given peptide.
+
+        Parameters
+        ----------
+        peptide : str
+            The peptide sequence.
+
+        Returns
+        -------
+        protein : str
+            The associated protein.
+        """
+        return self.db_peptides[self.db_peptides["peptide"] == peptide][
+            "protein"
+        ].values[0]
 
     def _digest_fasta(
         self,
@@ -161,16 +194,18 @@ class ProteinDatabase:
             logger.error("Digestion type %s not recognized.", digestion)
             raise ValueError(f"Digestion type {digestion} not recognized.")
         if enzyme not in parser.expasy_rules:
-            logger.error(
-                "Enzyme %s not recognized. Must be in pyteomics.parser.expasy_rules",
+            logger.info(
+                "Enzyme %s not recognized. Interpreting as cleavage rule.",
                 enzyme,
             )
-            raise ValueError(f"Enzyme {enzyme} not recognized.")
         semi = digestion == "partial"
+        valid_aa = set(
+            [re.sub(r"[^A-Z]+", "", res) for res in self.residues.keys()]
+        )
         for header, seq in fasta.read(fasta_filename):
             pep_set = parser.cleave(
                 seq,
-                rule=parser.expasy_rules[enzyme],
+                rule=enzyme,
                 missed_cleavages=missed_cleavages,
                 semi=semi,
             )
@@ -181,9 +216,8 @@ class ProteinDatabase:
                     or len(pep) > max_peptide_length
                 ):
                     continue
-                if any(
-                    aa in pep for aa in "BJOUXZ"
-                ):  # Check for incorrect AA letters
+
+                if any(aa not in valid_aa for aa in pep):
                     logger.warn(
                         "Skipping peptide with unknown amino acids: %s", pep
                     )
@@ -207,7 +241,10 @@ class ProteinDatabase:
         mod_peptide_list = [
             (mod_pep, mass_calculator.mass(mod_pep), prot)
             for isos, prot in peptide_isoforms
-            for mod_pep in map(_convert_from_modx, isos)
+            for mod_pep in map(
+                functools.partial(_convert_from_modx, swap_map=self.swap_map),
+                isos,
+            )
         ]
         # Create a DataFrame for easy sorting and filtering
         pep_table = pd.DataFrame(
@@ -261,31 +298,29 @@ def _to_raw_mass(mz_mass, charge):
     return charge * (mz_mass - PROTON)
 
 
-def _convert_from_modx(seq: str):
+def _convert_from_modx(seq: str, swap_map: dict) -> str:
     """Converts peptide sequence from modX format to Casanovo-acceptable modifications.
 
     Args:
-        seq (str): Peptide in modX format
+        seq : str
+            Peptide in modX format
+        swap_map : dict
+            Dictionary that allows for swapping of modX to Casanovo-acceptable modifications.
     """
-    seq = seq.replace("carbmC", "C+57.021")  # Fixed modification
-    seq = seq.replace("oxM", "M+15.995")
-    seq = seq.replace("dN", "N+0.984")
-    seq = seq.replace("dQ", "Q+0.984")
-    seq = seq.replace("ace-", "+42.011")
-    seq = seq.replace("carbnh3x-", "+43.006-17.027")
-    seq = seq.replace("carb-", "+43.006")
-    seq = seq.replace("nh3x-", "-17.027")
-    return seq
+    regex = re.compile("(%s)" % "|".join(map(re.escape, swap_map.keys())))
+    return regex.sub(lambda x: swap_map[x.group()], seq)
 
 
-def _construct_mods_dict(allowed_mods):
+def _construct_mods_dict(allowed_fixed_mods, allowed_var_mods):
     """
     Constructs dictionaries of fixed and variable modifications.
 
     Parameters
     ----------
-    allowed_mods : str
-        A comma-separated list of allowed modifications.
+    allowed_fixed_mods : str
+        A comma separated string of fixed modifications to consider.
+    allowed_var_mods : str
+        A comma separated string of variable modifications to consider.
 
     Returns
     -------
@@ -293,35 +328,26 @@ def _construct_mods_dict(allowed_mods):
         A dictionary of fixed modifications.
     var_mods : dict
         A dictionary of variable modifications.
+    swap_map : dict
+        A dictionary that allows for swapping of modX to Casanovo-acceptable modifications.
     """
-    fixed_mods = {"carbm": ["C"]}
+    swap_map = {}
+    fixed_mods = {}
+    for idx, mod in enumerate(allowed_fixed_mods.split(",")):
+        aa, mod_aa = mod.split(":")
+        mod_id = string.ascii_lowercase[idx]
+        fixed_mods[mod_id] = [aa]
+        swap_map[f"{mod_id}{aa}"] = f"{mod_aa}"
+
     var_mods = {}
-
-    if not allowed_mods:
-        return fixed_mods, var_mods
-    for mod in allowed_mods.split(","):
-        if mod == "M+15.995":
-            if "ox" not in var_mods:
-                var_mods["ox"] = []
-            var_mods["ox"].append("M")
-        elif mod == "N+0.984":
-            if "d" not in var_mods:
-                var_mods["d"] = []
-            var_mods["d"].append("N")
-        elif mod == "Q+0.984":
-            if "d" not in var_mods:
-                var_mods["d"] = []
-            var_mods["d"].append("Q")
-        elif mod == "+42.011":
-            var_mods["ace-"] = True
-        elif mod == "+43.006":
-            var_mods["carb-"] = True
-        elif mod == "-17.027":
-            var_mods["nh3x-"] = True
-        elif mod == "+43.006-17.027":
-            var_mods["carbnh3x-"] = True
+    for idx, mod in enumerate(allowed_var_mods.split(",")):
+        aa, mod_aa = mod.split(":")
+        mod_id = string.ascii_lowercase[idx]
+        if aa == "X":
+            var_mods[f"{mod_id}-"] = True
+            swap_map[f"{mod_id}-"] = f"{mod_aa}"
         else:
-            logger.error("Modification %s not recognized.", mod)
-            raise ValueError(f"Modification {mod} not recognized.")
+            var_mods[mod_id] = [aa]
+            swap_map[f"{mod_id}{aa}"] = f"{mod_aa}"
 
-    return fixed_mods, var_mods
+    return fixed_mods, var_mods, swap_map

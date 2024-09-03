@@ -110,22 +110,25 @@ class ModelRunner:
         self.initialize_model(train=False, db_search=True)
         self.model.out_writer = self.writer
         self.model.psm_batch_size = self.config.predict_batch_size
-        test_index = self._get_index(peak_path, False, "db search")
-        self.writer.set_ms_run(test_index.ms_files)
-
-        self.initialize_data_module(test_index=test_index)
-        self.loaders.protein_database = db_utils.ProteinDatabase(
+        self.model.protein_database = db_utils.ProteinDatabase(
             fasta_path,
             self.config.enzyme,
             self.config.digestion,
             self.config.missed_cleavages,
             self.config.min_peptide_len,
-            self.config.max_peptide_len,
+            self.config.max_length,
             self.config.max_mods,
             self.config.precursor_mass_tol,
             self.config.isotope_error_range,
-            self.config.allowed_mods,
+            self.config.allowed_fixed_mods,
+            self.config.allowed_var_mods,
+            self.config.residues,
         )
+        test_index = self._get_index(peak_path, False, "db search")
+        self.writer.set_ms_run(test_index.ms_files)
+
+        self.initialize_data_module(test_index=test_index)
+        self.loaders.protein_database = self.model.protein_database
         self.loaders.setup(stage="test", annotated=False)
         self.trainer.predict(self.model, self.loaders.db_dataloader())
 

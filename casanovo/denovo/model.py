@@ -1017,9 +1017,9 @@ class DbSpec2Pep(Spec2Pep):
 
         Parameters
         ----------
-        batch : Tuple[torch.Tensor, torch.Tensor, np.array, List[str], List[str]]
+        batch : Tuple[torch.Tensor, torch.Tensor, np.array, List[str]]
             A batch of (i) MS/MS spectra, (ii) precursor information, (iii)
-            spectrum identifiers, (iv) candidate peptides, (v) associated proteins.
+            spectrum identifiers, (iv) candidate peptides, (v) associated protein.
 
         Returns
         -------

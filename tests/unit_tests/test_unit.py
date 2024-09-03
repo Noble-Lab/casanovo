@@ -221,7 +221,7 @@ def test_calc_match_score():
     assert np.sum(masked_per_aa_scores.numpy()[3]) == 3
 
 
-def test_digest_fasta_cleave(tiny_fasta_file):
+def test_digest_fasta_cleave(tiny_fasta_file, residues_dict):
 
     # No missed cleavages
     expected_normal = [
@@ -287,16 +287,18 @@ def test_digest_fasta_cleave(tiny_fasta_file):
             max_mods=0,
             precursor_tolerance=20,
             isotope_error=[0, 0],
-            allowed_mods=(
-                "M+15.995,N+0.984,Q+0.984,"
-                "+42.011,+43.006,-17.027,+43.006-17.027"
+            allowed_fixed_mods="C:C+57.021",
+            allowed_var_mods=(
+                "M:M+15.995,N:N+0.984,Q:Q+0.984,"
+                "X:+42.011,X:+43.006,X:-17.027,X:+43.006-17.027"
             ),
+            residues=residues_dict,
         )
         peptide_list = list(pdb.db_peptides["peptide"])
         assert peptide_list == expected
 
 
-def test_digest_fasta_mods(tiny_fasta_file):
+def test_digest_fasta_mods(tiny_fasta_file, residues_dict):
     # 1 modification allowed
     # fixed: C+57.02146
     # variable: 1M+15.994915,1N+0.984016,1Q+0.984016
@@ -360,10 +362,12 @@ def test_digest_fasta_mods(tiny_fasta_file):
         max_mods=1,
         precursor_tolerance=20,
         isotope_error=[0, 0],
-        allowed_mods=(
-            "M+15.995,N+0.984,Q+0.984,"
-            "+42.011,+43.006,-17.027,+43.006-17.027"
+        allowed_fixed_mods="C:C+57.021",
+        allowed_var_mods=(
+            "M:M+15.995,N:N+0.984,Q:Q+0.984,"
+            "X:+42.011,X:+43.006,X:-17.027,X:+43.006-17.027"
         ),
+        residues=residues_dict,
     )
     peptide_list = list(pdb.db_peptides["peptide"])
     peptide_list = [
@@ -376,7 +380,7 @@ def test_digest_fasta_mods(tiny_fasta_file):
     assert peptide_list == expected_1mod
 
 
-def test_length_restrictions(tiny_fasta_file):
+def test_length_restrictions(tiny_fasta_file, residues_dict):
     # length between 20 and 50
     expected_long = [
         "MEAPAQLLFLLLLWLPDTTR",
@@ -397,10 +401,12 @@ def test_length_restrictions(tiny_fasta_file):
         max_mods=0,
         precursor_tolerance=20,
         isotope_error=[0, 0],
-        allowed_mods=(
-            "M+15.995,N+0.984,Q+0.984,"
-            "+42.011,+43.006,-17.027,+43.006-17.027"
+        allowed_fixed_mods="C:C+57.021",
+        allowed_var_mods=(
+            "M:M+15.995,N:N+0.984,Q:Q+0.984,"
+            "X:+42.011,X:+43.006,X:-17.027,X:+43.006-17.027"
         ),
+        residues=residues_dict,
     )
     peptide_list = list(pdb.db_peptides["peptide"])
     assert peptide_list == expected_long
@@ -415,16 +421,18 @@ def test_length_restrictions(tiny_fasta_file):
         max_mods=0,
         precursor_tolerance=20,
         isotope_error=[0, 0],
-        allowed_mods=(
-            "M+15.995,N+0.984,Q+0.984,"
-            "+42.011,+43.006,-17.027,+43.006-17.027"
+        allowed_fixed_mods="C:C+57.021",
+        allowed_var_mods=(
+            "M:M+15.995,N:N+0.984,Q:Q+0.984,"
+            "X:+42.011,X:+43.006,X:-17.027,X:+43.006-17.027"
         ),
+        residues=residues_dict,
     )
     peptide_list = list(pdb.db_peptides["peptide"])
     assert peptide_list == expected_short
 
 
-def test_digest_fasta_enzyme(tiny_fasta_file):
+def test_digest_fasta_enzyme(tiny_fasta_file, residues_dict):
     # arg-c enzyme
     expected_argc = [
         "ATSIPAR",
@@ -449,10 +457,12 @@ def test_digest_fasta_enzyme(tiny_fasta_file):
         max_mods=0,
         precursor_tolerance=20,
         isotope_error=[0, 0],
-        allowed_mods=(
-            "M+15.995,N+0.984,Q+0.984,"
-            "+42.011,+43.006,-17.027,+43.006-17.027"
+        allowed_fixed_mods="C:C+57.021",
+        allowed_var_mods=(
+            "M:M+15.995,N:N+0.984,Q:Q+0.984,"
+            "X:+42.011,X:+43.006,X:-17.027,X:+43.006-17.027"
         ),
+        residues=residues_dict,
     )
     peptide_list = list(pdb.db_peptides["peptide"])
     assert peptide_list == expected_argc
@@ -467,16 +477,39 @@ def test_digest_fasta_enzyme(tiny_fasta_file):
         max_mods=0,
         precursor_tolerance=20,
         isotope_error=[0, 0],
-        allowed_mods=(
-            "M+15.995,N+0.984,Q+0.984,"
-            "+42.011,+43.006,-17.027,+43.006-17.027"
+        allowed_fixed_mods="C:C+57.021",
+        allowed_var_mods=(
+            "M:M+15.995,N:N+0.984,Q:Q+0.984,"
+            "X:+42.011,X:+43.006,X:-17.027,X:+43.006-17.027"
         ),
+        residues=residues_dict,
     )
     peptide_list = list(pdb.db_peptides["peptide"])
     assert peptide_list == expected_aspn
 
+    # Tesr regex rule instead of named enzyme
+    pdb = db_utils.ProteinDatabase(
+        fasta_path=str(tiny_fasta_file),
+        enzyme="R",
+        digestion="full",
+        missed_cleavages=0,
+        min_peptide_len=6,
+        max_peptide_len=50,
+        max_mods=0,
+        precursor_tolerance=20,
+        isotope_error=[0, 0],
+        allowed_fixed_mods="C:C+57.021",
+        allowed_var_mods=(
+            "M:M+15.995,N:N+0.984,Q:Q+0.984,"
+            "X:+42.011,X:+43.006,X:-17.027,X:+43.006-17.027"
+        ),
+        residues=residues_dict,
+    )
+    peptide_list = list(pdb.db_peptides["peptide"])
+    assert peptide_list == expected_argc
 
-def test_get_candidates(tiny_fasta_file):
+
+def test_get_candidates(tiny_fasta_file, residues_dict):
     # precursor_window is 10000
     expected_smallwindow = ["LLIYGASTR"]
 
@@ -496,13 +529,15 @@ def test_get_candidates(tiny_fasta_file):
         max_mods=0,
         precursor_tolerance=10000,
         isotope_error=[0, 0],
-        allowed_mods=(
-            "M+15.995,N+0.984,Q+0.984,"
-            "+42.011,+43.006,-17.027,+43.006-17.027"
+        allowed_fixed_mods="C:C+57.021",
+        allowed_var_mods=(
+            "M:M+15.995,N:N+0.984,Q:Q+0.984,"
+            "X:+42.011,X:+43.006,X:-17.027,X:+43.006-17.027"
         ),
+        residues=residues_dict,
     )
     candidates, _ = pdb.get_candidates(precursor_mz=496.2, charge=2)
-    assert expected_smallwindow == candidates
+    assert expected_smallwindow == list(candidates)
 
     pdb = db_utils.ProteinDatabase(
         fasta_path=str(tiny_fasta_file),
@@ -514,13 +549,15 @@ def test_get_candidates(tiny_fasta_file):
         max_mods=0,
         precursor_tolerance=150000,
         isotope_error=[0, 0],
-        allowed_mods=(
-            "M+15.995,N+0.984,Q+0.984,"
-            "+42.011,+43.006,-17.027,+43.006-17.027"
+        allowed_fixed_mods="C:C+57.021",
+        allowed_var_mods=(
+            "M:M+15.995,N:N+0.984,Q:Q+0.984,"
+            "X:+42.011,X:+43.006,X:-17.027,X:+43.006-17.027"
         ),
+        residues=residues_dict,
     )
     candidates, _ = pdb.get_candidates(precursor_mz=496.2, charge=2)
-    assert expected_midwindow == candidates
+    assert expected_midwindow == list(candidates)
 
     pdb = db_utils.ProteinDatabase(
         fasta_path=str(tiny_fasta_file),
@@ -532,16 +569,18 @@ def test_get_candidates(tiny_fasta_file):
         max_mods=0,
         precursor_tolerance=600000,
         isotope_error=[0, 0],
-        allowed_mods=(
-            "M+15.995,N+0.984,Q+0.984,"
-            "+42.011,+43.006,-17.027,+43.006-17.027"
+        allowed_fixed_mods="C:C+57.021",
+        allowed_var_mods=(
+            "M:M+15.995,N:N+0.984,Q:Q+0.984,"
+            "X:+42.011,X:+43.006,X:-17.027,X:+43.006-17.027"
         ),
+        residues=residues_dict,
     )
     candidates, _ = pdb.get_candidates(precursor_mz=496.2, charge=2)
-    assert expected_widewindow == candidates
+    assert expected_widewindow == list(candidates)
 
 
-def test_get_candidates_isotope_error(tiny_fasta_file):
+def test_get_candidates_isotope_error(tiny_fasta_file, residues_dict):
 
     # Tide isotope error windows for 496.2, 2+:
     # 0: [980.481617, 1000.289326]
@@ -598,14 +637,16 @@ def test_get_candidates_isotope_error(tiny_fasta_file):
         max_mods=0,
         precursor_tolerance=10000,
         isotope_error=[0, 0],
-        allowed_mods=(
-            "M+15.995,N+0.984,Q+0.984,"
-            "+42.011,+43.006,-17.027,+43.006-17.027"
+        allowed_fixed_mods="C:C+57.021",
+        allowed_var_mods=(
+            "M:M+15.995,N:N+0.984,Q:Q+0.984,"
+            "X:+42.011,X:+43.006,X:-17.027,X:+43.006-17.027"
         ),
+        residues=residues_dict,
     )
     pdb.db_peptides = peptide_list
     candidates, _ = pdb.get_candidates(precursor_mz=496.2, charge=2)
-    assert expected_isotope0 == candidates
+    assert expected_isotope0 == list(candidates)
 
     pdb = db_utils.ProteinDatabase(
         fasta_path=str(tiny_fasta_file),
@@ -617,14 +658,16 @@ def test_get_candidates_isotope_error(tiny_fasta_file):
         max_mods=0,
         precursor_tolerance=10000,
         isotope_error=[0, 1],
-        allowed_mods=(
-            "M+15.995,N+0.984,Q+0.984,"
-            "+42.011,+43.006,-17.027,+43.006-17.027"
+        allowed_fixed_mods="C:C+57.021",
+        allowed_var_mods=(
+            "M:M+15.995,N:N+0.984,Q:Q+0.984,"
+            "X:+42.011,X:+43.006,X:-17.027,X:+43.006-17.027"
         ),
+        residues=residues_dict,
     )
     pdb.db_peptides = peptide_list
     candidates, _ = pdb.get_candidates(precursor_mz=496.2, charge=2)
-    assert expected_isotope01 == candidates
+    assert expected_isotope01 == list(candidates)
 
     pdb = db_utils.ProteinDatabase(
         fasta_path=str(tiny_fasta_file),
@@ -636,14 +679,16 @@ def test_get_candidates_isotope_error(tiny_fasta_file):
         max_mods=0,
         precursor_tolerance=10000,
         isotope_error=[0, 2],
-        allowed_mods=(
-            "M+15.995,N+0.984,Q+0.984,"
-            "+42.011,+43.006,-17.027,+43.006-17.027"
+        allowed_fixed_mods="C:C+57.021",
+        allowed_var_mods=(
+            "M:M+15.995,N:N+0.984,Q:Q+0.984,"
+            "X:+42.011,X:+43.006,X:-17.027,X:+43.006-17.027"
         ),
+        residues=residues_dict,
     )
     pdb.db_peptides = peptide_list
     candidates, _ = pdb.get_candidates(precursor_mz=496.2, charge=2)
-    assert expected_isotope012 == candidates
+    assert expected_isotope012 == list(candidates)
 
     pdb = db_utils.ProteinDatabase(
         fasta_path=str(tiny_fasta_file),
@@ -655,14 +700,16 @@ def test_get_candidates_isotope_error(tiny_fasta_file):
         max_mods=0,
         precursor_tolerance=10000,
         isotope_error=[0, 3],
-        allowed_mods=(
-            "M+15.995,N+0.984,Q+0.984,"
-            "+42.011,+43.006,-17.027,+43.006-17.027"
+        allowed_fixed_mods="C:C+57.021",
+        allowed_var_mods=(
+            "M:M+15.995,N:N+0.984,Q:Q+0.984,"
+            "X:+42.011,X:+43.006,X:-17.027,X:+43.006-17.027"
         ),
+        residues=residues_dict,
     )
     pdb.db_peptides = peptide_list
     candidates, _ = pdb.get_candidates(precursor_mz=496.2, charge=2)
-    assert expected_isotope0123 == candidates
+    assert expected_isotope0123 == list(candidates)
 
 
 def test_beam_search_decode():
