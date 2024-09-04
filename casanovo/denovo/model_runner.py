@@ -72,7 +72,7 @@ class ModelRunner:
 
         if output_dir is None:
             self.callbacks = []
-            warnings.warn(
+            logger.warning(
                 "Checkpoint directory not set in ModelRunner, "
                 "no checkpoint files will be saved."
             )

@@ -7,6 +7,7 @@ import io
 import os
 import pathlib
 import platform
+import re
 import requests
 import shutil
 import tempfile
@@ -944,3 +945,22 @@ def test_check_dir(tmp_path):
 
     utils.check_dir_file_exists(tmp_path, [dne_pattern])
     utils.check_dir_file_exists(tmp_path, dne_pattern)
+
+
+def test_setup_output(tmp_path, monkeypatch):
+    with monkeypatch.context() as mnk:
+        mnk.setattr(pathlib.Path, "cwd", lambda: tmp_path)
+        output_path, output_root = casanovo._setup_output(
+            None, None, False, "info"
+        )
+        assert output_path.resolve() == tmp_path.resolve()
+        assert re.fullmatch(r"casanovo_\d+", output_root) is not None
+
+        target_path = tmp_path / "foo"
+        with pytest.warns(UserWarning):
+            output_path, output_root = casanovo._setup_output(
+                str(target_path), "bar", False, "info"
+            )
+
+        assert output_path.resolve() == target_path.resolve()
+        assert output_root == "bar"

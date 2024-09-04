@@ -523,7 +523,7 @@ def _setup_output(
         be resolved to the current working directory.
     output_root : str | None
         The base name for the output files. If `None` the output root name will
-        be resolved to casanovo_<current data and time>
+        be resolved to casanovo_<current date and time>
     overwrite: bool
         Whether to overwrite log file if it already exists in the output
         directory.
@@ -544,10 +544,12 @@ def _setup_output(
     if output_dir is None:
         output_path = Path.cwd()
     else:
-        output_path = Path(output_dir)
+        output_path = Path(output_dir).expanduser().resolve()
         if not output_path.is_dir():
-            raise FileNotFoundError(
-                f"Target output directory {output_dir} does not exists."
+            output_path.mkdir(parents=True)
+            warnings.warn(
+                f"Target output directory {output_dir} does not exists, "
+                "so it will be created."
             )
 
     if not overwrite:
