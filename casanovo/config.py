@@ -64,7 +64,7 @@ class Config:
         max_length=int,
         residues=dict,
         n_log=int,
-        tb_summarywriter=str,
+        tb_summarywriter=bool,
         train_label_smoothing=float,
         warmup_iters=int,
         cosine_schedule_period_iters=int,
