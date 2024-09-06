@@ -18,6 +18,7 @@ import torch
 from depthcharge.data import AnnotatedSpectrumIndex, SpectrumIndex
 from lightning.pytorch.strategies import DDPStrategy
 from lightning.pytorch.callbacks import ModelCheckpoint
+from lightning.pytorch.callbacks.early_stopping import EarlyStopping
 
 from .. import utils
 from ..config import Config
@@ -81,13 +82,13 @@ class ModelRunner:
 
         prefix = f"{output_rootname}." if output_rootname is not None else ""
         curr_filename = prefix + "{epoch}-{step}"
-        best_filename = prefix + "best"
+        best_filename = prefix + "{epoch}-{step}.best"
         if overwrite_ckpt_check:
             utils.check_dir_file_exists(
                 output_dir,
                 [
                     f"{curr_filename.format(epoch='*', step='*')}.ckpt",
-                    f"{best_filename}.ckpt",
+                    f"{best_filename.format(epoch='*', step='*')}.ckpt",
                 ],
             )
 
@@ -106,6 +107,14 @@ class ModelRunner:
                 enable_version_counter=False,
             ),
         ]
+
+        if config._user_config.get("val_patience_interval") != -1:
+            self.callbacks.append(
+                EarlyStopping(
+                    monitor="valid_CELoss",
+                    patience=config._user_config.get("val_patience_interval"),
+                )
+            )
 
     def __enter__(self):
         """Enter the context manager"""

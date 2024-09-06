@@ -185,7 +185,7 @@ def test_save_final_model(tmp_path, mgf_small, tiny_config):
 
     # Test checkpoint saving when val_check_interval is not a factor of training steps
     config.val_check_interval = 15
-    validation_file = tmp_path / "foobar.best.ckpt"
+    validation_file = tmp_path / "foobar.epoch=14-step=15.best.ckpt"
     model_file = tmp_path / "foobar.epoch=19-step=20.ckpt"
     with ModelRunner(
         config, output_dir=tmp_path, output_rootname="foobar"

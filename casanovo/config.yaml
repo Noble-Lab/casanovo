@@ -91,6 +91,8 @@ train_label_smoothing: 0.01
 train_batch_size: 32
 # Max number of training epochs.
 max_epochs: 30
+# Patience interval in validation epochs
+val_patience_interval: -1
 # Number of validation steps to run before training begins.
 num_sanity_val_steps: 0
 # Calculate peptide and amino acid precision during training.

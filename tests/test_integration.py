@@ -38,11 +38,8 @@ def test_train_and_run(
 
     result = run(train_args)
     model_file = tmp_path / "train.epoch=19-step=20.ckpt"
-    best_model = tmp_path / "train.best.ckpt"
+    best_model = tmp_path / "train.epoch=18-step=19.best.ckpt"
     assert result.exit_code == 0
-    assert model_file.exists()
-    assert best_model.exists()
-
     assert model_file.exists()
     assert best_model.exists()
 

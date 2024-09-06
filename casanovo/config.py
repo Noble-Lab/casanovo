@@ -75,6 +75,7 @@ class Config:
         n_beams=int,
         top_match=int,
         max_epochs=int,
+        val_patience_interval=int,
         num_sanity_val_steps=int,
         val_check_interval=int,
         calculate_precision=bool,
