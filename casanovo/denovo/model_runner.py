@@ -167,10 +167,17 @@ class ModelRunner:
             Index containing the annotated spectra used to generate model
             predictions
         """
+        with test_index as t_ind:
+            all_spectrum_annotations = {
+                "".join(t_ind.get_spectrum_id(i)): t_ind[i][4]
+                for i in range(t_ind.n_spectra)
+            }
         model_output = [psm.sequence for psm in self.writer.psms]
         spectrum_annotations = [
-            test_index[i][4] for i in range(test_index.n_spectra)
+            all_spectrum_annotations["".join(psm.spectrum_id)]
+            for psm in self.writer.psms
         ]
+
         aa_precision, _, pep_precision = aa_match_metrics(
             *aa_match_batch(
                 spectrum_annotations,
@@ -178,7 +185,6 @@ class ModelRunner:
                 depthcharge.masses.PeptideMass().masses,
             )
         )
-
         logger.info("Peptide Precision: %.2f%%", 100 * pep_precision)
         logger.info("Amino Acid Precision: %.2f%%", 100 * aa_precision)
 
