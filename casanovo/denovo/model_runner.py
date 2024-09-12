@@ -163,16 +163,27 @@ class ModelRunner:
             Index containing the annotated spectra used to generate model
             predictions
         """
+        model_output = []
+        spectrum_annotations = []
+        psms = iter(self.writer.psms)
+        curr_psm = next(psms, None)
+
         with test_index as t_ind:
-            all_spectrum_annotations = {
-                "".join(t_ind.get_spectrum_id(i)): t_ind[i][4]
-                for i in range(t_ind.n_spectra)
-            }
-        model_output = [psm.sequence for psm in self.writer.psms]
-        spectrum_annotations = [
-            all_spectrum_annotations["".join(psm.spectrum_id)]
-            for psm in self.writer.psms
-        ]
+            for i in range(t_ind.n_spectra):
+                if curr_psm is None:
+                    break
+
+                if curr_psm.spectrum_id != t_ind.get_spectrum_id(i):
+                    continue
+
+                model_output.append(curr_psm.sequence)
+                spectrum_annotations.append(t_ind[i][4])
+                curr_psm = next(psms, None)
+
+        if curr_psm is not None:
+            logger.warning(
+                "Some spectra were not matched to annotations during evaluation."
+            )
 
         aa_precision, _, pep_precision = aa_match_metrics(
             *aa_match_batch(
