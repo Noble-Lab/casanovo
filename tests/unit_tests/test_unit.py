@@ -957,10 +957,9 @@ def test_setup_output(tmp_path, monkeypatch):
         assert re.fullmatch(r"casanovo_\d+", output_root) is not None
 
         target_path = tmp_path / "foo"
-        with pytest.warns(UserWarning):
-            output_path, output_root = casanovo._setup_output(
-                str(target_path), "bar", False, "info"
-            )
+        output_path, output_root = casanovo._setup_output(
+            str(target_path), "bar", False, "info"
+        )
 
         assert output_path.resolve() == target_path.resolve()
         assert output_root == "bar"

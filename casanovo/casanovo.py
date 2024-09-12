@@ -168,13 +168,21 @@ def sequence(
     to sequence peptides. If evaluate is set to True PEAK_PATH must be
     one or more annotated MGF file.
     """
-    output_path, output_root = _setup_output(
+    output_path, output_root_name = _setup_output(
         output_dir, output_root, force_overwrite, verbosity
     )
     utils.check_dir_file_exists(output_path, f"{output_root}.mztab")
-    config, model = setup_model(model, config, output_dir, output_root, False)
+    config, model = setup_model(
+        model, config, output_path, output_root_name, False
+    )
     start_time = time.time()
-    with ModelRunner(config, model, output_path, output_root, False) as runner:
+    with ModelRunner(
+        config,
+        model,
+        output_path,
+        output_root_name if output_root is not None else None,
+        False,
+    ) as runner:
         logger.info(
             "Sequencing %speptides from:",
             "and evaluating " if evaluate else "",
@@ -226,13 +234,19 @@ def train(
     TRAIN_PEAK_PATH must be one or more annoated MGF files, such as those
     provided by MassIVE-KB, from which to train a new Casnovo model.
     """
-    output_path, output_root = _setup_output(
+    output_path, output_root_name = _setup_output(
         output_dir, output_root, force_overwrite, verbosity
     )
-    config, model = setup_model(model, config, output_path, output_root, True)
+    config, model = setup_model(
+        model, config, output_path, output_root_name, True
+    )
     start_time = time.time()
     with ModelRunner(
-        config, model, output_path, output_root, not force_overwrite
+        config,
+        model,
+        output_path,
+        output_root_name if output_root is not None else None,
+        not force_overwrite,
     ) as runner:
         logger.info("Training a model from:")
         for peak_file in train_peak_path:
@@ -339,30 +353,36 @@ def setup_logging(
 
 
 def setup_model(
-    model: Optional[str],
-    config: Optional[str],
-    output_dir: Optional[Path | str],
-    output_root_name: Optional[str],
+    model: str | None,
+    config: str | None,
+    output_dir: Path | str,
+    output_root_name: str,
     is_train: bool,
-) -> Config:
-    """Setup Casanovo for most commands.
+) -> Tuple[Config, Path | None]:
+    """Setup Casanovo config and resolve model weights (.ckpt) path
 
     Parameters
     ----------
-    model : Optional[str]
-        The provided model weights file.
-    config : Optional[str]
-        The provided configuration file.
-    output : Optional[Path]
-        The provided output file name.
+    model : str | None
+        May be a file system path, a URL pointing to a .ckpt file, or None.
+        If `model` is a URL the weights will be downloaded and cached from
+        `model`. If `model` is `None` the weights from the latest matching
+        official release will be used (downloaded and cached).
+    config : str | None
+        Config file path. If None the default config will be used.
+    output_dir: : Path | str
+        The path to the output directory.
+    output_root_name : str,
+        The base name for the output files.
     is_train : bool
         Are we training? If not, we need to retrieve weights when the model is
         None.
 
     Return
     ------
-    config : Config
-        The parsed configuration
+    Tuple[Config, Path]
+        Initialized Casanovo config, local path to model weights if any (may be
+        `None` if training using random starting weights).
     """
     # Read parameters from the config file.
     config = Config(config)
@@ -547,7 +567,7 @@ def _setup_output(
         output_path = Path(output_dir).expanduser().resolve()
         if not output_path.is_dir():
             output_path.mkdir(parents=True)
-            warnings.warn(
+            logger.warning(
                 f"Target output directory {output_dir} does not exists, "
                 "so it will be created."
             )
