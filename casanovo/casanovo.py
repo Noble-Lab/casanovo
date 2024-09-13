@@ -42,7 +42,6 @@ from . import __version__
 from . import utils
 from .denovo import ModelRunner
 from .config import Config
-from .data.annotate_db import annotate_mgf
 
 logger = logging.getLogger("casanovo")
 click.rich_click.USE_MARKDOWN = True
@@ -131,7 +130,7 @@ def sequence(
 ) -> None:
     """De novo sequence peptides from tandem mass spectra.
 
-    PEAK_PATH must be one or more mzMl, mzXML, or MGF files from which
+    PEAK_PATH must be one or more mzML, mzXML, or MGF files from which
     to sequence peptides.
     """
     output = setup_logging(output, verbosity)
@@ -146,67 +145,6 @@ def sequence(
     logger.info("DONE!")
 
 
-@main.command()
-@click.argument(
-    "peak_path",
-    required=True,
-    nargs=1,
-    type=click.Path(exists=True, dir_okay=False),
-)
-@click.argument(
-    "tide_path",
-    required=True,
-    nargs=1,
-    type=click.Path(exists=True, dir_okay=True),
-)
-@click.option(
-    "-o",
-    "--output",
-    help="The output annotated MGF file.",
-    type=click.Path(dir_okay=False),
-)
-@click.option(
-    "-v",
-    "--verbosity",
-    help="""
-    Set the verbosity of console logging messages. Log files are
-    always set to 'debug'.
-    """,
-    type=click.Choice(
-        ["debug", "info", "warning", "error"],
-        case_sensitive=False,
-    ),
-    default="info",
-)
-def annotate(
-    peak_path: str,
-    tide_path: str,
-    output: Optional[str],
-    verbosity: str,
-) -> None:
-    """Annotate a given .mgf with candidates as selected by a Tide search for Casanovo-DB.
-
-    PEAK_PATH must be one MGF file from which to annotate spectra.
-
-    TIDE_PATH must be one directory containing the Tide search results of the <PEAK_PATH> .mgf.
-    This directory must contain tide-search.decoy.txt and tide-search.target.txt
-    """
-    if output is None:
-        output = setup_logging(output, verbosity)
-        logger.info(
-            "Output file not specified. \
-            Annotated MGF will be saved in the same directory \
-            as the input MGF."
-        )
-        output = peak_path.replace(".mgf", "_annotated.mgf")
-    else:
-        output = setup_logging(output, verbosity)
-
-    annotate_mgf(peak_path, tide_path, output)
-
-    logger.info("DONE!")
-
-
 @main.command(cls=_SharedParams)
 @click.argument(
     "peak_path",
@@ -214,23 +152,39 @@ def annotate(
     nargs=-1,
     type=click.Path(exists=True, dir_okay=False),
 )
+@click.argument(
+    "fasta_path",
+    required=True,
+    nargs=1,
+    type=click.Path(exists=True, dir_okay=False),
+)
 def db_search(
     peak_path: Tuple[str],
+    fasta_path: str,
     model: Optional[str],
     config: Optional[str],
     output: Optional[str],
     verbosity: str,
 ) -> None:
-    """Perform a search using Casanovo-DB.
+    """Perform a database search on MS/MS data using Casanovo-DB.
 
-    PEAK_PATH must be one MGF file that has ANNOTATED spectra,
-    as output by annotate mode.
+    PEAK_PATH must be one or more mzML, mzXML, or MGF files.
+    FASTA_PATH must be one FASTA file.
     """
     output = setup_logging(output, verbosity)
     config, model = setup_model(model, config, output, False)
     with ModelRunner(config, model) as runner:
-        logger.info("DB-searching peptides from: %s", peak_path)
-        runner.db_search(peak_path, output)
+        logger.info("Performing database search on:")
+        for peak_file in peak_path:
+            logger.info("  %s", peak_file)
+        logger.info("Using the following FASTA file:")
+        logger.info("  %s", fasta_path)
+
+        runner.db_search(
+            peak_path,
+            fasta_path,
+            output,
+        )
 
     logger.info("DONE!")
 

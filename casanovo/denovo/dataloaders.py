@@ -1,6 +1,7 @@
 """Data loaders for the de novo sequencing task."""
 
 import functools
+import logging
 import os
 from typing import List, Optional, Tuple
 
@@ -9,10 +10,14 @@ import numpy as np
 import torch
 from depthcharge.data import AnnotatedSpectrumIndex
 
+from ..data import db_utils
 from ..data.datasets import (
     AnnotatedSpectrumDataset,
     SpectrumDataset,
 )
+
+
+logger = logging.getLogger("casanovo")
 
 
 class DeNovoDataModule(pl.LightningDataModule):
@@ -84,6 +89,7 @@ class DeNovoDataModule(pl.LightningDataModule):
         self.train_dataset = None
         self.valid_dataset = None
         self.test_dataset = None
+        self.protein_database = None
 
     def setup(self, stage: str = None, annotated: bool = True) -> None:
         """
@@ -91,7 +97,7 @@ class DeNovoDataModule(pl.LightningDataModule):
 
         Parameters
         ----------
-        stage : str {"fit", "validate", "test", "db"}
+        stage : str {"fit", "validate", "test"}
             The stage indicating which Datasets to prepare. All are prepared by
             default.
         annotated: bool
@@ -125,25 +131,12 @@ class DeNovoDataModule(pl.LightningDataModule):
             )
             if self.test_index is not None:
                 self.test_dataset = make_dataset(self.test_index)
-        if stage == "db":
-            make_dataset = functools.partial(
-                AnnotatedSpectrumDataset,
-                n_peaks=self.n_peaks,
-                min_mz=self.min_mz,
-                max_mz=self.max_mz,
-                min_intensity=self.min_intensity,
-                remove_precursor_tol=self.remove_precursor_tol,
-                track_spectrum_id=True,
-            )
-            if self.test_index is not None:
-                self.test_dataset = make_dataset(self.test_index)
 
     def _make_loader(
         self,
         dataset: torch.utils.data.Dataset,
         batch_size: int,
         shuffle: bool = False,
-        db_mode: bool = False,
     ) -> torch.utils.data.DataLoader:
         """
         Create a PyTorch DataLoader.
@@ -156,8 +149,6 @@ class DeNovoDataModule(pl.LightningDataModule):
             The batch size to use.
         shuffle : bool
             Option to shuffle the batches.
-        db_mode : bool
-            Option to use the DataLoader for Casanovo-DB.
 
         Returns
         -------
@@ -167,7 +158,7 @@ class DeNovoDataModule(pl.LightningDataModule):
         return torch.utils.data.DataLoader(
             dataset,
             batch_size=batch_size,
-            collate_fn=prepare_batch if not db_mode else prepare_db_batch,
+            collate_fn=prepare_batch,
             pin_memory=True,
             num_workers=self.n_workers,
             shuffle=shuffle,
@@ -192,9 +183,16 @@ class DeNovoDataModule(pl.LightningDataModule):
         return self._make_loader(self.test_dataset, self.eval_batch_size)
 
     def db_dataloader(self) -> torch.utils.data.DataLoader:
-        """Get the predict DataLoader."""
-        return self._make_loader(
-            self.test_dataset, self.eval_batch_size, db_mode=True
+        """Get a special dataloader for DB search"""
+        return torch.utils.data.DataLoader(
+            self.test_dataset,
+            batch_size=self.eval_batch_size,
+            collate_fn=functools.partial(
+                prepare_psm_batch, protein_database=self.protein_database
+            ),
+            pin_memory=True,
+            num_workers=self.n_workers,
+            shuffle=False,
         )
 
 
@@ -237,46 +235,74 @@ def prepare_batch(
     return spectra, precursors, np.asarray(spectrum_ids)
 
 
-def prepare_db_batch(
-    batch: List[Tuple[torch.Tensor, float, int, str, Tuple[str, str]]]
-) -> Tuple[torch.Tensor, torch.Tensor, np.ndarray, Tuple[str, str]]:
+def prepare_psm_batch(
+    batch: List[Tuple[torch.Tensor, float, int, str]],
+    protein_database: db_utils.ProteinDatabase,
+) -> Tuple[torch.Tensor, torch.Tensor, np.ndarray, List[str], List[str]]:
     """
-    Collate MS/MS spectra into a batch meant for Casanovo-DB.
+    Collate MS/MS spectra into a batch for DB search.
+
+    The MS/MS spectra will be padded so that they fit nicely as a tensor.
+    However, the padded elements are ignored during the subsequent steps.
 
     Parameters
     ----------
-    batch : List[Tuple[torch.Tensor, Tuple[float, int, float], str, Tuple[str, str]]]
+    batch : List[Tuple[torch.Tensor, float, int, str]]
         A batch of data from an AnnotatedSpectrumDataset, consisting of for each
-        spectrum (i) a tensor with the m/z and intensity peak values,
-        (ii) the precursor information [mass, charge, m/z], (iii) the
-        peptide sequence, the precursor m/z, (iv) spectrum identifiers
-        (file and scan).
+        spectrum (i) a tensor with the m/z and intensity peak values, (ii), the
+        precursor m/z, (iii) the precursor charge, (iv) the spectrum identifier.
+    protein_database : db_utils.ProteinDatabase
+        The protein database to use for candidate peptide retrieval.
 
     Returns
     -------
-    spectra : torch.Tensor of shape (batch_size, n_peaks, 2)
+    all_spectra : torch.Tensor of shape (batch_size, n_peaks, 2)
         The padded mass spectra tensor with the m/z and intensity peak values
         for each spectrum.
-    precursors : torch.Tensor of shape (batch_size, 3)
+    all_precursors : torch.Tensor of shape (batch_size, 3)
         A tensor with the precursor neutral mass, precursor charge, and
         precursor m/z.
-    spectrum_peps : np.ndarray
-        Peptide sequences
-    spectrum_ids : Tuple[str, str]
-        Peak file and spectrum identifier
+    all_spectrum_ids : np.ndarray
+        The spectrum identifiers.
+    all_peptides : List[str]
+        The candidate peptides for each spectrum.
     """
-    (
-        spectra,
-        precursor_mzs,
-        precursor_charges,
-        spectrum_peps,
-        spectrum_ids,
-    ) = list(zip(*batch))
+    spectra, precursor_mzs, precursor_charges, spectrum_ids = list(zip(*batch))
     spectra = torch.nn.utils.rnn.pad_sequence(spectra, batch_first=True)
-    precursor_mzs = torch.tensor(precursor_mzs)
-    precursor_charges = torch.tensor(precursor_charges)
-    precursor_masses = (precursor_mzs - 1.007276) * precursor_charges
+
+    precursor_mzs_t = torch.tensor(precursor_mzs)
+    precursor_charges_t = torch.tensor(precursor_charges)
+    precursor_masses_t = (precursor_mzs_t - 1.007276) * precursor_charges_t
     precursors = torch.vstack(
-        [precursor_masses, precursor_charges, precursor_mzs]
+        [precursor_masses_t, precursor_charges_t, precursor_mzs_t]
     ).T.float()
-    return spectra, precursors, np.asarray(spectrum_peps), spectrum_ids
+
+    all_spectra = []
+    all_precursors = []
+    all_spectrum_ids = []
+    all_peptides = []
+    for idx in range(len(batch)):
+        spec_peptides = protein_database.get_candidates(
+            precursor_mzs[idx],
+            precursor_charges[idx],
+        )
+        try:
+            all_spectra.append(
+                spectra[idx].unsqueeze(0).repeat(len(spec_peptides), 1, 1)
+            )
+            all_precursors.append(
+                precursors[idx].unsqueeze(0).repeat(len(spec_peptides), 1)
+            )
+            all_spectrum_ids.extend([spectrum_ids[idx]] * len(spec_peptides))
+            all_peptides.extend(spec_peptides)
+        except ValueError:
+            logger.warning(
+                "No candidates found for spectrum %s", spectrum_ids[idx]
+            )
+
+    return (
+        torch.cat(all_spectra, dim=0),
+        torch.cat(all_precursors, dim=0),
+        all_spectrum_ids,
+        all_peptides,
+    )

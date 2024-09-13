@@ -5,7 +5,7 @@ import pandas as pd
 import psims
 import pytest
 import yaml
-from pyteomics.mass import calculate_mass
+from pyteomics.mass import calculate_mass, fast_mass, std_aa_mass
 
 
 @pytest.fixture
@@ -16,7 +16,34 @@ def mgf_small(tmp_path):
     return _create_mgf(peptides, mgf_file)
 
 
-def _create_mgf(peptides, mgf_file, random_state=42):
+@pytest.fixture
+def tiny_fasta_file(tmp_path):
+    fasta_file = tmp_path / "tiny_fasta.fasta"
+    with fasta_file.open("w+") as fasta_ref:
+        fasta_ref.write(
+            ">foo\nMEAPAQLLFLLLLWLPDTTREIVMTQSPPTLSLSPGERVTLSCRASQSVSSSYLTWYQQKPGQAPRLLIYGASTRATSIPARFSGSGSGTDFTLTISSLQPEDFAVYYCQQDYNLP"
+        )
+
+    return fasta_file
+
+
+@pytest.fixture
+def mgf_medium(tmp_path):
+    """An MGF file with 7 spectra and scan numbers, C+57.021 mass modification considered"""
+    peptides = [
+        "ATSIPAR",
+        "VTLSCR",
+        "LLIYGASTR",
+        "EIVMTQSPPTLSLSPGER",
+        "MEAPAQLLFLLLLWLPDTTR",
+        "ASQSVSSSYLTWYQQKPGQAPR",
+        "FSGSGSGTDFTLTISSLQPEDFAVYYCQQDYNLP",
+    ]
+    mgf_file = tmp_path / "db_search.mgf"
+    return _create_mgf(peptides, mgf_file, mod_aa_mass={"C": 160.030649})
+
+
+def _create_mgf(peptides, mgf_file, random_state=42, mod_aa_mass=None):
     """
     Create a fake MGF file from one or more peptides.
 
@@ -28,20 +55,25 @@ def _create_mgf(peptides, mgf_file, random_state=42):
         The MGF file to create.
     random_state : int or numpy.random.Generator, optional
         The random seed. The charge states are chosen to be 2 or 3 randomly.
+    mod_aa_mass : dict, optional
+        A dictionary that specifies the modified masses of amino acids.
+        e.g. {"C": 160.030649} for carbamidomethylated C.
 
     Returns
     -------
     mgf_file : Path
     """
     rng = np.random.default_rng(random_state)
-    entries = [_create_mgf_entry(p, rng.choice([2, 3])) for p in peptides]
+    entries = [
+        _create_mgf_entry(p, rng.choice([2, 3]), mod_aa_mass) for p in peptides
+    ]
     with mgf_file.open("w+") as mgf_ref:
         mgf_ref.write("\n".join(entries))
 
     return mgf_file
 
 
-def _create_mgf_entry(peptide, charge=2):
+def _create_mgf_entry(peptide, charge=2, mod_aa_mass=None):
     """
     Create a MassIVE-KB style MGF entry for a single PSM.
 
@@ -51,13 +83,20 @@ def _create_mgf_entry(peptide, charge=2):
         A peptide sequence.
     charge : int, optional
         The peptide charge state.
+    mod_aa_mass : dict, optional
+        A dictionary that specifies the modified masses of amino acids.
 
     Returns
     -------
     str
         The PSM entry in an MGF file format.
     """
-    precursor_mz = calculate_mass(peptide, charge=int(charge))
+    if mod_aa_mass is None:
+        precursor_mz = calculate_mass(peptide, charge=int(charge))
+    else:
+        aa_mass = std_aa_mass
+        aa_mass.update(mod_aa_mass)
+        precursor_mz = fast_mass(peptide, charge=int(charge), aa_mass=aa_mass)
     mzs, intensities = _peptide_to_peaks(peptide, charge)
     frags = "\n".join([f"{m} {i}" for m, i in zip(mzs, intensities)])
 
@@ -202,6 +241,11 @@ def tiny_config(tmp_path):
         "precursor_mass_tol": 5,
         "isotope_error_range": [0, 1],
         "min_peptide_len": 6,
+        "max_peptide_len": 100,
+        "enzyme": "trypsin",
+        "digestion": "full",
+        "missed_cleavages": 0,
+        "max_mods": None,
         "predict_batch_size": 1024,
         "n_beams": 1,
         "top_match": 1,
@@ -219,7 +263,6 @@ def tiny_config(tmp_path):
         "dim_model": 512,
         "dropout": 0.0,
         "dim_intensity": None,
-        "max_length": 100,
         "learning_rate": 5e-4,
         "weight_decay": 1e-5,
         "train_batch_size": 32,
@@ -254,6 +297,11 @@ def tiny_config(tmp_path):
             "-17.027": -17.026549,
             "+43.006-17.027": 25.980265,
         },
+        "allowed_fixed_mods": "C:C+57.021",
+        "allowed_var_mods": (
+            "M:M+15.995,N:N+0.984,Q:Q+0.984,"
+            "nterm:+42.011,nterm:+43.006,nterm:-17.027,nterm:+43.006-17.027"
+        ),
     }
 
     cfg_file = tmp_path / "config.yml"
@@ -264,75 +312,36 @@ def tiny_config(tmp_path):
 
 
 @pytest.fixture
-def mgf_small_unannotated(tmp_path):
-    """An MGF file with 2 unannotated spectra and scan numbers."""
-    peptides = ["LESLIEK", "PEPTIDEK", "LESTIEK"]
-    mgf_file = tmp_path / "small_unannotated.mgf"
-    return _create_unannotated_mgf(peptides, mgf_file)
-
-
-def _create_unannotated_mgf(peptides, mgf_file, random_state=999):
-    """
-    Create a fake MGF file from one or more peptides.
-    This file will have no SEQ= parameter, but will have a SCANS= parameter.
-
-    Parameters
-    ----------
-    peptides : str or list of str
-        The peptides for which to create spectra.
-    mgf_file : Path
-        The MGF file to create.
-    random_state : int or numpy.random.Generator, optional
-        The random seed. The charge states are chosen to be 2 or 3 randomly.
-
-    Returns
-    -------
-    mgf_file : Path
-    """
-    rng = np.random.default_rng(random_state)
-    entries = [
-        _create_unannotated_mgf_entry(p, idx, rng.choice([2, 3]))
-        for idx, p in enumerate(peptides)
-    ]
-    with mgf_file.open("w+") as mgf_ref:
-        mgf_ref.write("\n".join(entries))
-
-    return mgf_file
-
-
-def _create_unannotated_mgf_entry(peptide, scan_num, charge):
-    """
-    Create a MassIVE-KB style MGF entry for a single PSM.
-    Each entry will have no SEQ= parameter, but will have a SCANS= parameter.
-
-    Parameters
-    ----------
-    peptide : str
-        A peptide sequence.
-    scan_num : int
-        The scan number.
-    charge : int, optional
-        The peptide charge state.
-
-    Returns
-    -------
-    str
-        The PSM entry in an MGF file format.
-    """
-    precursor_mz = calculate_mass(peptide, charge=int(charge))
-    mzs, intensities = _peptide_to_peaks(peptide, charge)
-    frags = "\n".join([f"{m} {i}" for m, i in zip(mzs, intensities)])
-
-    mgf = [
-        "BEGIN IONS",
-        f"TITLE=title::{scan_num}",
-        f"PEPMASS={precursor_mz}",
-        f"CHARGE={charge}+",
-        f"SCANS={scan_num}",
-        f"{frags}",
-        "END IONS",
-    ]
-    return "\n".join(mgf)
+def residues_dict():
+    return {
+        "G": 57.021464,
+        "A": 71.037114,
+        "S": 87.032028,
+        "P": 97.052764,
+        "V": 99.068414,
+        "T": 101.047670,
+        "C+57.021": 160.030649,
+        "L": 113.084064,
+        "I": 113.084064,
+        "N": 114.042927,
+        "D": 115.026943,
+        "Q": 128.058578,
+        "K": 128.094963,
+        "E": 129.042593,
+        "M": 131.040485,
+        "H": 137.058912,
+        "F": 147.068414,
+        "R": 156.101111,
+        "Y": 163.063329,
+        "W": 186.079313,
+        "M+15.995": 147.035400,
+        "N+0.984": 115.026943,
+        "Q+0.984": 129.042594,
+        "+42.011": 42.010565,
+        "+43.006": 43.005814,
+        "-17.027": -17.026549,
+        "+43.006-17.027": 25.980265,
+    }
 
 
 @pytest.fixture

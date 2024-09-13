@@ -18,7 +18,7 @@ from lightning.pytorch.strategies import DDPStrategy
 from lightning.pytorch.callbacks import ModelCheckpoint
 
 from ..config import Config
-from ..data import ms_io
+from ..data import db_utils, ms_io
 from ..denovo.dataloaders import DeNovoDataModule
 from ..denovo.model import Spec2Pep, DbSpec2Pep
 
@@ -79,13 +79,20 @@ class ModelRunner:
         if self.writer is not None:
             self.writer.save()
 
-    def db_search(self, peak_path: Iterable[str], output: str) -> None:
+    def db_search(
+        self,
+        peak_path: Iterable[str],
+        fasta_path: str,
+        output: str,
+    ) -> None:
         """Perform database search with Casanovo.
 
         Parameters
         ----------
-        peak_path : iterable of str
-            The path to the annotated .mgf data files for database search.
+        peak_path : Iterable[str]
+            The paths to the .mgf data files for database search.
+        fasta_path : str
+            The path to the FASTA file for database search.
         output : str
             Where should the output be saved?
 
@@ -93,23 +100,36 @@ class ModelRunner:
         -------
         self
         """
-        self.writer = ms_io.MztabWriter(
-            Path(output).with_suffix(".mztab"), is_db_variant=True
-        )
+        self.writer = ms_io.MztabWriter(Path(output).with_suffix(".mztab"))
         self.writer.set_metadata(
             self.config,
             model=str(self.model_filename),
             config_filename=self.config.file,
         )
-
         self.initialize_trainer(train=True)
         self.initialize_model(train=False, db_search=True)
         self.model.out_writer = self.writer
-
-        test_index = self._get_index(peak_path, True, "db search")
+        self.model.psm_batch_size = self.config.predict_batch_size
+        self.model.protein_database = db_utils.ProteinDatabase(
+            fasta_path,
+            self.config.enzyme,
+            self.config.digestion,
+            self.config.missed_cleavages,
+            self.config.min_peptide_len,
+            self.config.max_peptide_len,
+            self.config.max_mods,
+            self.config.precursor_mass_tol,
+            self.config.isotope_error_range,
+            self.config.allowed_fixed_mods,
+            self.config.allowed_var_mods,
+            self.config.residues,
+        )
+        test_index = self._get_index(peak_path, False, "db search")
         self.writer.set_ms_run(test_index.ms_files)
+
         self.initialize_data_module(test_index=test_index)
-        self.loaders.setup(stage="db")
+        self.loaders.protein_database = self.model.protein_database
+        self.loaders.setup(stage="test", annotated=False)
         self.trainer.predict(self.model, self.loaders.db_dataloader())
 
     def train(
@@ -251,7 +271,7 @@ class ModelRunner:
             n_layers=self.config.n_layers,
             dropout=self.config.dropout,
             dim_intensity=self.config.dim_intensity,
-            max_length=self.config.max_length,
+            max_peptide_len=self.config.max_peptide_len,
             residues=self.config.residues,
             max_charge=self.config.max_charge,
             precursor_mass_tol=self.config.precursor_mass_tol,
@@ -272,7 +292,7 @@ class ModelRunner:
 
         # Reconfigurable non-architecture related parameters for a loaded model.
         loaded_model_params = dict(
-            max_length=self.config.max_length,
+            max_peptide_len=self.config.max_peptide_len,
             precursor_mass_tol=self.config.precursor_mass_tol,
             isotope_error_range=self.config.isotope_error_range,
             n_beams=self.config.n_beams,
@@ -291,12 +311,12 @@ class ModelRunner:
 
         if self.model_filename is None:
             # Train a model from scratch if no model file is provided.
+            if db_search:
+                logger.error("DB search mode requires a model file")
+                raise ValueError(
+                    "A model file must be provided for DB search mode"
+                )
             if train:
-                if db_search:
-                    logger.error("Db search mode requires a model file.")
-                    raise ValueError(
-                        "A model file must be provided for DB search mode"
-                    )
                 self.model = Spec2Pep(**model_params)
                 return
             # Else we're not training, so a model file must be provided.

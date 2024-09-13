@@ -18,6 +18,7 @@ logger = logging.getLogger("casanovo")
 _config_deprecated = dict(
     every_n_train_steps="val_check_interval",
     max_iters="cosine_schedule_period_iters",
+    max_length="max_peptide_len",
 )
 
 
@@ -59,7 +60,7 @@ class Config:
         n_layers=int,
         dropout=float,
         dim_intensity=int,
-        max_length=int,
+        max_peptide_len=int,
         residues=dict,
         n_log=int,
         tb_summarywriter=str,

@@ -1,6 +1,6 @@
 """A PyTorch Dataset class for annotated spectra."""
 
-from typing import Optional, Tuple
+from typing import List, Optional, Tuple
 
 import depthcharge
 import numpy as np
@@ -212,8 +212,6 @@ class AnnotatedSpectrumDataset(SpectrumDataset):
     random_state : Optional[int]
         The NumPy random state. ``None`` leaves mass spectra in the order they
         were parsed.
-    track_spectrum_id : Optional[bool]
-        Whether to keep track of the identifier of the MS/MS spectra.
     """
 
     def __init__(
@@ -225,7 +223,6 @@ class AnnotatedSpectrumDataset(SpectrumDataset):
         min_intensity: float = 0.01,
         remove_precursor_tol: float = 2.0,
         random_state: Optional[int] = None,
-        track_spectrum_id: Optional[bool] = False,
     ):
         super().__init__(
             annotated_spectrum_index,
@@ -236,7 +233,6 @@ class AnnotatedSpectrumDataset(SpectrumDataset):
             remove_precursor_tol=remove_precursor_tol,
             random_state=random_state,
         )
-        self.track_spectrum_id = track_spectrum_id
 
     def __getitem__(self, idx: int) -> Tuple[torch.Tensor, float, int, str]:
         """
@@ -268,12 +264,4 @@ class AnnotatedSpectrumDataset(SpectrumDataset):
         spectrum = self._process_peaks(
             mz_array, int_array, precursor_mz, precursor_charge
         )
-        if self.track_spectrum_id:
-            return (
-                spectrum,
-                precursor_mz,
-                precursor_charge,
-                peptide,
-                self.get_spectrum_id(idx),
-            )
         return spectrum, precursor_mz, precursor_charge, peptide
