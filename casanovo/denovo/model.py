@@ -1019,7 +1019,7 @@ class DbSpec2Pep(Spec2Pep):
         ----------
         batch : Tuple[torch.Tensor, torch.Tensor, np.array, List[str]]
             A batch of (i) MS/MS spectra, (ii) precursor information, (iii)
-            spectrum identifiers, (iv) candidate peptides, (v) associated protein.
+            spectrum identifiers, (iv) candidate peptides
 
         Returns
         -------
@@ -1049,7 +1049,6 @@ class DbSpec2Pep(Spec2Pep):
                 peptide_score,
                 aa_scores,
                 peptide,
-                protein,
             ) in zip(
                 current_batch[1][:, 1].cpu().detach().numpy(),
                 current_batch[1][:, 2].cpu().detach().numpy(),
@@ -1057,7 +1056,6 @@ class DbSpec2Pep(Spec2Pep):
                 all_scores.cpu().detach().numpy(),
                 per_aa_scores.cpu().detach().numpy(),
                 current_batch[3],
-                current_batch[4],
             ):
                 predictions.append(
                     (
@@ -1067,7 +1065,7 @@ class DbSpec2Pep(Spec2Pep):
                         peptide,
                         peptide_score,
                         aa_scores,
-                        protein,
+                        self.protein_database.get_associated_protein(peptide),
                     )
                 )
         return predictions

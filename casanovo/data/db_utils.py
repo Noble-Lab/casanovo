@@ -127,12 +127,12 @@ class ProteinDatabase:
                 (self.db_peptides["calc_mass"] >= lower_bound)
                 & (self.db_peptides["calc_mass"] <= upper_bound)
             ]
-            candidates.append(window[["peptide", "calc_mass", "protein"]])
+            candidates.append(window[["peptide", "calc_mass"]])
 
         candidates = pd.concat(candidates)
         candidates.drop_duplicates(inplace=True)
         candidates.sort_values(by=["calc_mass", "peptide"], inplace=True)
-        return candidates["peptide"], candidates["protein"]
+        return candidates["peptide"]
 
     def get_associated_protein(self, peptide: str) -> str:
         """
@@ -159,7 +159,7 @@ class ProteinDatabase:
         max_mods: int,
         min_peptide_length: int,
         max_peptide_length: int,
-    ) -> pd.DataFrame:
+    ) -> Tuple[pd.DataFrame, dict]:
         """
         Digests a FASTA file and returns the peptides, their masses, and associated protein.
 
@@ -185,8 +185,8 @@ class ProteinDatabase:
         Returns
         -------
         pep_table : pd.DataFrame
-            A Pandas DataFrame with peptide, mass,
-            and protein columns. Sorted by neutral mass in ascending order.
+            A Pandas DataFrame with peptide and mass columns.
+            Sorted by neutral mass in ascending order.
         prot_map : dict
             A dictionary mapping peptides to associated proteins.
         """
@@ -207,17 +207,14 @@ class ProteinDatabase:
         valid_aa = set(list(self.residues.keys()) + ["C"])
         if digestion == "non-specific":
             for header, seq in fasta.read(fasta_filename):
-                pep_set = []
+                protein = header.split()[0]
                 # Generate all possible peptides
                 for i in range(len(seq)):
-                    for j in range(i + 1, len(seq) + 1):
-                        pep_set.append(seq[i:j])
-                protein = header.split()[0]
-                for pep in pep_set:
-                    if (
-                        len(pep) >= min_peptide_length
-                        and len(pep) <= max_peptide_length
+                    for j in range(
+                        i + min_peptide_length,
+                        min(i + max_peptide_length + 1, len(seq) + 1),
                     ):
+                        pep = seq[i:j]
                         if any(aa not in valid_aa for aa in pep):
                             logger.warn(
                                 "Skipping peptide with unknown amino acids: %s",
@@ -274,16 +271,18 @@ class ProteinDatabase:
                 isos,
             )
         ]
-        # Create a DataFrame for easy sorting and filtering
-        pep_table = pd.DataFrame(
-            mod_peptide_list, columns=["peptide", "calc_mass", "protein"]
-        )
-        pep_table.sort_values(by=["calc_mass", "peptide"], inplace=True)
 
         # Create a dictionary mapping for easy accession of associated proteins
         prot_map = defaultdict(list)
         for pep, _, prot in mod_peptide_list:
             prot_map[pep].append(prot)
+
+        # Create a DataFrame for easy sorting and filtering
+        pep_table = pd.DataFrame(
+            [(pep, mass) for pep, mass, _ in mod_peptide_list],
+            columns=["peptide", "calc_mass"],
+        )
+        pep_table.sort_values(by=["calc_mass", "peptide"], inplace=True)
 
         logger.info(
             "Digestion complete. %d peptides generated.", len(pep_table)

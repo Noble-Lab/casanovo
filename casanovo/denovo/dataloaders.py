@@ -266,8 +266,6 @@ def prepare_psm_batch(
         The spectrum identifiers.
     all_peptides : List[str]
         The candidate peptides for each spectrum.
-    all_proteins : List[str]
-        The proteins associated with each candidate peptide.
     """
     spectra, precursor_mzs, precursor_charges, spectrum_ids = list(zip(*batch))
     spectra = torch.nn.utils.rnn.pad_sequence(spectra, batch_first=True)
@@ -283,9 +281,8 @@ def prepare_psm_batch(
     all_precursors = []
     all_spectrum_ids = []
     all_peptides = []
-    all_proteins = []
     for idx in range(len(batch)):
-        spec_peptides, spec_proteins = protein_database.get_candidates(
+        spec_peptides = protein_database.get_candidates(
             precursor_mzs[idx],
             precursor_charges[idx],
         )
@@ -298,7 +295,6 @@ def prepare_psm_batch(
             )
             all_spectrum_ids.extend([spectrum_ids[idx]] * len(spec_peptides))
             all_peptides.extend(spec_peptides)
-            all_proteins.extend(spec_proteins)
         except ValueError:
             logger.warning(
                 "No candidates found for spectrum %s", spectrum_ids[idx]
@@ -309,5 +305,4 @@ def prepare_psm_batch(
         torch.cat(all_precursors, dim=0),
         all_spectrum_ids,
         all_peptides,
-        all_proteins,
     )
