@@ -1088,16 +1088,16 @@ class DbSpec2Pep(Spec2Pep):
             protein,
         ) in outputs:
             self.out_writer.psms.append(
-                (
-                    peptide,
-                    tuple(spectrum_i),
-                    peptide_score,
-                    charge,
-                    precursor_mz,
-                    self.peptide_mass_calculator.mass(peptide, charge),
-                    ",".join(list(map("{:.5f}".format, aa_scores))),
-                    protein,
-                ),
+                ms_io.PepSpecMatch(
+                    sequence=peptide,
+                    spectrum_id=tuple(spectrum_i),
+                    peptide_score=peptide_score,
+                    charge=int(charge),
+                    calc_mz=precursor_mz,
+                    exp_mz=self.peptide_mass_calculator.mass(peptide, charge),
+                    aa_scores=aa_scores,
+                    protein=protein,
+                )
             )
 
 

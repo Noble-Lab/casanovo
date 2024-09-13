@@ -42,6 +42,7 @@ def mgf_medium(tmp_path):
     return _create_mgf(peptides, mgf_file, mod_aa_mass={"C": 160.030649})
 
 
+@pytest.fixture
 def mgf_small_unannotated(tmp_path):
     """An MGF file with 2 unannotated spectra."""
     peptides = ["LESLIEK", "PEPTIDEK"]
@@ -49,7 +50,9 @@ def mgf_small_unannotated(tmp_path):
     return _create_mgf(peptides, mgf_file, annotate=False)
 
 
-def _create_mgf(peptides, mgf_file, random_state=42, mod_aa_mass=None, annotate=True):
+def _create_mgf(
+    peptides, mgf_file, random_state=42, mod_aa_mass=None, annotate=True
+):
     """
     Create a fake MGF file from one or more peptides.
 
@@ -73,7 +76,10 @@ def _create_mgf(peptides, mgf_file, random_state=42, mod_aa_mass=None, annotate=
     """
     rng = np.random.default_rng(random_state)
     entries = [
-        _create_mgf_entry(p, rng.choice([2, 3]), mod_aa_mass=mod_aa_mass, annotate=annotate) for p in peptides
+        _create_mgf_entry(
+            p, rng.choice([2, 3]), mod_aa_mass=mod_aa_mass, annotate=annotate
+        )
+        for p in peptides
     ]
     with mgf_file.open("w+") as mgf_ref:
         mgf_ref.write("\n".join(entries))

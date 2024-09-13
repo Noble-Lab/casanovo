@@ -41,6 +41,9 @@ class PepSpecMatch:
     aa_scores : Iterable[float]
         A list of scores for individual amino acids in the peptide
         sequence, where len(aa_scores) == len(sequence)
+    protein : str
+        For DB-search mode, the protein from which the peptide
+        in the PSM was derived. Default value is "null".
     """
 
     sequence: str
@@ -50,6 +53,7 @@ class PepSpecMatch:
     calc_mz: float
     exp_mz: float
     aa_scores: Iterable[float]
+    protein: str = "null"
 
 
 class MztabWriter:
@@ -228,7 +232,7 @@ class MztabWriter:
                         "PSM",
                         psm.sequence,  # sequence
                         i,  # PSM_ID
-                        "null" if len(psm) < 8 else psm[7],  # accession
+                        psm.protein,  # accession
                         "null",  # unique
                         "null",  # database
                         "null",  # database_version
