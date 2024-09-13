@@ -1,10 +1,14 @@
 import functools
+import subprocess
 from pathlib import Path
 
 import pyteomics.mztab
 from click.testing import CliRunner
 
 from casanovo import casanovo
+
+
+TEST_DIR = Path(__file__).resolve().parent
 
 
 def test_db_search(
@@ -73,23 +77,10 @@ def test_train_and_run(
 
     result = run(train_args)
     model_file = tmp_path / "epoch=19-step=20.ckpt"
+    best_model = tmp_path / "best.ckpt"
     assert result.exit_code == 0
     assert model_file.exists()
-
-    # Try evaluating:
-    eval_args = [
-        "evaluate",
-        "--model",
-        str(model_file),
-        "--config",
-        str(tiny_config),
-        "--output",
-        str(tmp_path / "eval"),
-        str(mgf_small),
-    ]
-
-    result = run(eval_args)
-    assert result.exit_code == 0
+    assert best_model.exists()
 
     # Finally try predicting:
     output_filename = tmp_path / "test.mztab"
@@ -126,6 +117,63 @@ def test_train_and_run(
     assert psms.loc[3, "spectra_ref"] == "ms_run[2]:scan=17"
     assert psms.loc[4, "sequence"] == "PEPTLDEK"
     assert psms.loc[4, "spectra_ref"] == "ms_run[2]:scan=111"
+
+    # Finally, try evaluating:
+    output_filename = tmp_path / "test-eval.mztab"
+    eval_args = [
+        "sequence",
+        "--model",
+        str(model_file),
+        "--config",
+        tiny_config,
+        "--output",
+        str(output_filename),
+        str(mgf_small),
+        str(mzml_small),
+        "--evaluate",
+    ]
+
+    result = run(eval_args)
+    assert result.exit_code == 0
+    assert output_filename.is_file()
+
+    mztab = pyteomics.mztab.MzTab(str(output_filename))
+    filename = "small.mgf"
+    # Verify that the input annotated peak file is listed in the metadata.
+    assert f"ms_run[1]-location" in mztab.metadata
+    assert mztab.metadata[f"ms_run[1]-location"].endswith(filename)
+
+    # Verify that the spectrum predictions are correct
+    # and indexed according to the peak input file type.
+    psms = mztab.spectrum_match_table
+    assert psms.loc[1, "sequence"] == "LESLLEK"
+    assert psms.loc[1, "spectra_ref"] == "ms_run[1]:index=0"
+    assert psms.loc[2, "sequence"] == "PEPTLDEK"
+    assert psms.loc[2, "spectra_ref"] == "ms_run[1]:index=1"
+
+    # Validate mztab output
+    validate_args = [
+        "java",
+        "-jar",
+        f"{TEST_DIR}/jmzTabValidator.jar",
+        "--check",
+        f"inFile={output_filename}",
+    ]
+
+    validate_result = subprocess.run(
+        validate_args,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+
+    assert validate_result.returncode == 0
+    assert not any(
+        [
+            line.startswith("[Error-")
+            for line in validate_result.stdout.splitlines()
+        ]
+    )
 
 
 def test_auxilliary_cli(tmp_path, monkeypatch):

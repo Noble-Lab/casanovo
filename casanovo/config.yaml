@@ -80,9 +80,6 @@ random_seed: 454
 n_log: 1
 # Tensorboard directory to use for keeping track of training metrics.
 tb_summarywriter:
-# Save the top k model checkpoints during training. -1 saves all, and leaving
-# this field empty saves none.
-save_top_k: 5
 # Path to saved checkpoints.
 model_save_folder_path: ""
 # Model validation and checkpointing frequency in training steps.

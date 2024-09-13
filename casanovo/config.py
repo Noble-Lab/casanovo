@@ -19,6 +19,7 @@ _config_deprecated = dict(
     every_n_train_steps="val_check_interval",
     max_iters="cosine_schedule_period_iters",
     max_length="max_peptide_len",
+    save_top_k=None,
 )
 
 
@@ -75,7 +76,6 @@ class Config:
         top_match=int,
         max_epochs=int,
         num_sanity_val_steps=int,
-        save_top_k=int,
         model_save_folder_path=str,
         val_check_interval=int,
         calculate_precision=bool,
@@ -97,12 +97,20 @@ class Config:
                 # Remap deprecated config entries.
                 for old, new in _config_deprecated.items():
                     if old in self._user_config:
-                        self._user_config[new] = self._user_config.pop(old)
-                        warnings.warn(
-                            f"Deprecated config option '{old}' remapped to "
-                            f"'{new}'",
-                            DeprecationWarning,
-                        )
+                        if new is not None:
+                            self._user_config[new] = self._user_config.pop(old)
+                            warning_msg = (
+                                f"Deprecated config option '{old}' "
+                                f"remapped to '{new}'"
+                            )
+                        else:
+                            del self._user_config[old]
+                            warning_msg = (
+                                f"Deprecated config option '{old}' "
+                                "is no longer in use"
+                            )
+
+                        warnings.warn(warning_msg, DeprecationWarning)
                 # Check for missing entries in config file.
                 config_missing = self._params.keys() - self._user_config.keys()
                 if len(config_missing) > 0:

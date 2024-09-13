@@ -23,7 +23,6 @@ def tiny_fasta_file(tmp_path):
         fasta_ref.write(
             ">foo\nMEAPAQLLFLLLLWLPDTTREIVMTQSPPTLSLSPGERVTLSCRASQSVSSSYLTWYQQKPGQAPRLLIYGASTRATSIPARFSGSGSGTDFTLTISSLQPEDFAVYYCQQDYNLP"
         )
-
     return fasta_file
 
 
@@ -43,7 +42,14 @@ def mgf_medium(tmp_path):
     return _create_mgf(peptides, mgf_file, mod_aa_mass={"C": 160.030649})
 
 
-def _create_mgf(peptides, mgf_file, random_state=42, mod_aa_mass=None):
+def mgf_small_unannotated(tmp_path):
+    """An MGF file with 2 unannotated spectra."""
+    peptides = ["LESLIEK", "PEPTIDEK"]
+    mgf_file = tmp_path / "small_unannotated.mgf"
+    return _create_mgf(peptides, mgf_file, annotate=False)
+
+
+def _create_mgf(peptides, mgf_file, random_state=42, mod_aa_mass=None, annotate=True):
     """
     Create a fake MGF file from one or more peptides.
 
@@ -58,6 +64,8 @@ def _create_mgf(peptides, mgf_file, random_state=42, mod_aa_mass=None):
     mod_aa_mass : dict, optional
         A dictionary that specifies the modified masses of amino acids.
         e.g. {"C": 160.030649} for carbamidomethylated C.
+    annotate: bool, optional
+        Whether to add peptide annotations to mgf file
 
     Returns
     -------
@@ -65,7 +73,7 @@ def _create_mgf(peptides, mgf_file, random_state=42, mod_aa_mass=None):
     """
     rng = np.random.default_rng(random_state)
     entries = [
-        _create_mgf_entry(p, rng.choice([2, 3]), mod_aa_mass) for p in peptides
+        _create_mgf_entry(p, rng.choice([2, 3]), mod_aa_mass=mod_aa_mass, annotate=annotate) for p in peptides
     ]
     with mgf_file.open("w+") as mgf_ref:
         mgf_ref.write("\n".join(entries))
@@ -73,7 +81,7 @@ def _create_mgf(peptides, mgf_file, random_state=42, mod_aa_mass=None):
     return mgf_file
 
 
-def _create_mgf_entry(peptide, charge=2, mod_aa_mass=None):
+def _create_mgf_entry(peptide, charge=2, mod_aa_mass=None, annotate=True):
     """
     Create a MassIVE-KB style MGF entry for a single PSM.
 
@@ -85,6 +93,8 @@ def _create_mgf_entry(peptide, charge=2, mod_aa_mass=None):
         The peptide charge state.
     mod_aa_mass : dict, optional
         A dictionary that specifies the modified masses of amino acids.
+    annotate: bool, optional
+        Whether to add peptide annotation to entry
 
     Returns
     -------
@@ -102,12 +112,15 @@ def _create_mgf_entry(peptide, charge=2, mod_aa_mass=None):
 
     mgf = [
         "BEGIN IONS",
-        f"SEQ={peptide}",
         f"PEPMASS={precursor_mz}",
         f"CHARGE={charge}+",
         f"{frags}",
         "END IONS",
     ]
+
+    if annotate:
+        mgf.insert(1, f"SEQ={peptide}")
+
     return "\n".join(mgf)
 
 
@@ -253,7 +266,6 @@ def tiny_config(tmp_path):
         "random_seed": 454,
         "n_log": 1,
         "tb_summarywriter": None,
-        "save_top_k": 5,
         "n_peaks": 150,
         "min_mz": 50.0,
         "max_mz": 2500.0,

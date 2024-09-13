@@ -8,7 +8,32 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Added
 
-- A deprecation warning will be issued when depecrated config options are used in the config file or in the model weights file.
+- During training, model checkpoints will be saved at the end of each training epoch in addition to the checkpoints saved at the end of every validation run.
+- Besides as a local file, model weights can be specified from a URL. Upon initial download, the weights file is cached for future re-use.
+
+### Changed
+
+- Removed the `evaluate` sub-command, and all model evaluation functionality has been moved to the `sequence` command using the new `--evaluate` flag.
+
+### Fixed
+
+- Precursor charges are exported as integers instead of floats in the mzTab output file, in compliance with the mzTab specification.
+
+### Removed
+
+- Removed the `save_top_k` option from the Casanovo config, the model with the lowest validation loss during training will now be saved to a fixed filename `<output_root>.best.ckpt`. 
+
+## [4.2.1] - 2024-06-25
+
+### Fixed
+
+- Pin NumPy version to below v2.0 to ensure compatibility with current DepthCharge version.
+
+## [4.2.0] - 2024-05-14
+
+### Added
+
+- A deprecation warning will be issued when deprecated config options are used in the config file or in the model weights file.
 
 ### Changed
 
@@ -246,7 +271,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 - Initial Casanovo version.
 
-[Unreleased]: https://github.com/Noble-Lab/casanovo/compare/v4.1.0...HEAD
+[Unreleased]: https://github.com/Noble-Lab/casanovo/compare/v4.2.1...HEAD
+[4.2.1]: https://github.com/Noble-Lab/casanovo/compare/v4.2.0...v4.2.1
+[4.2.0]: https://github.com/Noble-Lab/casanovo/compare/v4.1.0...v4.2.0
 [4.1.0]: https://github.com/Noble-Lab/casanovo/compare/v4.0.1...v4.1.0
 [4.0.1]: https://github.com/Noble-Lab/casanovo/compare/v4.0.0...v4.0.1
 [4.0.0]: https://github.com/Noble-Lab/casanovo/compare/v3.5.0...v4.0.0

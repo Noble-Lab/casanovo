@@ -914,15 +914,15 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
             if len(peptide) == 0:
                 continue
             self.out_writer.psms.append(
-                (
-                    peptide,
-                    tuple(spectrum_i),
-                    peptide_score,
-                    charge,
-                    precursor_mz,
-                    self.peptide_mass_calculator.mass(peptide, charge),
-                    ",".join(list(map("{:.5f}".format, aa_scores))),
-                ),
+                ms_io.PepSpecMatch(
+                    sequence=peptide,
+                    spectrum_id=tuple(spectrum_i),
+                    peptide_score=peptide_score,
+                    charge=int(charge),
+                    calc_mz=precursor_mz,
+                    exp_mz=self.peptide_mass_calculator.mass(peptide, charge),
+                    aa_scores=aa_scores,
+                )
             )
 
     def _log_history(self) -> None:

@@ -88,7 +88,8 @@ This will need to be set with each new shell session, or you can add it to your 
 
 The [reported Casanovo results](https://doi.org/10.1101/2023.01.03.522621) were obtained by training on two different datasets: (i) a commonly used nine-species benchmark dataset, and (ii) a large-scale training dataset derived from the MassIVE Knowledge Base (MassIVE-KB).
 
-All data for the _nine-species benchmark_ is available as annotated MGF files [on MassIVE](https://doi.org/doi:10.25345/C52V2CK8J).
+All data for the _nine-species benchmark_ are available as annotated MGF files on MassIVE with [dataset identifier MSV000090982](https://doi.org/doi:10.25345/C52V2CK8J).
+Annotated MGF files that are directly compatible with Casanovo are available in the `/MSV000090982/updates/2024-05-14_woutb_71950b89/peak/9speciesbenchmark` FTP directory.
 Using these data, Casanovo was trained in a cross-validated fashion, training on eight species and testing on the remaining species.
 
 The _MassIVE-KB training data_ was derived from PSMs used to compile the MassIVE-KB v1 spectral library and consists of 30 million PSMs.
@@ -98,7 +99,7 @@ This will give you a zipped TSV file with the metadata and peptide identificatio
 Using the filename (column "filename") you can then retrieve the corresponding peak files from the MassIVE FTP server and extract the desired spectra using their scan number (column "scan").
 
 The _non-enzymatic dataset_, used to train a non-tryptic version of Casanovo, was created by selecting PSMs with a uniform distribution of amino acids at the C-terminal peptide positions from two datasets: MassIVE-KB and PROSPECT.
-Training, validation, and test splits for the non-enzymatic dataset are available as annotated MGF files [on MassIVE](https://doi.org/doi:10.25345/C5KS6JG0W).
+Training, validation, and test splits for the non-enzymatic dataset are available as annotated MGF files on MassIVE with [dataset identifier MSV000094014]](https://doi.org/doi:10.25345/C5KS6JG0W).
 
 **How do I know which model to use after training Casanovo?**
 
@@ -151,6 +152,13 @@ Yes, antibody sequencing is one of the popular uses for de novo sequencing techn
 [This article](https://academic.oup.com/bib/article/24/1/bbac542/6955273) carried out a systematic comparison of six de novo sequencing tools (Novor, pNovo 3, DeepNovo, SMSNet, PointNovo and Casanovo).  Casanovo fared very well in this comparison: "Casanovo exhibits the highest number of correct peptide predictions compared with all other de novo algorithms across all enzymes demonstrating the advantage of using transformers for peptide sequencing. Furthermore, Casanovo predicts amino acids with overall superior precision."
 
 In practice, you may want to try providing your Casanovo output file to the [Stitch software](https://github.com/snijderlab/stitch), which performs template-based assembly of de novo peptide reads to reconstruct antibody sequences ([Schulte and Snyder 2024](https://www.biorxiv.org/content/10.1101/2024.02.20.581155v1)).
+
+**Where can I find Casanovo model weights trained on the nine-species benchmark?**
+
+You can find the Casanovo weights corresponding to the nine-species benchmark [on Zenodo](https://doi.org/10.5281/zenodo.10694984), compatible with Casanovo v4.x.x.
+These weights correspond to training and validation on eight species using the default configurations, with the remaining species held out for testing, as indicated by the file names.
+Note that these weights are only intended for evaluation purposes on this specific benchmark dataset.
+For general-purpose usage of Casanovo, use its [default weights](https://casanovo.readthedocs.io/en/latest/getting_started.html#download-model-weights) instead, as these will give significantly improved performance.
 
 **How can I generate a precision–coverage curve?**
 
