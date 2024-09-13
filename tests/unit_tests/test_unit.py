@@ -705,7 +705,7 @@ def test_get_candidates(tiny_fasta_file, residues_dict):
         ),
         residues=residues_dict,
     )
-    candidates, _ = pdb.get_candidates(precursor_mz=496.2, charge=2)
+    candidates = pdb.get_candidates(precursor_mz=496.2, charge=2)
     assert expected_smallwindow == list(candidates)
 
     pdb = db_utils.ProteinDatabase(
@@ -725,7 +725,7 @@ def test_get_candidates(tiny_fasta_file, residues_dict):
         ),
         residues=residues_dict,
     )
-    candidates, _ = pdb.get_candidates(precursor_mz=496.2, charge=2)
+    candidates = pdb.get_candidates(precursor_mz=496.2, charge=2)
     assert expected_midwindow == list(candidates)
 
     pdb = db_utils.ProteinDatabase(
@@ -745,7 +745,7 @@ def test_get_candidates(tiny_fasta_file, residues_dict):
         ),
         residues=residues_dict,
     )
-    candidates, _ = pdb.get_candidates(precursor_mz=496.2, charge=2)
+    candidates = pdb.get_candidates(precursor_mz=496.2, charge=2)
     assert expected_widewindow == list(candidates)
 
 
@@ -814,7 +814,7 @@ def test_get_candidates_isotope_error(tiny_fasta_file, residues_dict):
         residues=residues_dict,
     )
     pdb.db_peptides = peptide_list
-    candidates, _ = pdb.get_candidates(precursor_mz=496.2, charge=2)
+    candidates = pdb.get_candidates(precursor_mz=496.2, charge=2)
     assert expected_isotope0 == list(candidates)
 
     pdb = db_utils.ProteinDatabase(
@@ -835,7 +835,7 @@ def test_get_candidates_isotope_error(tiny_fasta_file, residues_dict):
         residues=residues_dict,
     )
     pdb.db_peptides = peptide_list
-    candidates, _ = pdb.get_candidates(precursor_mz=496.2, charge=2)
+    candidates = pdb.get_candidates(precursor_mz=496.2, charge=2)
     assert expected_isotope01 == list(candidates)
 
     pdb = db_utils.ProteinDatabase(
@@ -856,7 +856,7 @@ def test_get_candidates_isotope_error(tiny_fasta_file, residues_dict):
         residues=residues_dict,
     )
     pdb.db_peptides = peptide_list
-    candidates, _ = pdb.get_candidates(precursor_mz=496.2, charge=2)
+    candidates = pdb.get_candidates(precursor_mz=496.2, charge=2)
     assert expected_isotope012 == list(candidates)
 
     pdb = db_utils.ProteinDatabase(
@@ -877,7 +877,7 @@ def test_get_candidates_isotope_error(tiny_fasta_file, residues_dict):
         residues=residues_dict,
     )
     pdb.db_peptides = peptide_list
-    candidates, _ = pdb.get_candidates(precursor_mz=496.2, charge=2)
+    candidates = pdb.get_candidates(precursor_mz=496.2, charge=2)
     assert expected_isotope0123 == list(candidates)
 
 

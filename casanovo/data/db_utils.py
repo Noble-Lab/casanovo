@@ -6,7 +6,7 @@ import os
 import re
 import string
 from collections import defaultdict
-from typing import List, Tuple
+from typing import List, Tuple, Iterator
 
 import depthcharge.masses
 import pandas as pd
@@ -70,22 +70,23 @@ class ProteinDatabase:
         allowed_var_mods: str,
         residues: dict,
     ):
-        self.residues = residues
         self.fixed_mods, self.var_mods, self.swap_map = _construct_mods_dict(
             allowed_fixed_mods, allowed_var_mods
         )
+        self.max_mods = max_mods
         self.swap_regex = re.compile(
             "(%s)" % "|".join(map(re.escape, self.swap_map.keys()))
         )
-        self.db_peptides, self.prot_map = self._digest_fasta(
+        peptide_generator = _peptide_generator(
             fasta_path,
             enzyme,
             digestion,
             missed_cleavages,
-            max_mods,
             min_peptide_len,
             max_peptide_len,
+            set(list(residues.keys()) + ["C"]),
         )
+        self.db_peptides, self.prot_map = self._digest_fasta(peptide_generator)
         self.precursor_tolerance = precursor_tolerance
         self.isotope_error = isotope_error
 
@@ -152,35 +153,15 @@ class ProteinDatabase:
 
     def _digest_fasta(
         self,
-        fasta_filename: str,
-        enzyme: str,
-        digestion: str,
-        missed_cleavages: int,
-        max_mods: int,
-        min_peptide_length: int,
-        max_peptide_length: int,
+        peptide_generator: Iterator[Tuple[str, str]],
     ) -> Tuple[pd.DataFrame, dict]:
         """
         Digests a FASTA file and returns the peptides, their masses, and associated protein.
 
         Parameters
         ----------
-        fasta_filename : str
-            Path to the FASTA file.
-        enzyme : str
-            The enzyme to use for digestion.
-            See pyteomics.parser.expasy_rules for valid enzymes.
-            Can also be a regex pattern.
-        digestion : str
-            The type of digestion to perform. Either 'full', 'partial' or 'non-specific'.
-        missed_cleavages : int
-            The number of missed cleavages to allow.
-        max_mods : int
-            The maximum number of modifications to allow per peptide.
-        min_peptide_length : int
-            The minimum length of peptides to consider.
-        max_peptide_length : int
-            The maximum length of peptides to consider.
+        peptide_generator : Iterator[Tuple[str, str]]
+            An iterator that yields peptides and associated proteins.
 
         Returns
         -------
@@ -190,60 +171,9 @@ class ProteinDatabase:
         prot_map : dict
             A dictionary mapping peptides to associated proteins.
         """
-        # Verify the existence of the file:
-        if not os.path.isfile(fasta_filename):
-            logger.error("File %s does not exist.", fasta_filename)
-            raise FileNotFoundError(f"File {fasta_filename} does not exist.")
-
         peptide_list = []
-        if digestion not in ["full", "partial", "non-specific"]:
-            logger.error("Digestion type %s not recognized.", digestion)
-            raise ValueError(f"Digestion type {digestion} not recognized.")
-        if enzyme not in parser.expasy_rules:
-            logger.info(
-                "Enzyme %s not recognized. Interpreting as cleavage rule.",
-                enzyme,
-            )
-        valid_aa = set(list(self.residues.keys()) + ["C"])
-        if digestion == "non-specific":
-            for header, seq in fasta.read(fasta_filename):
-                protein = header.split()[0]
-                # Generate all possible peptides
-                for i in range(len(seq)):
-                    for j in range(
-                        i + min_peptide_length,
-                        min(i + max_peptide_length + 1, len(seq) + 1),
-                    ):
-                        pep = seq[i:j]
-                        if any(aa not in valid_aa for aa in pep):
-                            logger.warn(
-                                "Skipping peptide with unknown amino acids: %s",
-                                pep,
-                            )
-                        else:
-                            peptide_list.append((pep, protein))
-        else:
-            semi = digestion == "partial"
-            for header, seq in fasta.read(fasta_filename):
-                pep_set = parser.cleave(
-                    seq,
-                    rule=enzyme,
-                    missed_cleavages=missed_cleavages,
-                    semi=semi,
-                )
-                protein = header.split()[0]
-                for pep in pep_set:
-                    if (
-                        len(pep) >= min_peptide_length
-                        and len(pep) <= max_peptide_length
-                    ):
-                        if any(aa not in valid_aa for aa in pep):
-                            logger.warn(
-                                "Skipping peptide with unknown amino acids: %s",
-                                pep,
-                            )
-                        else:
-                            peptide_list.append((pep, protein))
+        for pep, prot in peptide_generator:
+            peptide_list.append((pep, prot))
 
         # Generate modified peptides
         mass_calculator = depthcharge.masses.PeptideMass(residues="massivekb")
@@ -253,7 +183,7 @@ class ProteinDatabase:
                     pep,
                     variable_mods=self.var_mods,
                     fixed_mods=self.fixed_mods,
-                    max_mods=max_mods,
+                    max_mods=self.max_mods,
                 ),
                 prot,
             )
@@ -288,6 +218,111 @@ class ProteinDatabase:
             "Digestion complete. %d peptides generated.", len(pep_table)
         )
         return pep_table, prot_map
+
+
+def _peptide_generator(
+    fasta_filename: str,
+    enzyme: str,
+    digestion: str,
+    missed_cleavages: int,
+    min_peptide_length: int,
+    max_peptide_length: int,
+    valid_aa: set[str],
+) -> Iterator[str]:
+    """
+    Create a generator the yields peptides from a FASTA file
+    depending on the type of digestion specified.
+
+    Parameters
+    ----------
+    fasta_filename : str
+        Path to the FASTA file.
+    enzyme : str
+        The enzyme to use for digestion.
+        See pyteomics.parser.expasy_rules for valid enzymes.
+        Can also be a regex pattern.
+    digestion : str
+        The type of digestion to perform. Either 'full', 'partial' or 'non-specific'.
+    missed_cleavages : int
+        The number of missed cleavages to allow.
+    min_peptide_length : int
+        The minimum length of peptides to consider.
+    max_peptide_length : int
+        The maximum length of peptides to consider.
+    valid_aa : set[str]
+        A set of valid amino acids.
+
+    Yields
+    ------
+    pep : str
+        A peptide sequence, unmodified.
+    protein : str
+        The associated protein.
+    """
+    # Verify the existence of the file:
+    if not os.path.isfile(fasta_filename):
+        logger.error("File %s does not exist.", fasta_filename)
+        raise FileNotFoundError(f"File {fasta_filename} does not exist.")
+    if digestion not in ["full", "partial", "non-specific"]:
+        logger.error("Digestion type %s not recognized.", digestion)
+        raise ValueError(f"Digestion type {digestion} not recognized.")
+    if enzyme not in parser.expasy_rules:
+        logger.info(
+            "Enzyme %s not recognized. Interpreting as cleavage rule.",
+            enzyme,
+        )
+
+    # Verify the existence of the file:
+    if not os.path.isfile(fasta_filename):
+        logger.error("File %s does not exist.", fasta_filename)
+        raise FileNotFoundError(f"File {fasta_filename} does not exist.")
+    if digestion not in ["full", "partial", "non-specific"]:
+        logger.error("Digestion type %s not recognized.", digestion)
+        raise ValueError(f"Digestion type {digestion} not recognized.")
+    if enzyme not in parser.expasy_rules:
+        logger.info(
+            "Enzyme %s not recognized. Interpreting as cleavage rule.",
+            enzyme,
+        )
+    if digestion == "non-specific":
+        for header, seq in fasta.read(fasta_filename):
+            protein = header.split()[0]
+            # Generate all possible peptides
+            for i in range(len(seq)):
+                for j in range(
+                    i + min_peptide_length,
+                    min(i + max_peptide_length + 1, len(seq) + 1),
+                ):
+                    pep = seq[i:j]
+                    if any(aa not in valid_aa for aa in pep):
+                        logger.warn(
+                            "Skipping peptide with unknown amino acids: %s",
+                            pep,
+                        )
+                    else:
+                        yield pep, protein
+    else:
+        semi = digestion == "partial"
+        for header, seq in fasta.read(fasta_filename):
+            pep_set = parser.cleave(
+                seq,
+                rule=enzyme,
+                missed_cleavages=missed_cleavages,
+                semi=semi,
+            )
+            protein = header.split()[0]
+            for pep in pep_set:
+                if (
+                    len(pep) >= min_peptide_length
+                    and len(pep) <= max_peptide_length
+                ):
+                    if any(aa not in valid_aa for aa in pep):
+                        logger.warn(
+                            "Skipping peptide with unknown amino acids: %s",
+                            pep,
+                        )
+                    else:
+                        yield pep, protein
 
 
 @njit
