@@ -20,14 +20,14 @@ def test_db_search(
         CliRunner().invoke, casanovo.main, catch_exceptions=False
     )
 
-    output_path = tmp_path / "db_search.mztab"
+    output_filename = tmp_path / "db_search.mztab"
 
     search_args = [
         "db-search",
         "--config",
         tiny_config,
         "--output",
-        str(output_path),
+        str(output_filename),
         str(mgf_medium),
         str(tiny_fasta_file),
     ]
@@ -35,10 +35,10 @@ def test_db_search(
     result = run(search_args)
 
     assert result.exit_code == 0
-    assert output_path.exists()
-    assert output_path.is_file()
+    assert output_filename.exists()
+    assert output_filename.is_file()
 
-    mztab = pyteomics.mztab.MzTab(str(output_path))
+    mztab = pyteomics.mztab.MzTab(str(output_filename))
 
     psms = mztab.spectrum_match_table
     assert list(psms.sequence) == [
@@ -50,6 +50,30 @@ def test_db_search(
         "ASQSVSSSYLTWYQQKPGQAPR",
         "FSGSGSGTDFTLTISSLQPEDFAVYYC+57.021QQDYNLP",
     ]
+
+    # Validate mztab output
+    validate_args = [
+        "java",
+        "-jar",
+        f"{TEST_DIR}/jmzTabValidator.jar",
+        "--check",
+        f"inFile={output_filename}",
+    ]
+
+    validate_result = subprocess.run(
+        validate_args,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+
+    assert validate_result.returncode == 0
+    assert not any(
+        [
+            line.startswith("[Error-")
+            for line in validate_result.stdout.splitlines()
+        ]
+    )
 
 
 def test_train_and_run(
