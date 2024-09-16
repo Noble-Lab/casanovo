@@ -568,8 +568,8 @@ def _setup_output(
         if not output_path.is_dir():
             output_path.mkdir(parents=True)
             logger.warning(
-                f"Target output directory {output_dir} does not exists, "
-                "so it will be created."
+                "Target output directory %s does not exists, so it will be created.",
+                output_path,
             )
 
     if not overwrite:
