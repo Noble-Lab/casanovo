@@ -62,6 +62,7 @@ class ModelRunner:
         """Initialize a ModelRunner"""
         self.config = config
         self.model_filename = model_filename
+        self.output_dir = output_dir
 
         # Initialized later:
         self.tmp_dir = None
@@ -268,6 +269,16 @@ class ModelRunner:
             Determines whether to set the model up for model training or
             evaluation / inference.
         """
+        tb_summarywriter = None
+        if self.config.tb_summarywriter:
+            if self.output_dir is None:
+                logger.warning(
+                    "Can not create tensorboard because the output directory "
+                    "is not set in the model runner."
+                )
+            else:
+                tb_summarywriter = self.output_dir / "tensorboard"
+
         model_params = dict(
             dim_model=self.config.dim_model,
             n_head=self.config.n_head,
@@ -284,7 +295,7 @@ class ModelRunner:
             n_beams=self.config.n_beams,
             top_match=self.config.top_match,
             n_log=self.config.n_log,
-            tb_summarywriter=self.config.tb_summarywriter,
+            tb_summarywriter=tb_summarywriter,
             train_label_smoothing=self.config.train_label_smoothing,
             warmup_iters=self.config.warmup_iters,
             cosine_schedule_period_iters=self.config.cosine_schedule_period_iters,
@@ -303,7 +314,7 @@ class ModelRunner:
             min_peptide_len=self.config.min_peptide_len,
             top_match=self.config.top_match,
             n_log=self.config.n_log,
-            tb_summarywriter=self.config.tb_summarywriter,
+            tb_summarywriter=tb_summarywriter,
             train_label_smoothing=self.config.train_label_smoothing,
             warmup_iters=self.config.warmup_iters,
             cosine_schedule_period_iters=self.config.cosine_schedule_period_iters,
