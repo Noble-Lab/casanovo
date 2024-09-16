@@ -42,6 +42,8 @@ random_seed: 454
 n_log: 1
 # Whether to create tensorboard directory
 tb_summarywriter: false
+# Whether to create training metrics csv file
+loss_file: false
 # Model validation and checkpointing frequency in training steps.
 val_check_interval: 50_000
 

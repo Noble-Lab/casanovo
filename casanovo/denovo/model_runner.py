@@ -13,6 +13,7 @@ from typing import Iterable, List, Optional, Union
 
 import depthcharge.masses
 import lightning.pytorch as pl
+import lightning.pytorch.loggers
 import numpy as np
 import torch
 from depthcharge.data import AnnotatedSpectrumIndex, SpectrumIndex
@@ -63,6 +64,8 @@ class ModelRunner:
         self.config = config
         self.model_filename = model_filename
         self.output_dir = output_dir
+        self.output_rootname = output_rootname
+        self.overwrite_ckpt_check = overwrite_ckpt_check
 
         # Initialized later:
         self.tmp_dir = None
