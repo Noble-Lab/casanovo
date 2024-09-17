@@ -20,6 +20,7 @@ _config_deprecated = dict(
     max_iters="cosine_schedule_period_iters",
     max_length="max_peptide_len",
     save_top_k=None,
+    model_save_folder_path=None,
 )
 
 
@@ -64,7 +65,7 @@ class Config:
         max_peptide_len=int,
         residues=dict,
         n_log=int,
-        tb_summarywriter=str,
+        tb_summarywriter=bool,
         train_label_smoothing=float,
         warmup_iters=int,
         cosine_schedule_period_iters=int,
@@ -76,7 +77,6 @@ class Config:
         top_match=int,
         max_epochs=int,
         num_sanity_val_steps=int,
-        model_save_folder_path=str,
         val_check_interval=int,
         calculate_precision=bool,
         accelerator=str,

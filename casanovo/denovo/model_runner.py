@@ -4,6 +4,7 @@ model."""
 import glob
 import logging
 import os
+import re
 import tempfile
 import uuid
 import warnings
@@ -18,6 +19,7 @@ from depthcharge.data import AnnotatedSpectrumIndex, SpectrumIndex
 from lightning.pytorch.strategies import DDPStrategy
 from lightning.pytorch.callbacks import ModelCheckpoint
 
+from .. import utils
 from ..config import Config
 from ..data import db_utils, ms_io
 from ..denovo.dataloaders import DeNovoDataModule
@@ -39,19 +41,29 @@ class ModelRunner:
     model_filename : str, optional
         The model filename is required for eval and de novo modes,
         but not for training a model from scratch.
-    output_rootname : str, optional
-        The rootname for all output files (e.g. checkpoints or results)
+    output_dir : Path | None, optional
+        The directory where checkpoint files will be saved. If `None` no
+        checkpoint files will be saved and a warning will be triggered.
+    output_rootname : str | None, optional
+        The root name for checkpoint files (e.g., checkpoints or results). If
+        `None` no base name will be used for checkpoint files.
+    overwrite_ckpt_check: bool, optional
+        Whether to check output_dir (if not `None`) for conflicting checkpoint
+        files.
     """
 
     def __init__(
         self,
         config: Config,
         model_filename: Optional[str] = None,
-        output_rootname: Optional[str] = None,
+        output_dir: Optional[Path | None] = None,
+        output_rootname: Optional[str | None] = None,
+        overwrite_ckpt_check: Optional[bool] = True,
     ) -> None:
         """Initialize a ModelRunner"""
         self.config = config
         self.model_filename = model_filename
+        self.output_dir = output_dir
 
         # Initialized later:
         self.tmp_dir = None
@@ -60,20 +72,39 @@ class ModelRunner:
         self.loaders = None
         self.writer = None
 
-        best_filename = "best"
-        if output_rootname is not None:
-            best_filename = f"{output_rootname}.{best_filename}"
+        if output_dir is None:
+            self.callbacks = []
+            logger.warning(
+                "Checkpoint directory not set in ModelRunner, "
+                "no checkpoint files will be saved."
+            )
+            return
+
+        prefix = f"{output_rootname}." if output_rootname is not None else ""
+        curr_filename = prefix + "{epoch}-{step}"
+        best_filename = prefix + "best"
+        if overwrite_ckpt_check:
+            utils.check_dir_file_exists(
+                output_dir,
+                [
+                    f"{curr_filename.format(epoch='*', step='*')}.ckpt",
+                    f"{best_filename}.ckpt",
+                ],
+            )
 
         # Configure checkpoints.
         self.callbacks = [
             ModelCheckpoint(
-                dirpath=config.model_save_folder_path,
+                dirpath=output_dir,
                 save_on_train_epoch_end=True,
+                filename=curr_filename,
+                enable_version_counter=False,
             ),
             ModelCheckpoint(
-                dirpath=config.model_save_folder_path,
+                dirpath=output_dir,
                 monitor="valid_CELoss",
                 filename=best_filename,
+                enable_version_counter=False,
             ),
         ]
 
@@ -202,7 +233,10 @@ class ModelRunner:
         logger.info("Amino Acid Precision: %.2f%%", 100 * aa_precision)
 
     def predict(
-        self, peak_path: Iterable[str], output: str, evaluate: bool = False
+        self,
+        peak_path: Iterable[str],
+        results_path: str,
+        evaluate: bool = False,
     ) -> None:
         """Predict peptide sequences with a trained Casanovo model.
 
@@ -213,8 +247,8 @@ class ModelRunner:
         ----------
         peak_path : iterable of str
             The path with the MS data files for predicting peptide sequences.
-        output : str
-            Where should the output be saved?
+        results_path : str
+            Sequencing results file path
         evaluate: bool
             whether to run model evaluation in addition to inference
             Note: peak_path most point to annotated MS data files when
@@ -225,7 +259,7 @@ class ModelRunner:
         -------
         self
         """
-        self.writer = ms_io.MztabWriter(Path(output).with_suffix(".mztab"))
+        self.writer = ms_io.MztabWriter(results_path)
         self.writer.set_metadata(
             self.config,
             model=str(self.model_filename),
@@ -293,6 +327,16 @@ class ModelRunner:
         db_search : Optional[bool]
             Determines whether to use the DB search model subclass.
         """
+        tb_summarywriter = None
+        if self.config.tb_summarywriter:
+            if self.output_dir is None:
+                logger.warning(
+                    "Can not create tensorboard because the output directory "
+                    "is not set in the model runner."
+                )
+            else:
+                tb_summarywriter = self.output_dir / "tensorboard"
+
         model_params = dict(
             dim_model=self.config.dim_model,
             n_head=self.config.n_head,
@@ -309,7 +353,7 @@ class ModelRunner:
             n_beams=self.config.n_beams,
             top_match=self.config.top_match,
             n_log=self.config.n_log,
-            tb_summarywriter=self.config.tb_summarywriter,
+            tb_summarywriter=tb_summarywriter,
             train_label_smoothing=self.config.train_label_smoothing,
             warmup_iters=self.config.warmup_iters,
             cosine_schedule_period_iters=self.config.cosine_schedule_period_iters,
@@ -328,7 +372,7 @@ class ModelRunner:
             min_peptide_len=self.config.min_peptide_len,
             top_match=self.config.top_match,
             n_log=self.config.n_log,
-            tb_summarywriter=self.config.tb_summarywriter,
+            tb_summarywriter=tb_summarywriter,
             train_label_smoothing=self.config.train_label_smoothing,
             warmup_iters=self.config.warmup_iters,
             cosine_schedule_period_iters=self.config.cosine_schedule_period_iters,

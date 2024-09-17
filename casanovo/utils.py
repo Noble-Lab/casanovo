@@ -2,12 +2,13 @@
 
 import logging
 import os
+import pathlib
 import platform
 import re
 import socket
 import sys
 from datetime import datetime
-from typing import Tuple, Dict, List, Optional
+from typing import Tuple, Dict, List, Optional, Iterable
 
 import numpy as np
 import pandas as pd
@@ -203,6 +204,8 @@ def log_sequencing_report(
     """
     Log sequencing run report
 
+    Parameters
+    ----------
     next_prediction : Tuple[
         str, Tuple[str, str], float, float, float, float, str
     ]
@@ -251,3 +254,32 @@ def log_sequencing_report(
         logger.info(
             "Median Peptide Length: %d", run_report["median_sequence_length"]
         )
+
+
+def check_dir_file_exists(
+    dir: pathlib.Path, file_patterns: Iterable[str] | str
+) -> None:
+    """
+    Check that no file names in dir match any of file_patterns
+
+    Parameters
+    ----------
+    dir : pathlib.Path
+        The directory to check for matching file names
+    file_patterns : Iterable[str] | str
+        UNIX style wildcard pattern(s) to test file names against
+
+    Raises
+    ------
+    FileExistsError
+        If matching file name is found in dir
+    """
+    if isinstance(file_patterns, str):
+        file_patterns = [file_patterns]
+
+    for pattern in file_patterns:
+        if next(dir.glob(pattern), None) is not None:
+            raise FileExistsError(
+                f"File matching wildcard pattern {pattern} already exist in"
+                f"{dir} and can not be overwritten."
+            )
