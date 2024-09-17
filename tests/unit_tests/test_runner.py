@@ -8,7 +8,7 @@ import torch
 
 from casanovo.config import Config
 from casanovo.denovo.model_runner import ModelRunner
-from casanovo.data.ms_io import PepSpecMatch, MztabWriter
+from casanovo.data.ms_io import PepSpecMatch
 
 
 def test_initialize_model(tmp_path, mgf_small):
