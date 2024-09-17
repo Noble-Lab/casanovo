@@ -324,11 +324,10 @@ def test_metrics_logging(tmp_path, mgf_small, tiny_config):
     assert not tb_path.is_dir()
     assert csv_path.is_dir()
 
-    
-def test_log_metrics_with(monkeypatch, tiny_config):
-    """Test the log_metrics function using monkeypatch context manager"""
 
-    # Mocking AnnotatedSpectrumIndex context manager
+def test_log_metrics(monkeypatch, tiny_config):
+    TEST_EPSILON = 10**-5
+
     def get_mock_index(psm_list):
         mock_test_index = unittest.mock.MagicMock()
         mock_test_index.__enter__.return_value = mock_test_index
@@ -340,8 +339,7 @@ def test_log_metrics_with(monkeypatch, tiny_config):
             (None, None, None, None, curr_psm.sequence)
             for curr_psm in psm_list
         ]
-        mock_test_index.__getitem__ = lambda idx, _: mock_spectra[idx]
-
+        mock_test_index.__getitem__.side_effect = lambda idx: mock_spectra[idx]
         return mock_test_index
 
     def get_mock_psm(sequence, spectrum_id):
@@ -360,19 +358,27 @@ def test_log_metrics_with(monkeypatch, tiny_config):
         ctx.setattr("casanovo.denovo.model_runner.logger", mock_logger)
 
         with ModelRunner(Config(tiny_config)) as runner:
+            runner.writer = unittest.mock.MagicMock()
+
             # Test 100% peptide precision
-            psms = [
+            infer_psms = [
                 get_mock_psm("PEP", ("foo", "index=1")),
                 get_mock_psm("PET", ("foo", "index=2")),
             ]
-            runner.writer = unittest.mock.Mock(spec=MztabWriter)
-            runner.writer.psms = psms
-            mock_index = get_mock_index(psms.copy())
 
+            act_psms = [
+                get_mock_psm("PEP", ("foo", "index=1")),
+                get_mock_psm("PET", ("foo", "index=2")),
+            ]
+
+            runner.writer.psms = infer_psms
+            mock_index = get_mock_index(act_psms)
             runner.log_metrics(mock_index)
-            mock_logger.info.assert_any_call(
-                "Peptide Precision: %.2f%%", 100.0
-            )
+
+            pep_precision = mock_logger.info.call_args_list[-2][0][1]
+            aa_precision = mock_logger.info.call_args_list[-1][0][1]
+            assert abs(pep_precision - 100) < TEST_EPSILON
+            assert abs(aa_precision - 100) < TEST_EPSILON
 
             # Test 50% peptide precision (one wrong)
             infer_psms = [
@@ -387,7 +393,12 @@ def test_log_metrics_with(monkeypatch, tiny_config):
 
             runner.writer.psms = infer_psms
             mock_index = get_mock_index(act_psms)
-            mock_logger.info.assert_any_call("Peptide Precision: %.2f%%", 50.0)
+            runner.log_metrics(mock_index)
+
+            pep_precision = mock_logger.info.call_args_list[-2][0][1]
+            aa_precision = mock_logger.info.call_args_list[-1][0][1]
+            assert abs(pep_precision - 100 * (1 / 2)) < TEST_EPSILON
+            assert abs(aa_precision - 100 * (5 / 6)) < TEST_EPSILON
 
             # Test skipped spectra
             act_psms = [
@@ -400,14 +411,19 @@ def test_log_metrics_with(monkeypatch, tiny_config):
 
             infer_psms = [
                 get_mock_psm("PEP", ("foo", "index=1")),
-                get_mock_psm("PET", ("foo", "index=3")),
-                get_mock_psm("PEG", ("foo", "index=4")),
-                get_mock_psm("PET", ("foo", "index=5")),
+                get_mock_psm("PET", ("foo", "index=2")),
+                get_mock_psm("PEI", ("foo", "index=3")),
+                get_mock_psm("PEA", ("foo", "index=5")),
             ]
 
             runner.writer.psms = infer_psms
             mock_index = get_mock_index(act_psms)
-            mock_logger.info.assert_any_call("Peptide Precision: %.2f%%", 75.0)
+            runner.log_metrics(mock_index)
+
+            pep_precision = mock_logger.info.call_args_list[-2][0][1]
+            aa_precision = mock_logger.info.call_args_list[-1][0][1]
+            assert abs(pep_precision - 100 * (4 / 5)) < TEST_EPSILON
+            assert abs(aa_precision - 100 * (12 / 13)) < TEST_EPSILON
 
             # Test un-inferred spectra
             act_psms = [
@@ -427,7 +443,14 @@ def test_log_metrics_with(monkeypatch, tiny_config):
 
             runner.writer.psms = infer_psms
             mock_index = get_mock_index(act_psms)
-            mock_logger.info.assert_any_call("Peptide Precision: %.2f%%", 0.0)
-            mock_logger.warning.assert_called_once_with(
-                "Some spectra were not matched to annotations during evaluation."
+            runner.log_metrics(mock_index)
+
+            pep_precision = mock_logger.info.call_args_list[-2][0][1]
+            aa_precision = mock_logger.info.call_args_list[-1][0][1]
+            last_warning_msg = mock_logger.warning.call_args_list[-1][0][0]
+            assert abs(pep_precision) < TEST_EPSILON
+            assert abs(aa_precision - 100) < TEST_EPSILON
+            assert (
+                last_warning_msg
+                == "Some spectra were not matched to annotations during evaluation."
             )
