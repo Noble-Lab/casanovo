@@ -20,14 +20,17 @@ def test_db_search(
         CliRunner().invoke, casanovo.main, catch_exceptions=False
     )
 
-    output_filename = tmp_path / "db_search.mztab"
+    output_rootname = "db"
+    output_filename = (tmp_path / output_rootname).with_suffix(".mztab")
 
     search_args = [
         "db-search",
         "--config",
         tiny_config,
-        "--output",
-        str(output_filename),
+        "--output_dir",
+        str(tmp_path),
+        "--output_root",
+        output_rootname,
         str(mgf_medium),
         str(tiny_fasta_file),
     ]
@@ -36,7 +39,6 @@ def test_db_search(
 
     assert result.exit_code == 0
     assert output_filename.exists()
-    assert output_filename.is_file()
 
     mztab = pyteomics.mztab.MzTab(str(output_filename))
 
