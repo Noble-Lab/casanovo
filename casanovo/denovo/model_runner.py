@@ -173,12 +173,12 @@ class ModelRunner:
                 if curr_psm is None:
                     break
 
-                if curr_psm.spectrum_id != t_ind.get_spectrum_id(i):
-                    continue
-
-                model_output.append(curr_psm.sequence)
                 spectrum_annotations.append(t_ind[i][4])
-                curr_psm = next(psms, None)
+                if curr_psm.spectrum_id == t_ind.get_spectrum_id(i):
+                    model_output.append(curr_psm.sequence)
+                    curr_psm = next(psms, None)
+                else:
+                    model_output.append("")
 
         if curr_psm is not None:
             logger.warning(
