@@ -92,8 +92,6 @@ class Config:
         gradient_clip_val=float,
         gradient_clip_algorithm=str,
         precision=str,
-        early_stopping_patience=int,
-        resume_training_from=str,
         mskb_tokenizer=bool,
     )
 

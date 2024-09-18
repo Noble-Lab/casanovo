@@ -114,7 +114,6 @@ class ModelRunner:
                 filename=best_filename,
                 enable_version_counter=False,
             ),
-            LearningRateMonitor(log_momentum=True, log_weight_decay=True),
         ]
 
         if config.tb_summarywriter is not None:

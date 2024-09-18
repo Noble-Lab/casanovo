@@ -149,10 +149,6 @@ gradient_clip_val:
 gradient_clip_algorithm: 
 precision: "32-true" # '16-true', '16-mixed', 'bf16-true', 'bf16-mixed', '32-true', '64-true', '64', '32', '16', 'bf16'
 
-# Resume training and early stopping
-resume_training_from : #'last', 'best', 'path'
-early_stopping_patience:
-
 # Replace I by L in peptide sequences
 replace_isoleucine_with_leucine: True
 # Reverse peptide sequences
