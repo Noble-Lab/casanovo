@@ -468,7 +468,6 @@ class Spec2Pep(pl.LightningModule):
                         )
                     )
                 try:
-
                     calc_mz = self.tokenizer.calculate_precursor_ions(
                         calc_peptide.unsqueeze(0),
                         precursor_charge.unsqueeze(0),
