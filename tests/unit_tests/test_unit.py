@@ -1218,12 +1218,11 @@ def test_beam_search_decode():
     """
     model = Spec2Pep(n_beams=4, residues="massivekb", min_peptide_len=4)
     model.decoder.reverse = False  # For simplicity.
-    aa2idx = model.decoder._aa2idx
 
     # Sizes.
     batch = 1  # B
-    length = model.max_peptide_len + 1  # L
-    vocab = model.decoder.vocab_size + 1  # V
+    length = model.max_length + 1  # L
+    vocab = len(model.tokenizer) + 1  # V
     beam = model.n_beams  # S
     step = 3
 
@@ -1244,7 +1243,9 @@ def test_beam_search_decode():
     # Fill scores and tokens with relevant predictions.
     scores[:, : step + 1, :] = 0
     for i, peptide in enumerate(["PEPK", "PEPR", "PEPG", "PEP$"]):
-        tokens[i, : step + 1] = torch.tensor([aa2idx[aa] for aa in peptide])
+        tokens[i, : step + 1] = model.decoder.token_encoder(
+            [aa for aa in peptide]
+        )
         for j in range(step + 1):
             scores[i, j, tokens[1, j]] = 1
 
