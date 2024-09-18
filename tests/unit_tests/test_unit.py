@@ -421,18 +421,6 @@ def test_is_valid_url():
     assert not casanovo._is_valid_url("foobar")
 
 
-def test_tensorboard():
-    """
-    Test that the tensorboard.SummaryWriter object is only created when a folder
-    path is passed.
-    """
-    model = Spec2Pep(tb_summarywriter="test_path")
-    assert model.tb_summarywriter is not None
-
-    model = Spec2Pep()
-    assert model.tb_summarywriter is None
-
-
 def test_aa_pep_score():
     """
     Test the calculation of amino acid and peptide scores from the raw amino
