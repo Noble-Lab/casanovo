@@ -15,7 +15,7 @@ from depthcharge.tokenizers import PeptideTokenizer
 
 from . import evaluate
 from .. import config
-from ..data import ms_io
+from ..data import ms_io, pep_spec_match
 from ..denovo.transformers import SpectrumEncoder, PeptideDecoder
 
 logger = logging.getLogger("casanovo")
@@ -1051,6 +1051,7 @@ class Spec2Pep(pl.LightningModule):
             )
 
             self.out_writer.psms.append(
+<<<<<<< HEAD
                 (
                     peptide,
                     scan,
@@ -1063,6 +1064,17 @@ class Spec2Pep(pl.LightningModule):
                     true_seq,
                     title,
                 ),
+=======
+                pep_spec_match.PepSpecMatch(
+                    sequence=peptide,
+                    spectrum_id=tuple(spectrum_i),
+                    peptide_score=peptide_score,
+                    charge=int(charge),
+                    calc_mz=precursor_mz,
+                    exp_mz=self.peptide_mass_calculator.mass(peptide, charge),
+                    aa_scores=aa_scores,
+                )
+>>>>>>> 5719cdc (circular import bug)
             )
 
     def on_train_start(self):
