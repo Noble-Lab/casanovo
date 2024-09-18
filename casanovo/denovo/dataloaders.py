@@ -1,10 +1,7 @@
 """Data loaders for the de novo sequencing task."""
 
-<<<<<<< HEAD
 import functools
 import logging
-=======
->>>>>>> c21c899 (Reformat with Black)
 import os
 from typing import Optional, Iterable
 from pathlib import Path
