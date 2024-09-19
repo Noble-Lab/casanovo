@@ -8,8 +8,8 @@ import pytest
 import torch
 
 from casanovo.config import Config
+from casanovo.data.psm import PepSpecMatch
 from casanovo.denovo.model_runner import ModelRunner
-from casanovo.data.ms_io import PepSpecMatch
 
 
 def test_initialize_model(tmp_path, mgf_small):
@@ -326,8 +326,6 @@ def test_metrics_logging(tmp_path, mgf_small, tiny_config):
 
 
 def test_log_metrics(monkeypatch, tiny_config):
-    TEST_EPSILON = 10**-5
-
     def get_mock_index(psm_list):
         mock_test_index = unittest.mock.MagicMock()
         mock_test_index.__enter__.return_value = mock_test_index
@@ -377,8 +375,8 @@ def test_log_metrics(monkeypatch, tiny_config):
 
             pep_precision = mock_logger.info.call_args_list[-2][0][1]
             aa_precision = mock_logger.info.call_args_list[-1][0][1]
-            assert abs(pep_precision - 100) < TEST_EPSILON
-            assert abs(aa_precision - 100) < TEST_EPSILON
+            assert pep_precision == pytest.approx(100)
+            assert aa_precision == pytest.approx(100)
 
             # Test 50% peptide precision (one wrong)
             infer_psms = [
@@ -397,8 +395,8 @@ def test_log_metrics(monkeypatch, tiny_config):
 
             pep_precision = mock_logger.info.call_args_list[-2][0][1]
             aa_precision = mock_logger.info.call_args_list[-1][0][1]
-            assert abs(pep_precision - 100 * (1 / 2)) < TEST_EPSILON
-            assert abs(aa_precision - 100 * (5 / 6)) < TEST_EPSILON
+            assert pep_precision == pytest.approx(100 * (1 / 2))
+            assert aa_precision == pytest.approx(100 * (5 / 6))
 
             # Test skipped spectra
             act_psms = [
@@ -422,8 +420,32 @@ def test_log_metrics(monkeypatch, tiny_config):
 
             pep_precision = mock_logger.info.call_args_list[-2][0][1]
             aa_precision = mock_logger.info.call_args_list[-1][0][1]
-            assert abs(pep_precision - 100 * (4 / 5)) < TEST_EPSILON
-            assert abs(aa_precision - 100 * (12 / 13)) < TEST_EPSILON
+            assert pep_precision == pytest.approx(100 * (4 / 5))
+            assert aa_precision == pytest.approx(100 * (12 / 13))
+
+            act_psms = [
+                get_mock_psm("PEP", ("foo", "index=1")),
+                get_mock_psm("PET", ("foo", "index=2")),
+                get_mock_psm("PEI", ("foo", "index=3")),
+                get_mock_psm("PEG", ("foo", "index=4")),
+                get_mock_psm("PEA", ("foo", "index=5")),
+            ]
+
+            infer_psms = [
+                get_mock_psm("PEP", ("foo", "index=1")),
+                get_mock_psm("PET", ("foo", "index=2")),
+                get_mock_psm("PEI", ("foo", "index=3")),
+                get_mock_psm("PEG", ("foo", "index=4")),
+            ]
+
+            runner.writer.psms = infer_psms
+            mock_index = get_mock_index(act_psms)
+            runner.log_metrics(mock_index)
+
+            pep_precision = mock_logger.info.call_args_list[-2][0][1]
+            aa_precision = mock_logger.info.call_args_list[-1][0][1]
+            assert pep_precision == pytest.approx(100 * (4 / 5))
+            assert aa_precision == pytest.approx(100 * (12 / 13))
 
             # Test un-inferred spectra
             act_psms = [
@@ -447,10 +469,5 @@ def test_log_metrics(monkeypatch, tiny_config):
 
             pep_precision = mock_logger.info.call_args_list[-2][0][1]
             aa_precision = mock_logger.info.call_args_list[-1][0][1]
-            last_warning_msg = mock_logger.warning.call_args_list[-1][0][0]
-            assert abs(pep_precision) < TEST_EPSILON
-            assert abs(aa_precision - 100) < TEST_EPSILON
-            assert (
-                last_warning_msg
-                == "Some spectra were not matched to annotations during evaluation."
-            )
+            assert pep_precision == pytest.approx(0)
+            assert aa_precision == pytest.approx(100)

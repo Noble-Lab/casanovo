@@ -16,7 +16,7 @@ from depthcharge.components import ModelMixin, PeptideDecoder, SpectrumEncoder
 
 from . import evaluate
 from .. import config
-from ..data import ms_io, pep_spec_match
+from ..data import ms_io, psm
 
 logger = logging.getLogger("casanovo")
 
@@ -914,7 +914,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
             if len(peptide) == 0:
                 continue
             self.out_writer.psms.append(
-                pep_spec_match.PepSpecMatch(
+                psm.PepSpecMatch(
                     sequence=peptide,
                     spectrum_id=tuple(spectrum_i),
                     peptide_score=peptide_score,

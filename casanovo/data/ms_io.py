@@ -12,7 +12,7 @@ import natsort
 
 from .. import __version__
 from ..config import Config
-from .pep_spec_match import PepSpecMatch
+from .psm import PepSpecMatch
 
 
 class MztabWriter:
