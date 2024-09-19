@@ -81,8 +81,8 @@ This model file or a custom one can then be specified using the `--model` comman
 
 Not all releases will have a model file included on the [Releases page](https://github.com/Noble-Lab/casanovo/releases), in which case model weights for alternative releases with the same major version number can be used.
 
-The most recent model weights for Casanovo version 4.2.x are currently provided under [Casanovo v4.2.0](https://github.com/Noble-Lab/casanovo/releases/tag/v4.2.0):
-- `casanovo_v4_2_0.ckpt`: Default Casanovo weights to use as described in [Melendez et al.](https://www.biorxiv.org/content/10.1101/2024.05.16.594602v1). These weights will be downloaded automatically if no weights are explicitly specified.
+The most recent model weights for Casanovo version 4.2 and above are currently provided under [Casanovo v4.2.0](https://github.com/Noble-Lab/casanovo/releases/tag/v4.2.0):
+- `casanovo_v4_2_0.ckpt`: Default Casanovo weights to use as described in [Melendez et al.](https://pubs.acs.org/doi/full/10.1021/acs.jproteome.4c00422). These weights will be downloaded automatically if no weights are explicitly specified.
 
 Alternatively, model weigths for Casanovo version 4.x as described in [Yilmaz et al.](https://www.nature.com/articles/s41467-024-49731-x) are currently provided under [Casanovo v4.0.0](https://github.com/Noble-Lab/casanovo/releases/tag/v4.0.0):
 - `casanovo_massivekb.ckpt`: Casanovo weights to use when analyzing tryptic data. These weights need to be downloaded manually.
