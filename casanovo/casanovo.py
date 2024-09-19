@@ -192,7 +192,7 @@ def sequence(
 
         runner.predict(
             peak_path,
-            str((output_path / output_root).with_suffix(".mztab")),
+            str((output_path / output_root_name).with_suffix(".mztab")),
             evaluate=evaluate,
         )
         psms = runner.writer.psms

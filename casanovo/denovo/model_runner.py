@@ -108,10 +108,7 @@ class ModelRunner:
                 filename=best_filename,
                 enable_version_counter=False,
             ),
-            LearningRateMonitor(
-                log_momentum=True,
-                log_weight_decay=True,
-            ),
+            LearningRateMonitor(log_momentum=True, log_weight_decay=True),
         ]
 
     def __enter__(self):
@@ -262,31 +259,31 @@ class ModelRunner:
                 strategy=self._get_strategy(),
                 val_check_interval=self.config.val_check_interval,
                 check_val_every_n_epoch=None,
-                log_every_n_steps=1,
+                log_every_n_steps=self.config.get("log_every_n_steps"),
             )
 
-            if self.config._user_config.get("log_metrics"):
+            if self.config.get("log_metrics"):
                 if not self.output_dir:
                     logger.warning(
                         "Output directory not set in model runner. "
                         "No loss file will be created."
                     )
                 else:
-                    CSV_LOG_SUB_DIR = "csv_logs"
+                    csv_log_dir = "csv_logs"
                     if self.overwrite_ckpt_check:
                         utils.check_dir_file_exists(
                             self.output_dir,
-                            CSV_LOG_SUB_DIR,
+                            csv_log_dir,
                         )
 
                     additional_cfg.update(
                         {
                             "logger": lightning.pytorch.loggers.CSVLogger(
                                 self.output_dir,
-                                version=CSV_LOG_SUB_DIR,
+                                version=csv_log_dir,
                                 name=None,
                             ),
-                            "log_every_n_steps": self.config._user_config.get(
+                            "log_every_n_steps": self.config.get(
                                 "log_every_n_steps"
                             ),
                         }
