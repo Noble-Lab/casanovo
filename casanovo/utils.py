@@ -15,7 +15,7 @@ import pandas as pd
 import psutil
 import torch
 
-from .data.pep_spec_match import PepSpecMatch
+from .data.psm import PepSpecMatch
 
 
 SCORE_BINS = [0.0, 0.5, 0.9, 0.95, 0.99]
