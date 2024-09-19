@@ -1594,7 +1594,7 @@ def test_eval_metrics():
     aa_matches, n_pred_aa, n_gt_aa = aa_match_batch(
         peptides1=preds,
         peptides2=gt,
-        aa_dict=model.decoder._peptide_mass.masses,
+        aa_dict=model.tokenizer.residues,
         mode="best",
     )
 
