@@ -421,15 +421,7 @@ def test_log_metrics(monkeypatch, tiny_config):
             pep_precision = mock_logger.info.call_args_list[-2][0][1]
             aa_precision = mock_logger.info.call_args_list[-1][0][1]
             assert pep_precision == pytest.approx(100 * (4 / 5))
-            assert aa_precision == pytest.approx(100 * (12 / 13))
-
-            act_psms = [
-                get_mock_psm("PEP", ("foo", "index=1")),
-                get_mock_psm("PET", ("foo", "index=2")),
-                get_mock_psm("PEI", ("foo", "index=3")),
-                get_mock_psm("PEG", ("foo", "index=4")),
-                get_mock_psm("PEA", ("foo", "index=5")),
-            ]
+            assert aa_precision == pytest.approx(100)
 
             infer_psms = [
                 get_mock_psm("PEP", ("foo", "index=1")),
@@ -445,7 +437,35 @@ def test_log_metrics(monkeypatch, tiny_config):
             pep_precision = mock_logger.info.call_args_list[-2][0][1]
             aa_precision = mock_logger.info.call_args_list[-1][0][1]
             assert pep_precision == pytest.approx(100 * (4 / 5))
-            assert aa_precision == pytest.approx(100 * (12 / 13))
+            assert aa_precision == pytest.approx(100)
+
+            infer_psms = [
+                get_mock_psm("PEP", ("foo", "index=1")),
+                get_mock_psm("PEI", ("foo", "index=3")),
+            ]
+
+            runner.writer.psms = infer_psms
+            mock_index = get_mock_index(act_psms)
+            runner.log_metrics(mock_index)
+
+            pep_precision = mock_logger.info.call_args_list[-2][0][1]
+            aa_precision = mock_logger.info.call_args_list[-1][0][1]
+            assert pep_precision == pytest.approx(100 * (2 / 5))
+            assert aa_precision == pytest.approx(100)
+
+            infer_psms = [
+                get_mock_psm("PEP", ("foo", "index=1")),
+                get_mock_psm("PEA", ("foo", "index=5")),
+            ]
+
+            runner.writer.psms = infer_psms
+            mock_index = get_mock_index(act_psms)
+            runner.log_metrics(mock_index)
+
+            pep_precision = mock_logger.info.call_args_list[-2][0][1]
+            aa_precision = mock_logger.info.call_args_list[-1][0][1]
+            assert pep_precision == pytest.approx(100 * (2 / 5))
+            assert aa_precision == pytest.approx(100)
 
             # Test un-inferred spectra
             act_psms = [
