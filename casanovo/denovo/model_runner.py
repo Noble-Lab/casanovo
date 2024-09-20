@@ -13,11 +13,12 @@ from typing import Iterable, List, Optional, Union
 
 import depthcharge.masses
 import lightning.pytorch as pl
+import lightning.pytorch.loggers
 import numpy as np
 import torch
 from depthcharge.data import AnnotatedSpectrumIndex, SpectrumIndex
 from lightning.pytorch.strategies import DDPStrategy
-from lightning.pytorch.callbacks import ModelCheckpoint
+from lightning.pytorch.callbacks import ModelCheckpoint, LearningRateMonitor
 
 from .. import utils
 from ..config import Config
@@ -63,6 +64,8 @@ class ModelRunner:
         self.config = config
         self.model_filename = model_filename
         self.output_dir = output_dir
+        self.output_rootname = output_rootname
+        self.overwrite_ckpt_check = overwrite_ckpt_check
 
         # Initialized later:
         self.tmp_dir = None
@@ -105,6 +108,7 @@ class ModelRunner:
                 filename=best_filename,
                 enable_version_counter=False,
             ),
+            LearningRateMonitor(log_momentum=True, log_weight_decay=True),
         ]
 
     def __enter__(self):
@@ -255,7 +259,36 @@ class ModelRunner:
                 strategy=self._get_strategy(),
                 val_check_interval=self.config.val_check_interval,
                 check_val_every_n_epoch=None,
+                log_every_n_steps=self.config.get("log_every_n_steps"),
             )
+
+            if self.config.get("log_metrics"):
+                if not self.output_dir:
+                    logger.warning(
+                        "Output directory not set in model runner. "
+                        "No loss file will be created."
+                    )
+                else:
+                    csv_log_dir = "csv_logs"
+                    if self.overwrite_ckpt_check:
+                        utils.check_dir_file_exists(
+                            self.output_dir,
+                            csv_log_dir,
+                        )
+
+                    additional_cfg.update(
+                        {
+                            "logger": lightning.pytorch.loggers.CSVLogger(
+                                self.output_dir,
+                                version=csv_log_dir,
+                                name=None,
+                            ),
+                            "log_every_n_steps": self.config.get(
+                                "log_every_n_steps"
+                            ),
+                        }
+                    )
+
             trainer_cfg.update(additional_cfg)
 
         self.trainer = pl.Trainer(**trainer_cfg)
