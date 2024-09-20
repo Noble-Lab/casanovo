@@ -4,6 +4,7 @@ import functools
 import hashlib
 import heapq
 import io
+import itertools
 import os
 import pathlib
 import platform
@@ -14,6 +15,7 @@ import tempfile
 import unittest
 import unittest.mock
 
+import depthcharge
 import einops
 import github
 import numpy as np
@@ -1631,24 +1633,21 @@ def test_spectrum_id_mgf(mgf_small, tmp_path):
     mgf_small2 = tmp_path / "mgf_small2.mgf"
     shutil.copy(mgf_small, mgf_small2)
 
-    for index_func, dataset_func in [
-        (SpectrumIndex, SpectrumDataset),
-        (AnnotatedSpectrumIndex, AnnotatedSpectrumDataset),
+    for dataset_func in [
+        depthcharge.data.SpectrumDataset,
+        depthcharge.data.AnnotatedSpectrumDataset,
     ]:
-        index = index_func(
-            tmp_path / "index.hdf5", [mgf_small, mgf_small2], overwrite=True
-        )
-        dataset = dataset_func(index)
-        for i, (filename, mgf_i) in enumerate(
+        dataset = dataset_func([mgf_small, mgf_small2], 1)
+        for i, (filename, scan_id) in enumerate(
             [
-                (mgf_small, 0),
-                (mgf_small, 1),
-                (mgf_small2, 0),
-                (mgf_small2, 1),
+                (mgf_small, "0"),
+                (mgf_small, "1"),
+                (mgf_small2, "0"),
+                (mgf_small2, "1"),
             ]
         ):
-            spectrum_id = str(filename), f"index={mgf_i}"
-            assert dataset.get_spectrum_id(i) == spectrum_id
+            assert dataset[i]["peak_file"][0] == filename.name
+            assert dataset[i]["scan_id"][0] == scan_id
 
 
 def test_spectrum_id_mzml(mzml_small, tmp_path):
