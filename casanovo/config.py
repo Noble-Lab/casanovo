@@ -66,6 +66,8 @@ class Config:
         residues=dict,
         n_log=int,
         tb_summarywriter=bool,
+        log_metrics=bool,
+        log_every_n_steps=int,
         train_label_smoothing=float,
         warmup_iters=int,
         cosine_schedule_period_iters=int,

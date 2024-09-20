@@ -1,5 +1,6 @@
 """Unit tests specifically for the model_runner module."""
 
+import shutil
 from pathlib import Path
 
 import pytest
@@ -282,3 +283,41 @@ def test_evaluate(
             )
 
     result_file.unlink()
+
+
+def test_metrics_logging(tmp_path, mgf_small, tiny_config):
+    config = Config(tiny_config)
+    config._user_config["log_metrics"] = True
+    config._user_config["log_every_n_steps"] = 1
+    config.tb_summarywriter = True
+    config.max_epochs = 1
+
+    curr_model_path = tmp_path / "foo.epoch=0-step=1.ckpt"
+    best_model_path = tmp_path / "foo.best.ckpt"
+    tb_path = tmp_path / "tensorboard"
+    csv_path = tmp_path / "csv_logs"
+
+    with ModelRunner(
+        config, output_dir=tmp_path, output_rootname="foo"
+    ) as runner:
+        runner.train([mgf_small], [mgf_small])
+
+    assert curr_model_path.is_file()
+    assert best_model_path.is_file()
+    assert tb_path.is_dir()
+    assert csv_path.is_dir()
+
+    curr_model_path.unlink()
+    best_model_path.unlink()
+    shutil.rmtree(tb_path)
+
+    with pytest.raises(FileExistsError):
+        with ModelRunner(
+            config, output_dir=tmp_path, output_rootname="foo"
+        ) as runner:
+            runner.train([mgf_small], [mgf_small])
+
+    assert not curr_model_path.is_file()
+    assert not best_model_path.is_file()
+    assert not tb_path.is_dir()
+    assert csv_path.is_dir()
