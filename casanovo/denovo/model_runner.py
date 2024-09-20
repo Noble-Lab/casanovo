@@ -176,7 +176,7 @@ class ModelRunner:
                     seq_pred.append(self.writer.psms[pred_idx].sequence)
                     pred_idx += 1
                 else:
-                    seq_pred.append("")
+                    seq_pred.append(None)
 
         aa_precision, _, pep_precision = aa_match_metrics(
             *aa_match_batch(
