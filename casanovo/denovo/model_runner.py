@@ -1,6 +1,7 @@
 """Training and testing functionality for the de novo peptide sequencing
 model."""
 
+import csv
 import glob
 import logging
 import os
@@ -165,6 +166,7 @@ class ModelRunner:
         """
         seq_pred = []
         seq_true = []
+        pred_conf = []
         pred_idx = 0
 
         with test_index as t_ind:
@@ -174,9 +176,11 @@ class ModelRunner:
                     pred_idx
                 ].spectrum_id == t_ind.get_spectrum_id(true_idx):
                     seq_pred.append(self.writer.psms[pred_idx].sequence)
+                    pred_conf.append(self.writer.psms[pred_idx].peptide_score)
                     pred_idx += 1
                 else:
                     seq_pred.append(None)
+                    pred_conf.append(-1.0)
 
         aa_precision, _, pep_precision = aa_match_metrics(
             *aa_match_batch(
@@ -187,6 +191,18 @@ class ModelRunner:
         )
         logger.info("Peptide Precision: %.2f%%", 100 * pep_precision)
         logger.info("Amino Acid Precision: %.2f%%", 100 * aa_precision)
+
+        with open(self.output_dir / "psms.csv", mode="w", newline="") as file:
+            writer = csv.writer(file)
+            writer.writerow(
+                [
+                    "Ground Truth Peptide",
+                    "Predicted Peptide",
+                    "Prediction Confidence",
+                ]
+            )
+            for true_seq, pred_seq, conf in zip(seq_true, seq_pred, pred_conf):
+                writer.writerow([true_seq, pred_seq, conf])
 
     def predict(
         self,
