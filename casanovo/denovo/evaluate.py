@@ -225,8 +225,14 @@ def aa_match_batch(
         # Split peptides into individual AAs if necessary.
         if isinstance(peptide1, str):
             peptide1 = re.split(r"(?<=.)(?=[A-Z])", peptide1)
+        elif peptide1 is None:
+            peptide1 = []
+
         if isinstance(peptide2, str):
             peptide2 = re.split(r"(?<=.)(?=[A-Z])", peptide2)
+        elif peptide2 is None:
+            peptide2 = []
+
         n_aa1, n_aa2 = n_aa1 + len(peptide1), n_aa2 + len(peptide2)
         aa_matches_batch.append(
             aa_match(
