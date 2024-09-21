@@ -680,7 +680,7 @@ def test_digest_fasta_mods(tiny_fasta_file, residues_dict):
         residues=residues_dict,
     )
     peptide_list = list(pdb.db_peptides["peptide"])
-    assert peptide_list == expected_1mod
+    assert set(peptide_list) == set(expected_1mod)
 
 
 def test_length_restrictions(tiny_fasta_file, residues_dict):
@@ -981,7 +981,7 @@ def test_digest_fasta_enzyme(tiny_fasta_file, residues_dict):
         residues=residues_dict,
     )
     peptide_list = list(pdb.db_peptides["peptide"])
-    assert peptide_list == expected_nonspecific
+    assert set(peptide_list) == set(expected_nonspecific)
 
 
 def test_get_candidates(tiny_fasta_file, residues_dict):

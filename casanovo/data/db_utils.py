@@ -212,7 +212,9 @@ class ProteinDatabase:
             [(pep, mass) for pep, mass, _ in mod_peptide_list],
             columns=["peptide", "calc_mass"],
         )
-        pep_table.sort_values(by=["calc_mass", "peptide"], inplace=True)
+        pep_table.sort_values(
+            by=["calc_mass", "peptide"], ascending=True, inplace=True
+        )
 
         logger.info(
             "Digestion complete. %d peptides generated.", len(pep_table)
