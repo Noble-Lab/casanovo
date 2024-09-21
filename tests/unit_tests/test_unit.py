@@ -654,10 +654,10 @@ def test_digest_fasta_mods(tiny_fasta_file, residues_dict):
         "+43.006ASQSVSSSYLTWYQQKPGQAPR",
         "-17.027FSGSGSGTDFTLTISSLQPEDFAVYYC+57.021QQDYNLP",
         "FSGSGSGTDFTLTISSLQPEDFAVYYC+57.021QQDYNLP",
-        "FSGSGSGTDFTLTISSLQ+0.984PEDFAVYYC+57.021QQDYNLP",
         "FSGSGSGTDFTLTISSLQPEDFAVYYC+57.021Q+0.984QDYNLP",
         "FSGSGSGTDFTLTISSLQPEDFAVYYC+57.021QQ+0.984DYNLP",
         "FSGSGSGTDFTLTISSLQPEDFAVYYC+57.021QQDYN+0.984LP",
+        "FSGSGSGTDFTLTISSLQ+0.984PEDFAVYYC+57.021QQDYNLP",
         "+43.006-17.027FSGSGSGTDFTLTISSLQPEDFAVYYC+57.021QQDYNLP",
         "+42.011FSGSGSGTDFTLTISSLQPEDFAVYYC+57.021QQDYNLP",
         "+43.006FSGSGSGTDFTLTISSLQPEDFAVYYC+57.021QQDYNLP",
@@ -680,7 +680,7 @@ def test_digest_fasta_mods(tiny_fasta_file, residues_dict):
         residues=residues_dict,
     )
     peptide_list = list(pdb.db_peptides["peptide"])
-    assert set(peptide_list) == set(expected_1mod)
+    assert peptide_list == expected_1mod
 
 
 def test_length_restrictions(tiny_fasta_file, residues_dict):
