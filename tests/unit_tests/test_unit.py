@@ -828,8 +828,8 @@ def test_digest_fasta_enzyme(tiny_fasta_file, residues_dict):
         "QQKPGQ",
         "SLQPED",
         "PAQLLF",
-        "IPARFS",
         "SIPARF",
+        "IPARFS",
         "LSC+57.021RAS",
         "TDFTLT",
         "QAPRLL",
@@ -981,7 +981,7 @@ def test_digest_fasta_enzyme(tiny_fasta_file, residues_dict):
         residues=residues_dict,
     )
     peptide_list = list(pdb.db_peptides["peptide"])
-    assert set(peptide_list) == set(expected_nonspecific)
+    assert peptide_list == expected_nonspecific
 
 
 def test_get_candidates(tiny_fasta_file, residues_dict):
