@@ -178,7 +178,7 @@ class ModelRunner:
                 else:
                     seq_pred.append(None)
 
-        aa_precision, _, pep_precision = aa_match_metrics(
+        aa_precision, aa_recall, pep_precision = aa_match_metrics(
             *aa_match_batch(
                 seq_true,
                 seq_pred,
@@ -187,6 +187,7 @@ class ModelRunner:
         )
         logger.info("Peptide Precision: %.2f%%", 100 * pep_precision)
         logger.info("Amino Acid Precision: %.2f%%", 100 * aa_precision)
+        logger.info("Amino Acid Recall: %.2f%%", 100 * aa_recall)
 
     def predict(
         self,

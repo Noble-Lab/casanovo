@@ -127,8 +127,8 @@ def aa_match_prefix_suffix(
 
 
 def aa_match(
-    peptide1: List[str],
-    peptide2: List[str],
+    peptide1: List[str] | None,
+    peptide2: List[str] | None,
     aa_dict: Dict[str, float],
     cum_mass_threshold: float = 0.5,
     ind_mass_threshold: float = 0.1,
@@ -139,9 +139,9 @@ def aa_match(
 
     Parameters
     ----------
-    peptide1 : List[str]
+    peptide1 : List[str] | None,
         The first tokenized peptide sequence to be compared.
-    peptide2 : List[str]
+    peptide2 : List[str] | None
         The second tokenized peptide sequence to be compared.
     aa_dict : Dict[str, float]
         Mapping of amino acid tokens to their mass values.
@@ -161,7 +161,12 @@ def aa_match(
     pep_match : bool
         Boolean flag to indicate whether the two peptide sequences fully match.
     """
-    if mode == "best":
+    if peptide1 is None and peptide2 is None:
+        return np.array([], dtype=bool), False
+    elif (peptide1 is None) != (peptide2 is None):
+        peptide = peptide1 if peptide2 is None else peptide2
+        return np.array([False] * len(peptide)), False
+    elif mode == "best":
         return aa_match_prefix_suffix(
             peptide1, peptide2, aa_dict, cum_mass_threshold, ind_mass_threshold
         )
@@ -225,15 +230,12 @@ def aa_match_batch(
         # Split peptides into individual AAs if necessary.
         if isinstance(peptide1, str):
             peptide1 = re.split(r"(?<=.)(?=[A-Z])", peptide1)
-        elif peptide1 is None:
-            peptide1 = []
 
         if isinstance(peptide2, str):
             peptide2 = re.split(r"(?<=.)(?=[A-Z])", peptide2)
-        elif peptide2 is None:
-            peptide2 = []
 
-        n_aa1, n_aa2 = n_aa1 + len(peptide1), n_aa2 + len(peptide2)
+        n_aa1 += 0 if peptide1 is None else len(peptide1)
+        n_aa2 += 0 if peptide2 is None else len(peptide2)
         aa_matches_batch.append(
             aa_match(
                 peptide1,
