@@ -189,6 +189,13 @@ class ModelRunner:
                 depthcharge.masses.PeptideMass().masses,
             )
         )
+
+        if self.config["top_match"] > 1:
+            logger.warning(
+                "The behavior for calculating evaluation metrics is undefined when "
+                "the 'top_match' configuration option is set to a value greater than 1."
+            )
+
         logger.info("Peptide Precision: %.2f%%", 100 * pep_precision)
         logger.info("Amino Acid Precision: %.2f%%", 100 * aa_precision)
         logger.info("Amino Acid Recall: %.2f%%", 100 * aa_recall)
