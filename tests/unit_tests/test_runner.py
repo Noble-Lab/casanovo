@@ -289,8 +289,8 @@ def test_evaluate(
 
 def test_metrics_logging(tmp_path, mgf_small, tiny_config):
     config = Config(tiny_config)
-    config._user_config["log_metrics"] = True
-    config._user_config["log_every_n_steps"] = 1
+    config.log_metrics = True
+    config.log_every_n_steps = 1
     config.tb_summarywriter = True
     config.max_epochs = 1
 
