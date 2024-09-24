@@ -10,6 +10,7 @@ import einops
 import torch
 import numpy as np
 import lightning.pytorch as pl
+from torch.utils.tensorboard import SummaryWriter
 
 from depthcharge.tokenizers import PeptideTokenizer
 
@@ -120,6 +121,7 @@ class Spec2Pep(pl.LightningModule):
         out_writer: Optional[ms_io.MztabWriter] = None,
         calculate_precision: bool = False,
         tokenizer: Optional[PeptideTokenizer] = None,
+        tb_summarywriter: Optional[SummaryWriter] = None,  # TODO
         **kwargs: Dict,
     ):
         super().__init__()
