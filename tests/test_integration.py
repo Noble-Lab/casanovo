@@ -93,7 +93,6 @@ def test_train_and_run(
     # Train a tiny model:
     train_args = [
         "train",
-        "--validation_peak_path",
         str(mgf_small),
         "--config",
         tiny_config,
@@ -101,7 +100,6 @@ def test_train_and_run(
         str(tmp_path),
         "--output_root",
         "train",
-        str(mgf_small),  # The training files.
     ]
 
     result = run(train_args)
