@@ -162,10 +162,10 @@ def aa_match(
         Boolean flag to indicate whether the two peptide sequences fully match.
     """
     if peptide1 is None and peptide2 is None:
-        return np.array([], dtype=bool), False
-    elif (peptide1 is None) != (peptide2 is None):
+        return np.empty(0, dtype=bool), False
+    elif peptide1 is None or peptide2 is None:
         peptide = peptide1 if peptide2 is None else peptide2
-        return np.array([False] * len(peptide)), False
+        return np.zeros(len(peptide), dtype=bool), False
     elif mode == "best":
         return aa_match_prefix_suffix(
             peptide1, peptide2, aa_dict, cum_mass_threshold, ind_mass_threshold
