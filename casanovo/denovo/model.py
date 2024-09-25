@@ -934,16 +934,7 @@ class Spec2Pep(pl.LightningModule):
             Predicted PSMs for the given batch of spectra.
         """
 
-        _, _, precursors, true_seqs = self._process_batch(batch)
-        true_seqs = (
-            [
-                "".join(p)
-                for p in self.tokenizer.detokenize(true_seqs, join=False)
-            ]
-            if true_seqs is not None
-            else [""] * precursors.shape[0]
-        )
-
+        _, _, precursors, _ = self._process_batch(batch)
         prec_charges = precursors[:, 1].cpu().detach().numpy()
         prec_mzs = precursors[:, 2].cpu().detach().numpy()
 
@@ -952,31 +943,25 @@ class Spec2Pep(pl.LightningModule):
             precursor_charge,
             precursor_mz,
             scan,
-            title,
             file_name,
-            true_seq,
             spectrum_preds,
         ) in zip(
             prec_charges,
             prec_mzs,
-            batch["scans"],
-            batch["title"],
+            batch["scan_id"],
             batch["peak_file"],
-            true_seqs,
             self.forward(batch),
         ):
             for peptide_score, aa_scores, peptide in spectrum_preds:
                 predictions.append(
                     (
-                        scan,
+                        scan[0],
                         precursor_charge,
                         precursor_mz,
                         peptide,
                         peptide_score,
                         aa_scores,
-                        file_name,
-                        true_seq,
-                        title,
+                        file_name[0],
                     )
                 )
 
@@ -1037,8 +1022,6 @@ class Spec2Pep(pl.LightningModule):
             peptide_score,
             aa_scores,
             file_name,
-            true_seq,
-            title,
         ) in outputs:
             if len(peptide) == 0:
                 continue
@@ -1068,11 +1051,11 @@ class Spec2Pep(pl.LightningModule):
 =======
                 pep_spec_match.PepSpecMatch(
                     sequence=peptide,
-                    spectrum_id=tuple(spectrum_i),
+                    spectrum_id=(file_name, scan),
                     peptide_score=peptide_score,
                     charge=int(charge),
                     calc_mz=precursor_mz,
-                    exp_mz=self.peptide_mass_calculator.mass(peptide, charge),
+                    exp_mz=calc_mass,
                     aa_scores=aa_scores,
                 )
 >>>>>>> 5719cdc (circular import bug)
