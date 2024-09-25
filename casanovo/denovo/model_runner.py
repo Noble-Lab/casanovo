@@ -317,15 +317,55 @@ class ModelRunner:
             else:
                 devices = self.config.devices
 
-            # TODO: CSV logger
-            if self.config.tb_summarywriter:
-                logger = TensorBoardLogger(
-                    self.output_dir,
-                    version="tensorboard",
-                    default_hp_metric=False,
-                )
-            else:
-                logger = False
+            # Configure loggers
+            logger = False
+            if self.config.log_metrics or self.config.tb_summarywriter:
+                if not self.output_dir:
+                    logger.warning(
+                        "Output directory not set in model runner. "
+                        "No loss file or tensorboard will be created."
+                    )
+                else:
+                    logger = []
+                    csv_log_dir = "csv_logs"
+                    tb_log_dir = "tensorboard"
+
+                    if self.config.log_metrics:
+                        if self.overwrite_ckpt_check:
+                            utils.check_dir_file_exists(
+                                self.output_dir,
+                                csv_log_dir,
+                            )
+
+                        logger.append(
+                            lightning.pytorch.loggers.CSVLogger(
+                                self.output_dir,
+                                version=csv_log_dir,
+                                name=None,
+                            )
+                        )
+
+                    if self.config.tb_summarywriter:
+                        if self.overwrite_ckpt_check:
+                            utils.check_dir_file_exists(
+                                self.output_dir,
+                                tb_log_dir,
+                            )
+
+                        logger.append(
+                            lightning.pytorch.loggers.TensorBoardLogger(
+                                self.output_dir,
+                                version=tb_log_dir,
+                                name=None,
+                            )
+                        )
+
+                    if len(logger) > 0:
+                        self.callbacks.append(
+                            LearningRateMonitor(
+                                log_momentum=True, log_weight_decay=True
+                            ),
+                        )
 
             additional_cfg = dict(
                 devices=devices,
@@ -341,31 +381,6 @@ class ModelRunner:
                 gradient_clip_val=self.config.gradient_clip_val,
                 gradient_clip_algorithm=self.config.gradient_clip_algorithm,
             )
-
-            if self.config.log_metrics:
-                if not self.output_dir:
-                    logger.warning(
-                        "Output directory not set in model runner. "
-                        "No loss file will be created."
-                    )
-                else:
-                    csv_log_dir = "csv_logs"
-                    if self.overwrite_ckpt_check:
-                        utils.check_dir_file_exists(
-                            self.output_dir,
-                            csv_log_dir,
-                        )
-
-                    additional_cfg.update(
-                        {
-                            "logger": lightning.pytorch.loggers.CSVLogger(
-                                self.output_dir,
-                                version=csv_log_dir,
-                                name=None,
-                            ),
-                            "log_every_n_steps": self.config.log_every_n_steps,
-                        }
-                    )
 
             trainer_cfg.update(additional_cfg)
 
