@@ -167,20 +167,38 @@ class ModelRunner:
             Index containing the annotated spectra used to generate model
             predictions
         """
-        model_output = [psm.sequence for psm in self.writer.psms]
-        spectrum_annotations = [
-            test_index[i][4] for i in range(test_index.n_spectra)
-        ]
-        aa_precision, _, pep_precision = aa_match_metrics(
+        seq_pred = []
+        seq_true = []
+        pred_idx = 0
+
+        with test_index as t_ind:
+            for true_idx in range(t_ind.n_spectra):
+                seq_true.append(t_ind[true_idx][4])
+                if pred_idx < len(self.writer.psms) and self.writer.psms[
+                    pred_idx
+                ].spectrum_id == t_ind.get_spectrum_id(true_idx):
+                    seq_pred.append(self.writer.psms[pred_idx].sequence)
+                    pred_idx += 1
+                else:
+                    seq_pred.append(None)
+
+        aa_precision, aa_recall, pep_precision = aa_match_metrics(
             *aa_match_batch(
-                spectrum_annotations,
-                model_output,
+                seq_true,
+                seq_pred,
                 depthcharge.masses.PeptideMass().masses,
             )
         )
 
+        if self.config["top_match"] > 1:
+            logger.warning(
+                "The behavior for calculating evaluation metrics is undefined when "
+                "the 'top_match' configuration option is set to a value greater than 1."
+            )
+
         logger.info("Peptide Precision: %.2f%%", 100 * pep_precision)
         logger.info("Amino Acid Precision: %.2f%%", 100 * aa_precision)
+        logger.info("Amino Acid Recall: %.2f%%", 100 * aa_recall)
 
     def predict(
         self,
@@ -259,10 +277,10 @@ class ModelRunner:
                 strategy=self._get_strategy(),
                 val_check_interval=self.config.val_check_interval,
                 check_val_every_n_epoch=None,
-                log_every_n_steps=self.config.get("log_every_n_steps"),
+                log_every_n_steps=self.config.log_every_n_steps,
             )
 
-            if self.config.get("log_metrics"):
+            if self.config.log_metrics:
                 if not self.output_dir:
                     logger.warning(
                         "Output directory not set in model runner. "
@@ -283,9 +301,7 @@ class ModelRunner:
                                 version=csv_log_dir,
                                 name=None,
                             ),
-                            "log_every_n_steps": self.config.get(
-                                "log_every_n_steps"
-                            ),
+                            "log_every_n_steps": self.config.log_every_n_steps,
                         }
                     )
 
