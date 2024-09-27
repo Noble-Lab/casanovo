@@ -15,11 +15,7 @@ import pandas as pd
 import psutil
 import torch
 
-<<<<<<< HEAD
 from .data.psm import PepSpecMatch
-=======
-from .data.pep_spec_match import PepSpecMatch
->>>>>>> 5719cdc (circular import bug)
 
 
 SCORE_BINS = (0.0, 0.5, 0.9, 0.95, 0.99)
