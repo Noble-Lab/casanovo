@@ -138,9 +138,7 @@ class DeNovoDataModule(pl.LightningDataModule):
                 ),
                 pa.string(),
             ),
-            CustomField(
-                "title", lambda x: f"index={x['params']['title']}", pa.string()
-            ),
+            CustomField("title", lambda x: x["params"]["title"], pa.string()),
         ]
         self.custom_field_test_mzml = [
             CustomField("scans", lambda x: x["id"], pa.string()),

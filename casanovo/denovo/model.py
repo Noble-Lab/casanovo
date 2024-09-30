@@ -1055,7 +1055,7 @@ class Spec2Pep(pl.LightningModule):
                     peptide_score=peptide_score,
                     charge=int(charge),
                     calc_mz=precursor_mz,
-                    exp_mz=calc_mass,
+                    exp_mz=calc_mass.item(),
                     aa_scores=aa_scores,
                 )
 >>>>>>> 5719cdc (circular import bug)

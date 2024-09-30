@@ -18,6 +18,7 @@ import torch.utils.data
 from lightning.pytorch.strategies import DDPStrategy
 from lightning.pytorch.callbacks import ModelCheckpoint
 from lightning.pytorch.loggers import TensorBoardLogger
+from torch.utils.data import DataLoader
 
 from depthcharge.tokenizers import PeptideTokenizer
 from depthcharge.tokenizers.peptides import MskbPeptideTokenizer
@@ -210,9 +211,7 @@ class ModelRunner:
             self.loaders.val_dataloader(),
         )
 
-    def log_metrics(
-        self, test_dataloader: torch.utils.data.DataLoader
-    ) -> None:
+    def log_metrics(self, test_dataloader: DataLoader) -> None:
         """Log peptide precision and amino acid precision
 
         Calculate and log peptide precision and amino acid precision
@@ -224,15 +223,29 @@ class ModelRunner:
             Index containing the annotated spectra used to generate model
             predictions
 
-        model_output = [psm.sequence for psm in self.writer.psms]
-        spectrum_annotations = [
-            test_index[i][4] for i in range(test_index.n_spectra)
-        ]
-        aa_precision, _, pep_precision = aa_match_metrics(
+        for batch in test_dataloader:
+            for peak_file, scan_id, curr_seq_true in zip(
+                batch["peak_file"],
+                batch["scan_id"],
+                self.model.tokenizer.detokenize(batch["seq"][0]),
+            ):
+                spectrum_id_true = (peak_file, scan_id)
+                seq_true.append(curr_seq_true)
+                if (
+                    pred_idx < len(self.writer.psms)
+                    and self.writer.psms[pred_idx].spectrum_id
+                    == spectrum_id_true
+                ):
+                    seq_pred.append(self.writer.psms[pred_idx].sequence)
+                    pred_idx += 1
+                else:
+                    seq_pred.append(None)
+
+        aa_precision, aa_recall, pep_precision = aa_match_metrics(
             *aa_match_batch(
                 seq_true,
                 seq_pred,
-                depthcharge.masses.PeptideMass().masses,
+                self.model.tokenizer.residues,
             )
         )
 
@@ -288,11 +301,12 @@ class ModelRunner:
         test_paths = self._get_input_paths(peak_path, False, "test")
         self.writer.set_ms_run(test_paths)
         self.initialize_data_module(test_paths=test_paths)
-        self.loaders.setup(stage="test", annotated=False)
-        self.trainer.predict(self.model, self.loaders.test_dataloader())
+        self.loaders.setup(stage="test", annotated=evaluate)
+        predict_dataloader = self.loaders.predict_dataloader()
+        self.trainer.predict(self.model, predict_dataloader)
 
         if evaluate:
-            self.log_metrics(self.loaders.test_dataloader())
+            self.log_metrics(predict_dataloader)
 
     def initialize_trainer(self, train: bool) -> None:
         """Initialize the lightning Trainer.
