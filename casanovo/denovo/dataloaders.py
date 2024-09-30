@@ -134,7 +134,7 @@ class DeNovoDataModule(pl.LightningDataModule):
                 lambda x: (
                     x["params"]["scans"]
                     if "scans" in x["params"]
-                    else x["params"]["title"]
+                    else ["params"]["title"]
                 ),
                 pa.string(),
             ),

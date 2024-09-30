@@ -142,7 +142,7 @@ class MztabWriter:
             self.metadata.append(
                 (f"ms_run[{i}]-location", Path(filename).as_uri()),
             )
-            self._run_map[os.path.basename(filename)] = i
+            self._run_map[Path(filename).name] = i
 
     def save(self) -> None:
         """
@@ -184,7 +184,7 @@ class MztabWriter:
                 ),
                 1,
             ):
-                filename = os.path.abspath(psm.spectrum_id[0])
+                filename = psm.spectrum_id[0]
                 idx = psm.spectrum_id[1]
                 writer.writerow(
                     [
