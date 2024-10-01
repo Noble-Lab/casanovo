@@ -301,7 +301,22 @@ class ModelRunner:
         test_paths = self._get_input_paths(peak_path, False, "test")
         self.writer.set_ms_run(test_paths)
         self.initialize_data_module(test_paths=test_paths)
-        self.loaders.setup(stage="test", annotated=evaluate)
+
+        try:
+            self.loaders.setup(stage="test", annotated=evaluate)
+        except (KeyError, OSError) as e:
+            if evaluate:
+                error_message = (
+                    "Error creating annotated spectrum dataloaders. "
+                    "This may be the result of having an unannotated peak file "
+                    "present in the validation peak file path list.\n"
+                )
+
+                logger.error(error_message)
+                raise TypeError(error_message) from e
+
+            raise
+
         predict_dataloader = self.loaders.predict_dataloader()
         self.trainer.predict(self.model, predict_dataloader)
 
