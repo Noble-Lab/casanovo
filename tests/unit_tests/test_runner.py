@@ -4,6 +4,7 @@ import shutil
 import unittest.mock
 from pathlib import Path
 
+import depthcharge.tokenizers.peptides
 import pytest
 import torch
 
@@ -360,19 +361,16 @@ def test_metrics_logging(tmp_path, mgf_small, tiny_config):
 
 
 def test_log_metrics(monkeypatch, tiny_config):
-    def get_mock_index(psm_list):
-        mock_test_index = unittest.mock.MagicMock()
-        mock_test_index.__enter__.return_value = mock_test_index
-        mock_test_index.__exit__.return_value = False
-        mock_test_index.n_spectra = len(psm_list)
-        mock_test_index.get_spectrum_id = lambda idx: psm_list[idx].spectrum_id
-
-        mock_spectra = [
-            (None, None, None, None, curr_psm.sequence)
-            for curr_psm in psm_list
+    def get_mock_loader(psm_list, tokenizer):
+        return [
+            {
+                "peak_file": [psm.spectrum_id[0] for psm in psm_list],
+                "scan_id": [psm.spectrum_id[1] for psm in psm_list],
+                "seq": tokenizer.tokenize(
+                    [psm.sequence for psm in psm_list]
+                ).unsqueeze(0),
+            }
         ]
-        mock_test_index.__getitem__.side_effect = lambda idx: mock_spectra[idx]
-        return mock_test_index
 
     def get_mock_psm(sequence, spectrum_id):
         return PepSpecMatch(
@@ -391,6 +389,10 @@ def test_log_metrics(monkeypatch, tiny_config):
 
         with ModelRunner(Config(tiny_config)) as runner:
             runner.writer = unittest.mock.MagicMock()
+            runner.model = unittest.mock.MagicMock()
+            runner.model.tokenizer = (
+                depthcharge.tokenizers.peptides.MskbPeptideTokenizer()
+            )
 
             # Test 100% peptide precision
             infer_psms = [
@@ -404,7 +406,7 @@ def test_log_metrics(monkeypatch, tiny_config):
             ]
 
             runner.writer.psms = infer_psms
-            mock_index = get_mock_index(act_psms)
+            mock_index = get_mock_loader(act_psms, runner.model.tokenizer)
             runner.log_metrics(mock_index)
 
             pep_precision = mock_logger.info.call_args_list[-3][0][1]
@@ -426,7 +428,7 @@ def test_log_metrics(monkeypatch, tiny_config):
             ]
 
             runner.writer.psms = infer_psms
-            mock_index = get_mock_index(act_psms)
+            mock_index = get_mock_loader(act_psms, runner.model.tokenizer)
             runner.log_metrics(mock_index)
 
             pep_precision = mock_logger.info.call_args_list[-3][0][1]
@@ -453,7 +455,7 @@ def test_log_metrics(monkeypatch, tiny_config):
             ]
 
             runner.writer.psms = infer_psms
-            mock_index = get_mock_index(act_psms)
+            mock_index = get_mock_loader(act_psms, runner.model.tokenizer)
             runner.log_metrics(mock_index)
 
             pep_precision = mock_logger.info.call_args_list[-3][0][1]
@@ -471,7 +473,7 @@ def test_log_metrics(monkeypatch, tiny_config):
             ]
 
             runner.writer.psms = infer_psms
-            mock_index = get_mock_index(act_psms)
+            mock_index = get_mock_loader(act_psms, runner.model.tokenizer)
             runner.log_metrics(mock_index)
 
             pep_precision = mock_logger.info.call_args_list[-3][0][1]
@@ -487,7 +489,7 @@ def test_log_metrics(monkeypatch, tiny_config):
             ]
 
             runner.writer.psms = infer_psms
-            mock_index = get_mock_index(act_psms)
+            mock_index = get_mock_loader(act_psms, runner.model.tokenizer)
             runner.log_metrics(mock_index)
 
             pep_precision = mock_logger.info.call_args_list[-3][0][1]
@@ -503,7 +505,7 @@ def test_log_metrics(monkeypatch, tiny_config):
             ]
 
             runner.writer.psms = infer_psms
-            mock_index = get_mock_index(act_psms)
+            mock_index = get_mock_loader(act_psms, runner.model.tokenizer)
             runner.log_metrics(mock_index)
 
             pep_precision = mock_logger.info.call_args_list[-3][0][1]
@@ -530,7 +532,7 @@ def test_log_metrics(monkeypatch, tiny_config):
             ]
 
             runner.writer.psms = infer_psms
-            mock_index = get_mock_index(act_psms)
+            mock_index = get_mock_loader(act_psms, runner.model.tokenizer)
             runner.log_metrics(mock_index)
 
             pep_precision = mock_logger.info.call_args_list[-3][0][1]
