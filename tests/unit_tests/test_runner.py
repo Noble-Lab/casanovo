@@ -155,7 +155,7 @@ def test_save_and_load_weights_deprecated(tmp_path, mgf_small, tiny_config):
             assert "max_iters" not in runner.model.opt_kwargs
 
 
-def test_calculate_precision(tmp_path, mgf_small, tiny_config):
+def test_calculate_precision(tmp_path, mgf_small, tiny_config, monkeypatch):
     """Test that this parameter is working correctly."""
     config = Config(tiny_config)
     config.n_layers = 1
@@ -163,22 +163,42 @@ def test_calculate_precision(tmp_path, mgf_small, tiny_config):
     config.calculate_precision = False
     config.tb_summarywriter = str(tmp_path)
 
-    runner = ModelRunner(config=config, output_dir=tmp_path)
-    with runner:
-        runner.train([mgf_small], [mgf_small])
+    with monkeypatch.context() as ctx:
+        mock_logger = unittest.mock.MagicMock()
+        ctx.setattr("casanovo.denovo.model.logger", mock_logger)
+        runner = ModelRunner(config=config, output_dir=tmp_path)
+        with runner:
+            runner.train([mgf_small], [mgf_small])
 
-    assert "valid_aa_precision" not in runner.model.history.columns
-    assert "valid_pep_precision" not in runner.model.history.columns
+        logged_items = [
+            item
+            for call in mock_logger.info.call_args_list
+            for arg in call.args
+            for item in (arg.split("\t") if isinstance(arg, str) else [arg])
+        ]
+
+        assert "AA precision" not in logged_items
+        assert "Peptide precision" not in logged_items
 
     config.calculate_precision = True
-    runner = ModelRunner(
-        config=config, output_dir=tmp_path, overwrite_ckpt_check=False
-    )
-    with runner:
-        runner.train([mgf_small], [mgf_small])
+    with monkeypatch.context() as ctx:
+        mock_logger = unittest.mock.MagicMock()
+        ctx.setattr("casanovo.denovo.model.logger", mock_logger)
+        runner = ModelRunner(
+            config=config, output_dir=tmp_path, overwrite_ckpt_check=False
+        )
+        with runner:
+            runner.train([mgf_small], [mgf_small])
 
-    assert "valid_aa_precision" in runner.model.history.columns
-    assert "valid_pep_precision" in runner.model.history.columns
+        logged_items = [
+            item
+            for call in mock_logger.info.call_args_list
+            for arg in call.args
+            for item in (arg.split("\t") if isinstance(arg, str) else [arg])
+        ]
+
+        assert "AA precision" in logged_items
+        assert "Peptide precision" in logged_items
 
 
 def test_save_final_model(tmp_path, mgf_small, tiny_config):
@@ -237,8 +257,8 @@ def test_evaluate(
     result_file.unlink()
 
     exception_string = (
-        "Error creating annotated spectrum index. "
-        "This may be the result of having an unannotated MGF file "
+        "Error creating annotated spectrum dataloaders. "
+        "This may be the result of having an unannotated peak file "
         "present in the validation peak file path list.\n"
     )
 
