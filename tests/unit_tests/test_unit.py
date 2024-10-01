@@ -16,6 +16,7 @@ import unittest
 import unittest.mock
 
 import depthcharge
+import depthcharge.data
 import depthcharge.tokenizers.peptides
 import einops
 import github
@@ -1634,6 +1635,7 @@ def test_spectrum_id_mgf(mgf_small, tmp_path):
         train_paths=[mgf_small, mgf_small2],
         valid_paths=[mgf_small, mgf_small2],
         test_paths=[mgf_small, mgf_small2],
+        shuffle=False,
     )
     data_module.setup()
 
@@ -1658,11 +1660,13 @@ def test_spectrum_id_mzml(mzml_small, tmp_path):
     """Test that spectra from mzML files are specified by their scan number."""
     mzml_small2 = tmp_path / "mzml_small2.mzml"
     shutil.copy(mzml_small, mzml_small2)
-
-    index = SpectrumIndex(
-        tmp_path / "index.hdf5", [mzml_small, mzml_small2], overwrite=True
+    data_module = DeNovoDataModule(
+        test_paths=[mzml_small, mzml_small2],
+        shuffle=False,
     )
-    dataset = SpectrumDataset(index)
+    data_module.setup(stage="test", annotated=False)
+
+    dataset = data_module.test_dataset
     for i, (filename, scan_nr) in enumerate(
         [
             (mzml_small, 17),
@@ -1671,8 +1675,8 @@ def test_spectrum_id_mzml(mzml_small, tmp_path):
             (mzml_small2, 111),
         ]
     ):
-        spectrum_id = str(filename), f"scan={scan_nr}"
-        assert dataset.get_spectrum_id(i) == spectrum_id
+        assert dataset[i]["peak_file"][0] == filename.name
+        assert dataset[i]["scan_id"][0] == f"scan={scan_nr}"
 
 
 def test_train_val_step_functions():
