@@ -86,6 +86,7 @@ def test_save_and_load_weights(tmp_path, mgf_small, tiny_config):
         # Now load the weights into a new model
         # The device should be meta for all the weights.
         runner = ModelRunner(config=other_config, model_filename=str(ckpt))
+        runner.initialize_tokenizer()
         runner.initialize_model(train=False)
 
     obs_layers = runner.model.encoder.transformer_encoder.num_layers
