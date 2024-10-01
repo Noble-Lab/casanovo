@@ -140,6 +140,7 @@ def test_save_and_load_weights_deprecated(tmp_path, mgf_small, tiny_config):
     with ModelRunner(
         config=config, model_filename=str(ckpt), overwrite_ckpt_check=False
     ) as runner:
+        runner.initialize_tokenizer()
         runner.initialize_model(train=False)
         assert runner.model.cosine_schedule_period_iters == 5
     # Fine-tuning.
