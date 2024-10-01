@@ -16,16 +16,25 @@ def test_initialize_model(tmp_path, mgf_small):
     """Test initializing a new or existing model."""
     config = Config()
     config.model_save_folder_path = tmp_path
+    # Initializing model without initializing tokenizer raises an error
+    with pytest.raises(RuntimeError):
+        ModelRunner(config=config).initialize_model(train=True)
+
     # No model filename given, so train from scratch.
-    ModelRunner(config=config).initialize_model(train=True)
+    runner = ModelRunner(config=config)
+    runner.initialize_tokenizer()
+    runner.initialize_model(train=True)
 
     # No model filename given during inference = error.
     with pytest.raises(ValueError):
-        ModelRunner(config=config).initialize_model(train=False)
+        runner = ModelRunner(config=config)
+        runner.initialize_tokenizer()
+        runner.initialize_model(train=False)
 
     # Non-existing model filename given during inference = error.
     with pytest.raises(FileNotFoundError):
         runner = ModelRunner(config=config, model_filename="blah")
+        runner.initialize_tokenizer()
         runner.initialize_model(train=False)
 
     # Train a quick model.
@@ -38,10 +47,12 @@ def test_initialize_model(tmp_path, mgf_small):
 
     # Resume training from previous model.
     runner = ModelRunner(config=config, model_filename=str(ckpt))
+    runner.initialize_tokenizer()
     runner.initialize_model(train=True)
 
     # Inference with previous model.
     runner = ModelRunner(config=config, model_filename=str(ckpt))
+    runner.initialize_tokenizer()
     runner.initialize_model(train=False)
 
     # If the model initialization throws and EOFError, then the Spec2Pep model
@@ -50,6 +61,7 @@ def test_initialize_model(tmp_path, mgf_small):
     weights.touch()
     with pytest.raises(EOFError):
         runner = ModelRunner(config=config, model_filename=str(weights))
+        runner.initialize_tokenizer()
         runner.initialize_model(train=False)
 
 
