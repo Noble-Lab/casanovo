@@ -16,6 +16,7 @@ import unittest
 import unittest.mock
 
 import depthcharge
+import depthcharge.tokenizers.peptides
 import einops
 import github
 import numpy as np
@@ -1580,7 +1581,7 @@ def test_eval_metrics():
     the ground truth. A peptide prediction is correct if all its AA are correct
     matches.
     """
-    model = Spec2Pep()
+    tokenizer = depthcharge.tokenizers.peptides.MskbPeptideTokenizer()
 
     preds = [
         "SPEIK",
@@ -1597,7 +1598,7 @@ def test_eval_metrics():
     aa_matches, n_pred_aa, n_gt_aa = aa_match_batch(
         peptides1=preds,
         peptides2=gt,
-        aa_dict=model.tokenizer.residues,
+        aa_dict=tokenizer.residues,
         mode="best",
     )
 
@@ -1612,16 +1613,12 @@ def test_eval_metrics():
     assert 26 / 40 == pytest.approx(aa_recall)
     assert 26 / 41 == pytest.approx(aa_precision)
 
-    aa_matches, pep_match = aa_match(
-        None, None, depthcharge.masses.PeptideMass().masses
-    )
+    aa_matches, pep_match = aa_match(None, None, tokenizer.residues)
 
     assert aa_matches.shape == (0,)
     assert not pep_match
 
-    aa_matches, pep_match = aa_match(
-        "PEPTIDE", None, depthcharge.masses.PeptideMass().masses
-    )
+    aa_matches, pep_match = aa_match("PEPTIDE", None, tokenizer.residues)
 
     assert np.array_equal(aa_matches, np.zeros(len("PEPTIDE"), dtype=bool))
     assert not pep_match
