@@ -1163,8 +1163,6 @@ def _calc_match_score(
 
     per_aa_scores = batch_all_aa_scores[rows, cols, truth_aa_indices]
 
-    logging.debug("$$$$$$$$$$$$$||%s||$$$$$$$$$$$$$$", per_aa_scores)
-
     per_aa_scores[per_aa_scores == 0] += 1e-10
     score_mask = truth_aa_indices != 0
     per_aa_scores[~score_mask] = 0

@@ -510,7 +510,7 @@ def test_calc_match_score():
     )
 
     all_scores, masked_per_aa_scores = _calc_match_score(
-        batch_all_aa_scores, truth_aa_indices
+        batch_all_aa_scores, truth_aa_indices, True
     )
 
     assert all_scores.numpy()[0] == 0
