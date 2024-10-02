@@ -41,4 +41,4 @@ class PepSpecMatch:
     calc_mz: float
     exp_mz: float
     aa_scores: Iterable[float]
-    protein: str = None
+    protein: str = "null"
