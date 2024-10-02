@@ -14,6 +14,7 @@ import tempfile
 import unittest
 import unittest.mock
 
+import depthcharge.masses
 import einops
 import github
 import numpy as np
@@ -25,7 +26,7 @@ from casanovo import casanovo
 from casanovo import utils
 from casanovo.data import db_utils, ms_io
 from casanovo.data.datasets import SpectrumDataset, AnnotatedSpectrumDataset
-from casanovo.denovo.evaluate import aa_match_batch, aa_match_metrics
+from casanovo.denovo.evaluate import aa_match, aa_match_batch, aa_match_metrics
 from casanovo.denovo.model import Spec2Pep, _aa_pep_score, _calc_match_score
 from depthcharge.data import SpectrumIndex, AnnotatedSpectrumIndex
 
@@ -1586,6 +1587,20 @@ def test_eval_metrics():
     assert 2 / 8 == pytest.approx(pep_precision)
     assert 26 / 40 == pytest.approx(aa_recall)
     assert 26 / 41 == pytest.approx(aa_precision)
+
+    aa_matches, pep_match = aa_match(
+        None, None, depthcharge.masses.PeptideMass().masses
+    )
+
+    assert aa_matches.shape == (0,)
+    assert not pep_match
+
+    aa_matches, pep_match = aa_match(
+        "PEPTIDE", None, depthcharge.masses.PeptideMass().masses
+    )
+
+    assert np.array_equal(aa_matches, np.zeros(len("PEPTIDE"), dtype=bool))
+    assert not pep_match
 
 
 def test_spectrum_id_mgf(mgf_small, tmp_path):
