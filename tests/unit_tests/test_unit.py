@@ -1219,7 +1219,11 @@ def test_beam_search_decode():
     """
     Test beam search decoding and its sub-functions.
     """
-    model = Spec2Pep(n_beams=4, residues="massivekb", min_peptide_len=4)
+    model = Spec2Pep(
+        n_beams=4,
+        residues="massivekb",
+        min_peptide_len=4,
+    )
     model.decoder.reverse = False  # For simplicity.
 
     # Sizes.
@@ -1245,8 +1249,12 @@ def test_beam_search_decode():
     )
     # Fill scores and tokens with relevant predictions.
     scores[:, : step + 1, :] = 0
-    for i, peptide in enumerate(["PEPK", "PEPR", "PEPG", "PEP$"]):
-        tokens[i, : step + 1] = model.tokenizer.tokenize(peptide)[0]
+    for i, (peptide, add_stop) in enumerate(
+        [("PEPK", False), ("PEPR", False), ("PEPG", False), ("PEP", True)]
+    ):
+        tokens[i, : step + 1] = model.tokenizer.tokenize(
+            peptide, add_stop=add_stop
+        )[0]
         for j in range(step + 1):
             scores[i, j, tokens[1, j]] = 1
 
