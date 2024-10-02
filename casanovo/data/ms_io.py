@@ -191,7 +191,7 @@ class MztabWriter:
                         "PSM",
                         psm.sequence,  # sequence
                         i,  # PSM_ID
-                        "null",  # accession
+                        psm.protein,  # accession
                         "null",  # unique
                         "null",  # database
                         "null",  # database_version

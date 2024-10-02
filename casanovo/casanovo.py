@@ -203,6 +203,63 @@ def sequence(
 
 @main.command(cls=_SharedParams)
 @click.argument(
+    "peak_path",
+    required=True,
+    nargs=-1,
+    type=click.Path(exists=True, dir_okay=False),
+)
+@click.argument(
+    "fasta_path",
+    required=True,
+    nargs=1,
+    type=click.Path(exists=True, dir_okay=False),
+)
+def db_search(
+    peak_path: Tuple[str],
+    fasta_path: str,
+    model: Optional[str],
+    config: Optional[str],
+    output_dir: Optional[str],
+    output_root: Optional[str],
+    verbosity: str,
+    force_overwrite: bool,
+) -> None:
+    """Perform a database search on MS/MS data using Casanovo-DB.
+
+    PEAK_PATH must be one or more mzML, mzXML, or MGF files.
+    FASTA_PATH must be one FASTA file.
+    """
+    output_path, output_root_name = _setup_output(
+        output_dir, output_root, force_overwrite, verbosity
+    )
+    utils.check_dir_file_exists(output_path, f"{output_root}.mztab")
+    config, model = setup_model(
+        model, config, output_path, output_root_name, False
+    )
+    with ModelRunner(
+        config,
+        model,
+        output_path,
+        output_root_name if output_root is not None else None,
+        False,
+    ) as runner:
+        logger.info("Performing database search on:")
+        for peak_file in peak_path:
+            logger.info("  %s", peak_file)
+        logger.info("Using the following FASTA file:")
+        logger.info("  %s", fasta_path)
+
+        runner.db_search(
+            peak_path,
+            fasta_path,
+            str((output_path / output_root).with_suffix(".mztab")),
+        )
+
+    logger.info("DONE!")
+
+
+@main.command(cls=_SharedParams)
+@click.argument(
     "train_peak_path",
     required=True,
     nargs=-1,
