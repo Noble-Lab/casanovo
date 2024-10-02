@@ -1217,14 +1217,18 @@ def test_get_candidates_isotope_error(tiny_fasta_file, residues_dict):
     assert expected_isotope0123 == list(candidates)
 
 
-def test_beam_search_decode():
+def test_beam_search_decode(tiny_config):
     """
     Test beam search decoding and its sub-functions.
     """
+    config = casanovo.Config(tiny_config)
     model = Spec2Pep(
         n_beams=4,
         residues="massivekb",
         min_peptide_len=4,
+        tokenizer=depthcharge.tokenizers.peptides.PeptideTokenizer(
+            residues=config.residues
+        ),
     )
     model.decoder.reverse = False  # For simplicity.
 
