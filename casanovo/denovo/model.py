@@ -1023,12 +1023,13 @@ class DbSpec2Pep(Spec2Pep):
 
         Returns
         -------
-        predictions: List[Tuple[int, int, float, str, np.ndarray, np.ndarray, str]]
+        predictions: List[Tuple[List[str], int, float, str, np.ndarray, np.ndarray, str]]
             Model predictions for the given batch of spectra containing spectrum
             ids, precursor charge and m/z, candidate peptide sequences, peptide
-            scores, amino acid-level scores, and associated proteins.
+            scores, amino acid-level scores, and associated proteins. Stored separately by
+            spectrum id.
         """
-        predictions = []
+        store_dict = collections.defaultdict(list)
         for start_idx in range(0, len(batch[0]), self.psm_batch_size):
             current_batch = [
                 b[start_idx : start_idx + self.psm_batch_size] for b in batch
@@ -1057,7 +1058,7 @@ class DbSpec2Pep(Spec2Pep):
                 per_aa_scores.cpu().detach().numpy(),
                 current_batch[3],
             ):
-                predictions.append(
+                store_dict[str(spectrum_i)].append(
                     (
                         spectrum_i,
                         precursor_charge,
@@ -1068,11 +1069,22 @@ class DbSpec2Pep(Spec2Pep):
                         self.protein_database.get_associated_protein(peptide),
                     )
                 )
+        predictions = []
+        for spectrum_i in store_dict:
+            predictions.extend(
+                sorted(
+                    store_dict[str(spectrum_i)],
+                    key=lambda x: x[4],
+                    reverse=True,
+                )[: self.top_match]
+            )
         return predictions
 
     def on_predict_batch_end(
         self,
-        outputs: List[Tuple[np.ndarray, List[str], torch.Tensor]],
+        outputs: List[
+            Tuple[List[str], int, float, str, np.ndarray, np.ndarray, str]
+        ],
         *args,
     ) -> None:
         """

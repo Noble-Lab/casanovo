@@ -30,6 +30,8 @@ class PepSpecMatch:
     aa_scores : Iterable[float]
         A list of scores for individual amino acids in the peptide
         sequence, where len(aa_scores) == len(sequence)
+    protein : str
+        Protein associated with the peptide sequence (for db mode)
     """
 
     sequence: str
@@ -39,3 +41,4 @@ class PepSpecMatch:
     calc_mz: float
     exp_mz: float
     aa_scores: Iterable[float]
+    protein: str = None
