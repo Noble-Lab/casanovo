@@ -372,7 +372,7 @@ class Spec2Pep(pl.LightningModule):
             violate the minimum peptide length).
         """
         # Check for tokens with a negative mass (i.e. neutral loss).
-        aa_neg_mass_idx = []
+        aa_neg_mass_idx = [None]
         for aa, mass in self.tokenizer.residues.items():
             if mass < 0:
                 # aa_neg_mass.append(aa)
@@ -383,7 +383,7 @@ class Spec2Pep(pl.LightningModule):
             [
                 self.tokenizer.index[aa]
                 for aa in self.tokenizer.index
-                if aa.startswith(("+", "-", "[+", "[-"))
+                if aa.startswith("[") and aa.endswith("]-")
             ]
         ).to(self.decoder.device)
 
