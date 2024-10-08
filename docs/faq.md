@@ -103,7 +103,7 @@ Training, validation, and test splits for the non-enzymatic dataset are availabl
 
 **How do I know which model to use after training Casanovo?**
 
-By default, Casanovo evaluates the model validation performance every 50,000 training steps.
+By default, Casanovo runs model validation every 50,000 training steps.
 Note that the number of samples that are processed during a single training step depends on the batch size.
 Therefore, the default training batch size of 32 corresponds to saving a model snapshot after every 1.6 million training samples.
 You can optionally modify the validation run frequency in the [config file](https://github.com/Noble-Lab/casanovo/blob/main/casanovo/config.yaml) (parameter `val_check_interval`), depending on your dataset size.
