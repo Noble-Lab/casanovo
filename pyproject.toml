@@ -28,6 +28,7 @@ dependencies = [
     "pandas",
     "psutil",
     "PyGithub",
+    "pylance==0.15.0",
     "PyYAML",
     "requests",
     "rich-click>=1.6.1",
