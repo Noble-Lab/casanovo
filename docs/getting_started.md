@@ -96,7 +96,7 @@ We recommend a Linux system with a dedicated GPU to achieve optimal runtime perf
 To sequence your own mass spectra with Casanovo, use the `casanovo sequence` command:
 
 ```sh
-casanovo sequence -o results.mztab spectra.mgf
+casanovo sequence spectra.mgf
 ```
 ![`casanovo sequence --help`](images/sequence-help.svg)
 
@@ -105,10 +105,10 @@ This will write peptide predictions for the given MS/MS spectra to the specified
 
 ### Evaluate *de novo* sequencing performance
 
-To evaluate _de novo_ sequencing performance based on known mass spectrum annotations, use the `casanovo evaluate` command:
+To evaluate _de novo_ sequencing performance based on known mass spectrum annotations, use the `casanovo sequence` command with the `--evaluate` option:
 
 ```sh
-casanovo evaluate annotated_spectra.mgf
+casanovo sequence annotated_spectra.mgf --evaluate
 ```
 ![`casanovo evaluate --help`](images/evaluate-help.svg)
 
