@@ -129,19 +129,9 @@ class DeNovoDataModule(pl.LightningDataModule):
             scale_to_unit_norm,
         ]
         self.custom_field_test_mgf = [
-            CustomField(
-                "scans",
-                lambda x: (
-                    x["params"]["scans"]
-                    if "scans" in x["params"]
-                    else x["params"]["title"]
-                ),
-                pa.string(),
-            ),
             CustomField("title", lambda x: x["params"]["title"], pa.string()),
         ]
         self.custom_field_test_mzml = [
-            CustomField("scans", lambda x: x["id"], pa.string()),
             CustomField("title", lambda x: x["id"], pa.string()),
         ]
 
