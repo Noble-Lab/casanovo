@@ -446,6 +446,11 @@ def test_aa_pep_score():
     np.testing.assert_array_equal(aa_scores, np.asarray([0.0, 0.25, 0.5]))
     assert peptide_score == pytest.approx(-1.0)
 
+    aa_scores_raw = np.asarray([1.0, 0.25])
+    aa_scores, peptide_score = _aa_pep_score(aa_scores_raw, True)
+    np.testing.assert_array_equal(aa_scores, np.asarray([0.75, 0.375]))
+    assert peptide_score == pytest.approx(0.5)
+
 
 def test_beam_search_decode():
     """
