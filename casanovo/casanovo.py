@@ -138,7 +138,7 @@ def main() -> None:
     "peak_path",
     required=True,
     nargs=-1,
-    type=click.Path(exists=True, dir_okay=False),
+    type=click.Path(exists=True, dir_okay=True),
 )
 @click.option(
     "--evaluate",
@@ -206,7 +206,7 @@ def sequence(
     "train_peak_path",
     required=True,
     nargs=-1,
-    type=click.Path(exists=True, dir_okay=False),
+    type=click.Path(exists=True, dir_okay=True),
 )
 @click.option(
     "-p",
@@ -217,7 +217,7 @@ def sequence(
     """,
     required=False,
     multiple=True,
-    type=click.Path(exists=True, dir_okay=False),
+    type=click.Path(exists=True, dir_okay=True),
 )
 def train(
     train_peak_path: Tuple[str],

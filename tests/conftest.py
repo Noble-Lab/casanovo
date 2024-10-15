@@ -44,8 +44,8 @@ def _create_mgf(peptides, mgf_file, random_state=42, annotate=True):
     """
     rng = np.random.default_rng(random_state)
     entries = [
-        _create_mgf_entry(p, rng.choice([2, 3]), annotate=annotate)
-        for p in peptides
+        _create_mgf_entry(p, i, rng.choice([2, 3]), annotate=annotate)
+        for i, p in enumerate(peptides)
     ]
     with mgf_file.open("w+") as mgf_ref:
         mgf_ref.write("\n".join(entries))
@@ -53,7 +53,7 @@ def _create_mgf(peptides, mgf_file, random_state=42, annotate=True):
     return mgf_file
 
 
-def _create_mgf_entry(peptide, charge=2, annotate=True):
+def _create_mgf_entry(peptide, title, charge=2, annotate=True):
     """
     Create a MassIVE-KB style MGF entry for a single PSM.
 
@@ -77,6 +77,7 @@ def _create_mgf_entry(peptide, charge=2, annotate=True):
 
     mgf = [
         "BEGIN IONS",
+        f"TITLE={title}",
         f"PEPMASS={precursor_mz}",
         f"CHARGE={charge}+",
         f"{frags}",
@@ -242,6 +243,16 @@ def tiny_config(tmp_path):
         "train_batch_size": 32,
         "num_sanity_val_steps": 0,
         "calculate_precision": False,
+        "lance_dir": None,
+        "shuffle": False,
+        "buffer_size": 64,
+        "accumulate_grad_batches": 1,
+        "gradient_clip_val": None,
+        "gradient_clip_algorithm": None,
+        "precision": "32-true",
+        "replace_isoleucine_with_leucine": True,
+        "reverse_peptides": False,
+        "mskb_tokenizer": True,
         "residues": {
             "G": 57.021464,
             "A": 71.037114,
@@ -249,7 +260,7 @@ def tiny_config(tmp_path):
             "P": 97.052764,
             "V": 99.068414,
             "T": 101.047670,
-            "C+57.021": 160.030649,
+            "C[Carbamidomethyl]": 160.030649,  # 103.009185 + 57.021464
             "L": 113.084064,
             "I": 113.084064,
             "N": 114.042927,
@@ -263,13 +274,15 @@ def tiny_config(tmp_path):
             "R": 156.101111,
             "Y": 163.063329,
             "W": 186.079313,
-            "M+15.995": 147.035400,
-            "N+0.984": 115.026943,
-            "Q+0.984": 129.042594,
-            "+42.011": 42.010565,
-            "+43.006": 43.005814,
-            "-17.027": -17.026549,
-            "+43.006-17.027": 25.980265,
+            # Amino acid modifications.
+            "M[Oxidation]": 147.035400,  # Met oxidation:   131.040485 + 15.994915
+            "N[Deamidated]": 115.026943,  # Asn deamidation: 114.042927 + 0.984016
+            "Q[Deamidated]": 129.042594,  # Gln deamidation: 128.058578 + 0.984016
+            # N-terminal modifications.
+            "[Acetyl]-": 42.010565,  # Acetylation
+            "[Carbamyl]-": 43.005814,  # Carbamylation "+43.006"
+            "[Ammonia-loss]-": -17.026549,  # NH3 loss
+            "[+25.980265]-": 25.980265,  # Carbamylation and NH3 loss
         },
     }
 
