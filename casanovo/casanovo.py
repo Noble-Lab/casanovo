@@ -2,14 +2,17 @@
 
 import datetime
 import functools
+import hashlib
 import logging
 import os
 import re
 import shutil
 import sys
+import time
+import urllib.parse
 import warnings
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import Optional, Tuple, List
 
 warnings.formatwarning = lambda message, category, *args, **kwargs: (
     f"{category.__name__}: {message}"
@@ -59,14 +62,18 @@ class _SharedParams(click.RichCommand):
             click.Option(
                 ("-m", "--model"),
                 help="""
-                The model weights (.ckpt file). If not provided, Casanovo
-                will try to download the latest release.
+                Either the model weights (.ckpt file) or a URL pointing to the model weights
+                file. If not provided, Casanovo will try to download the latest release automatically.
                 """,
-                type=click.Path(exists=True, dir_okay=False),
             ),
             click.Option(
-                ("-o", "--output"),
-                help="The mzTab file to which results will be written.",
+                ("-d", "--output_dir"),
+                help="The destination directory for output files",
+                type=click.Path(dir_okay=True),
+            ),
+            click.Option(
+                ("-o", "--output_root"),
+                help="The root name for all output files",
                 type=click.Path(dir_okay=False),
             ),
             click.Option(
@@ -88,12 +95,21 @@ class _SharedParams(click.RichCommand):
                 ),
                 default="info",
             ),
+            click.Option(
+                ("-f", "--force_overwrite"),
+                help="Whether to overwrite output files.",
+                is_flag=True,
+                show_default=True,
+                default=False,
+            ),
         ]
 
 
 @click.group(context_settings=dict(help_option_names=["-h", "--help"]))
 def main() -> None:
-    """# Casanovo
+    """
+    Casanovo
+    ========
 
     Casanovo de novo sequences peptides from tandem mass spectra using a
     Transformer model. Casanovo currently supports mzML, mzXML, and MGF files
@@ -101,14 +117,17 @@ def main() -> None:
     MassIVE-KB, for training new models.
 
     Links:
-    - Documentation: [https://casanovo.readthedocs.io]()
-    - Official code repository: [https://github.com/Noble-Lab/casanovo]()
+
+    - Documentation: https://casanovo.readthedocs.io
+    - Official code repository: https://github.com/Noble-Lab/casanovo
 
     If you use Casanovo in your work, please cite:
+
     - Yilmaz, M., Fondrie, W. E., Bittremieux, W., Oh, S. & Noble, W. S. De novo
-    mass spectrometry peptide sequencing with a transformer model. Proceedings
-    of the 39th International Conference on Machine Learning - ICML '22 (2022)
-    doi:10.1101/2022.02.07.479481.
+      mass spectrometry peptide sequencing with a transformer model. Proceedings
+      of the 39th International Conference on Machine Learning - ICML '22 (2022)
+      doi:10.1101/2022.02.07.479481.
+
 
     """
     return
@@ -121,59 +140,65 @@ def main() -> None:
     nargs=-1,
     type=click.Path(exists=True, dir_okay=False),
 )
+@click.option(
+    "--evaluate",
+    "-e",
+    is_flag=True,
+    default=False,
+    help="""
+    Run in evaluation mode. When this flag is set the peptide and amino
+    acid precision will be calculated and logged at the end of the sequencing
+    run. All input files must be annotated MGF files if running in evaluation
+    mode.
+    """,
+)
 def sequence(
     peak_path: Tuple[str],
     model: Optional[str],
     config: Optional[str],
-    output: Optional[str],
+    output_dir: Optional[str],
+    output_root: Optional[str],
     verbosity: str,
+    force_overwrite: bool,
+    evaluate: bool,
 ) -> None:
     """De novo sequence peptides from tandem mass spectra.
 
-    PEAK_PATH must be one or more mzMl, mzXML, or MGF files from which
-    to sequence peptides.
+    PEAK_PATH must be one or more mzML, mzXML, or MGF files from which
+    to sequence peptides. If evaluate is set to True PEAK_PATH must be
+    one or more annotated MGF file.
     """
-    output = setup_logging(output, verbosity)
-    config, model = setup_model(model, config, output, False)
-    with ModelRunner(config, model) as runner:
-        logger.info("Sequencing peptides from:")
+    output_path, output_root_name = _setup_output(
+        output_dir, output_root, force_overwrite, verbosity
+    )
+    utils.check_dir_file_exists(output_path, f"{output_root}.mztab")
+    config, model = setup_model(
+        model, config, output_path, output_root_name, False
+    )
+    start_time = time.time()
+    with ModelRunner(
+        config,
+        model,
+        output_path,
+        output_root_name if output_root is not None else None,
+        False,
+    ) as runner:
+        logger.info(
+            "Sequencing %speptides from:",
+            "and evaluating " if evaluate else "",
+        )
         for peak_file in peak_path:
             logger.info("  %s", peak_file)
 
-        runner.predict(peak_path, output)
-
-    logger.info("DONE!")
-
-
-@main.command(cls=_SharedParams)
-@click.argument(
-    "annotated_peak_path",
-    required=True,
-    nargs=-1,
-    type=click.Path(exists=True, dir_okay=False),
-)
-def evaluate(
-    annotated_peak_path: Tuple[str],
-    model: Optional[str],
-    config: Optional[str],
-    output: Optional[str],
-    verbosity: str,
-) -> None:
-    """Evaluate de novo peptide sequencing performance.
-
-    ANNOTATED_PEAK_PATH must be one or more annoated MGF files,
-    such as those provided by MassIVE-KB.
-    """
-    output = setup_logging(output, verbosity)
-    config, model = setup_model(model, config, output, False)
-    with ModelRunner(config, model) as runner:
-        logger.info("Sequencing and evaluating peptides from:")
-        for peak_file in annotated_peak_path:
-            logger.info("  %s", peak_file)
-
-        runner.evaluate(annotated_peak_path)
-
-    logger.info("DONE!")
+        runner.predict(
+            peak_path,
+            str((output_path / output_root_name).with_suffix(".mztab")),
+            evaluate=evaluate,
+        )
+        psms = runner.writer.psms
+        utils.log_sequencing_report(
+            psms, start_time=start_time, end_time=time.time()
+        )
 
 
 @main.command(cls=_SharedParams)
@@ -190,37 +215,52 @@ def evaluate(
     An annotated MGF file for validation, like from MassIVE-KB. Use this
     option multiple times to specify multiple files.
     """,
-    required=True,
+    required=False,
     multiple=True,
     type=click.Path(exists=True, dir_okay=False),
 )
 def train(
     train_peak_path: Tuple[str],
-    validation_peak_path: Tuple[str],
+    validation_peak_path: Optional[Tuple[str]],
     model: Optional[str],
     config: Optional[str],
-    output: Optional[str],
+    output_dir: Optional[str],
+    output_root: Optional[str],
     verbosity: str,
+    force_overwrite: bool,
 ) -> None:
     """Train a Casanovo model on your own data.
 
     TRAIN_PEAK_PATH must be one or more annoated MGF files, such as those
     provided by MassIVE-KB, from which to train a new Casnovo model.
     """
-    output = setup_logging(output, verbosity)
-    config, model = setup_model(model, config, output, True)
-    with ModelRunner(config, model) as runner:
+    output_path, output_root_name = _setup_output(
+        output_dir, output_root, force_overwrite, verbosity
+    )
+    config, model = setup_model(
+        model, config, output_path, output_root_name, True
+    )
+    start_time = time.time()
+    with ModelRunner(
+        config,
+        model,
+        output_path,
+        output_root_name if output_root is not None else None,
+        not force_overwrite,
+    ) as runner:
         logger.info("Training a model from:")
         for peak_file in train_peak_path:
             logger.info("  %s", peak_file)
+
+        if len(validation_peak_path) == 0:
+            validation_peak_path = train_peak_path
 
         logger.info("Using the following validation files:")
         for peak_file in validation_peak_path:
             logger.info("  %s", peak_file)
 
         runner.train(train_peak_path, validation_peak_path)
-
-    logger.info("DONE!")
+        utils.log_run_report(start_time=start_time, end_time=time.time())
 
 
 @main.command()
@@ -254,7 +294,7 @@ def configure(output: str) -> None:
 
 
 def setup_logging(
-    output: Optional[str],
+    log_file_path: Path,
     verbosity: str,
 ) -> Path:
     """Set up the logger.
@@ -263,21 +303,11 @@ def setup_logging(
 
     Parameters
     ----------
-    output : Optional[str]
-        The provided output file name.
+    log_file_path: Path
+        The log file path.
     verbosity : str
         The logging level to use in the console.
-
-    Return
-    ------
-    output : Path
-        The output file path.
     """
-    if output is None:
-        output = f"casanovo_{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}"
-
-    output = Path(output).expanduser().resolve()
-
     logging_levels = {
         "debug": logging.DEBUG,
         "info": logging.INFO,
@@ -304,7 +334,7 @@ def setup_logging(
     console_handler.setFormatter(console_formatter)
     root_logger.addHandler(console_handler)
     warnings_logger.addHandler(console_handler)
-    file_handler = logging.FileHandler(output.with_suffix(".log"))
+    file_handler = logging.FileHandler(log_file_path, encoding="utf8")
     file_handler.setFormatter(log_formatter)
     root_logger.addHandler(file_handler)
     warnings_logger.addHandler(file_handler)
@@ -321,68 +351,86 @@ def setup_logging(
     logging.getLogger("torch").setLevel(logging.WARNING)
     logging.getLogger("urllib3").setLevel(logging.WARNING)
 
-    return output
-
 
 def setup_model(
-    model: Optional[str],
-    config: Optional[str],
-    output: Optional[Path],
+    model: str | None,
+    config: str | None,
+    output_dir: Path | str,
+    output_root_name: str,
     is_train: bool,
-) -> Config:
-    """Setup Casanovo for most commands.
+) -> Tuple[Config, Path | None]:
+    """Setup Casanovo config and resolve model weights (.ckpt) path
 
     Parameters
     ----------
-    model : Optional[str]
-        The provided model weights file.
-    config : Optional[str]
-        The provided configuration file.
-    output : Optional[Path]
-        The provided output file name.
+    model : str | None
+        May be a file system path, a URL pointing to a .ckpt file, or None.
+        If `model` is a URL the weights will be downloaded and cached from
+        `model`. If `model` is `None` the weights from the latest matching
+        official release will be used (downloaded and cached).
+    config : str | None
+        Config file path. If None the default config will be used.
+    output_dir: : Path | str
+        The path to the output directory.
+    output_root_name : str,
+        The base name for the output files.
     is_train : bool
         Are we training? If not, we need to retrieve weights when the model is
         None.
 
     Return
     ------
-    config : Config
-        The parsed configuration
+    Tuple[Config, Path]
+        Initialized Casanovo config, local path to model weights if any (may be
+        `None` if training using random starting weights).
     """
     # Read parameters from the config file.
     config = Config(config)
     seed_everything(seed=config["random_seed"], workers=True)
 
     # Download model weights if these were not specified (except when training).
-    if model is None and not is_train:
-        try:
-            model = _get_model_weights()
-        except github.RateLimitExceededException:
-            logger.error(
-                "GitHub API rate limit exceeded while trying to download the "
-                "model weights. Please download compatible model weights "
-                "manually from the official Casanovo code website "
-                "(https://github.com/Noble-Lab/casanovo) and specify these "
-                "explicitly using the `--model` parameter when running "
-                "Casanovo."
+    cache_dir = Path(appdirs.user_cache_dir("casanovo", False, opinion=False))
+    if model is None:
+        if not is_train:
+            try:
+                model = _get_model_weights(cache_dir)
+            except github.RateLimitExceededException:
+                logger.error(
+                    "GitHub API rate limit exceeded while trying to download the "
+                    "model weights. Please download compatible model weights "
+                    "manually from the official Casanovo code website "
+                    "(https://github.com/Noble-Lab/casanovo) and specify these "
+                    "explicitly using the `--model` parameter when running "
+                    "Casanovo."
+                )
+                raise PermissionError(
+                    "GitHub API rate limit exceeded while trying to download the "
+                    "model weights"
+                ) from None
+    else:
+        if _is_valid_url(model):
+            model = _get_weights_from_url(model, cache_dir)
+        elif not Path(model).is_file():
+            error_msg = (
+                f"{model} is not a valid URL or checkpoint file path, "
+                "--model argument must be a URL or checkpoint file path"
             )
-            raise PermissionError(
-                "GitHub API rate limit exceeded while trying to download the "
-                "model weights"
-            ) from None
+            logger.error(error_msg)
+            raise ValueError(error_msg)
 
     # Log the active configuration.
     logger.info("Casanovo version %s", str(__version__))
     logger.debug("model = %s", model)
     logger.debug("config = %s", config.file)
-    logger.debug("output = %s", output)
+    logger.debug("output directory = %s", output_dir)
+    logger.debug("output root name = %s", output_root_name)
     for key, value in config.items():
         logger.debug("%s = %s", str(key), str(value))
 
     return config, model
 
 
-def _get_model_weights() -> str:
+def _get_model_weights(cache_dir: Path) -> str:
     """
     Use cached model weights or download them from GitHub.
 
@@ -396,12 +444,16 @@ def _get_model_weights() -> str:
     Note that the GitHub API is limited to 60 requests from the same IP per
     hour.
 
+    Parameters
+    ----------
+    cache_dir : Path
+        model weights cache directory path
+
     Returns
     -------
     str
         The name of the model weights file.
     """
-    cache_dir = appdirs.user_cache_dir("casanovo", False, opinion=False)
     os.makedirs(cache_dir, exist_ok=True)
     version = utils.split_version(__version__)
     version_match: Tuple[Optional[str], Optional[str], int] = None, None, 0
@@ -425,7 +477,7 @@ def _get_model_weights() -> str:
             "Model weights file %s retrieved from local cache",
             version_match[0],
         )
-        return version_match[0]
+        return Path(version_match[0])
     # Otherwise try to find compatible model weights on GitHub.
     else:
         repo = github.Github().get_repo("Noble-Lab/casanovo")
@@ -458,19 +510,9 @@ def _get_model_weights() -> str:
         # Download the model weights if a matching release was found.
         if version_match[2] > 0:
             filename, url, _ = version_match
-            logger.info(
-                "Downloading model weights file %s from %s", filename, url
-            )
-            r = requests.get(url, stream=True, allow_redirects=True)
-            r.raise_for_status()
-            file_size = int(r.headers.get("Content-Length", 0))
-            desc = "(Unknown total file size)" if file_size == 0 else ""
-            r.raw.read = functools.partial(r.raw.read, decode_content=True)
-            with tqdm.tqdm.wrapattr(
-                r.raw, "read", total=file_size, desc=desc
-            ) as r_raw, open(filename, "wb") as f:
-                shutil.copyfileobj(r_raw, f)
-            return filename
+            cache_file_path = cache_dir / filename
+            _download_weights(url, cache_file_path)
+            return cache_file_path
         else:
             logger.error(
                 "No matching model weights for release v%s found, please "
@@ -483,6 +525,183 @@ def _get_model_weights() -> str:
                 f"please specify your model weights explicitly using the "
                 f"`--model` parameter"
             )
+
+
+def _setup_output(
+    output_dir: str | None,
+    output_root: str | None,
+    overwrite: bool,
+    verbosity: str,
+) -> Tuple[Path, str]:
+    """
+    Set up the output directory, output file root name, and logging.
+
+    Parameters:
+    -----------
+    output_dir : str | None
+        The path to the output directory. If `None`, the output directory will
+        be resolved to the current working directory.
+    output_root : str | None
+        The base name for the output files. If `None` the output root name will
+        be resolved to casanovo_<current date and time>
+    overwrite: bool
+        Whether to overwrite log file if it already exists in the output
+        directory.
+    verbosity : str
+        The verbosity level for logging.
+
+    Returns:
+    --------
+    Tuple[Path, str]
+        A tuple containing the resolved output directory and root name for
+        output files.
+    """
+    if output_root is None:
+        output_root = (
+            f"casanovo_{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}"
+        )
+
+    if output_dir is None:
+        output_path = Path.cwd()
+    else:
+        output_path = Path(output_dir).expanduser().resolve()
+        if not output_path.is_dir():
+            output_path.mkdir(parents=True)
+            logger.warning(
+                "Target output directory %s does not exists, so it will be created.",
+                output_path,
+            )
+
+    if not overwrite:
+        utils.check_dir_file_exists(output_path, f"{output_root}.log")
+
+    setup_logging((output_path / output_root).with_suffix(".log"), verbosity)
+    return output_path, output_root
+
+
+def _get_weights_from_url(
+    file_url: str,
+    cache_dir: Path,
+    force_download: Optional[bool] = False,
+) -> Path:
+    """
+    Resolve weight file from URL
+
+    Attempt to download weight file from URL if weights are not already
+    cached - otherwise use cached weights. Downloaded weight files will be
+    cached.
+
+    Parameters
+    ----------
+    file_url : str
+        URL pointing to model weights file.
+    cache_dir : Path
+        Model weights cache directory path.
+    force_download : Optional[bool], default=False
+        If True, forces a new download of the weight file even if it exists in
+        the cache.
+
+    Returns
+    -------
+    Path
+        Path to the cached weights file.
+    """
+    if not _is_valid_url(file_url):
+        raise ValueError("file_url must point to a valid URL")
+
+    os.makedirs(cache_dir, exist_ok=True)
+    cache_file_name = Path(urllib.parse.urlparse(file_url).path).name
+    url_hash = hashlib.shake_256(file_url.encode("utf-8")).hexdigest(5)
+    cache_file_dir = cache_dir / url_hash
+    cache_file_path = cache_file_dir / cache_file_name
+
+    if cache_file_path.is_file() and not force_download:
+        cache_time = cache_file_path.stat()
+        url_last_modified = 0
+
+        try:
+            file_response = requests.head(file_url)
+            if file_response.ok:
+                if "Last-Modified" in file_response.headers:
+                    url_last_modified = datetime.datetime.strptime(
+                        file_response.headers["Last-Modified"],
+                        "%a, %d %b %Y %H:%M:%S %Z",
+                    ).timestamp()
+            else:
+                logger.warning(
+                    "Attempted HEAD request to %s yielded non-ok status code - using cached file",
+                    file_url,
+                )
+        except (
+            requests.ConnectionError,
+            requests.Timeout,
+            requests.TooManyRedirects,
+        ):
+            logger.warning(
+                "Failed to reach %s to get remote last modified time - using cached file",
+                file_url,
+            )
+
+        if cache_time.st_mtime > url_last_modified:
+            logger.info(
+                "Model weights %s retrieved from local cache", file_url
+            )
+            return cache_file_path
+
+    _download_weights(file_url, cache_file_path)
+    return cache_file_path
+
+
+def _download_weights(file_url: str, download_path: Path) -> None:
+    """
+    Download weights file from URL
+
+    Download the model weights file from the specified URL and save it to the
+    given path. Ensures the download directory exists, and uses a progress
+    bar to indicate download status.
+
+    Parameters
+    ----------
+    file_url : str
+        URL pointing to the model weights file.
+    download_path : Path
+        Path where the downloaded weights file will be saved.
+    """
+    download_file_dir = download_path.parent
+    os.makedirs(download_file_dir, exist_ok=True)
+    response = requests.get(file_url, stream=True, allow_redirects=True)
+    response.raise_for_status()
+    file_size = int(response.headers.get("Content-Length", 0))
+    desc = "(Unknown total file size)" if file_size == 0 else ""
+    response.raw.read = functools.partial(
+        response.raw.read, decode_content=True
+    )
+
+    with tqdm.tqdm.wrapattr(
+        response.raw, "read", total=file_size, desc=desc
+    ) as r_raw, open(download_path, "wb") as file:
+        shutil.copyfileobj(r_raw, file)
+
+
+def _is_valid_url(file_url: str) -> bool:
+    """
+    Determine whether file URL is a valid URL
+
+    Parameters
+    ----------
+    file_url : str
+        url to verify
+
+    Return
+    ------
+    is_url : bool
+        whether file_url is a valid url
+    """
+    try:
+        result = urllib.parse.urlparse(file_url)
+        return all([result.scheme, result.netloc])
+    except ValueError:
+        return False
 
 
 if __name__ == "__main__":

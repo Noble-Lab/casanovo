@@ -1,10 +1,20 @@
 import collections
+import datetime
+import functools
+import hashlib
 import heapq
+import io
 import os
+import pathlib
 import platform
+import re
+import requests
 import shutil
 import tempfile
+import unittest
+import unittest.mock
 
+import depthcharge.masses
 import einops
 import github
 import numpy as np
@@ -15,7 +25,7 @@ from casanovo import casanovo
 from casanovo import utils
 from casanovo.data import ms_io
 from casanovo.data.datasets import SpectrumDataset, AnnotatedSpectrumDataset
-from casanovo.denovo.evaluate import aa_match_batch, aa_match_metrics
+from casanovo.denovo.evaluate import aa_match_batch, aa_match_metrics, aa_match
 from casanovo.denovo.model import Spec2Pep, _aa_pep_score
 from depthcharge.data import SpectrumIndex, AnnotatedSpectrumIndex
 
@@ -69,7 +79,180 @@ def test_split_version():
     assert version == ("3", "0", "1")
 
 
-@pytest.mark.skip(reason="Hit rate limit during CI/CD")
+class MockResponseGet:
+    file_content = b"fake model weights content"
+
+    class MockRaw(io.BytesIO):
+        def read(self, *args, **kwargs):
+            return super().read(*args)
+
+    def __init__(self):
+        self.request_counter = 0
+        self.is_ok = True
+
+    def raise_for_status(self):
+        if not self.is_ok:
+            raise requests.HTTPError
+
+    def __call__(self, url, stream=True, allow_redirects=True):
+        self.request_counter += 1
+        response = unittest.mock.MagicMock()
+        response.raise_for_status = self.raise_for_status
+        response.headers = {"Content-Length": str(len(self.file_content))}
+        response.raw = MockResponseGet.MockRaw(self.file_content)
+        return response
+
+
+class MockAsset:
+    def __init__(self, file_name):
+        self.name = file_name
+        self.browser_download_url = f"http://example.com/{file_name}"
+
+
+class MockRelease:
+    def __init__(self, tag_name, assets):
+        self.tag_name = tag_name
+        self.assets = [MockAsset(asset) for asset in assets]
+
+    def get_assets(self):
+        return self.assets
+
+
+class MockRepo:
+    def __init__(
+        self,
+        release_dict={
+            "v3.0.0": [
+                "casanovo_massivekb.ckpt",
+                "casanovo_non-enzy.checkpt",
+                "v3.0.0.zip",
+                "v3.0.0.tar.gz",
+            ],
+            "v3.1.0": ["v3.1.0.zip", "v3.1.0.tar.gz"],
+            "v3.2.0": ["v3.2.0.zip", "v3.2.0.tar.gz"],
+            "v3.3.0": ["v3.3.0.zip", "v3.3.0.tar.gz"],
+            "v4.0.0": [
+                "casanovo_massivekb.ckpt",
+                "casanovo_nontryptic.ckpt",
+                "v4.0.0.zip",
+                "v4.0.0.tar.gz",
+            ],
+        },
+    ):
+        self.releases = [
+            MockRelease(tag_name, assets)
+            for tag_name, assets in release_dict.items()
+        ]
+
+    def get_releases(self):
+        return self.releases
+
+
+class MockGithub:
+    def __init__(self, releases):
+        self.releases = releases
+
+    def get_repo(self, repo_name):
+        return MockRepo()
+
+
+def test_setup_model(monkeypatch):
+    test_releases = ["3.0.0", "3.0.999", "3.999.999"]
+    mock_get = MockResponseGet()
+    mock_github = functools.partial(MockGithub, test_releases)
+    version = "3.0.0"
+
+    # Test model is none when not training
+    with monkeypatch.context() as mnk, tempfile.TemporaryDirectory() as tmp_dir:
+        mnk.setattr(casanovo, "__version__", version)
+        mnk.setattr("appdirs.user_cache_dir", lambda n, a, opinion: tmp_dir)
+        mnk.setattr(github, "Github", mock_github)
+        mnk.setattr(requests, "get", mock_get)
+        filename = pathlib.Path(tmp_dir) / "casanovo_massivekb_v3_0_0.ckpt"
+
+        assert not filename.is_file()
+        _, result_path = casanovo.setup_model(None, None, None, None, False)
+        assert result_path.resolve() == filename.resolve()
+        assert filename.is_file()
+        assert mock_get.request_counter == 1
+        os.remove(result_path)
+
+        assert not filename.is_file()
+        _, result = casanovo.setup_model(None, None, None, None, True)
+        assert result is None
+        assert not filename.is_file()
+        assert mock_get.request_counter == 1
+
+    with monkeypatch.context() as mnk, tempfile.TemporaryDirectory() as tmp_dir:
+        mnk.setattr(casanovo, "__version__", version)
+        mnk.setattr("appdirs.user_cache_dir", lambda n, a, opinion: tmp_dir)
+        mnk.setattr(github, "Github", mock_github)
+        mnk.setattr(requests, "get", mock_get)
+
+        cache_file_name = "model_weights.ckpt"
+        file_url = f"http://www.example.com/{cache_file_name}"
+        url_hash = hashlib.shake_256(file_url.encode("utf-8")).hexdigest(5)
+        cache_dir = pathlib.Path(tmp_dir)
+        cache_file_dir = cache_dir / url_hash
+        cache_file_path = cache_file_dir / cache_file_name
+
+        assert not cache_file_path.is_file()
+        _, result_path = casanovo.setup_model(
+            file_url, None, None, None, False
+        )
+        assert cache_file_path.is_file()
+        assert result_path.resolve() == cache_file_path.resolve()
+        assert mock_get.request_counter == 2
+        os.remove(result_path)
+
+        assert not cache_file_path.is_file()
+        _, result_path = casanovo.setup_model(
+            file_url, None, None, None, False
+        )
+        assert cache_file_path.is_file()
+        assert result_path.resolve() == cache_file_path.resolve()
+        assert mock_get.request_counter == 3
+
+    # Test model is file
+    with monkeypatch.context() as mnk, tempfile.NamedTemporaryFile(
+        suffix=".ckpt"
+    ) as temp_file, tempfile.TemporaryDirectory() as tmp_dir:
+        mnk.setattr(casanovo, "__version__", version)
+        mnk.setattr("appdirs.user_cache_dir", lambda n, a, opinion: tmp_dir)
+        mnk.setattr(github, "Github", mock_github)
+        mnk.setattr(requests, "get", mock_get)
+
+        temp_file_path = temp_file.name
+        _, result = casanovo.setup_model(
+            temp_file_path, None, None, None, False
+        )
+        assert mock_get.request_counter == 3
+        assert result == temp_file_path
+
+        _, result = casanovo.setup_model(
+            temp_file_path, None, None, None, True
+        )
+        assert mock_get.request_counter == 3
+        assert result == temp_file_path
+
+    # Test model is neither a URL or File
+    with monkeypatch.context() as mnk, tempfile.TemporaryDirectory() as tmp_dir:
+        mnk.setattr(casanovo, "__version__", version)
+        mnk.setattr("appdirs.user_cache_dir", lambda n, a, opinion: tmp_dir)
+        mnk.setattr(github, "Github", mock_github)
+        mnk.setattr(requests, "get", mock_get)
+
+        with pytest.raises(ValueError):
+            casanovo.setup_model("FooBar", None, None, None, False)
+
+        assert mock_get.request_counter == 3
+
+        with pytest.raises(ValueError):
+            casanovo.setup_model("FooBar", None, None, None, False)
+
+        assert mock_get.request_counter == 3
+
+
 def test_get_model_weights(monkeypatch):
     """
     Test that model weights can be downloaded from GitHub or used from the
@@ -77,26 +260,37 @@ def test_get_model_weights(monkeypatch):
     """
     # Model weights for fully matching version, minor matching version, major
     # matching version.
-    for version in ["3.0.0", "3.0.999", "3.999.999"]:
+    test_releases = ["3.0.0", "3.0.999", "3.999.999"]
+    mock_get = MockResponseGet()
+    mock_github = functools.partial(MockGithub, test_releases)
+
+    for version in test_releases:
         with monkeypatch.context() as mnk, tempfile.TemporaryDirectory() as tmp_dir:
             mnk.setattr(casanovo, "__version__", version)
             mnk.setattr(
                 "appdirs.user_cache_dir", lambda n, a, opinion: tmp_dir
             )
+            mnk.setattr(github, "Github", mock_github)
+            mnk.setattr(requests, "get", mock_get)
 
-            filename = os.path.join(tmp_dir, "casanovo_massivekb_v3_0_0.ckpt")
-            assert not os.path.isfile(filename)
-            assert casanovo._get_model_weights() == filename
-            assert os.path.isfile(filename)
-            assert casanovo._get_model_weights() == filename
+            tmp_path = pathlib.Path(tmp_dir)
+            filename = tmp_path / "casanovo_massivekb_v3_0_0.ckpt"
+            assert not filename.is_file()
+            result_path = casanovo._get_model_weights(tmp_path)
+            assert result_path == filename
+            assert filename.is_file()
+            result_path = casanovo._get_model_weights(tmp_path)
+            assert result_path == filename
 
     # Impossible to find model weights for (i) full version mismatch and (ii)
     # major version mismatch.
     for version in ["999.999.999", "999.0.0"]:
-        with monkeypatch.context() as mnk:
+        with monkeypatch.context() as mnk, tempfile.TemporaryDirectory() as tmp_dir:
             mnk.setattr(casanovo, "__version__", version)
+            mnk.setattr(github, "Github", mock_github)
+            mnk.setattr(requests, "get", mock_get)
             with pytest.raises(ValueError):
-                casanovo._get_model_weights()
+                casanovo._get_model_weights(pathlib.Path(tmp_dir))
 
     # Test GitHub API rate limit.
     def request(self, *args, **kwargs):
@@ -107,8 +301,122 @@ def test_get_model_weights(monkeypatch):
     with monkeypatch.context() as mnk, tempfile.TemporaryDirectory() as tmp_dir:
         mnk.setattr("appdirs.user_cache_dir", lambda n, a, opinion: tmp_dir)
         mnk.setattr("github.Requester.Requester.requestJsonAndCheck", request)
+        mnk.setattr(requests, "get", mock_get)
+        mock_get.request_counter = 0
         with pytest.raises(github.RateLimitExceededException):
-            casanovo._get_model_weights()
+            casanovo._get_model_weights(pathlib.Path(tmp_dir))
+
+        assert mock_get.request_counter == 0
+
+
+class MockResponseHead:
+    def __init__(self):
+        self.last_modified = None
+        self.is_ok = True
+        self.fail = False
+
+    def __call__(self, url):
+        if self.fail:
+            raise requests.ConnectionError
+
+        response = unittest.mock.MagicMock()
+        response.headers = dict()
+        response.ok = self.is_ok
+        if self.last_modified is not None:
+            response.headers["Last-Modified"] = self.last_modified
+
+        return response
+
+
+def test_get_weights_from_url(monkeypatch):
+    file_url = "http://example.com/model_weights.ckpt"
+
+    with monkeypatch.context() as mnk, tempfile.TemporaryDirectory() as tmp_dir:
+        mock_get = MockResponseGet()
+        mock_head = MockResponseHead()
+        mnk.setattr(requests, "get", mock_get)
+        mnk.setattr(requests, "head", mock_head)
+
+        cache_dir = pathlib.Path(tmp_dir)
+        url_hash = hashlib.shake_256(file_url.encode("utf-8")).hexdigest(5)
+        cache_file_name = "model_weights.ckpt"
+        cache_file_dir = cache_dir / url_hash
+        cache_file_path = cache_file_dir / cache_file_name
+
+        # Test downloading and caching the file
+        assert not cache_file_path.is_file()
+        result_path = casanovo._get_weights_from_url(file_url, cache_dir)
+        assert cache_file_path.is_file()
+        assert result_path.resolve() == cache_file_path.resolve()
+        assert mock_get.request_counter == 1
+
+        # Test that cached file is used
+        result_path = casanovo._get_weights_from_url(file_url, cache_dir)
+        assert result_path.resolve() == cache_file_path.resolve()
+        assert mock_get.request_counter == 1
+
+        # Test force downloading the file
+        result_path = casanovo._get_weights_from_url(
+            file_url, cache_dir, force_download=True
+        )
+        assert result_path.resolve() == cache_file_path.resolve()
+        assert mock_get.request_counter == 2
+
+        # Test that file is re-downloaded if last modified is newer than
+        # file last modified
+        # NOTE: Assuming test takes < 1 year to run
+        curr_utc = datetime.datetime.now().astimezone(datetime.timezone.utc)
+        mock_head.last_modified = (
+            curr_utc + datetime.timedelta(days=365.0)
+        ).strftime("%a, %d %b %Y %H:%M:%S GMT")
+        result_path = casanovo._get_weights_from_url(file_url, cache_dir)
+        assert result_path.resolve() == cache_file_path.resolve()
+        assert mock_get.request_counter == 3
+
+        # Test file is not redownloaded if its newer than upstream file
+        mock_head.last_modified = (
+            curr_utc - datetime.timedelta(days=365.0)
+        ).strftime("%a, %d %b %Y %H:%M:%S GMT")
+        result_path = casanovo._get_weights_from_url(file_url, cache_dir)
+        assert result_path.resolve() == cache_file_path.resolve()
+        assert mock_get.request_counter == 3
+
+        # Test that error is raised if file get response is not OK
+        mock_get.is_ok = False
+        with pytest.raises(requests.HTTPError):
+            casanovo._get_weights_from_url(
+                file_url, cache_dir, force_download=True
+            )
+        mock_get.is_ok = True
+        assert mock_get.request_counter == 4
+
+        # Test that cached file is used if head requests yields non-ok status
+        # code, even if upstream file is newer
+        mock_head.is_ok = False
+        mock_head.last_modified = (
+            curr_utc + datetime.timedelta(days=365.0)
+        ).strftime("%a, %d %b %Y %H:%M:%S GMT")
+        result_path = casanovo._get_weights_from_url(file_url, cache_dir)
+        assert result_path.resolve() == cache_file_path.resolve()
+        assert mock_get.request_counter == 4
+        mock_head.is_ok = True
+
+        # Test that cached file is used if head request fails
+        mock_head.fail = True
+        result_path = casanovo._get_weights_from_url(file_url, cache_dir)
+        assert result_path.resolve() == cache_file_path.resolve()
+        assert mock_get.request_counter == 4
+        mock_head.fail = False
+
+        # Test invalid URL
+        with pytest.raises(ValueError):
+            bad_url = "foobar"
+            casanovo._get_weights_from_url(bad_url, cache_dir)
+
+
+def test_is_valid_url():
+    assert casanovo._is_valid_url("https://www.washington.edu/")
+    assert not casanovo._is_valid_url("foobar")
 
 
 def test_tensorboard():
@@ -131,12 +439,17 @@ def test_aa_pep_score():
     aa_scores_raw = np.asarray([0.0, 0.5, 1.0])
 
     aa_scores, peptide_score = _aa_pep_score(aa_scores_raw, True)
-    np.testing.assert_array_equal(aa_scores, np.asarray([0.25, 0.5, 0.75]))
-    assert peptide_score == pytest.approx(0.5)
+    np.testing.assert_array_equal(aa_scores, np.asarray([0.0, 0.25, 0.5]))
+    assert peptide_score == pytest.approx(0.0)
 
     aa_scores, peptide_score = _aa_pep_score(aa_scores_raw, False)
-    np.testing.assert_array_equal(aa_scores, np.asarray([0.25, 0.5, 0.75]))
-    assert peptide_score == pytest.approx(-0.5)
+    np.testing.assert_array_equal(aa_scores, np.asarray([0.0, 0.25, 0.5]))
+    assert peptide_score == pytest.approx(-1.0)
+
+    aa_scores_raw = np.asarray([1.0, 0.25])
+    aa_scores, peptide_score = _aa_pep_score(aa_scores_raw, True)
+    np.testing.assert_array_equal(aa_scores, np.asarray([0.75, 0.375]))
+    assert peptide_score == pytest.approx(0.5)
 
 
 def test_beam_search_decode():
@@ -539,6 +852,20 @@ def test_eval_metrics():
     assert 26 / 40 == pytest.approx(aa_recall)
     assert 26 / 41 == pytest.approx(aa_precision)
 
+    aa_matches, pep_match = aa_match(
+        None, None, depthcharge.masses.PeptideMass().masses
+    )
+
+    assert aa_matches.shape == (0,)
+    assert not pep_match
+
+    aa_matches, pep_match = aa_match(
+        "PEPTIDE", None, depthcharge.masses.PeptideMass().masses
+    )
+
+    assert np.array_equal(aa_matches, np.zeros(len("PEPTIDE"), dtype=bool))
+    assert not pep_match
+
 
 def test_spectrum_id_mgf(mgf_small, tmp_path):
     """Test that spectra from MGF files are specified by their index."""
@@ -622,3 +949,37 @@ def test_run_map(mgf_small):
     out_writer.set_ms_run([os.path.abspath(mgf_small.name)])
     assert os.path.basename(mgf_small.name) not in out_writer._run_map
     assert os.path.abspath(mgf_small.name) in out_writer._run_map
+
+
+def test_check_dir(tmp_path):
+    exists_path = tmp_path / "exists-1234.ckpt"
+    exists_pattern = "exists-*.ckpt"
+    exists_path.touch()
+    dne_pattern = "dne-*.ckpt"
+
+    with pytest.raises(FileExistsError):
+        utils.check_dir_file_exists(tmp_path, [exists_pattern, dne_pattern])
+
+    with pytest.raises(FileExistsError):
+        utils.check_dir_file_exists(tmp_path, exists_pattern)
+
+    utils.check_dir_file_exists(tmp_path, [dne_pattern])
+    utils.check_dir_file_exists(tmp_path, dne_pattern)
+
+
+def test_setup_output(tmp_path, monkeypatch):
+    with monkeypatch.context() as mnk:
+        mnk.setattr(pathlib.Path, "cwd", lambda: tmp_path)
+        output_path, output_root = casanovo._setup_output(
+            None, None, False, "info"
+        )
+        assert output_path.resolve() == tmp_path.resolve()
+        assert re.fullmatch(r"casanovo_\d+", output_root) is not None
+
+        target_path = tmp_path / "foo"
+        output_path, output_root = casanovo._setup_output(
+            str(target_path), "bar", False, "info"
+        )
+
+        assert output_path.resolve() == target_path.resolve()
+        assert output_root == "bar"

@@ -16,7 +16,7 @@ from depthcharge.components import ModelMixin, PeptideDecoder, SpectrumEncoder
 
 from . import evaluate
 from .. import config
-from ..data import ms_io
+from ..data import ms_io, psm
 
 logger = logging.getLogger("casanovo")
 
@@ -914,15 +914,15 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
             if len(peptide) == 0:
                 continue
             self.out_writer.psms.append(
-                (
-                    peptide,
-                    tuple(spectrum_i),
-                    peptide_score,
-                    charge,
-                    precursor_mz,
-                    self.peptide_mass_calculator.mass(peptide, charge),
-                    ",".join(list(map("{:.5f}".format, aa_scores))),
-                ),
+                psm.PepSpecMatch(
+                    sequence=peptide,
+                    spectrum_id=tuple(spectrum_i),
+                    peptide_score=peptide_score,
+                    charge=int(charge),
+                    calc_mz=precursor_mz,
+                    exp_mz=self.peptide_mass_calculator.mass(peptide, charge),
+                    aa_scores=aa_scores,
+                )
             )
 
     def _log_history(self) -> None:
@@ -1076,7 +1076,7 @@ def _aa_pep_score(
     peptide_score : float
         The peptide score.
     """
-    peptide_score = np.mean(aa_scores)
+    peptide_score = np.exp(np.mean(np.log(aa_scores)))
     aa_scores = (aa_scores + peptide_score) / 2
     if not fits_precursor_mz:
         peptide_score -= 1

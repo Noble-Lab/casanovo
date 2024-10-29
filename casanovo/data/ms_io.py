@@ -12,6 +12,7 @@ import natsort
 
 from .. import __version__
 from ..config import Config
+from .psm import PepSpecMatch
 
 
 class MztabWriter:
@@ -42,7 +43,7 @@ class MztabWriter:
             ),
         ]
         self._run_map = {}
-        self.psms = []
+        self.psms: List[PepSpecMatch] = []
 
     def set_metadata(self, config: Config, **kwargs) -> None:
         """
@@ -178,34 +179,39 @@ class MztabWriter:
                 ]
             )
             for i, psm in enumerate(
-                natsort.natsorted(self.psms, key=operator.itemgetter(1)), 1
+                natsort.natsorted(
+                    self.psms, key=operator.attrgetter("spectrum_id")
+                ),
+                1,
             ):
-                filename, idx = os.path.abspath(psm[1][0]), psm[1][1]
+                filename = os.path.abspath(psm.spectrum_id[0])
+                idx = psm.spectrum_id[1]
                 writer.writerow(
                     [
                         "PSM",
-                        psm[0],  # sequence
+                        psm.sequence,  # sequence
                         i,  # PSM_ID
                         "null",  # accession
                         "null",  # unique
                         "null",  # database
                         "null",  # database_version
                         f"[MS, MS:1003281, Casanovo, {__version__}]",
-                        psm[2],  # search_engine_score[1]
+                        psm.peptide_score,  # search_engine_score[1]
                         # FIXME: Modifications should be specified as
                         #  controlled vocabulary terms.
                         "null",  # modifications
                         # FIXME: Can we get the retention time from the data
                         #  loader?
                         "null",  # retention_time
-                        psm[3],  # charge
-                        psm[4],  # exp_mass_to_charge
-                        psm[5],  # calc_mass_to_charge
+                        psm.charge,  # charge
+                        psm.exp_mz,  # exp_mass_to_charge
+                        psm.calc_mz,  # calc_mass_to_charge
                         f"ms_run[{self._run_map[filename]}]:{idx}",
                         "null",  # pre
                         "null",  # post
                         "null",  # start
                         "null",  # end
-                        psm[6],  # opt_ms_run[1]_aa_scores
+                        # opt_ms_run[1]_aa_scores
+                        ",".join(list(map("{:.5f}".format, psm.aa_scores))),
                     ]
                 )

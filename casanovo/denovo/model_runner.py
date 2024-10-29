@@ -4,22 +4,27 @@ model."""
 import glob
 import logging
 import os
+import re
 import tempfile
 import uuid
 import warnings
 from pathlib import Path
 from typing import Iterable, List, Optional, Union
 
+import depthcharge.masses
 import lightning.pytorch as pl
+import lightning.pytorch.loggers
 import numpy as np
 import torch
 from depthcharge.data import AnnotatedSpectrumIndex, SpectrumIndex
 from lightning.pytorch.strategies import DDPStrategy
-from lightning.pytorch.callbacks import ModelCheckpoint
+from lightning.pytorch.callbacks import ModelCheckpoint, LearningRateMonitor
 
+from .. import utils
 from ..config import Config
 from ..data import ms_io
 from ..denovo.dataloaders import DeNovoDataModule
+from ..denovo.evaluate import aa_match_batch, aa_match_metrics
 from ..denovo.model import Spec2Pep
 
 
@@ -36,16 +41,31 @@ class ModelRunner:
     model_filename : str, optional
         The model filename is required for eval and de novo modes,
         but not for training a model from scratch.
+    output_dir : Path | None, optional
+        The directory where checkpoint files will be saved. If `None` no
+        checkpoint files will be saved and a warning will be triggered.
+    output_rootname : str | None, optional
+        The root name for checkpoint files (e.g., checkpoints or results). If
+        `None` no base name will be used for checkpoint files.
+    overwrite_ckpt_check: bool, optional
+        Whether to check output_dir (if not `None`) for conflicting checkpoint
+        files.
     """
 
     def __init__(
         self,
         config: Config,
         model_filename: Optional[str] = None,
+        output_dir: Optional[Path | None] = None,
+        output_rootname: Optional[str | None] = None,
+        overwrite_ckpt_check: Optional[bool] = True,
     ) -> None:
         """Initialize a ModelRunner"""
         self.config = config
         self.model_filename = model_filename
+        self.output_dir = output_dir
+        self.output_rootname = output_rootname
+        self.overwrite_ckpt_check = overwrite_ckpt_check
 
         # Initialized later:
         self.tmp_dir = None
@@ -54,18 +74,42 @@ class ModelRunner:
         self.loaders = None
         self.writer = None
 
+        if output_dir is None:
+            self.callbacks = []
+            logger.warning(
+                "Checkpoint directory not set in ModelRunner, "
+                "no checkpoint files will be saved."
+            )
+            return
+
+        prefix = f"{output_rootname}." if output_rootname is not None else ""
+        curr_filename = prefix + "{epoch}-{step}"
+        best_filename = prefix + "best"
+        if overwrite_ckpt_check:
+            utils.check_dir_file_exists(
+                output_dir,
+                [
+                    f"{curr_filename.format(epoch='*', step='*')}.ckpt",
+                    f"{best_filename}.ckpt",
+                ],
+            )
+
         # Configure checkpoints.
-        if config.save_top_k is not None:
-            self.callbacks = [
-                ModelCheckpoint(
-                    dirpath=config.model_save_folder_path,
-                    monitor="valid_CELoss",
-                    mode="min",
-                    save_top_k=config.save_top_k,
-                )
-            ]
-        else:
-            self.callbacks = None
+        self.callbacks = [
+            ModelCheckpoint(
+                dirpath=output_dir,
+                save_on_train_epoch_end=True,
+                filename=curr_filename,
+                enable_version_counter=False,
+            ),
+            ModelCheckpoint(
+                dirpath=output_dir,
+                monitor="valid_CELoss",
+                filename=best_filename,
+                enable_version_counter=False,
+            ),
+            LearningRateMonitor(log_momentum=True, log_weight_decay=True),
+        ]
 
     def __enter__(self):
         """Enter the context manager"""
@@ -111,42 +155,79 @@ class ModelRunner:
             self.loaders.val_dataloader(),
         )
 
-    def evaluate(self, peak_path: Iterable[str]) -> None:
-        """Evaluate peptide sequence preditions from a trained Casanovo model.
+    def log_metrics(self, test_index: AnnotatedSpectrumIndex) -> None:
+        """Log peptide precision and amino acid precision
+
+        Calculate and log peptide precision and amino acid precision
+        based off of model predictions and spectrum annotations
 
         Parameters
         ----------
-        peak_path : iterable of str
-            The path with MS data files for predicting peptide sequences.
-
-        Returns
-        -------
-        self
+        test_index : AnnotatedSpectrumIndex
+            Index containing the annotated spectra used to generate model
+            predictions
         """
-        self.initialize_trainer(train=False)
-        self.initialize_model(train=False)
+        seq_pred = []
+        seq_true = []
+        pred_idx = 0
 
-        test_index = self._get_index(peak_path, True, "evaluation")
-        self.initialize_data_module(test_index=test_index)
-        self.loaders.setup(stage="test", annotated=True)
+        with test_index as t_ind:
+            for true_idx in range(t_ind.n_spectra):
+                seq_true.append(t_ind[true_idx][4])
+                if pred_idx < len(self.writer.psms) and self.writer.psms[
+                    pred_idx
+                ].spectrum_id == t_ind.get_spectrum_id(true_idx):
+                    seq_pred.append(self.writer.psms[pred_idx].sequence)
+                    pred_idx += 1
+                else:
+                    seq_pred.append(None)
 
-        self.trainer.validate(self.model, self.loaders.test_dataloader())
+        aa_precision, aa_recall, pep_precision = aa_match_metrics(
+            *aa_match_batch(
+                seq_true,
+                seq_pred,
+                depthcharge.masses.PeptideMass().masses,
+            )
+        )
 
-    def predict(self, peak_path: Iterable[str], output: str) -> None:
+        if self.config["top_match"] > 1:
+            logger.warning(
+                "The behavior for calculating evaluation metrics is undefined when "
+                "the 'top_match' configuration option is set to a value greater than 1."
+            )
+
+        logger.info("Peptide Precision: %.2f%%", 100 * pep_precision)
+        logger.info("Amino Acid Precision: %.2f%%", 100 * aa_precision)
+        logger.info("Amino Acid Recall: %.2f%%", 100 * aa_recall)
+
+    def predict(
+        self,
+        peak_path: Iterable[str],
+        results_path: str,
+        evaluate: bool = False,
+    ) -> None:
         """Predict peptide sequences with a trained Casanovo model.
+
+        Can also evaluate model during prediction if provided with annotated
+        peak files.
 
         Parameters
         ----------
         peak_path : iterable of str
             The path with the MS data files for predicting peptide sequences.
-        output : str
-            Where should the output be saved?
+        results_path : str
+            Sequencing results file path
+        evaluate: bool
+            whether to run model evaluation in addition to inference
+            Note: peak_path most point to annotated MS data files when
+            running model evaluation. Files that are not an annotated
+            peak file format will be ignored if evaluate is set to true.
 
         Returns
         -------
         self
         """
-        self.writer = ms_io.MztabWriter(Path(output).with_suffix(".mztab"))
+        self.writer = ms_io.MztabWriter(results_path)
         self.writer.set_metadata(
             self.config,
             model=str(self.model_filename),
@@ -157,11 +238,14 @@ class ModelRunner:
         self.initialize_model(train=False)
         self.model.out_writer = self.writer
 
-        test_index = self._get_index(peak_path, False, "")
+        test_index = self._get_index(peak_path, evaluate, "")
         self.writer.set_ms_run(test_index.ms_files)
         self.initialize_data_module(test_index=test_index)
         self.loaders.setup(stage="test", annotated=False)
         self.trainer.predict(self.model, self.loaders.test_dataloader())
+
+        if evaluate:
+            self.log_metrics(test_index)
 
     def initialize_trainer(self, train: bool) -> None:
         """Initialize the lightning Trainer.
@@ -187,13 +271,40 @@ class ModelRunner:
             additional_cfg = dict(
                 devices=devices,
                 callbacks=self.callbacks,
-                enable_checkpointing=self.config.save_top_k is not None,
+                enable_checkpointing=True,
                 max_epochs=self.config.max_epochs,
                 num_sanity_val_steps=self.config.num_sanity_val_steps,
                 strategy=self._get_strategy(),
                 val_check_interval=self.config.val_check_interval,
                 check_val_every_n_epoch=None,
+                log_every_n_steps=self.config.log_every_n_steps,
             )
+
+            if self.config.log_metrics:
+                if not self.output_dir:
+                    logger.warning(
+                        "Output directory not set in model runner. "
+                        "No loss file will be created."
+                    )
+                else:
+                    csv_log_dir = "csv_logs"
+                    if self.overwrite_ckpt_check:
+                        utils.check_dir_file_exists(
+                            self.output_dir,
+                            csv_log_dir,
+                        )
+
+                    additional_cfg.update(
+                        {
+                            "logger": lightning.pytorch.loggers.CSVLogger(
+                                self.output_dir,
+                                version=csv_log_dir,
+                                name=None,
+                            ),
+                            "log_every_n_steps": self.config.log_every_n_steps,
+                        }
+                    )
+
             trainer_cfg.update(additional_cfg)
 
         self.trainer = pl.Trainer(**trainer_cfg)
@@ -207,6 +318,16 @@ class ModelRunner:
             Determines whether to set the model up for model training or
             evaluation / inference.
         """
+        tb_summarywriter = None
+        if self.config.tb_summarywriter:
+            if self.output_dir is None:
+                logger.warning(
+                    "Can not create tensorboard because the output directory "
+                    "is not set in the model runner."
+                )
+            else:
+                tb_summarywriter = self.output_dir / "tensorboard"
+
         model_params = dict(
             dim_model=self.config.dim_model,
             n_head=self.config.n_head,
@@ -223,7 +344,7 @@ class ModelRunner:
             n_beams=self.config.n_beams,
             top_match=self.config.top_match,
             n_log=self.config.n_log,
-            tb_summarywriter=self.config.tb_summarywriter,
+            tb_summarywriter=tb_summarywriter,
             train_label_smoothing=self.config.train_label_smoothing,
             warmup_iters=self.config.warmup_iters,
             cosine_schedule_period_iters=self.config.cosine_schedule_period_iters,
@@ -242,7 +363,7 @@ class ModelRunner:
             min_peptide_len=self.config.min_peptide_len,
             top_match=self.config.top_match,
             n_log=self.config.n_log,
-            tb_summarywriter=self.config.tb_summarywriter,
+            tb_summarywriter=tb_summarywriter,
             train_label_smoothing=self.config.train_label_smoothing,
             warmup_iters=self.config.warmup_iters,
             cosine_schedule_period_iters=self.config.cosine_schedule_period_iters,
@@ -391,7 +512,22 @@ class ModelRunner:
 
         Index = AnnotatedSpectrumIndex if annotated else SpectrumIndex
         valid_charge = np.arange(1, self.config.max_charge + 1)
-        return Index(index_fname, filenames, valid_charge=valid_charge)
+
+        try:
+            return Index(index_fname, filenames, valid_charge=valid_charge)
+        except TypeError as e:
+            if Index == AnnotatedSpectrumIndex:
+                error_msg = (
+                    "Error creating annotated spectrum index. "
+                    "This may be the result of having an unannotated MGF file "
+                    "present in the validation peak file path list.\n"
+                    f"Original error message: {e}"
+                )
+
+                logger.error(error_msg)
+                raise TypeError(error_msg)
+
+            raise e
 
     def _get_strategy(self) -> Union[str, DDPStrategy]:
         """Get the strategy for the Trainer.
@@ -444,5 +580,15 @@ def _get_peak_filenames(
         for fname in glob.glob(path, recursive=True):
             if Path(fname).suffix.lower() in supported_ext:
                 found_files.add(fname)
+            else:
+                warnings.warn(
+                    f"Ignoring unsupported peak file: {fname}", RuntimeWarning
+                )
+
+    if len(found_files) == 0:
+        warnings.warn(
+            f"No supported peak files found under path(s): {list(paths)}",
+            RuntimeWarning,
+        )
 
     return sorted(list(found_files))

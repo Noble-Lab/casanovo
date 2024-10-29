@@ -40,13 +40,12 @@ random_seed: 454
 # OUTPUT OPTIONS
 # Logging frequency in training steps.
 n_log: 1
-# Tensorboard directory to use for keeping track of training metrics.
-tb_summarywriter:
-# Save the top k model checkpoints during training. -1 saves all, and leaving
-# this field empty saves none.
-save_top_k: 5
-# Path to saved checkpoints.
-model_save_folder_path: ""
+# Whether to create tensorboard directory
+tb_summarywriter: false
+# Whether to create csv_logs directory
+log_metrics: false
+# How often to log optimizer parameters in steps
+log_every_n_steps: 50
 # Model validation and checkpointing frequency in training steps.
 val_check_interval: 50_000
 

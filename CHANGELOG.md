@@ -6,6 +6,29 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+### Added
+
+- During training, model checkpoints will be saved at the end of each training epoch in addition to the checkpoints saved at the end of every validation run.
+- Besides as a local file, model weights can be specified from a URL. Upon initial download, the weights file is cached for future re-use.
+- Training and optimizer metrics can now be logged to a CSV file by setting the `log_metrics` config file option to true - the CSV file will be written to under a sub-directory of the output directory named `csv_logs`.
+
+### Changed
+
+- Removed the `evaluate` sub-command, and all model evaluation functionality has been moved to the `sequence` command using the new `--evaluate` flag.
+- The `--output` option has been split into two options, `--output_dir` and `--output_root`.
+- The `--validation_peak_path` is now optional when training; if `--validation_peak_path` is not set then the `train_peak_path` will also be used for validation.
+- The `tb_summarywriter` config option is now a boolean config option, and if set to true the TensorBoard summary will be written to a sub-directory of the output directory named `tensorboard`.
+- The Casanovo model peptide level score is now reported as the geometric mean of the raw amino acid scores, rather then the arithmetic mean.
+
+### Fixed
+
+- Precursor charges are exported as integers instead of floats in the mzTab output file, in compliance with the mzTab specification.
+
+### Removed
+
+- Removed the `save_top_k` option from the Casanovo config, the model with the lowest validation loss during training will now be saved to a fixed filename `<output_root>.best.ckpt`.
+- The `model_save_folder_path` config option has been eliminated; model checkpoints will now be saved to `--output_dir` during training.
+
 ## [4.2.1] - 2024-06-25
 
 ### Fixed

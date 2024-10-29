@@ -2,6 +2,8 @@
 
 ## Input file formats for Casanovo
 
+### MS/MS spectra
+
 When you're ready to use Casanovo for *de novo* peptide sequencing, you can input your MS/MS spectra in one of the following formats:
 
 - **[mzML](https://doi.org/10.1074/mcp.R110.000133)**: XML-based mass spectrometry community standard file format developed by the Proteomics Standards Initiative (PSI).
@@ -10,6 +12,19 @@ When you're ready to use Casanovo for *de novo* peptide sequencing, you can inpu
 
 All three of the above file formats can be used as input to Casanovo for *de novo* peptide sequencing.
 As the official PSI standard format containing the complete information from a mass spectrometry run, mzML should typically be preferred.
+
+### Model weights
+
+In addition to MS/MS spectra, Casanovo also optionally accepts a model weights (.ckpt extension) input file when running in training, sequencing, or evaluating mode.
+These weights define the functionality of the Casanovo neural network.
+
+If no input weights file is provided, Casanovo will automatically use the most recent compatible weights from the [official Casanovo GitHub repository](https://github.com/Noble-Lab/casanovo), which will be downloaded and cached locally if they are not already.
+Model weights are retrieved by matching Casanovo release version, which is of the form (major, minor, patch).
+If no model weights for an identical release are available, alternative releases with matching (i) major and minor, or (ii) major versions will be used.
+
+Alternatively, you can input custom model weights in the form of a local file system path or a URL pointing to a compatible Casanovo model weights file.
+If a URL is provided, the upstream weights file will be downloaded and cached locally for later use.
+See the [command line interface documentation](cli.rst) for more details.
 
 ## Output: Understanding the mzTab format
 
