@@ -144,7 +144,7 @@ casanovo sequence [PATH_TO]/sample_preprocessed_spectra.mgf
 ```
 
 ```{note}
-If you want to store the output mzTab file in a different location than the current working directory, specify an alternative output location using the `--output` parameter.
+If you want to store the output mzTab file in a different location than the current working directory, specify an alternative output location using the `--output_dir` parameter.
 ```
 
 This job should complete in < 1 minute.

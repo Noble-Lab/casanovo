@@ -103,17 +103,17 @@ Training, validation, and test splits for the non-enzymatic dataset are availabl
 
 **How do I know which model to use after training Casanovo?**
 
+When running model validation, Casanovo will use the validation data to compute performance measures (training loss, validation loss, amino acid precision, and peptide precision) and print this information to the console and log file.
+At the end of each validation run and at the end of each training epoch (one complete run over the training data), Casanovo will take a snapshot of the current model weights.
+After the training job is finished, the validation snapshot that achieved the lowest **validation loss** will be saved to the output directory as `<output_root>.best.ckpt`.
+Additionally, a snapshot of the model weights at the end of each **training** epoch will be saved to the output directory as `epoch=<epoch>-step=<step>.ckpt`.
+Snapshots from previous training epochs will be overwritten with the latest training snapshot at the end of each training epoch.
+
 By default, Casanovo runs model validation every 50,000 training steps.
 Note that the number of samples that are processed during a single training step depends on the batch size.
 Therefore, the default training batch size of 32 corresponds to saving a model snapshot after every 1.6 million training samples.
 You can optionally modify the validation run frequency in the [config file](https://github.com/Noble-Lab/casanovo/blob/main/casanovo/config.yaml) (parameter `val_check_interval`), depending on your dataset size.
 Note that running model validation very frequently will result in slower training time because Casanovo will evaluate its performance on the validation data for every validation check.
-
-When running model validation, Casanovo will use the validation data to compute performance measures (training loss, validation loss, amino acid precision, and peptide precision) and print this information to the console and log file.
-At the end of each validation run and training epoch (one complete run over the training data), Casanovo will take a snapshot of the current model weights.
-After the training job is finished, the validation snapshot that achieved the lowest **validation loss** will ba saved to the output directory as `best.ckpt` if no custom output prefix is specified.
-Additionally, a snapshot of the model weights at the end of each **training** epoch will be saved to the output directory as `epoch=<epoch>-step=<step>.ckpt`.
-Snapshots from previous training epochs will be overwritten with the latest training snapshot at the end of each training epoch.
 
 **Even though I added new post-translational modifications to the configuration file, Casanovo didn't identify those peptides.**
 
