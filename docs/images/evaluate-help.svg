@@ -19,7 +19,6 @@
         font-weight: 700;
     }
 
-
     .terminal-1819499677-matrix {
         font-family: Fira Code, monospace;
         font-size: 20px;
@@ -27,13 +26,11 @@
         font-variant-east-asian: full-width;
     }
 
-      
     .terminal-1819499677-title {
         font-size: 18px;
         font-weight: bold;
         font-family: arial;
     }
-
 
     .terminal-1819499677-r1 { fill: #c5c8c6 }
 .terminal-1819499677-r2 { fill: #d0b344 }
@@ -81,7 +78,6 @@
             <circle cx="44" cy="0" r="7" fill="#28c840"/>
             </g>
         
-
     <g transform="translate(9, 41)" clip-path="url(#terminal-1819499677-clip-terminal)">
     
     <g class="terminal-1819499677-matrix">

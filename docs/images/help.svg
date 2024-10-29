@@ -19,7 +19,6 @@
         font-weight: 700;
     }
 
-
     .terminal-1998256653-matrix {
         font-family: Fira Code, monospace;
         font-size: 20px;
@@ -32,7 +31,6 @@
         font-weight: bold;
         font-family: arial;
     }
-
 
     .terminal-1998256653-r1 { fill: #c5c8c6 }
 .terminal-1998256653-r2 { fill: #d0b344 }
