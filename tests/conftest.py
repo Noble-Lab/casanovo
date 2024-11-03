@@ -22,14 +22,18 @@ def tiny_fasta_file(tmp_path):
     fasta_file = tmp_path / "tiny_fasta.fasta"
     with fasta_file.open("w+") as fasta_ref:
         fasta_ref.write(
-            ">foo\nMEAPAQLLFLLLLWLPDTTREIVMTQSPPTLSLSPGERVTLSCRASQSVSSSYLTWYQQKPGQAPRLLIYGASTRATSIPARFSGSGSGTDFTLTISSLQPEDFAVYYCQQDYNLP"
+            (
+                ">foo\nMEAPAQLLFLLLLWLPDTTREIVMTQSPPTLSLSPGERVTLSCRASQSVSSSYLTWYQ"
+                "QKPGQAPRLLIYGASTRATSIPARFSGSGSGTDFTLTISSLQPEDFAVYYCQQDYNLP"
+            )
         )
     return fasta_file
 
 
 @pytest.fixture
 def mgf_medium(tmp_path):
-    """An MGF file with 7 spectra and scan numbers, C+57.021 mass modification considered"""
+    """An MGF file with 7 spectra and scan numbers,
+    C+57.021 mass modification considered"""
     peptides = [
         "ATSIPAR",
         "VTLSCR",

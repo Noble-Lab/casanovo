@@ -1021,8 +1021,8 @@ class DbSpec2Pep(Spec2Pep):
         predictions: List[Tuple[List[str], int, float, str, np.ndarray, np.ndarray, str]]
             Model predictions for the given batch of spectra containing spectrum
             ids, precursor charge and m/z, candidate peptide sequences, peptide
-            scores, amino acid-level scores, and associated proteins. Stored separately by
-            spectrum id.
+            scores, amino acid-level scores, and associated proteins.
+            Stored separately by spectrum id.
         """
         store_dict = collections.defaultdict(list)
         for start_idx in range(0, len(batch[0]), self.psm_batch_size):

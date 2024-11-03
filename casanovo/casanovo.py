@@ -62,8 +62,9 @@ class _SharedParams(click.RichCommand):
             click.Option(
                 ("-m", "--model"),
                 help="""
-                Either the model weights (.ckpt file) or a URL pointing to the model weights
-                file. If not provided, Casanovo will try to download the latest release automatically.
+                Either the model weights (.ckpt file) or a URL pointing to 
+                the model weights file. If not provided, 
+                Casanovo will try to download the latest release automatically.
                 """,
             ),
             click.Option(
