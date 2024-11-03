@@ -314,26 +314,6 @@ def _peptide_generator(
 
 
 @njit
-def _to_mz(precursor_mass: float, charge: int) -> float:
-    """
-    Convert precursor neutral mass to m/z value.
-
-    Parameters
-    ----------
-    precursor_mass : float
-        The precursor neutral mass.
-    charge : int
-        The precursor charge.
-
-    Returns
-    -------
-    mz : float
-        The calculated precursor mass-to-charge ratio.
-    """
-    return (precursor_mass + (charge * PROTON)) / charge
-
-
-@njit
 def _to_neutral_mass(mz_mass: float, charge: int) -> float:
     """
     Convert precursor m/z value to neutral mass.

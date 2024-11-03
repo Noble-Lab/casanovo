@@ -453,6 +453,35 @@ def test_aa_pep_score():
     assert peptide_score == pytest.approx(0.5)
 
 
+def test_peptide_generator_errors(residues_dict, tiny_fasta_file):
+    with pytest.raises(FileNotFoundError) as e_info:
+        [
+            (a, b)
+            for a, b in db_utils._peptide_generator(
+                "fail.fasta", "trypsin", "full", 0, 5, 10, residues_dict
+            )
+        ]
+    with pytest.raises(ValueError) as e_info:
+        [
+            (a, b)
+            for a, b in db_utils._peptide_generator(
+                tiny_fasta_file, "trypsin", "fail", 0, 5, 10, residues_dict
+            )
+        ]
+
+
+def test_to_neutral_mass():
+    mz = 500
+    charge = 2
+    neutral_mass = db_utils._to_neutral_mass(mz, charge)
+    assert neutral_mass == 997.98544706646
+
+    mz = 500
+    charge = 1
+    neutral_mass = db_utils._to_neutral_mass(mz, charge)
+    assert neutral_mass == 498.99272353323
+
+
 def test_calc_match_score():
     """
     Test the calculation of geometric scores using teacher-forced
@@ -518,19 +547,29 @@ def test_calc_match_score():
         batch_all_aa_scores, truth_aa_indices, True
     )
 
-    assert all_scores.numpy()[0] == 0
-    assert all_scores.numpy()[1] == 0
-    assert all_scores.numpy()[2] == pytest.approx(
-        np.log(0.5 * 0.5 * 1 * 1) / 4
+    assert all_scores[0] == np.exp(0)
+    assert all_scores[1] == np.exp(0)
+    assert all_scores[2] == pytest.approx(
+        np.exp(np.log(0.5 * 0.5 * 1 * 1) / 4)
     )
-    assert all_scores.numpy()[3] == pytest.approx(
-        np.log(1e-10 * 1 * 1 * 1) / 4
+    assert all_scores[3] == pytest.approx(
+        np.exp(np.log(1e-10 * 1 * 1 * 1) / 4)
     )
 
-    assert np.sum(masked_per_aa_scores.numpy()[0]) == 4
-    assert np.sum(masked_per_aa_scores.numpy()[1]) == 3
-    assert np.sum(masked_per_aa_scores.numpy()[2]) == 3
-    assert np.sum(masked_per_aa_scores.numpy()[3]) == 3
+    aa_scores = np.array([1, 1, 1, 1])
+    assert np.allclose(masked_per_aa_scores[0], (aa_scores + 1) / 2)
+    aa_scores = np.array([1, 1, 1])
+    assert np.allclose(masked_per_aa_scores[1], (aa_scores + 1) / 2)
+    aa_scores = np.array([0.5, 0.5, 1, 1])
+    assert np.allclose(
+        masked_per_aa_scores[2],
+        (aa_scores + np.exp(np.log(0.5 * 0.5 * 1 * 1) / 4)) / 2,
+    )
+    aa_scores = np.array([1e-10, 1, 1, 1])
+    assert np.allclose(
+        masked_per_aa_scores[3],
+        (aa_scores + np.exp(np.log(1e-10 * 1 * 1 * 1) / 4)) / 2,
+    )
 
 
 def test_digest_fasta_cleave(tiny_fasta_file, residues_dict):
