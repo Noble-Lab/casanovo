@@ -1,5 +1,6 @@
 """Fixtures used for testing."""
 
+import depthcharge
 import numpy as np
 import pandas as pd
 import psims
@@ -108,9 +109,9 @@ def _create_mgf_entry(peptide, charge=2, mod_aa_mass=None, annotate=True):
         The PSM entry in an MGF file format.
     """
     if mod_aa_mass is None:
-        precursor_mz = calculate_mass(peptide, charge=int(charge))
+        precursor_mz = fast_mass(peptide, charge=int(charge))
     else:
-        aa_mass = std_aa_mass
+        aa_mass = std_aa_mass.copy()
         aa_mass.update(mod_aa_mass)
         precursor_mz = fast_mass(peptide, charge=int(charge), aa_mass=aa_mass)
     mzs, intensities = _peptide_to_peaks(peptide, charge)
@@ -332,99 +333,4 @@ def tiny_config(tmp_path):
 
 @pytest.fixture
 def residues_dict():
-    return {
-        "G": 57.021464,
-        "A": 71.037114,
-        "S": 87.032028,
-        "P": 97.052764,
-        "V": 99.068414,
-        "T": 101.047670,
-        "C+57.021": 160.030649,
-        "L": 113.084064,
-        "I": 113.084064,
-        "N": 114.042927,
-        "D": 115.026943,
-        "Q": 128.058578,
-        "K": 128.094963,
-        "E": 129.042593,
-        "M": 131.040485,
-        "H": 137.058912,
-        "F": 147.068414,
-        "R": 156.101111,
-        "Y": 163.063329,
-        "W": 186.079313,
-        "M+15.995": 147.035400,
-        "N+0.984": 115.026943,
-        "Q+0.984": 129.042594,
-        "+42.011": 42.010565,
-        "+43.006": 43.005814,
-        "-17.027": -17.026549,
-        "+43.006-17.027": 25.980265,
-    }
-
-
-@pytest.fixture
-def tide_dir_small(tmp_path):
-    """A directory with a very small TIDE search result."""
-    tide_dir = tmp_path / "tide_results"
-    tide_dir.mkdir()
-
-    # Key is the scan number
-    built_dict = {
-        0: {
-            "targets": ["LESLIEK", "PEPTIDEK"],
-            "decoys": ["KEILSEL", "KEDITEPP"],
-        },
-        1: {
-            "targets": ["LESLIEK", "PEPTIDEK"],
-            "decoys": ["KEILSEL", "KEDITEPP"],
-        },
-        2: {
-            "targets": [
-                "L[42.011]EM[15.9]SLIM[15.995]EK",
-                "P[43.01]EN[0.99]PTIQ[0.984]DEK",
-            ],
-            "decoys": [
-                "K[-17.03]M[15.995]EILSEL",
-                "K[25.1]EDITEPP",
-                "KEDIQ[0.984]TEPPQ[0.984]",
-            ],
-        },
-    }
-
-    _create_tide_results_target(tide_dir, built_dict)
-    _create_tide_results_decoy(tide_dir, built_dict)
-
-    return tide_dir
-
-
-def _create_tide_results_target(tide_dir, built_dict):
-    """Create a fake TIDE search result file (target)."""
-    out_file = tide_dir / "tide-search.target.txt"
-    df = pd.DataFrame(columns=["scan", "sequence", "target/decoy"])
-    for scan, peptides in built_dict.items():
-        entry = pd.DataFrame.from_dict(
-            {
-                "scan": [scan] * len(peptides["targets"]),
-                "sequence": peptides["targets"],
-                "target/decoy": ["target"] * len(peptides["targets"]),
-            }
-        )
-        df = pd.concat([df, entry], ignore_index=True)
-    df.to_csv(out_file, sep="\t", index=True)
-
-
-def _create_tide_results_decoy(tide_dir, built_dict):
-    """Create a fake TIDE search result file (decoy)."""
-    out_file = tide_dir / "tide-search.decoy.txt"
-    df = pd.DataFrame(columns=["scan", "sequence", "target/decoy"])
-    for scan, peptides in built_dict.items():
-        entry = pd.DataFrame.from_dict(
-            {
-                "scan": [scan] * len(peptides["decoys"]),
-                "sequence": peptides["decoys"],
-                "target/decoy": ["decoy"] * len(peptides["decoys"]),
-            }
-        )
-        df = pd.concat([df, entry], ignore_index=True)
-    df.to_csv(out_file, sep="\t", index=True)
+    return depthcharge.masses.PeptideMass("massivekb").masses

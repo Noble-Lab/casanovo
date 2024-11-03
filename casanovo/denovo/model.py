@@ -994,17 +994,12 @@ class DbSpec2Pep(Spec2Pep):
     Subclass of Spec2Pep for the use of Casanovo as an
     MS/MS database search score function.
 
-    Uses teacher forcing to 'query' Casanovo for its score for each AA
-    within a candidate peptide, and takes the geometric average of these scores
-    and reports this as the score for the spectrum-peptide pair. Note that the
-    geometric mean of the AA scores is actually calculated by a
-    summation and average of the log of the scores, to preserve numerical
-    stability. This does not affect PSM ranking.
+    Uses teacher forcing to 'query' Casanovo to score a peptide-spectrum
+    pair. Higher scores indicate a better match between the peptide and
+    spectrum. The amino acid-level scores are also returned.
 
     Also note that although teacher-forcing is used within this method,
     there is *no training* involved. This is a prediction-only method.
-
-    Output is provided in .mztab format.
     """
 
     def __init__(self, *args, **kwargs):
@@ -1034,17 +1029,15 @@ class DbSpec2Pep(Spec2Pep):
             current_batch = [
                 b[start_idx : start_idx + self.psm_batch_size] for b in batch
             ]
-            pred, truth = self.decoder(
-                current_batch[3],
-                current_batch[1],
-                *self.encoder(current_batch[0]),
+            pred, truth = self._forward_step(
+                current_batch[0], current_batch[1], current_batch[3]
             )
             pred = self.softmax(pred)
-            all_scores, per_aa_scores = _calc_match_score(
+            all_peptide_scores, all_aa_scores = _calc_match_score(
                 pred, truth, self.decoder.reverse
             )
             for (
-                precursor_charge,
+                charge,
                 precursor_mz,
                 spectrum_i,
                 peptide_score,
@@ -1054,27 +1047,32 @@ class DbSpec2Pep(Spec2Pep):
                 current_batch[1][:, 1].cpu().detach().numpy(),
                 current_batch[1][:, 2].cpu().detach().numpy(),
                 current_batch[2],
-                all_scores.cpu().detach().numpy(),
-                per_aa_scores.cpu().detach().numpy(),
+                all_peptide_scores,
+                all_aa_scores,
                 current_batch[3],
             ):
-                store_dict[str(spectrum_i)].append(
-                    (
-                        spectrum_i,
-                        precursor_charge,
-                        precursor_mz,
-                        peptide,
-                        peptide_score,
-                        aa_scores,
-                        self.protein_database.get_associated_protein(peptide),
+                store_dict[spectrum_i].append(
+                    ms_io.PepSpecMatch(
+                        sequence=peptide,
+                        spectrum_id=tuple(spectrum_i),
+                        peptide_score=peptide_score,
+                        charge=int(charge),
+                        calc_mz=precursor_mz,
+                        exp_mz=self.peptide_mass_calculator.mass(
+                            peptide, charge
+                        ),
+                        aa_scores=aa_scores,
+                        protein=self.protein_database.get_associated_protein(
+                            peptide
+                        ),
                     )
                 )
         predictions = []
         for spectrum_i in store_dict:
             predictions.extend(
                 sorted(
-                    store_dict[str(spectrum_i)],
-                    key=lambda x: x[4],
+                    store_dict[spectrum_i],
+                    key=lambda x: x.peptide_score,
                     reverse=True,
                 )[: self.top_match]
             )
@@ -1090,27 +1088,7 @@ class DbSpec2Pep(Spec2Pep):
         """
         Write the database search results to the output file.
         """
-        for (
-            spectrum_i,
-            charge,
-            precursor_mz,
-            peptide,
-            peptide_score,
-            aa_scores,
-            protein,
-        ) in outputs:
-            self.out_writer.psms.append(
-                ms_io.PepSpecMatch(
-                    sequence=peptide,
-                    spectrum_id=tuple(spectrum_i),
-                    peptide_score=peptide_score,
-                    charge=int(charge),
-                    calc_mz=precursor_mz,
-                    exp_mz=self.peptide_mass_calculator.mass(peptide, charge),
-                    aa_scores=aa_scores,
-                    protein=protein,
-                )
-            )
+        self.out_writer.psms.extend(outputs)
 
 
 def _calc_match_score(
@@ -1124,8 +1102,7 @@ def _calc_match_score(
     Take in teacher-forced scoring of amino acids
     of the peptides (in a batch) and use the truth labels
     to calculate a score between the input spectra and
-    associated peptide. The score is the geometric
-    mean of the AA probabilities
+    associated peptide.
 
     Parameters
     ----------
@@ -1134,18 +1111,19 @@ def _calc_match_score(
         the vocabulary for every prediction made to generate
         the associated peptide (for an entire batch)
     truth_aa_indices : torch.Tensor
-        Indicies of the score for each actual amino acid
+        Indices of the score for each actual amino acid
         in the peptide (for an entire batch)
     decoder_reverse : bool
         Whether the decoder is reversed.
 
     Returns
     -------
-    (all_scores, per_aa_scores) : Tuple[torch.Tensor, torch.Tensor]
+    all_peptide_scores: List[float]
         The score between the input spectra and associated peptide
-        (for an entire batch)
-        a list of lists of per amino acid scores
-        (for an entire batch)
+        for each PSM in the batch.
+    all_aa_scores : List[List[float]]
+        A list of lists of per amino acid scores
+        for each PSM in the batch.
     """
     # Remove trailing tokens from predictions based on decoder reversal
     if not decoder_reverse:
@@ -1162,19 +1140,19 @@ def _calc_match_score(
     cols = torch.arange(0, batch_all_aa_scores.shape[1]).expand_as(rows)
 
     per_aa_scores = batch_all_aa_scores[rows, cols, truth_aa_indices]
-
+    per_aa_scores = per_aa_scores.cpu().detach().numpy()
     per_aa_scores[per_aa_scores == 0] += 1e-10
     score_mask = truth_aa_indices != 0
     per_aa_scores[~score_mask] = 0
-    log_per_aa_scores = torch.log(per_aa_scores)
-    all_scores = torch.where(
-        log_per_aa_scores == float("-inf"),
-        torch.tensor(0.0),
-        log_per_aa_scores,
-    ).sum(dim=1) / score_mask.sum(
-        dim=1
-    )  # Calculates geometric score
-    return all_scores, per_aa_scores
+    all_peptide_scores = []
+    all_aa_scores = []
+    for psm_score in per_aa_scores:
+        psm_score = np.trim_zeros(psm_score)
+        aa_scores, peptide_score = _aa_pep_score(psm_score, True)
+        all_peptide_scores.append(peptide_score)
+        all_aa_scores.append(aa_scores)
+
+    return all_peptide_scores, all_aa_scores
 
 
 class CosineWarmupScheduler(torch.optim.lr_scheduler._LRScheduler):

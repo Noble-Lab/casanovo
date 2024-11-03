@@ -137,6 +137,7 @@ class DeNovoDataModule(pl.LightningDataModule):
         dataset: torch.utils.data.Dataset,
         batch_size: int,
         shuffle: bool = False,
+        collate_fn: Optional[callable] = None,
     ) -> torch.utils.data.DataLoader:
         """
         Create a PyTorch DataLoader.
@@ -149,6 +150,8 @@ class DeNovoDataModule(pl.LightningDataModule):
             The batch size to use.
         shuffle : bool
             Option to shuffle the batches.
+        collate_fn : Optional[callable]
+            A function to collate the data into a batch.
 
         Returns
         -------
@@ -158,7 +161,7 @@ class DeNovoDataModule(pl.LightningDataModule):
         return torch.utils.data.DataLoader(
             dataset,
             batch_size=batch_size,
-            collate_fn=prepare_batch,
+            collate_fn=prepare_batch if collate_fn is None else collate_fn,
             pin_memory=True,
             num_workers=self.n_workers,
             shuffle=shuffle,
@@ -184,15 +187,12 @@ class DeNovoDataModule(pl.LightningDataModule):
 
     def db_dataloader(self) -> torch.utils.data.DataLoader:
         """Get a special dataloader for DB search"""
-        return torch.utils.data.DataLoader(
+        return self._make_loader(
             self.test_dataset,
-            batch_size=self.eval_batch_size,
+            self.eval_batch_size,
             collate_fn=functools.partial(
                 prepare_psm_batch, protein_database=self.protein_database
             ),
-            pin_memory=True,
-            num_workers=self.n_workers,
-            shuffle=False,
         )
 
 
