@@ -236,6 +236,7 @@ def db_search(
     config, model = setup_model(
         model, config, output_path, output_root_name, False
     )
+    start_time = time.time()
     with ModelRunner(
         config,
         model,
@@ -246,6 +247,7 @@ def db_search(
         logger.info("Performing database search on:")
         for peak_file in peak_path:
             logger.info("  %s", peak_file)
+
         logger.info("Using the following FASTA file:")
         logger.info("  %s", fasta_path)
 
@@ -254,8 +256,7 @@ def db_search(
             fasta_path,
             str((output_path / output_root).with_suffix(".mztab")),
         )
-
-    logger.info("DONE!")
+        utils.log_run_report(start_time=start_time, end_time=time.time())
 
 
 @main.command(cls=_SharedParams)

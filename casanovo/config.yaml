@@ -23,14 +23,6 @@ max_peptide_len: 100
 predict_batch_size: 1024
 # Number of PSMs for each spectrum.
 top_match: 1
-
-
-###
-# The following parameters are unique to Casanovo's inference/finetuning mode.
-###
-
-# Number of beams used in beam search.
-n_beams: 1
 # The hardware accelerator to use. Must be one of:
 # "cpu", "gpu", "tpu", "ipu", "hpu", "mps", or "auto".
 accelerator: "auto"
@@ -41,12 +33,20 @@ devices:
 
 
 ###
+# The following parameters are unique to Casanovo's inference/finetuning mode.
+###
+
+# Number of beams used in beam search.
+n_beams: 1
+
+
+###
 # The following parameters are unique to Casanovo's database search mode.
 ###
 
 # Enzyme for in silico digestion, used to generate candidate peptides.
 # See pyteomics.parser.expasy_rules for valid enzymes.
-# Can also take a regex expression to specify custom digestion rules.
+# Can also take a regex to specify custom digestion rules.
 enzyme: "trypsin"
 # Digestion type for candidate peptide generation.
 # full: standard digestion. 
@@ -60,9 +60,9 @@ missed_cleavages: 0
 max_mods: 1
 # Select which modifications from the vocabulary can be used in candidate creation.
 # Format: Comma-separated list of "aa:mod_residue", 
-# where aa is a standard amino acid or "nterm" for an N-terminal mod
+# where aa is a standard amino acid (or "nterm" for an N-terminal mod)
 # and mod_residue is a key from the "residues" dictionary.
-# Example: "M:M+15.995,X:+43.006-17.027"
+# Example: "M:M+15.995,nterm:+43.006"
 allowed_fixed_mods: "C:C+57.021"
 allowed_var_mods: "M:M+15.995,N:N+0.984,Q:Q+0.984,nterm:+42.011,nterm:+43.006,nterm:-17.027,nterm:+43.006-17.027"
 

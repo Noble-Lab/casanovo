@@ -1,6 +1,6 @@
 """A PyTorch Dataset class for annotated spectra."""
 
-from typing import List, Optional, Tuple
+from typing import Optional, Tuple
 
 import depthcharge
 import numpy as np
