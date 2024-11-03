@@ -81,9 +81,12 @@ This model file or a custom one can then be specified using the `--model` comman
 
 Not all releases will have a model file included on the [Releases page](https://github.com/Noble-Lab/casanovo/releases), in which case model weights for alternative releases with the same major version number can be used.
 
-The most recent model weights for Casanovo version 3.x are currently provided under [Casanovo v3.0.0](https://github.com/Noble-Lab/casanovo/releases/tag/v3.0.0):
-- `casanovo_massivekb.ckpt`: Default Casanovo weights to use when analyzing tryptic data. These weights will be downloaded automatically if no weights are explicitly specified.
-- `casanovo_non-enzy.checkpt`: Casanovo weights to use when analyzing non-tryptic data, obtained by fine-tuning the tryptic model on multi-enzyme data. These weights need to be downloaded manually.
+The most recent model weights for Casanovo version 4.2 and above are currently provided under [Casanovo v4.2.0](https://github.com/Noble-Lab/casanovo/releases/tag/v4.2.0):
+- `casanovo_v4_2_0.ckpt`: Default Casanovo weights to use as described in [Melendez et al.](https://pubs.acs.org/doi/full/10.1021/acs.jproteome.4c00422). These weights will be downloaded automatically if no weights are explicitly specified.
+
+Alternatively, model weigths for Casanovo version 4.x as described in [Yilmaz et al.](https://www.nature.com/articles/s41467-024-49731-x) are currently provided under [Casanovo v4.0.0](https://github.com/Noble-Lab/casanovo/releases/tag/v4.0.0):
+- `casanovo_massivekb.ckpt`: Casanovo weights to use when analyzing tryptic data. These weights need to be downloaded manually.
+- `casanovo_nontryptic.ckpt`: Casanovo weights to use when analyzing non-tryptic data, obtained by fine-tuning the tryptic model on multi-enzyme data. These weights need to be downloaded manually.
 
 ## Running Casanovo
 
@@ -96,7 +99,7 @@ We recommend a Linux system with a dedicated GPU to achieve optimal runtime perf
 To sequence your own mass spectra with Casanovo, use the `casanovo sequence` command:
 
 ```sh
-casanovo sequence -o results.mztab spectra.mgf
+casanovo sequence spectra.mgf
 ```
 ![`casanovo sequence --help`](images/sequence-help.svg)
 
@@ -105,10 +108,10 @@ This will write peptide predictions for the given MS/MS spectra to the specified
 
 ### Evaluate *de novo* sequencing performance
 
-To evaluate _de novo_ sequencing performance based on known mass spectrum annotations, use the `casanovo evaluate` command:
+To evaluate _de novo_ sequencing performance based on known mass spectrum annotations, use the `casanovo sequence` command with the `--evaluate` option:
 
 ```sh
-casanovo evaluate annotated_spectra.mgf
+casanovo sequence annotated_spectra.mgf --evaluate
 ```
 ![`casanovo evaluate --help`](images/evaluate-help.svg)
 
@@ -144,7 +147,7 @@ casanovo sequence [PATH_TO]/sample_preprocessed_spectra.mgf
 ```
 
 ```{note}
-If you want to store the output mzTab file in a different location than the current working directory, specify an alternative output location using the `--output` parameter.
+If you want to store the output mzTab file in a different location than the current working directory, specify an alternative output location using the `--output_dir` parameter.
 ```
 
 This job should complete in < 1 minute.
