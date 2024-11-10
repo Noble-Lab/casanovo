@@ -228,9 +228,9 @@ def prepare_batch(
     precursor_mzs = torch.tensor(precursor_mzs)
     precursor_charges = torch.tensor(precursor_charges)
     precursor_masses = (precursor_mzs - 1.007276) * precursor_charges
-    precursors = torch.hstack(
+    precursors = torch.vstack(
         [precursor_masses, precursor_charges, precursor_mzs]
-    ).float()
+    ).T.float()
     return spectra, precursors, np.asarray(spectrum_ids)
 
 
@@ -274,8 +274,8 @@ def prepare_psm_batch(
     batch_precursors = []
     batch_spectrum_ids = []
     batch_peptides = []
-    # FIXME: This can be optmized by using a sliding window instead of
-    #  retrieving candidates for each spectrum indendently.
+    # FIXME: This can be optimized by using a sliding window instead of
+    #  retrieving candidates for each spectrum independently.
     for i in range(len(batch)):
         candidate_pep = protein_database.get_candidates(
             precursors[i][2], precursors[i][1]

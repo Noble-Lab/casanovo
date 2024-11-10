@@ -8,7 +8,6 @@ import string
 from typing import Dict, Iterator, Pattern, Set, Tuple
 
 import depthcharge.masses
-import numba as nb
 import numpy as np
 import pandas as pd
 import pyteomics.fasta
@@ -365,7 +364,6 @@ def _convert_from_modx(
     return swap_regex.sub(lambda x: swap_map[x.group()], seq)
 
 
-@nb.njit
 def _to_neutral_mass(mz_mass: float, charge: int) -> float:
     """
     Convert precursor m/z value to neutral mass.
