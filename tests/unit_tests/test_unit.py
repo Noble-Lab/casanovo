@@ -645,8 +645,7 @@ def test_digest_fasta_cleave(tiny_fasta_file, residues_dict):
             ),
             residues=residues_dict,
         )
-        peptide_list = list(pdb.db_peptides["peptide"])
-        assert peptide_list == expected
+        assert pdb.db_peptides.index.to_list() == expected
 
 
 def test_digest_fasta_mods(tiny_fasta_file, residues_dict):
@@ -724,8 +723,7 @@ def test_digest_fasta_mods(tiny_fasta_file, residues_dict):
         ),
         residues=residues_dict,
     )
-    peptide_list = list(pdb.db_peptides["peptide"])
-    assert peptide_list == expected_1mod
+    assert pdb.db_peptides.index.to_list() == expected_1mod
 
 
 def test_length_restrictions(tiny_fasta_file, residues_dict):
@@ -756,8 +754,7 @@ def test_length_restrictions(tiny_fasta_file, residues_dict):
         ),
         residues=residues_dict,
     )
-    peptide_list = list(pdb.db_peptides["peptide"])
-    assert peptide_list == expected_long
+    assert pdb.db_peptides.index.to_list() == expected_long
 
     pdb = db_utils.ProteinDatabase(
         fasta_path=str(tiny_fasta_file),
@@ -776,8 +773,7 @@ def test_length_restrictions(tiny_fasta_file, residues_dict):
         ),
         residues=residues_dict,
     )
-    peptide_list = list(pdb.db_peptides["peptide"])
-    assert peptide_list == expected_short
+    assert pdb.db_peptides.index.to_list() == expected_short
 
 
 def test_digest_fasta_enzyme(tiny_fasta_file, residues_dict):
@@ -942,8 +938,7 @@ def test_digest_fasta_enzyme(tiny_fasta_file, residues_dict):
         ),
         residues=residues_dict,
     )
-    peptide_list = list(pdb.db_peptides["peptide"])
-    assert peptide_list == expected_argc
+    assert pdb.db_peptides.index.to_list() == expected_argc
 
     pdb = db_utils.ProteinDatabase(
         fasta_path=str(tiny_fasta_file),
@@ -962,8 +957,7 @@ def test_digest_fasta_enzyme(tiny_fasta_file, residues_dict):
         ),
         residues=residues_dict,
     )
-    peptide_list = list(pdb.db_peptides["peptide"])
-    assert peptide_list == expected_aspn
+    assert pdb.db_peptides.index.to_list() == expected_aspn
 
     # Test regex rule instead of named enzyme
     pdb = db_utils.ProteinDatabase(
@@ -983,8 +977,7 @@ def test_digest_fasta_enzyme(tiny_fasta_file, residues_dict):
         ),
         residues=residues_dict,
     )
-    peptide_list = list(pdb.db_peptides["peptide"])
-    assert peptide_list == expected_argc
+    assert pdb.db_peptides.index.to_list() == expected_argc
 
     # Test semispecific digest
     pdb = db_utils.ProteinDatabase(
@@ -1004,8 +997,7 @@ def test_digest_fasta_enzyme(tiny_fasta_file, residues_dict):
         ),
         residues=residues_dict,
     )
-    peptide_list = list(pdb.db_peptides["peptide"])
-    assert peptide_list == expected_semispecific
+    assert pdb.db_peptides.index.to_list() == expected_semispecific
 
     # Test nonspecific digest
     pdb = db_utils.ProteinDatabase(
@@ -1025,8 +1017,7 @@ def test_digest_fasta_enzyme(tiny_fasta_file, residues_dict):
         ),
         residues=residues_dict,
     )
-    peptide_list = list(pdb.db_peptides["peptide"])
-    assert peptide_list == expected_nonspecific
+    assert pdb.db_peptides.index.to_list() == expected_nonspecific
 
 
 def test_get_candidates(tiny_fasta_file, residues_dict):
@@ -1139,7 +1130,7 @@ def test_get_candidates_isotope_error(tiny_fasta_file, residues_dict):
 
     peptide_list = pd.DataFrame(
         peptide_list, columns=["peptide", "calc_mass", "protein"]
-    )
+    ).set_index("peptide")
     peptide_list.sort_values("calc_mass", inplace=True)
 
     expected_isotope0 = list("UTSRQPONMLKJIHGFEDCB")

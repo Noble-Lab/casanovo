@@ -5,8 +5,7 @@ import logging
 import os
 import re
 import string
-from collections import defaultdict
-from typing import DefaultDict, Dict, Iterator, Pattern, Set, Tuple
+from typing import Dict, Iterator, Pattern, Set, Tuple
 
 import depthcharge.masses
 import numba as nb
@@ -90,14 +89,14 @@ class ProteinDatabase:
             max_peptide_len,
             set([aa[0] for aa in residues.keys() if aa[0].isalpha()]),
         )
-        self.db_peptides, self.prot_map = self._digest_fasta(peptide_generator)
+        self.db_peptides = self._digest_fasta(peptide_generator)
         self.precursor_tolerance = precursor_tolerance
         self.isotope_error = isotope_error
 
     def _digest_fasta(
         self,
         peptide_generator: Iterator[Tuple[str, str]],
-    ) -> Tuple[pd.DataFrame, DefaultDict[str, Set]]:
+    ) -> pd.DataFrame:
         """
         Digests a FASTA file and returns the peptides, their masses,
         and associated protein(s).
@@ -109,58 +108,50 @@ class ProteinDatabase:
 
         Returns
         -------
-        pep_table : pd.DataFrame
-            A Pandas DataFrame with peptide and mass columns.
-            Sorted by neutral mass in ascending order.
-        prot_map : DefaultDict[str, Set]
-            A dictionary mapping peptides to associated proteins.
+        peptides : pd.DataFrame
+            A Pandas DataFrame with index "peptide" (the peptide
+            sequence), and columns "calc_mass" (the peptide neutral
+            mass) and "protein" (a list of associated protein(s)).
         """
         # Generate all possible peptide isoforms.
-        mass_calculator = depthcharge.masses.PeptideMass(residues="massivekb")
-        peptide_isoforms = [
-            (
-                pyteomics.parser.isoforms(
+        peptides = pd.DataFrame(
+            data=[
+                (iso, prot)
+                for pep, prot in peptide_generator
+                for iso in pyteomics.parser.isoforms(
                     pep,
                     variable_mods=self.var_mods,
                     fixed_mods=self.fixed_mods,
                     max_mods=self.max_mods,
-                ),
-                prot,
-            )
-            for pep, prot in peptide_generator
-        ]
-        mod_peptide_list = [
-            (mod_pep, mass_calculator.mass(mod_pep), prot)
-            for isos, prot in peptide_isoforms
-            for mod_pep in map(
-                functools.partial(
-                    _convert_from_modx,
-                    swap_map=self.swap_map,
-                    swap_regex=self.swap_regex,
-                ),
-                isos,
-            )
-        ]
-
-        # Create a dictionary mapping for easy accession of associated
-        # proteins.
-        prot_map: DefaultDict[str, Set] = defaultdict(set)
-        for pep, _, prot in mod_peptide_list:
-            prot_map[pep].add(prot)
-
-        # Create a DataFrame for easy sorting and filtering.
-        pep_table = pd.DataFrame(
-            [(pep, mass) for pep, mass, _ in mod_peptide_list],
-            columns=["peptide", "calc_mass"],
+                )
+            ],
+            columns=["peptide", "protein"],
         )
-        pep_table.sort_values(
+        # Convert modX peptide to Casanovo format.
+        peptides["peptide"] = peptides["peptide"].apply(
+            functools.partial(
+                _convert_from_modx,
+                swap_map=self.swap_map,
+                swap_regex=self.swap_regex,
+            )
+        )
+        # Merge proteins from duplicate peptides.
+        peptides = peptides.groupby("peptide")["protein"].apply(
+            lambda proteins: sorted(set(proteins))
+        ).reset_index()
+        # Calculate the mass of each peptide.
+        mass_calculator = depthcharge.masses.PeptideMass(residues="massivekb")
+        peptides["calc_mass"] = peptides["peptide"].apply(mass_calculator.mass)
+        # Sort by peptide mass and index by peptide sequence.
+        peptides.sort_values(
             by=["calc_mass", "peptide"], ascending=True, inplace=True
         )
+        peptides.set_index("peptide", inplace=True)
 
         logger.info(
-            "Digestion complete. %d peptides generated.", len(pep_table)
+            "Digestion complete. %d peptides generated.", len(peptides)
         )
-        return pep_table, prot_map
+        return peptides
 
     def get_candidates(
         self,
@@ -198,7 +189,7 @@ class ProteinDatabase:
                 (self.db_peptides["calc_mass"] >= lower_bound)
                 & (self.db_peptides["calc_mass"] <= upper_bound)
             )
-        return self.db_peptides[mask]["peptide"]
+        return self.db_peptides.index[mask]
 
     def get_associated_protein(self, peptide: str) -> str:
         """
@@ -214,7 +205,7 @@ class ProteinDatabase:
         protein : str
             The associated protein(s) identifiers, separated by commas.
         """
-        return ",".join(self.prot_map[peptide])
+        return ",".join(self.db_peptides.loc[peptide, "protein"])
 
 
 def _construct_mods_dict(
