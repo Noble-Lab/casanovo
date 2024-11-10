@@ -33,7 +33,7 @@ devices:
 
 
 ###
-# The following parameters are unique to Casanovo's inference/finetuning mode.
+# The following parameters are unique to Casanovo's de novo sequencing mode.
 ###
 
 # Number of beams used in beam search.

@@ -4,7 +4,6 @@ model."""
 import glob
 import logging
 import os
-import re
 import tempfile
 import uuid
 import warnings
@@ -25,7 +24,7 @@ from ..config import Config
 from ..data import db_utils, ms_io
 from ..denovo.dataloaders import DeNovoDataModule
 from ..denovo.evaluate import aa_match_batch, aa_match_metrics
-from ..denovo.model import Spec2Pep, DbSpec2Pep
+from ..denovo.model import DbSpec2Pep, Spec2Pep
 
 
 logger = logging.getLogger("casanovo")
@@ -45,11 +44,12 @@ class ModelRunner:
         The directory where checkpoint files will be saved. If `None` no
         checkpoint files will be saved and a warning will be triggered.
     output_rootname : str | None, optional
-        The root name for checkpoint files (e.g., checkpoints or results). If
-        `None` no base name will be used for checkpoint files.
-    overwrite_ckpt_check: bool, optional
-        Whether to check output_dir (if not `None`) for conflicting checkpoint
+        The root name for checkpoint files (e.g., checkpoints or
+        results). If `None` no base name will be used for checkpoint
         files.
+    overwrite_ckpt_check: bool, optional
+        Whether to check output_dir (if not `None`) for conflicting
+        checkpoint files.
     """
 
     def __init__(
@@ -138,11 +138,7 @@ class ModelRunner:
         fasta_path : str
             The path with the FASTA file for database search.
         results_path : str
-            Sequencing results file path
-
-        Returns
-        -------
-        self
+            Sequencing results file path.
         """
         self.writer = ms_io.MztabWriter(results_path)
         self.writer.set_metadata(
@@ -189,10 +185,6 @@ class ModelRunner:
             The path to the MS data files for training.
         valid_peak_path : iterable of str
             The path to the MS data files for validation.
-
-        Returns
-        -------
-        self
         """
         self.initialize_trainer(train=True)
         self.initialize_model(train=True)
@@ -209,16 +201,16 @@ class ModelRunner:
         )
 
     def log_metrics(self, test_index: AnnotatedSpectrumIndex) -> None:
-        """Log peptide precision and amino acid precision
+        """Log peptide precision and amino acid precision.
 
         Calculate and log peptide precision and amino acid precision
-        based off of model predictions and spectrum annotations
+        based off of model predictions and spectrum annotations.
 
         Parameters
         ----------
         test_index : AnnotatedSpectrumIndex
-            Index containing the annotated spectra used to generate model
-            predictions
+            Index containing the annotated spectra used to generate
+            model predictions.
         """
         seq_pred = []
         seq_true = []
@@ -245,8 +237,9 @@ class ModelRunner:
 
         if self.config["top_match"] > 1:
             logger.warning(
-                "The behavior for calculating evaluation metrics is undefined when "
-                "the 'top_match' configuration option is set to a value greater than 1."
+                "The behavior for calculating evaluation metrics is undefined "
+                "when the 'top_match' configuration option is set to a value "
+                "greater than 1."
             )
 
         logger.info("Peptide Precision: %.2f%%", 100 * pep_precision)
@@ -261,13 +254,14 @@ class ModelRunner:
     ) -> None:
         """Predict peptide sequences with a trained Casanovo model.
 
-        Can also evaluate model during prediction if provided with annotated
-        peak files.
+        Can also evaluate model during prediction if provided with
+        annotated peak files.
 
         Parameters
         ----------
         peak_path : Iterable[str]
-            The path with the MS data files for predicting peptide sequences.
+            The path with the MS data files for predicting peptide
+            sequences.
         results_path : str
             Sequencing results file path
         evaluate: bool
@@ -275,10 +269,6 @@ class ModelRunner:
             Note: peak_path most point to annotated MS data files when
             running model evaluation. Files that are not an annotated
             peak file format will be ignored if evaluate is set to true.
-
-        Returns
-        -------
-        self
         """
         self.writer = ms_io.MztabWriter(results_path)
         self.writer.set_metadata(
@@ -363,7 +353,7 @@ class ModelRunner:
         self.trainer = pl.Trainer(**trainer_cfg)
 
     def initialize_model(
-        self, train: bool, db_search: Optional[bool] = False
+        self, train: bool, db_search: bool = False
     ) -> None:
         """Initialize the Casanovo model.
 
@@ -372,7 +362,7 @@ class ModelRunner:
         train : bool
             Determines whether to set the model up for model training or
             evaluation / inference.
-        db_search : Optional[bool]
+        db_search : bool
             Determines whether to use the DB search model subclass.
         """
         tb_summarywriter = None
@@ -411,7 +401,8 @@ class ModelRunner:
             calculate_precision=self.config.calculate_precision,
         )
 
-        # Reconfigurable non-architecture related parameters for a loaded model.
+        # Reconfigurable non-architecture related parameters for a
+        # loaded model.
         loaded_model_params = dict(
             max_peptide_len=self.config.max_peptide_len,
             precursor_mass_tol=self.config.precursor_mass_tol,
@@ -432,10 +423,8 @@ class ModelRunner:
 
         if self.model_filename is None:
             if db_search:
-                logger.error("DB search mode requires a model file")
-                raise ValueError(
-                    "A model file must be provided for DB search mode"
-                )
+                logger.error("A model file must be provided for DB search")
+                raise ValueError("A model file must be provided for DB search")
             # Train a model from scratch if no model file is provided.
             if train:
                 self.model = Spec2Pep(**model_params)
@@ -444,7 +433,8 @@ class ModelRunner:
             else:
                 logger.error("A model file must be provided")
                 raise ValueError("A model file must be provided")
-        # Else a model file is provided (to continue training or for inference).
+        # Else a model file is provided (to continue training or for
+        # inference).
 
         if not Path(self.model_filename).exists():
             logger.error(
@@ -453,15 +443,13 @@ class ModelRunner:
             )
             raise FileNotFoundError("Could not find the model weights file")
 
-        # First try loading model details from the weights file, otherwise use
-        # the provided configuration.
+        # First try loading model details from the weights file,
+        # otherwise use the provided configuration.
         device = torch.empty(1).device  # Use the default device.
         Model = DbSpec2Pep if db_search else Spec2Pep
         try:
             self.model = Model.load_from_checkpoint(
-                self.model_filename,
-                map_location=device,
-                **loaded_model_params,
+                self.model_filename, map_location=device, **loaded_model_params
             )
 
             architecture_params = set(model_params.keys()) - set(
@@ -476,7 +464,8 @@ class ModelRunner:
                         "using the checkpoint."
                     )
         except RuntimeError:
-            # This only doesn't work if the weights are from an older version
+            # This only doesn't work if the weights are from an older
+            # version.
             try:
                 self.model = Model.load_from_checkpoint(
                     self.model_filename,
@@ -497,7 +486,7 @@ class ModelRunner:
             Union[AnnotatedSpectrumIndex, SpectrumIndex]
         ] = None,
     ) -> None:
-        """Initialize the data module
+        """Initialize the data module.
 
         Parameters
         ----------
@@ -536,8 +525,8 @@ class ModelRunner:
     ) -> Union[SpectrumIndex, AnnotatedSpectrumIndex]:
         """Get the spectrum index.
 
-        If the file is a SpectrumIndex, only one is allowed. Otherwise multiple
-        may be specified.
+        If the file is a SpectrumIndex, only one is allowed. Otherwise
+        multiple may be specified.
 
         Parameters
         ----------
@@ -597,15 +586,14 @@ class ModelRunner:
     def _get_strategy(self) -> Union[str, DDPStrategy]:
         """Get the strategy for the Trainer.
 
-        The DDP strategy works best when multiple GPUs are used. It can work
-        for CPU-only, but definitely fails using MPS (the Apple Silicon chip)
-        due to Gloo.
+        The DDP strategy works best when multiple GPUs are used. It can
+        work for CPU-only, but definitely fails using MPS (the Apple
+        Silicon chip) due to Gloo.
 
         Returns
         -------
         Union[str, DDPStrategy]
             The strategy parameter for the Trainer.
-
         """
         if self.config.accelerator in ("cpu", "mps"):
             return "auto"
@@ -623,8 +611,8 @@ def _get_peak_filenames(
     """
     Get all matching peak file names from the path pattern.
 
-    Performs cross-platform path expansion akin to the Unix shell (glob, expand
-    user, expand vars).
+    Performs cross-platform path expansion akin to the Unix shell (glob,
+    expand user, expand vars).
 
     Parameters
     ----------
