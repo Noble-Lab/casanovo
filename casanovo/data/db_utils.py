@@ -94,60 +94,6 @@ class ProteinDatabase:
         self.precursor_tolerance = precursor_tolerance
         self.isotope_error = isotope_error
 
-    def get_candidates(
-        self,
-        precursor_mz: float,
-        charge: int,
-    ) -> pd.Series:
-        """
-        Returns candidate peptides that fall within the search
-        parameter's precursor mass tolerance.
-
-        Parameters
-        ----------
-        precursor_mz : float
-            The precursor mass-to-charge ratio.
-        charge : int
-            The precursor charge.
-
-        Returns
-        -------
-        candidates : pd.Series
-            A series of candidate peptides.
-        """
-        # FIXME: This could potentially be sped up with only a single pass
-        #  through the database.
-        mask = np.zeros(len(self.db_peptides), dtype=bool)
-        precursor_tol_ppm = self.precursor_tolerance / 1e6
-        for e in range(self.isotope_error[0], self.isotope_error[1] + 1):
-            iso_shift = ISOTOPE_SPACING * e
-            shift_raw_mass = float(
-                _to_neutral_mass(precursor_mz, charge) - iso_shift
-            )
-            upper_bound = shift_raw_mass * (1 + precursor_tol_ppm)
-            lower_bound = shift_raw_mass * (1 - precursor_tol_ppm)
-            mask |= (
-                (self.db_peptides["calc_mass"] >= lower_bound)
-                & (self.db_peptides["calc_mass"] <= upper_bound)
-            )
-        return self.db_peptides[mask]["peptide"]
-
-    def get_associated_protein(self, peptide: str) -> str:
-        """
-        Returns the associated protein(s) for a given peptide.
-
-        Parameters
-        ----------
-        peptide : str
-            The peptide sequence.
-
-        Returns
-        -------
-        protein : str
-            The associated protein(s) identifiers, separated by commas.
-        """
-        return ",".join(self.prot_map[peptide])
-
     def _digest_fasta(
         self,
         peptide_generator: Iterator[Tuple[str, str]],
@@ -215,6 +161,100 @@ class ProteinDatabase:
             "Digestion complete. %d peptides generated.", len(pep_table)
         )
         return pep_table, prot_map
+
+    def get_candidates(
+        self,
+        precursor_mz: float,
+        charge: int,
+    ) -> pd.Series:
+        """
+        Returns candidate peptides that fall within the search
+        parameter's precursor mass tolerance.
+
+        Parameters
+        ----------
+        precursor_mz : float
+            The precursor mass-to-charge ratio.
+        charge : int
+            The precursor charge.
+
+        Returns
+        -------
+        candidates : pd.Series
+            A series of candidate peptides.
+        """
+        # FIXME: This could potentially be sped up with only a single pass
+        #  through the database.
+        mask = np.zeros(len(self.db_peptides), dtype=bool)
+        precursor_tol_ppm = self.precursor_tolerance / 1e6
+        for e in range(self.isotope_error[0], self.isotope_error[1] + 1):
+            iso_shift = ISOTOPE_SPACING * e
+            shift_raw_mass = float(
+                _to_neutral_mass(precursor_mz, charge) - iso_shift
+            )
+            upper_bound = shift_raw_mass * (1 + precursor_tol_ppm)
+            lower_bound = shift_raw_mass * (1 - precursor_tol_ppm)
+            mask |= (
+                (self.db_peptides["calc_mass"] >= lower_bound)
+                & (self.db_peptides["calc_mass"] <= upper_bound)
+            )
+        return self.db_peptides[mask]["peptide"]
+
+    def get_associated_protein(self, peptide: str) -> str:
+        """
+        Returns the associated protein(s) for a given peptide.
+
+        Parameters
+        ----------
+        peptide : str
+            The peptide sequence.
+
+        Returns
+        -------
+        protein : str
+            The associated protein(s) identifiers, separated by commas.
+        """
+        return ",".join(self.prot_map[peptide])
+
+
+def _construct_mods_dict(
+    allowed_fixed_mods: str, allowed_var_mods: str
+) -> Tuple[Dict[str, str], Dict[str, str], Dict[str, str]]:
+    """
+    Constructs dictionaries of fixed and variable modifications.
+
+    Parameters
+    ----------
+    allowed_fixed_mods : str
+        A comma-separated string of fixed modifications to consider.
+    allowed_var_mods : str
+        A comma-separated string of variable modifications to consider.
+
+    Returns
+    -------
+    fixed_mods : Dict[str, str]
+        A dictionary of fixed modifications.
+    var_mods : Dict[str, str]
+        A dictionary of variable modifications.
+    swap_map : Dict[str, str]
+        A dictionary that allows for swapping of modX to
+        Casanovo-acceptable modifications.
+    """
+    swap_map, fixed_mods, var_mods = {}, {}, {}
+    for mod_map, allowed_mods in zip(
+        [fixed_mods, var_mods], [allowed_fixed_mods, allowed_var_mods]
+    ):
+        for i, mod in enumerate(allowed_mods.split(",")):
+            aa, mod_aa = mod.split(":")
+            mod_id = string.ascii_lowercase[i]
+            if aa == "nterm":
+                mod_map[f"{mod_id}-"] = True
+                swap_map[f"{mod_id}-"] = f"{mod_aa}"
+            else:
+                mod_map[mod_id] = [aa]
+                swap_map[f"{mod_id}{aa}"] = f"{mod_aa}"
+
+    return fixed_mods, var_mods, swap_map
 
 
 def _peptide_generator(
@@ -306,26 +346,6 @@ def _peptide_generator(
                         yield peptide, protein
 
 
-@nb.njit
-def _to_neutral_mass(mz_mass: float, charge: int) -> float:
-    """
-    Convert precursor m/z value to neutral mass.
-
-    Parameters
-    ----------
-    mz_mass : float
-        The precursor mass-to-charge ratio.
-    charge : int
-        The precursor charge.
-
-    Returns
-    -------
-    mass : float
-        The calculated precursor neutral mass.
-    """
-    return charge * (mz_mass - PROTON)
-
-
 def _convert_from_modx(
     seq: str, swap_map: dict[str, str], swap_regex: Pattern
 ) -> str:
@@ -353,41 +373,21 @@ def _convert_from_modx(
     return swap_regex.sub(lambda x: swap_map[x.group()], seq)
 
 
-def _construct_mods_dict(
-    allowed_fixed_mods: str, allowed_var_mods: str
-) -> Tuple[Dict[str, str], Dict[str, str], Dict[str, str]]:
+@nb.njit
+def _to_neutral_mass(mz_mass: float, charge: int) -> float:
     """
-    Constructs dictionaries of fixed and variable modifications.
+    Convert precursor m/z value to neutral mass.
 
     Parameters
     ----------
-    allowed_fixed_mods : str
-        A comma-separated string of fixed modifications to consider.
-    allowed_var_mods : str
-        A comma-separated string of variable modifications to consider.
+    mz_mass : float
+        The precursor mass-to-charge ratio.
+    charge : int
+        The precursor charge.
 
     Returns
     -------
-    fixed_mods : Dict[str, str]
-        A dictionary of fixed modifications.
-    var_mods : Dict[str, str]
-        A dictionary of variable modifications.
-    swap_map : Dict[str, str]
-        A dictionary that allows for swapping of modX to
-        Casanovo-acceptable modifications.
+    mass : float
+        The calculated precursor neutral mass.
     """
-    swap_map, fixed_mods, var_mods = {}, {}, {}
-    for mod_map, allowed_mods in zip(
-        [fixed_mods, var_mods], [allowed_fixed_mods, allowed_var_mods]
-    ):
-        for i, mod in enumerate(allowed_mods.split(",")):
-            aa, mod_aa = mod.split(":")
-            mod_id = string.ascii_lowercase[i]
-            if aa == "nterm":
-                mod_map[f"{mod_id}-"] = True
-                swap_map[f"{mod_id}-"] = f"{mod_aa}"
-            else:
-                mod_map[mod_id] = [aa]
-                swap_map[f"{mod_id}{aa}"] = f"{mod_aa}"
-
-    return fixed_mods, var_mods, swap_map
+    return charge * (mz_mass - PROTON)
