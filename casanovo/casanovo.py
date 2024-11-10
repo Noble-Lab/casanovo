@@ -255,7 +255,7 @@ def db_search(
         runner.db_search(
             peak_path,
             fasta_path,
-            str((output_path / output_root).with_suffix(".mztab")),
+            str((output_path / output_root_name).with_suffix(".mztab")),
         )
         utils.log_run_report(start_time=start_time, end_time=time.time())
 
