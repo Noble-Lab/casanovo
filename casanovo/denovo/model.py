@@ -1149,12 +1149,12 @@ def _calc_match_score(
     per_aa_scores = batch_all_aa_scores[rows, cols, truth_aa_indices]
     per_aa_scores = per_aa_scores.cpu().detach().numpy()
     per_aa_scores[per_aa_scores == 0] += 1e-10
-    score_mask = truth_aa_indices != 0
-    per_aa_scores[~score_mask] = 0
+    score_mask = (truth_aa_indices != 0).cpu().detach().numpy()
     peptide_scores, aa_scores = [], []
-    for psm_score in per_aa_scores:
-        psm_score = np.trim_zeros(psm_score)
-        psm_aa_scores, psm_peptide_score = _aa_pep_score(psm_score, True)
+    for psm_score, psm_mask in zip(per_aa_scores, score_mask):
+        psm_aa_scores, psm_peptide_score = _aa_pep_score(
+            psm_score[psm_mask], True
+        )
         peptide_scores.append(psm_peptide_score)
         aa_scores.append(psm_aa_scores)
 
