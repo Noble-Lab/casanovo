@@ -352,9 +352,7 @@ class ModelRunner:
 
         self.trainer = pl.Trainer(**trainer_cfg)
 
-    def initialize_model(
-        self, train: bool, db_search: bool = False
-    ) -> None:
+    def initialize_model(self, train: bool, db_search: bool = False) -> None:
         """Initialize the Casanovo model.
 
         Parameters

@@ -1019,7 +1019,7 @@ class DbSpec2Pep(Spec2Pep):
     def predict_step(
         self,
         batch: Tuple[torch.Tensor, torch.Tensor, np.ndarray, np.ndarray],
-        *args
+        *args,
     ) -> List[ms_io.PepSpecMatch]:
         """
         A single prediction step.

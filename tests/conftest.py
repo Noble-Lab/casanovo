@@ -2,7 +2,6 @@
 
 import depthcharge
 import numpy as np
-import pandas as pd
 import psims
 import pytest
 import yaml

@@ -136,9 +136,11 @@ class ProteinDatabase:
             )
         )
         # Merge proteins from duplicate peptides.
-        peptides = peptides.groupby("peptide")["protein"].apply(
-            lambda proteins: sorted(set(proteins))
-        ).reset_index()
+        peptides = (
+            peptides.groupby("peptide")["protein"]
+            .apply(lambda proteins: sorted(set(proteins)))
+            .reset_index()
+        )
         # Calculate the mass of each peptide.
         mass_calculator = depthcharge.masses.PeptideMass(residues="massivekb")
         peptides["calc_mass"] = peptides["peptide"].apply(mass_calculator.mass)
@@ -185,9 +187,8 @@ class ProteinDatabase:
             )
             upper_bound = shift_raw_mass * (1 + precursor_tol_ppm)
             lower_bound = shift_raw_mass * (1 - precursor_tol_ppm)
-            mask |= (
-                (self.db_peptides["calc_mass"] >= lower_bound)
-                & (self.db_peptides["calc_mass"] <= upper_bound)
+            mask |= (self.db_peptides["calc_mass"] >= lower_bound) & (
+                self.db_peptides["calc_mass"] <= upper_bound
             )
         return self.db_peptides.index[mask]
 
