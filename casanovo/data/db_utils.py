@@ -6,13 +6,14 @@ import os
 import re
 import string
 from collections import defaultdict
-from typing import List, Tuple, Iterator
+from typing import DefaultDict, Dict, Iterator, Pattern, Set, Tuple
 
 import depthcharge.masses
+import numba as nb
+import numpy as np
 import pandas as pd
-import pyteomics.fasta as fasta
-import pyteomics.parser as parser
-from numba import njit
+import pyteomics.fasta
+import pyteomics.parser
 
 
 logger = logging.getLogger("casanovo")
@@ -24,8 +25,8 @@ ISOTOPE_SPACING = 1.003355
 
 class ProteinDatabase:
     """
-    Store digested .fasta data and return candidate peptides
-    for a given precursor mass.
+    Store digested FASTA data and return candidate peptides for a given
+    precursor mass.
 
     Parameters
     ----------
@@ -36,7 +37,7 @@ class ProteinDatabase:
         See pyteomics.parser.expasy_rules for valid enzymes.
     digestion : str
         The type of digestion to perform.
-        Either 'full', 'partial' or 'non-specific'.
+        Either 'full', 'partial', or 'non-specific'.
     missed_cleavages : int
         The number of missed cleavages to allow.
     min_peptide_len : int
@@ -51,10 +52,10 @@ class ProteinDatabase:
         Isotope range [min, max] to consider when comparing predicted
         and observed precursor m/z's.
     allowed_fixed_mods : str
-        A comma separated string of fixed modifications to consider.
+        A comma-separated string of fixed modifications to consider.
     allowed_var_mods : str
-        A comma separated string of variable modifications to consider.
-    residues : dict[str, float]
+        A comma-separated string of variable modifications to consider.
+    residues : Dict[str, float]
         A dictionary of amino acid masses.
     """
 
@@ -71,7 +72,7 @@ class ProteinDatabase:
         isotope_error: Tuple[int, int],
         allowed_fixed_mods: str,
         allowed_var_mods: str,
-        residues: dict[str, float],
+        residues: Dict[str, float],
     ):
         self.fixed_mods, self.var_mods, self.swap_map = _construct_mods_dict(
             allowed_fixed_mods, allowed_var_mods
@@ -99,8 +100,8 @@ class ProteinDatabase:
         charge: int,
     ) -> pd.Series:
         """
-        Returns a list of candidate peptides that fall within the
-        specified mass range.
+        Returns candidate peptides that fall within the search
+        parameter's precursor mass tolerance.
 
         Parameters
         ----------
@@ -141,7 +142,7 @@ class ProteinDatabase:
 
     def get_associated_protein(self, peptide: str) -> str:
         """
-        Returns the associated protein for a given peptide.
+        Returns the associated protein(s) for a given peptide.
 
         Parameters
         ----------
@@ -151,17 +152,17 @@ class ProteinDatabase:
         Returns
         -------
         protein : str
-            The associated protein(s).
+            The associated protein(s) identifiers, separated by commas.
         """
         return ",".join(self.prot_map[peptide])
 
     def _digest_fasta(
         self,
         peptide_generator: Iterator[Tuple[str, str]],
-    ) -> Tuple[pd.DataFrame, dict[str, str]]:
+    ) -> Tuple[pd.DataFrame, DefaultDict[str, Set]]:
         """
         Digests a FASTA file and returns the peptides, their masses,
-        and associated protein.
+        and associated protein(s).
 
         Parameters
         ----------
@@ -173,14 +174,14 @@ class ProteinDatabase:
         pep_table : pd.DataFrame
             A Pandas DataFrame with peptide and mass columns.
             Sorted by neutral mass in ascending order.
-        prot_map : dict[str, str]
+        prot_map : DefaultDict[str, Set]
             A dictionary mapping peptides to associated proteins.
         """
-        # Generate modified peptides
+        # Generate all possible peptide isoforms.
         mass_calculator = depthcharge.masses.PeptideMass(residues="massivekb")
         peptide_isoforms = [
             (
-                parser.isoforms(
+                pyteomics.parser.isoforms(
                     pep,
                     variable_mods=self.var_mods,
                     fixed_mods=self.fixed_mods,
@@ -203,12 +204,13 @@ class ProteinDatabase:
             )
         ]
 
-        # Create a dictionary mapping for easy accession of associated proteins
-        prot_map = defaultdict(set)
+        # Create a dictionary mapping for easy accession of associated
+        # proteins.
+        prot_map: DefaultDict[str, Set] = defaultdict(set)
         for pep, _, prot in mod_peptide_list:
             prot_map[pep].add(prot)
 
-        # Create a DataFrame for easy sorting and filtering
+        # Create a DataFrame for easy sorting and filtering.
         pep_table = pd.DataFrame(
             [(pep, mass) for pep, mass, _ in mod_peptide_list],
             columns=["peptide", "calc_mass"],
@@ -230,11 +232,11 @@ def _peptide_generator(
     missed_cleavages: int,
     min_peptide_len: int,
     max_peptide_len: int,
-    valid_aa: set[str],
-) -> Iterator[str]:
+    valid_aa: Set[str],
+) -> Iterator[Tuple[str, str]]:
     """
-    Create a generator the yields peptides from a FASTA file
-    depending on the type of digestion specified.
+    Creates a generator that yields peptides from a FASTA file depending
+    on the type of digestion specified.
 
     Parameters
     ----------
@@ -246,74 +248,73 @@ def _peptide_generator(
         Can also be a regex.
     digestion : str
         The type of digestion to perform.
-        Either 'full', 'partial' or 'non-specific'.
+        Either 'full', 'partial', or 'non-specific'.
     missed_cleavages : int
         The number of missed cleavages to allow.
     min_peptide_len : int
         The minimum length of peptides to consider.
     max_peptide_len : int
         The maximum length of peptides to consider.
-    valid_aa : set[str]
+    valid_aa : Set[str]
         A set of valid amino acids.
 
     Yields
     ------
-    pep : str
+    peptide : str
         A peptide sequence, unmodified.
     protein : str
         The associated protein.
     """
-    # Verify the existence of the file:
+    # Verify the existence of the file.
     if not os.path.isfile(fasta_filename):
         logger.error("File %s does not exist.", fasta_filename)
         raise FileNotFoundError(f"File {fasta_filename} does not exist.")
-    if digestion not in ["full", "partial", "non-specific"]:
+    if digestion not in ("full", "partial", "non-specific"):
         logger.error("Digestion type %s not recognized.", digestion)
         raise ValueError(f"Digestion type {digestion} not recognized.")
-    if enzyme not in parser.expasy_rules:
+    if enzyme not in pyteomics.parser.expasy_rules:
         logger.info(
             "Enzyme %s not recognized. Interpreting as cleavage rule.",
             enzyme,
         )
     if digestion == "non-specific":
-        for header, seq in fasta.read(fasta_filename):
+        for header, seq in pyteomics.fasta.read(fasta_filename):
             protein = header.split()[0]
-            # Generate all possible peptides
+            # Generate all possible peptides.
             for i in range(len(seq)):
                 for j in range(
                     i + min_peptide_len,
                     min(i + max_peptide_len + 1, len(seq) + 1),
                 ):
-                    pep = seq[i:j]
-                    if any(aa not in valid_aa for aa in pep):
+                    peptide = seq[i:j]
+                    if any(aa not in valid_aa for aa in peptide):
                         logger.warning(
                             "Skipping peptide with unknown amino acids: %s",
-                            pep,
+                            peptide,
                         )
                     else:
-                        yield pep, protein
+                        yield peptide, protein
     else:
-        semi = digestion == "partial"
-        for header, seq in fasta.read(fasta_filename):
-            pep_set = parser.cleave(
+        for header, seq in pyteomics.fasta.read(fasta_filename):
+            peptides = pyteomics.parser.cleave(
                 seq,
                 rule=enzyme,
                 missed_cleavages=missed_cleavages,
-                semi=semi,
+                semi=digestion == "partial",
             )
             protein = header.split()[0]
-            for pep in pep_set:
-                if len(pep) >= min_peptide_len and len(pep) <= max_peptide_len:
-                    if any(aa not in valid_aa for aa in pep):
+            for peptide in peptides:
+                if min_peptide_len <= len(peptide) <= max_peptide_len:
+                    if any(aa not in valid_aa for aa in peptide):
                         logger.warning(
                             "Skipping peptide with unknown amino acids: %s",
-                            pep,
+                            peptide,
                         )
                     else:
-                        yield pep, protein
+                        yield peptide, protein
 
 
-@njit
+@nb.njit
 def _to_neutral_mass(mz_mass: float, charge: int) -> float:
     """
     Convert precursor m/z value to neutral mass.
@@ -334,7 +335,7 @@ def _to_neutral_mass(mz_mass: float, charge: int) -> float:
 
 
 def _convert_from_modx(
-    seq: str, swap_map: dict[str, str], swap_regex: str
+    seq: str, swap_map: dict[str, str], swap_regex: Pattern
 ) -> str:
     """
     Converts peptide sequence from modX format to
@@ -345,50 +346,51 @@ def _convert_from_modx(
     seq : str
         Peptide in modX format
     swap_map : dict[str, str]
-        Dictionary that allows for swapping of modX to Casanovo-acceptable modifications.
-    swap_regex : str
+        Dictionary that allows for swapping of modX to
+        Casanovo-acceptable modifications.
+    swap_regex : Pattern
         Regular expression to match modX format.
 
     Returns:
     --------
-    swap_regex : str
+    str
         Peptide in Casanovo-acceptable modifications.
     """
+    # FIXME: This might be handled by the DepthCharge residues vocabulary
+    #  instead.
     return swap_regex.sub(lambda x: swap_map[x.group()], seq)
 
 
 def _construct_mods_dict(
     allowed_fixed_mods: str, allowed_var_mods: str
-) -> Tuple[dict[str, str], dict[str, str], dict[str, str]]:
+) -> Tuple[Dict[str, str], Dict[str, str], Dict[str, str]]:
     """
     Constructs dictionaries of fixed and variable modifications.
 
     Parameters
     ----------
     allowed_fixed_mods : str
-        A comma separated string of fixed modifications to consider.
+        A comma-separated string of fixed modifications to consider.
     allowed_var_mods : str
-        A comma separated string of variable modifications to consider.
+        A comma-separated string of variable modifications to consider.
 
     Returns
     -------
-    fixed_mods : dict[str, str]
+    fixed_mods : Dict[str, str]
         A dictionary of fixed modifications.
-    var_mods : dict[str, str]
+    var_mods : Dict[str, str]
         A dictionary of variable modifications.
-    swap_map : dict[str, str]
+    swap_map : Dict[str, str]
         A dictionary that allows for swapping of modX to
         Casanovo-acceptable modifications.
     """
-    swap_map = {}
-    fixed_mods = {}
-    var_mods = {}
+    swap_map, fixed_mods, var_mods = {}, {}, {}
     for mod_map, allowed_mods in zip(
         [fixed_mods, var_mods], [allowed_fixed_mods, allowed_var_mods]
     ):
-        for idx, mod in enumerate(allowed_mods.split(",")):
+        for i, mod in enumerate(allowed_mods.split(",")):
             aa, mod_aa = mod.split(":")
-            mod_id = string.ascii_lowercase[idx]
+            mod_id = string.ascii_lowercase[i]
             if aa == "nterm":
                 mod_map[f"{mod_id}-"] = True
                 swap_map[f"{mod_id}-"] = f"{mod_aa}"
