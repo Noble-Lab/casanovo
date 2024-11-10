@@ -161,16 +161,16 @@ def get_report_dict(
 
 
 def log_run_report(
-    start_time: Optional[int] = None, end_time: Optional[int] = None
+    start_time: Optional[float] = None, end_time: Optional[float] = None
 ) -> None:
     """
     Log general run report
 
     Parameters
     ----------
-    start_time : Optional[int], default=None
+    start_time : Optional[float], default=None
         The start time of the sequencing run in seconds since the epoch.
-    end_time : Optional[int], default=None
+    end_time : Optional[float], default=None
         The end time of the sequencing run in seconds since the epoch.
     """
     logger.info("======= End of Run Report =======")
@@ -197,8 +197,8 @@ def log_run_report(
 
 def log_sequencing_report(
     predictions: List[PepSpecMatch],
-    start_time: Optional[int] = None,
-    end_time: Optional[int] = None,
+    start_time: Optional[float] = None,
+    end_time: Optional[float] = None,
     score_bins: List[float] = SCORE_BINS,
 ) -> None:
     """
@@ -210,9 +210,9 @@ def log_sequencing_report(
         str, Tuple[str, str], float, float, float, float, str
     ]
         PSM predictions
-    start_time : Optional[int], default=None
+    start_time : Optional[float], default=None
         The start time of the sequencing run in seconds since the epoch.
-    end_time : Optional[int], default=None
+    end_time : Optional[float], default=None
         The end time of the sequencing run in seconds since the epoch.
     score_bins: List[float], Optional
         Confidence scores for creating confidence score distribution,
