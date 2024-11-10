@@ -115,30 +115,22 @@ class ProteinDatabase:
         candidates : pd.Series
             A series of candidate peptides.
         """
-        candidates = []
-
+        # FIXME: This could potentially be sped up with only a single pass
+        #  through the database.
+        mask = np.zeros(len(self.db_peptides), dtype=bool)
+        precursor_tol_ppm = self.precursor_tolerance / 1e6
         for e in range(self.isotope_error[0], self.isotope_error[1] + 1):
             iso_shift = ISOTOPE_SPACING * e
             shift_raw_mass = float(
                 _to_neutral_mass(precursor_mz, charge) - iso_shift
             )
-            upper_bound = shift_raw_mass * (
-                1 + (self.precursor_tolerance / 1e6)
-            )
-            lower_bound = shift_raw_mass * (
-                1 - (self.precursor_tolerance / 1e6)
-            )
-
-            window = self.db_peptides[
+            upper_bound = shift_raw_mass * (1 + precursor_tol_ppm)
+            lower_bound = shift_raw_mass * (1 - precursor_tol_ppm)
+            mask |= (
                 (self.db_peptides["calc_mass"] >= lower_bound)
                 & (self.db_peptides["calc_mass"] <= upper_bound)
-            ]
-            candidates.append(window[["peptide", "calc_mass"]])
-
-        candidates = pd.concat(candidates)
-        candidates.drop_duplicates(inplace=True)
-        candidates.sort_values(by=["calc_mass", "peptide"], inplace=True)
-        return candidates["peptide"]
+            )
+        return self.db_peptides[mask]["peptide"]
 
     def get_associated_protein(self, peptide: str) -> str:
         """
