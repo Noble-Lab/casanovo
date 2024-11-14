@@ -88,6 +88,13 @@ class ProteinDatabase:
             max_peptide_len,
             set([aa[0] for aa in residues.keys() if aa[0].isalpha()]),
         )
+        logger.info(
+            "Digesting FASTA file (enzyme = %s, digestion = %s, missed "
+            "cleavages = %d)...",
+            enzyme,
+            digestion,
+            missed_cleavages,
+        )
         self.db_peptides = self._digest_fasta(peptide_generator)
         self.precursor_tolerance = precursor_tolerance
         self.isotope_error = isotope_error
@@ -150,7 +157,7 @@ class ProteinDatabase:
         peptides.set_index("peptide", inplace=True)
 
         logger.info(
-            "Digestion complete. %d peptides generated.", len(peptides)
+            "Digestion complete. %s peptides generated.", f"{len(peptides):,d}"
         )
         return peptides
 
