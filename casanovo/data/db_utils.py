@@ -341,7 +341,7 @@ def _peptide_generator(
     if n_skipped > 0:
         logger.warning(
             "Skipped %d peptides with unknown amino acids", n_skipped
-    )
+        )
 
 
 def _convert_from_modx(
