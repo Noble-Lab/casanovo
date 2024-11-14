@@ -281,7 +281,7 @@ def prepare_psm_batch(
             precursors[i][2], precursors[i][1]
         )
         if len(candidate_pep) == 0:
-            logger.info(
+            logger.debug(
                 "No candidate peptides found for spectrum %s with precursor "
                 "charge %d and precursor m/z %f",
                 spectrum_ids[i],
