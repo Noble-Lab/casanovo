@@ -300,6 +300,7 @@ def _peptide_generator(
             "Enzyme %s not recognized. Interpreting as cleavage rule.",
             enzyme,
         )
+    n_skipped = 0
     if digestion == "non-specific":
         for header, seq in pyteomics.fasta.read(fasta_filename):
             protein = header.split()[0]
@@ -311,7 +312,8 @@ def _peptide_generator(
                 ):
                     peptide = seq[i:j]
                     if any(aa not in valid_aa for aa in peptide):
-                        logger.warning(
+                        n_skipped += 1
+                        logger.debug(
                             "Skipping peptide with unknown amino acids: %s",
                             peptide,
                         )
@@ -329,12 +331,17 @@ def _peptide_generator(
             for peptide in peptides:
                 if min_peptide_len <= len(peptide) <= max_peptide_len:
                     if any(aa not in valid_aa for aa in peptide):
-                        logger.warning(
+                        n_skipped += 1
+                        logger.debug(
                             "Skipping peptide with unknown amino acids: %s",
                             peptide,
                         )
                     else:
                         yield peptide, protein
+    if n_skipped > 0:
+        logger.warning(
+            "Skipped %d peptides with unknown amino acids", n_skipped
+    )
 
 
 def _convert_from_modx(
