@@ -919,8 +919,8 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
                     spectrum_id=tuple(spectrum_i),
                     peptide_score=peptide_score,
                     charge=int(charge),
-                    calc_mz=precursor_mz,
-                    exp_mz=self.peptide_mass_calculator.mass(peptide, charge),
+                    calc_mz=self.peptide_mass_calculator.mass(peptide, charge),
+                    exp_mz=precursor_mz,
                     aa_scores=aa_scores,
                 )
             )
