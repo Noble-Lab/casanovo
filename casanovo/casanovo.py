@@ -196,9 +196,8 @@ def sequence(
             str((output_path / output_root_name).with_suffix(".mztab")),
             evaluate=evaluate,
         )
-        psms = runner.writer.psms
-        utils.log_sequencing_report(
-            psms, start_time=start_time, end_time=time.time()
+        utils.log_annotate_report(
+            runner.writer.psms, start_time=start_time, end_time=time.time()
         )
 
 
@@ -257,7 +256,9 @@ def db_search(
             fasta_path,
             str((output_path / output_root_name).with_suffix(".mztab")),
         )
-        utils.log_run_report(start_time=start_time, end_time=time.time())
+        utils.log_annotate_report(
+            runner.writer.psms, start_time=start_time, end_time=time.time()
+        )
 
 
 @main.command(cls=_SharedParams)
