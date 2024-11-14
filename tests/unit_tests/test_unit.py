@@ -454,14 +454,14 @@ def test_aa_pep_score():
 
 
 def test_peptide_generator_errors(residues_dict, tiny_fasta_file):
-    with pytest.raises(FileNotFoundError) as e_info:
+    with pytest.raises(FileNotFoundError):
         [
             (a, b)
             for a, b in db_utils._peptide_generator(
                 "fail.fasta", "trypsin", "full", 0, 5, 10, residues_dict
             )
         ]
-    with pytest.raises(ValueError) as e_info:
+    with pytest.raises(ValueError):
         [
             (a, b)
             for a, b in db_utils._peptide_generator(

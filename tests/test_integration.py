@@ -177,8 +177,8 @@ def test_train_and_run(
     mztab = pyteomics.mztab.MzTab(str(output_filename))
     filename = "small.mgf"
     # Verify that the input annotated peak file is listed in the metadata.
-    assert f"ms_run[1]-location" in mztab.metadata
-    assert mztab.metadata[f"ms_run[1]-location"].endswith(filename)
+    assert "ms_run[1]-location" in mztab.metadata
+    assert mztab.metadata["ms_run[1]-location"].endswith(filename)
 
     # Verify that the spectrum predictions are correct
     # and indexed according to the peak input file type.

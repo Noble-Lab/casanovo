@@ -18,7 +18,7 @@ from depthcharge.components import ModelMixin, PeptideDecoder, SpectrumEncoder
 
 from . import evaluate
 from .. import config
-from ..data import ms_io, psm
+from ..data import ms_io
 
 logger = logging.getLogger("casanovo")
 
