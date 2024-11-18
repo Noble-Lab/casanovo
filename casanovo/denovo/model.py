@@ -1076,14 +1076,6 @@ class DbSpec2Pep(Spec2Pep):
         )
         return predictions
 
-    def on_predict_batch_end(
-        self, outputs: List[ms_io.PepSpecMatch], *args
-    ) -> None:
-        """
-        Write the database search results to the output file.
-        """
-        self.out_writer.psms.extend(outputs)
-
 
 def _calc_match_score(
     batch_all_aa_scores: torch.Tensor,
