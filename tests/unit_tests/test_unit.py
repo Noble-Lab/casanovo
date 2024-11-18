@@ -18,15 +18,16 @@ import depthcharge.masses
 import einops
 import github
 import numpy as np
+import pandas as pd
 import pytest
 import torch
 
 from casanovo import casanovo
 from casanovo import utils
-from casanovo.data import ms_io
+from casanovo.data import db_utils, ms_io
 from casanovo.data.datasets import SpectrumDataset, AnnotatedSpectrumDataset
-from casanovo.denovo.evaluate import aa_match_batch, aa_match_metrics, aa_match
-from casanovo.denovo.model import Spec2Pep, _aa_pep_score
+from casanovo.denovo.evaluate import aa_match, aa_match_batch, aa_match_metrics
+from casanovo.denovo.model import Spec2Pep, _aa_pep_score, _calc_match_score
 from depthcharge.data import SpectrumIndex, AnnotatedSpectrumIndex
 
 
@@ -452,6 +453,776 @@ def test_aa_pep_score():
     assert peptide_score == pytest.approx(0.5)
 
 
+def test_peptide_generator_errors(residues_dict, tiny_fasta_file):
+    with pytest.raises(FileNotFoundError):
+        [
+            (a, b)
+            for a, b in db_utils._peptide_generator(
+                "fail.fasta", "trypsin", "full", 0, 5, 10, residues_dict
+            )
+        ]
+    with pytest.raises(ValueError):
+        [
+            (a, b)
+            for a, b in db_utils._peptide_generator(
+                tiny_fasta_file, "trypsin", "fail", 0, 5, 10, residues_dict
+            )
+        ]
+
+
+def test_to_neutral_mass():
+    mz = 500
+    charge = 2
+    neutral_mass = db_utils._to_neutral_mass(mz, charge)
+    assert neutral_mass == 997.98544706646
+
+    mz = 500
+    charge = 1
+    neutral_mass = db_utils._to_neutral_mass(mz, charge)
+    assert neutral_mass == 498.99272353323
+
+
+def test_calc_match_score():
+    """
+    Test the calculation of geometric scores using teacher-forced
+    decoder output probabilities and ground truth amino acid sequences.
+    """
+    first_slot_prob = torch.zeros(29)
+    first_slot_prob[1] = 1.0  # A
+    second_slot_prob = torch.zeros(29)
+    second_slot_prob[2] = 1.0  # B
+    third_slot_prob = torch.zeros(29)
+    third_slot_prob[3] = 1.0  # C
+    stop_slot_prob = torch.zeros(29)
+    stop_slot_prob[28] = 1.0  # $
+    blank_slot_prob = torch.zeros(29)
+    blank_slot_prob[0] = 0.42  # Should never come into play
+    fourth_slot_prob = torch.zeros(29)
+    fourth_slot_prob[4] = 0.5  # D
+    fifth_slot_prob = torch.zeros(29)
+    fifth_slot_prob[5] = 0.5  # E
+
+    pep_1_aa = torch.stack(
+        [
+            first_slot_prob,
+            second_slot_prob,
+            third_slot_prob,
+            stop_slot_prob,
+            blank_slot_prob,
+        ]
+    )
+    pep_2_aa = torch.stack(
+        [
+            third_slot_prob,
+            second_slot_prob,
+            stop_slot_prob,
+            blank_slot_prob,
+            blank_slot_prob,
+        ]
+    )
+    pep_3_aa = torch.stack(
+        [
+            fourth_slot_prob,
+            fifth_slot_prob,
+            first_slot_prob,
+            stop_slot_prob,
+            blank_slot_prob,
+        ]
+    )
+    pep_4_aa = torch.stack(
+        [
+            first_slot_prob,
+            second_slot_prob,
+            third_slot_prob,
+            stop_slot_prob,
+            blank_slot_prob,
+        ]
+    )
+    batch_all_aa_scores = torch.stack([pep_1_aa, pep_2_aa, pep_3_aa, pep_4_aa])
+    truth_aa_indices = torch.tensor(
+        [[1, 2, 3, 28], [3, 2, 28, 0], [4, 5, 1, 28], [2, 2, 3, 28]]
+    )
+
+    all_scores, masked_per_aa_scores = _calc_match_score(
+        batch_all_aa_scores, truth_aa_indices, True
+    )
+
+    assert all_scores[0] == np.exp(0)
+    assert all_scores[1] == np.exp(0)
+    assert all_scores[2] == pytest.approx(
+        np.exp(np.log(0.5 * 0.5 * 1 * 1) / 4)
+    )
+    assert all_scores[3] == pytest.approx(
+        np.exp(np.log(1e-10 * 1 * 1 * 1) / 4)
+    )
+
+    aa_scores = np.array([1, 1, 1, 1])
+    assert np.allclose(masked_per_aa_scores[0], (aa_scores + 1) / 2)
+    aa_scores = np.array([1, 1, 1])
+    assert np.allclose(masked_per_aa_scores[1], (aa_scores + 1) / 2)
+    aa_scores = np.array([0.5, 0.5, 1, 1])
+    assert np.allclose(
+        masked_per_aa_scores[2],
+        (aa_scores + np.exp(np.log(0.5 * 0.5 * 1 * 1) / 4)) / 2,
+    )
+    aa_scores = np.array([1e-10, 1, 1, 1])
+    assert np.allclose(
+        masked_per_aa_scores[3],
+        (aa_scores + np.exp(np.log(1e-10 * 1 * 1 * 1) / 4)) / 2,
+    )
+
+
+def test_digest_fasta_cleave(tiny_fasta_file, residues_dict):
+
+    # No missed cleavages
+    expected_normal = [
+        "ATSIPAR",
+        "VTLSC+57.021R",
+        "LLIYGASTR",
+        "EIVMTQSPPTLSLSPGER",
+        "MEAPAQLLFLLLLWLPDTTR",
+        "ASQSVSSSYLTWYQQKPGQAPR",
+        "FSGSGSGTDFTLTISSLQPEDFAVYYC+57.021QQDYNLP",
+    ]
+
+    # 1 missed cleavage
+    expected_1missedcleavage = [
+        "ATSIPAR",
+        "VTLSC+57.021R",
+        "LLIYGASTR",
+        "LLIYGASTRATSIPAR",
+        "EIVMTQSPPTLSLSPGER",
+        "MEAPAQLLFLLLLWLPDTTR",
+        "ASQSVSSSYLTWYQQKPGQAPR",
+        "EIVMTQSPPTLSLSPGERVTLSC+57.021R",
+        "VTLSC+57.021RASQSVSSSYLTWYQQKPGQAPR",
+        "ASQSVSSSYLTWYQQKPGQAPRLLIYGASTR",
+        "FSGSGSGTDFTLTISSLQPEDFAVYYC+57.021QQDYNLP",
+        "MEAPAQLLFLLLLWLPDTTREIVMTQSPPTLSLSPGER",
+        "ATSIPARFSGSGSGTDFTLTISSLQPEDFAVYYC+57.021QQDYNLP",
+    ]
+
+    # 3 missed cleavages
+    expected_3missedcleavage = [
+        "ATSIPAR",
+        "VTLSC+57.021R",
+        "LLIYGASTR",
+        "LLIYGASTRATSIPAR",
+        "EIVMTQSPPTLSLSPGER",
+        "MEAPAQLLFLLLLWLPDTTR",
+        "ASQSVSSSYLTWYQQKPGQAPR",
+        "EIVMTQSPPTLSLSPGERVTLSC+57.021R",
+        "VTLSC+57.021RASQSVSSSYLTWYQQKPGQAPR",
+        "ASQSVSSSYLTWYQQKPGQAPRLLIYGASTR",
+        "FSGSGSGTDFTLTISSLQPEDFAVYYC+57.021QQDYNLP",
+        "ASQSVSSSYLTWYQQKPGQAPRLLIYGASTRATSIPAR",
+        "VTLSC+57.021RASQSVSSSYLTWYQQKPGQAPRLLIYGASTR",
+        "MEAPAQLLFLLLLWLPDTTREIVMTQSPPTLSLSPGER",
+        "ATSIPARFSGSGSGTDFTLTISSLQPEDFAVYYC+57.021QQDYNLP",
+        "VTLSC+57.021RASQSVSSSYLTWYQQKPGQAPRLLIYGASTRATSIPAR",
+        "MEAPAQLLFLLLLWLPDTTREIVMTQSPPTLSLSPGERVTLSC+57.021R",
+        "EIVMTQSPPTLSLSPGERVTLSC+57.021RASQSVSSSYLTWYQQKPGQAPR",
+        "LLIYGASTRATSIPARFSGSGSGTDFTLTISSLQPEDFAVYYC+57.021QQDYNLP",
+    ]
+    for missed_cleavages, expected in zip(
+        (0, 1, 3),
+        (expected_normal, expected_1missedcleavage, expected_3missedcleavage),
+    ):
+        pdb = db_utils.ProteinDatabase(
+            fasta_path=str(tiny_fasta_file),
+            enzyme="trypsin",
+            digestion="full",
+            missed_cleavages=missed_cleavages,
+            min_peptide_len=6,
+            max_peptide_len=50,
+            max_mods=0,
+            precursor_tolerance=20,
+            isotope_error=[0, 0],
+            allowed_fixed_mods="C:C+57.021",
+            allowed_var_mods=(
+                "M:M+15.995,N:N+0.984,Q:Q+0.984,"
+                "nterm:+42.011,nterm:+43.006,nterm:-17.027,nterm:+43.006-17.027"
+            ),
+            residues=residues_dict,
+        )
+        assert pdb.db_peptides.index.to_list() == expected
+
+
+def test_digest_fasta_mods(tiny_fasta_file, residues_dict):
+    # 1 modification allowed
+    # fixed: C+57.02146
+    # variable: 1M+15.994915,1N+0.984016,1Q+0.984016
+    # nterm: 1X+42.010565,1X+43.005814,1X-17.026549,1X+25.980265
+    expected_1mod = [
+        "-17.027ATSIPAR",
+        "ATSIPAR",
+        "-17.027VTLSC+57.021R",
+        "VTLSC+57.021R",
+        "+43.006-17.027ATSIPAR",
+        "+42.011ATSIPAR",
+        "+43.006ATSIPAR",
+        "+43.006-17.027VTLSC+57.021R",
+        "+42.011VTLSC+57.021R",
+        "+43.006VTLSC+57.021R",
+        "-17.027LLIYGASTR",
+        "LLIYGASTR",
+        "+43.006-17.027LLIYGASTR",
+        "+42.011LLIYGASTR",
+        "+43.006LLIYGASTR",
+        "-17.027EIVMTQSPPTLSLSPGER",
+        "EIVMTQSPPTLSLSPGER",
+        "EIVMTQ+0.984SPPTLSLSPGER",
+        "EIVM+15.995TQSPPTLSLSPGER",
+        "+43.006-17.027EIVMTQSPPTLSLSPGER",
+        "+42.011EIVMTQSPPTLSLSPGER",
+        "+43.006EIVMTQSPPTLSLSPGER",
+        "-17.027MEAPAQLLFLLLLWLPDTTR",
+        "-17.027M+15.995EAPAQLLFLLLLWLPDTTR",  #
+        "MEAPAQLLFLLLLWLPDTTR",
+        "MEAPAQ+0.984LLFLLLLWLPDTTR",
+        "M+15.995EAPAQLLFLLLLWLPDTTR",
+        "+43.006-17.027MEAPAQLLFLLLLWLPDTTR",
+        "+43.006-17.027M+15.995EAPAQLLFLLLLWLPDTTR",  #
+        "+42.011MEAPAQLLFLLLLWLPDTTR",
+        "+43.006MEAPAQLLFLLLLWLPDTTR",
+        "+42.011M+15.995EAPAQLLFLLLLWLPDTTR",  #
+        "+43.006M+15.995EAPAQLLFLLLLWLPDTTR",  #
+        "-17.027ASQSVSSSYLTWYQQKPGQAPR",
+        "ASQSVSSSYLTWYQQKPGQAPR",
+        "ASQ+0.984SVSSSYLTWYQQKPGQAPR",
+        "ASQSVSSSYLTWYQ+0.984QKPGQAPR",
+        "ASQSVSSSYLTWYQQ+0.984KPGQAPR",
+        "ASQSVSSSYLTWYQQKPGQ+0.984APR",
+        "+43.006-17.027ASQSVSSSYLTWYQQKPGQAPR",
+        "+42.011ASQSVSSSYLTWYQQKPGQAPR",
+        "+43.006ASQSVSSSYLTWYQQKPGQAPR",
+        "-17.027FSGSGSGTDFTLTISSLQPEDFAVYYC+57.021QQDYNLP",
+        "FSGSGSGTDFTLTISSLQPEDFAVYYC+57.021QQDYNLP",
+        "FSGSGSGTDFTLTISSLQ+0.984PEDFAVYYC+57.021QQDYNLP",
+        "FSGSGSGTDFTLTISSLQPEDFAVYYC+57.021Q+0.984QDYNLP",
+        "FSGSGSGTDFTLTISSLQPEDFAVYYC+57.021QQ+0.984DYNLP",
+        "FSGSGSGTDFTLTISSLQPEDFAVYYC+57.021QQDYN+0.984LP",
+        "+43.006-17.027FSGSGSGTDFTLTISSLQPEDFAVYYC+57.021QQDYNLP",
+        "+42.011FSGSGSGTDFTLTISSLQPEDFAVYYC+57.021QQDYNLP",
+        "+43.006FSGSGSGTDFTLTISSLQPEDFAVYYC+57.021QQDYNLP",
+    ]
+    pdb = db_utils.ProteinDatabase(
+        fasta_path=str(tiny_fasta_file),
+        enzyme="trypsin",
+        digestion="full",
+        missed_cleavages=0,
+        min_peptide_len=6,
+        max_peptide_len=50,
+        max_mods=1,
+        precursor_tolerance=20,
+        isotope_error=[0, 0],
+        allowed_fixed_mods="C:C+57.021",
+        allowed_var_mods=(
+            "M:M+15.995,N:N+0.984,Q:Q+0.984,"
+            "nterm:+42.011,nterm:+43.006,nterm:-17.027,nterm:+43.006-17.027"
+        ),
+        residues=residues_dict,
+    )
+    assert pdb.db_peptides.index.to_list() == expected_1mod
+
+
+def test_length_restrictions(tiny_fasta_file, residues_dict):
+    # length between 20 and 50
+    expected_long = [
+        "MEAPAQLLFLLLLWLPDTTR",
+        "ASQSVSSSYLTWYQQKPGQAPR",
+        "FSGSGSGTDFTLTISSLQPEDFAVYYC+57.021QQDYNLP",
+    ]
+
+    # length between 6 and 8
+    expected_short = ["ATSIPAR", "VTLSC+57.021R"]
+
+    pdb = db_utils.ProteinDatabase(
+        fasta_path=str(tiny_fasta_file),
+        enzyme="trypsin",
+        digestion="full",
+        missed_cleavages=0,
+        min_peptide_len=20,
+        max_peptide_len=50,
+        max_mods=0,
+        precursor_tolerance=20,
+        isotope_error=[0, 0],
+        allowed_fixed_mods="C:C+57.021",
+        allowed_var_mods=(
+            "M:M+15.995,N:N+0.984,Q:Q+0.984,"
+            "nterm:+42.011,nterm:+43.006,nterm:-17.027,nterm:+43.006-17.027"
+        ),
+        residues=residues_dict,
+    )
+    assert pdb.db_peptides.index.to_list() == expected_long
+
+    pdb = db_utils.ProteinDatabase(
+        fasta_path=str(tiny_fasta_file),
+        enzyme="trypsin",
+        digestion="full",
+        missed_cleavages=0,
+        min_peptide_len=6,
+        max_peptide_len=8,
+        max_mods=0,
+        precursor_tolerance=20,
+        isotope_error=[0, 0],
+        allowed_fixed_mods="C:C+57.021",
+        allowed_var_mods=(
+            "M:M+15.995,N:N+0.984,Q:Q+0.984,"
+            "nterm:+42.011,nterm:+43.006,nterm:-17.027,nterm:+43.006-17.027"
+        ),
+        residues=residues_dict,
+    )
+    assert pdb.db_peptides.index.to_list() == expected_short
+
+
+def test_digest_fasta_enzyme(tiny_fasta_file, residues_dict):
+    # arg-c enzyme
+    expected_argc = [
+        "ATSIPAR",
+        "VTLSC+57.021R",
+        "LLIYGASTR",
+        "EIVMTQSPPTLSLSPGER",
+        "MEAPAQLLFLLLLWLPDTTR",
+        "ASQSVSSSYLTWYQQKPGQAPR",
+        "FSGSGSGTDFTLTISSLQPEDFAVYYC+57.021QQDYNLP",
+    ]
+
+    # asp-n enzyme
+    expected_aspn = ["DFAVYYC+57.021QQ", "DFTLTISSLQPE", "MEAPAQLLFLLLLWLP"]
+
+    expected_semispecific = [
+        "FSGSGS",
+        "ATSIPA",
+        "ASQSVS",
+        "PGQAPR",
+        "TSIPAR",
+        "MEAPAQ",
+        "LLIYGA",
+        "YGASTR",
+        "LSPGER",
+        "LPDTTR",
+        "EIVMTQ",
+        "VTLSC+57.021R",
+        "QDYNLP",
+    ]
+
+    expected_nonspecific = [
+        "SGSGSG",
+        "GSGSGT",
+        "SGSGTD",
+        "FSGSGS",
+        "ATSIPA",
+        "GASTRA",
+        "LSLSPG",
+        "ASQSVS",
+        "GSGTDF",
+        "SLSPGE",
+        "QSVSSS",
+        "SQSVSS",
+        "KPGQAP",
+        "SPPTLS",
+        "ASTRAT",
+        "RFSGSG",
+        "IYGAST",
+        "APAQLL",
+        "PTLSLS",
+        "TLSLSP",
+        "TLTISS",
+        "STRATS",
+        "LIYGAS",
+        "ARFSGS",
+        "PGQAPR",
+        "SGTDFT",
+        "PPTLSL",
+        "EAPAQL",
+        "QKPGQA",
+        "SVSSSY",
+        "TQSPPT",
+        "LTISSL",
+        "PARFSG",
+        "GQAPRL",
+        "QSPPTL",
+        "SPGERV",
+        "ISSLQP",
+        "RATSIP",
+        "TSIPAR",
+        "MEAPAQ",
+        "RASQSV",
+        "TISSLQ",
+        "TRATSI",
+        "LLIYGA",
+        "GTDFTL",
+        "YGASTR",
+        "VSSSYL",
+        "SSSYLT",
+        "LSPGER",
+        "PGERVT",
+        "MTQSPP",
+        "SSLQPE",
+        "VMTQSP",
+        "GERVTL",
+        "PEDFAV",
+        "IVMTQS",
+        "FTLTIS",
+        "APRLLI",
+        "QQKPGQ",
+        "SLQPED",
+        "PAQLLF",
+        "IPARFS",
+        "SIPARF",
+        "LSC+57.021RAS",
+        "TDFTLT",
+        "QAPRLL",
+        "LPDTTR",
+        "ERVTLS",
+        "AQLLFL",
+        "QPEDFA",
+        "TLSC+57.021RA",
+        "C+57.021RASQS",
+        "SC+57.021RASQ",
+        "DFTLTI",
+        "PDTTRE",
+        "TTREIV",
+        "EIVMTQ",
+        "YQQKPG",
+        "LFLLLL",
+        "LLFLLL",
+        "WLPDTT",
+        "DTTREI",
+        "RLLIYG",
+        "RVTLSC+57.021",
+        "VTLSC+57.021R",
+        "EDFAVY",
+        "LWLPDT",
+        "QLLFLL",
+        "LQPEDF",
+        "REIVMT",
+        "TREIVM",
+        "QDYNLP",
+        "LLLWLP",
+        "SSYLTW",
+        "LLWLPD",
+        "LLLLWL",
+        "PRLLIY",
+        "DFAVYY",
+        "QQDYNL",
+        "AVYYC+57.021Q",
+        "FLLLLW",
+        "FAVYYC+57.021",
+        "C+57.021QQDYN",
+        "SYLTWY",
+        "LTWYQQ",
+        "WYQQKP",
+        "TWYQQK",
+        "VYYC+57.021QQ",
+        "YLTWYQ",
+        "YC+57.021QQDY",
+        "YYC+57.021QQD",
+    ]
+
+    pdb = db_utils.ProteinDatabase(
+        fasta_path=str(tiny_fasta_file),
+        enzyme="arg-c",
+        digestion="full",
+        missed_cleavages=0,
+        min_peptide_len=6,
+        max_peptide_len=50,
+        max_mods=0,
+        precursor_tolerance=20,
+        isotope_error=[0, 0],
+        allowed_fixed_mods="C:C+57.021",
+        allowed_var_mods=(
+            "M:M+15.995,N:N+0.984,Q:Q+0.984,"
+            "nterm:+42.011,nterm:+43.006,nterm:-17.027,nterm:+43.006-17.027"
+        ),
+        residues=residues_dict,
+    )
+    assert pdb.db_peptides.index.to_list() == expected_argc
+
+    pdb = db_utils.ProteinDatabase(
+        fasta_path=str(tiny_fasta_file),
+        enzyme="asp-n",
+        digestion="full",
+        missed_cleavages=0,
+        min_peptide_len=6,
+        max_peptide_len=50,
+        max_mods=0,
+        precursor_tolerance=20,
+        isotope_error=[0, 0],
+        allowed_fixed_mods="C:C+57.021",
+        allowed_var_mods=(
+            "M:M+15.995,N:N+0.984,Q:Q+0.984,"
+            "nterm:+42.011,nterm:+43.006,nterm:-17.027,nterm:+43.006-17.027"
+        ),
+        residues=residues_dict,
+    )
+    assert pdb.db_peptides.index.to_list() == expected_aspn
+
+    # Test regex rule instead of named enzyme
+    pdb = db_utils.ProteinDatabase(
+        fasta_path=str(tiny_fasta_file),
+        enzyme="R",
+        digestion="full",
+        missed_cleavages=0,
+        min_peptide_len=6,
+        max_peptide_len=50,
+        max_mods=0,
+        precursor_tolerance=20,
+        isotope_error=[0, 0],
+        allowed_fixed_mods="C:C+57.021",
+        allowed_var_mods=(
+            "M:M+15.995,N:N+0.984,Q:Q+0.984,"
+            "nterm:+42.011,nterm:+43.006,nterm:-17.027,nterm:+43.006-17.027"
+        ),
+        residues=residues_dict,
+    )
+    assert pdb.db_peptides.index.to_list() == expected_argc
+
+    # Test semispecific digest
+    pdb = db_utils.ProteinDatabase(
+        fasta_path=str(tiny_fasta_file),
+        enzyme="trypsin",
+        digestion="partial",
+        missed_cleavages=0,
+        min_peptide_len=6,
+        max_peptide_len=6,
+        max_mods=0,
+        precursor_tolerance=10000,
+        isotope_error=[0, 0],
+        allowed_fixed_mods="C:C+57.021",
+        allowed_var_mods=(
+            "M:M+15.995,N:N+0.984,Q:Q+0.984,"
+            "nterm:+42.011,nterm:+43.006,nterm:-17.027,nterm:+43.006-17.027"
+        ),
+        residues=residues_dict,
+    )
+    assert pdb.db_peptides.index.to_list() == expected_semispecific
+
+    # Test nonspecific digest
+    pdb = db_utils.ProteinDatabase(
+        fasta_path=str(tiny_fasta_file),
+        enzyme="trypsin",
+        digestion="non-specific",
+        missed_cleavages=0,
+        min_peptide_len=6,
+        max_peptide_len=6,
+        max_mods=0,
+        precursor_tolerance=10000,
+        isotope_error=[0, 0],
+        allowed_fixed_mods="C:C+57.021",
+        allowed_var_mods=(
+            "M:M+15.995,N:N+0.984,Q:Q+0.984,"
+            "nterm:+42.011,nterm:+43.006,nterm:-17.027,nterm:+43.006-17.027"
+        ),
+        residues=residues_dict,
+    )
+    assert pdb.db_peptides.index.to_list() == expected_nonspecific
+
+
+def test_get_candidates(tiny_fasta_file, residues_dict):
+    # precursor_window is 10000
+    expected_smallwindow = ["LLIYGASTR"]
+
+    # precursor window is 150000
+    expected_midwindow = ["LLIYGASTR"]
+
+    # precursor window is 600000
+    expected_widewindow = ["ATSIPAR", "VTLSC+57.021R", "LLIYGASTR"]
+
+    pdb = db_utils.ProteinDatabase(
+        fasta_path=str(tiny_fasta_file),
+        enzyme="trypsin",
+        digestion="full",
+        missed_cleavages=1,
+        min_peptide_len=6,
+        max_peptide_len=50,
+        max_mods=0,
+        precursor_tolerance=10000,
+        isotope_error=[0, 0],
+        allowed_fixed_mods="C:C+57.021",
+        allowed_var_mods=(
+            "M:M+15.995,N:N+0.984,Q:Q+0.984,"
+            "nterm:+42.011,nterm:+43.006,nterm:-17.027,nterm:+43.006-17.027"
+        ),
+        residues=residues_dict,
+    )
+    candidates = pdb.get_candidates(precursor_mz=496.2, charge=2)
+    assert expected_smallwindow == list(candidates)
+
+    pdb = db_utils.ProteinDatabase(
+        fasta_path=str(tiny_fasta_file),
+        enzyme="trypsin",
+        digestion="full",
+        missed_cleavages=1,
+        min_peptide_len=6,
+        max_peptide_len=50,
+        max_mods=0,
+        precursor_tolerance=150000,
+        isotope_error=[0, 0],
+        allowed_fixed_mods="C:C+57.021",
+        allowed_var_mods=(
+            "M:M+15.995,N:N+0.984,Q:Q+0.984,"
+            "nterm:+42.011,nterm:+43.006,nterm:-17.027,nterm:+43.006-17.027"
+        ),
+        residues=residues_dict,
+    )
+    candidates = pdb.get_candidates(precursor_mz=496.2, charge=2)
+    assert expected_midwindow == list(candidates)
+
+    pdb = db_utils.ProteinDatabase(
+        fasta_path=str(tiny_fasta_file),
+        enzyme="trypsin",
+        digestion="full",
+        missed_cleavages=1,
+        min_peptide_len=6,
+        max_peptide_len=50,
+        max_mods=0,
+        precursor_tolerance=600000,
+        isotope_error=[0, 0],
+        allowed_fixed_mods="C:C+57.021",
+        allowed_var_mods=(
+            "M:M+15.995,N:N+0.984,Q:Q+0.984,"
+            "nterm:+42.011,nterm:+43.006,nterm:-17.027,nterm:+43.006-17.027"
+        ),
+        residues=residues_dict,
+    )
+    candidates = pdb.get_candidates(precursor_mz=496.2, charge=2)
+    assert expected_widewindow == list(candidates)
+
+
+def test_get_candidates_isotope_error(tiny_fasta_file, residues_dict):
+
+    # Tide isotope error windows for 496.2, 2+:
+    # 0: [980.481617, 1000.289326]
+    # 1: [979.491114, 999.278813]
+    # 2: [978.500611, 998.268300]
+    # 3: [977.510108, 997.257787]
+
+    peptide_list = [
+        ("A", 1001, "foo"),
+        ("B", 1000, "foo"),
+        ("C", 999, "foo"),
+        ("D", 998, "foo"),
+        ("E", 997, "foo"),
+        ("F", 996, "foo"),
+        ("G", 995, "foo"),
+        ("H", 994, "foo"),
+        ("I", 993, "foo"),
+        ("J", 992, "foo"),
+        ("K", 991, "foo"),
+        ("L", 990, "foo"),
+        ("M", 989, "foo"),
+        ("N", 988, "foo"),
+        ("O", 987, "foo"),
+        ("P", 986, "foo"),
+        ("Q", 985, "foo"),
+        ("R", 984, "foo"),
+        ("S", 983, "foo"),
+        ("T", 982, "foo"),
+        ("U", 981, "foo"),
+        ("V", 980, "foo"),
+        ("W", 979, "foo"),
+        ("X", 978, "foo"),
+        ("Y", 977, "foo"),
+        ("Z", 976, "foo"),
+    ]
+
+    peptide_list = pd.DataFrame(
+        peptide_list, columns=["peptide", "calc_mass", "protein"]
+    ).set_index("peptide")
+    peptide_list.sort_values("calc_mass", inplace=True)
+
+    expected_isotope0 = list("UTSRQPONMLKJIHGFEDCB")
+    expected_isotope01 = list("VUTSRQPONMLKJIHGFEDCB")
+    expected_isotope012 = list("WVUTSRQPONMLKJIHGFEDCB")
+    expected_isotope0123 = list("XWVUTSRQPONMLKJIHGFEDCB")
+
+    pdb = db_utils.ProteinDatabase(
+        fasta_path=str(tiny_fasta_file),
+        enzyme="trypsin",
+        digestion="full",
+        missed_cleavages=0,
+        min_peptide_len=0,
+        max_peptide_len=0,
+        max_mods=0,
+        precursor_tolerance=10000,
+        isotope_error=[0, 0],
+        allowed_fixed_mods="C:C+57.021",
+        allowed_var_mods=(
+            "M:M+15.995,N:N+0.984,Q:Q+0.984,"
+            "nterm:+42.011,nterm:+43.006,nterm:-17.027,nterm:+43.006-17.027"
+        ),
+        residues=residues_dict,
+    )
+    pdb.db_peptides = peptide_list
+    candidates = pdb.get_candidates(precursor_mz=496.2, charge=2)
+    assert expected_isotope0 == list(candidates)
+
+    pdb = db_utils.ProteinDatabase(
+        fasta_path=str(tiny_fasta_file),
+        enzyme="trypsin",
+        digestion="full",
+        missed_cleavages=0,
+        min_peptide_len=0,
+        max_peptide_len=0,
+        max_mods=0,
+        precursor_tolerance=10000,
+        isotope_error=[0, 1],
+        allowed_fixed_mods="C:C+57.021",
+        allowed_var_mods=(
+            "M:M+15.995,N:N+0.984,Q:Q+0.984,"
+            "nterm:+42.011,nterm:+43.006,nterm:-17.027,nterm:+43.006-17.027"
+        ),
+        residues=residues_dict,
+    )
+    pdb.db_peptides = peptide_list
+    candidates = pdb.get_candidates(precursor_mz=496.2, charge=2)
+    assert expected_isotope01 == list(candidates)
+
+    pdb = db_utils.ProteinDatabase(
+        fasta_path=str(tiny_fasta_file),
+        enzyme="trypsin",
+        digestion="full",
+        missed_cleavages=0,
+        min_peptide_len=0,
+        max_peptide_len=0,
+        max_mods=0,
+        precursor_tolerance=10000,
+        isotope_error=[0, 2],
+        allowed_fixed_mods="C:C+57.021",
+        allowed_var_mods=(
+            "M:M+15.995,N:N+0.984,Q:Q+0.984,"
+            "nterm:+42.011,nterm:+43.006,nterm:-17.027,nterm:+43.006-17.027"
+        ),
+        residues=residues_dict,
+    )
+    pdb.db_peptides = peptide_list
+    candidates = pdb.get_candidates(precursor_mz=496.2, charge=2)
+    assert expected_isotope012 == list(candidates)
+
+    pdb = db_utils.ProteinDatabase(
+        fasta_path=str(tiny_fasta_file),
+        enzyme="trypsin",
+        digestion="full",
+        missed_cleavages=0,
+        min_peptide_len=0,
+        max_peptide_len=0,
+        max_mods=0,
+        precursor_tolerance=10000,
+        isotope_error=[0, 3],
+        allowed_fixed_mods="C:C+57.021",
+        allowed_var_mods=(
+            "M:M+15.995,N:N+0.984,Q:Q+0.984,"
+            "nterm:+42.011,nterm:+43.006,nterm:-17.027,nterm:+43.006-17.027"
+        ),
+        residues=residues_dict,
+    )
+    pdb.db_peptides = peptide_list
+    candidates = pdb.get_candidates(precursor_mz=496.2, charge=2)
+    assert expected_isotope0123 == list(candidates)
+
+
 def test_beam_search_decode():
     """
     Test beam search decoding and its sub-functions.
@@ -462,7 +1233,7 @@ def test_beam_search_decode():
 
     # Sizes.
     batch = 1  # B
-    length = model.max_length + 1  # L
+    length = model.max_peptide_len + 1  # L
     vocab = model.decoder.vocab_size + 1  # V
     beam = model.n_beams  # S
     step = 3
@@ -579,12 +1350,12 @@ def test_beam_search_decode():
     assert torch.equal(new_scores[:, step, :], expected_scores)
 
     # Test output if decoding loop isn't stopped with termination of all beams.
-    model.max_length = 0
+    model.max_peptide_len = 0
     # 1 spectrum with 5 peaks (2 values: m/z and intensity).
     spectra = torch.zeros(1, 5, 2)
     precursors = torch.tensor([[469.25364, 2.0, 235.63410]])
     assert len(list(model.beam_search_decode(spectra, precursors))[0]) == 0
-    model.max_length = 100
+    model.max_peptide_len = 100
 
     # Re-initialize scores and tokens to further test caching functionality.
     scores = torch.full(
@@ -744,7 +1515,7 @@ def test_beam_search_decode():
     batch = 2  # B
     beam = model.n_beams  # S
     model.decoder.reverse = True
-    length = model.max_length + 1  # L
+    length = model.max_peptide_len + 1  # L
     vocab = model.decoder.vocab_size + 1  # V
     step = 4
 
@@ -785,7 +1556,7 @@ def test_beam_search_decode():
     batch = 2  # B
     beam = model.n_beams  # S
     model.decoder.reverse = True
-    length = model.max_length + 1  # L
+    length = model.max_peptide_len + 1  # L
     vocab = model.decoder.vocab_size + 1  # V
     step = 4
 

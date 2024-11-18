@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Added
 
+- Casanovo-DB mode (`casanovo db_search`) to use Casanovo as a learned  score function for sequence database searching (given a FASTA protein database).
 - During training, model checkpoints will be saved at the end of each training epoch in addition to the checkpoints saved at the end of every validation run.
 - Besides as a local file, model weights can be specified from a URL. Upon initial download, the weights file is cached for future re-use.
 - Training and optimizer metrics can now be logged to a CSV file by setting the `log_metrics` config file option to true - the CSV file will be written to under a sub-directory of the output directory named `csv_logs`.

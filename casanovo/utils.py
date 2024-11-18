@@ -8,7 +8,7 @@ import re
 import socket
 import sys
 from datetime import datetime
-from typing import Tuple, Dict, List, Optional, Iterable
+from typing import Dict, Iterable, List, Optional, Tuple
 
 import numpy as np
 import pandas as pd
@@ -18,7 +18,7 @@ import torch
 from .data.psm import PepSpecMatch
 
 
-SCORE_BINS = [0.0, 0.5, 0.9, 0.95, 0.99]
+SCORE_BINS = (0.0, 0.5, 0.9, 0.95, 0.99)
 
 logger = logging.getLogger("casanovo")
 
@@ -27,8 +27,8 @@ def n_workers() -> int:
     """
     Get the number of workers to use for data loading.
 
-    This is the maximum number of CPUs allowed for the process, scaled for the
-    number of GPUs being used.
+    This is the maximum number of CPUs allowed for the process, scaled
+    for the number of GPUs being used.
 
     On Windows and MacOS, we only use the main process. See:
     https://discuss.pytorch.org/t/errors-when-using-num-workers-0-in-dataloader/97564/4
@@ -79,7 +79,7 @@ def split_version(version: str) -> Tuple[str, str, str]:
 
 
 def get_score_bins(
-    scores: pd.Series, score_bins: List[float]
+    scores: pd.Series, score_bins: Iterable[float]
 ) -> Dict[float, int]:
     """
     Get binned confidence scores
@@ -92,14 +92,14 @@ def get_score_bins(
     ----------
     scores: pd.Series
         Series of assigned peptide scores.
-    score_bins: List[float]
+    score_bins: Iterable[float]
         Confidence scores to map.
 
     Returns
     -------
     score_bin_dict: Dict[float, int]
-        Dictionary mapping each confidence score to the number of spectra
-        with a confidence greater than or equal to it.
+        Dictionary mapping each confidence score to the number of
+        spectra with a confidence greater than or equal to it.
     """
     return {score: (scores >= score).sum() for score in score_bins}
 
@@ -116,8 +116,8 @@ def get_peptide_lengths(sequences: pd.Series) -> np.ndarray:
     Returns
     -------
     sequence_lengths: np.ndarray
-        Numpy array containing the length of each sequence, listed in the
-        same order that the sequences are provided in.
+        Numpy array containing the length of each sequence, listed in
+        the same order that the sequences are provided in.
     """
     # Mass modifications do not contribute to sequence length
     # FIXME: If PTMs are represented in ProForma notation this filtering
@@ -126,7 +126,7 @@ def get_peptide_lengths(sequences: pd.Series) -> np.ndarray:
 
 
 def get_report_dict(
-    results_table: pd.DataFrame, score_bins: List[float] = SCORE_BINS
+    results_table: pd.DataFrame, score_bins: Iterable[float] = SCORE_BINS
 ) -> Optional[Dict]:
     """
     Generate sequencing run report
@@ -134,15 +134,16 @@ def get_report_dict(
     Parameters
     ----------
     results_table: pd.DataFrame
-        Parsed spectrum match table
-    score_bins: List[float], Optional
-        Confidence scores for creating confidence CMF, see get_score_bins
+        Parsed spectrum match table.
+    score_bins: Iterable[float], Optional
+        Confidence scores for creating confidence CMF, see
+        `get_score_bins`.
 
     Returns
     -------
     report_gen: Dict
         Generated report represented as a dictionary, or None if no
-        sequencing predictions were logged
+        sequencing predictions were logged.
     """
     if results_table.empty:
         return None
@@ -161,16 +162,16 @@ def get_report_dict(
 
 
 def log_run_report(
-    start_time: Optional[int] = None, end_time: Optional[int] = None
+    start_time: Optional[float] = None, end_time: Optional[float] = None
 ) -> None:
     """
     Log general run report
 
     Parameters
     ----------
-    start_time : Optional[int], default=None
+    start_time : Optional[float], default=None
         The start time of the sequencing run in seconds since the epoch.
-    end_time : Optional[int], default=None
+    end_time : Optional[float], default=None
         The end time of the sequencing run in seconds since the epoch.
     """
     logger.info("======= End of Run Report =======")
@@ -195,28 +196,26 @@ def log_run_report(
         logger.info("Max GPU Memory Utilization: %d MiB", gpu_util >> 20)
 
 
-def log_sequencing_report(
+def log_annotate_report(
     predictions: List[PepSpecMatch],
-    start_time: Optional[int] = None,
-    end_time: Optional[int] = None,
-    score_bins: List[float] = SCORE_BINS,
+    start_time: Optional[float] = None,
+    end_time: Optional[float] = None,
+    score_bins: Iterable[float] = SCORE_BINS,
 ) -> None:
     """
-    Log sequencing run report
+    Log run annotation report.
 
     Parameters
     ----------
-    next_prediction : Tuple[
-        str, Tuple[str, str], float, float, float, float, str
-    ]
-        PSM predictions
-    start_time : Optional[int], default=None
+    predictions: List[PepSpecMatch]
+        PSM predictions.
+    start_time : Optional[float], default=None
         The start time of the sequencing run in seconds since the epoch.
-    end_time : Optional[int], default=None
+    end_time : Optional[float], default=None
         The end time of the sequencing run in seconds since the epoch.
-    score_bins: List[float], Optional
+    score_bins: Iterable[float], Optional
         Confidence scores for creating confidence score distribution,
-        see get_score_bins
+        see `get_score_bins`.
     """
     log_run_report(start_time=start_time, end_time=end_time)
     run_report = get_report_dict(

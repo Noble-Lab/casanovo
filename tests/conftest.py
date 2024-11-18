@@ -1,10 +1,11 @@
 """Fixtures used for testing."""
 
+import depthcharge
 import numpy as np
 import psims
 import pytest
 import yaml
-from pyteomics.mass import calculate_mass
+from pyteomics.mass import calculate_mass, fast_mass, std_aa_mass
 
 
 @pytest.fixture
@@ -16,6 +17,36 @@ def mgf_small(tmp_path):
 
 
 @pytest.fixture
+def tiny_fasta_file(tmp_path):
+    fasta_file = tmp_path / "tiny_fasta.fasta"
+    with fasta_file.open("w+") as fasta_ref:
+        fasta_ref.write(
+            (
+                ">foo\nMEAPAQLLFLLLLWLPDTTREIVMTQSPPTLSLSPGERVTLSCRASQSVSSSYLTWYQ"
+                "QKPGQAPRLLIYGASTRATSIPARFSGSGSGTDFTLTISSLQPEDFAVYYCQQDYNLP"
+            )
+        )
+    return fasta_file
+
+
+@pytest.fixture
+def mgf_medium(tmp_path):
+    """An MGF file with 7 spectra and scan numbers,
+    C+57.021 mass modification considered"""
+    peptides = [
+        "ATSIPAR",
+        "VTLSCR",
+        "LLIYGASTR",
+        "EIVMTQSPPTLSLSPGER",
+        "MEAPAQLLFLLLLWLPDTTR",
+        "ASQSVSSSYLTWYQQKPGQAPR",
+        "FSGSGSGTDFTLTISSLQPEDFAVYYCQQDYNLP",
+    ]
+    mgf_file = tmp_path / "db_search.mgf"
+    return _create_mgf(peptides, mgf_file, mod_aa_mass={"C": 160.030649})
+
+
+@pytest.fixture
 def mgf_small_unannotated(tmp_path):
     """An MGF file with 2 unannotated spectra."""
     peptides = ["LESLIEK", "PEPTIDEK"]
@@ -23,7 +54,9 @@ def mgf_small_unannotated(tmp_path):
     return _create_mgf(peptides, mgf_file, annotate=False)
 
 
-def _create_mgf(peptides, mgf_file, random_state=42, annotate=True):
+def _create_mgf(
+    peptides, mgf_file, random_state=42, mod_aa_mass=None, annotate=True
+):
     """
     Create a fake MGF file from one or more peptides.
 
@@ -35,6 +68,9 @@ def _create_mgf(peptides, mgf_file, random_state=42, annotate=True):
         The MGF file to create.
     random_state : int or numpy.random.Generator, optional
         The random seed. The charge states are chosen to be 2 or 3 randomly.
+    mod_aa_mass : dict, optional
+        A dictionary that specifies the modified masses of amino acids.
+        e.g. {"C": 160.030649} for carbamidomethylated C.
     annotate: bool, optional
         Whether to add peptide annotations to mgf file
 
@@ -44,7 +80,9 @@ def _create_mgf(peptides, mgf_file, random_state=42, annotate=True):
     """
     rng = np.random.default_rng(random_state)
     entries = [
-        _create_mgf_entry(p, rng.choice([2, 3]), annotate=annotate)
+        _create_mgf_entry(
+            p, rng.choice([2, 3]), mod_aa_mass=mod_aa_mass, annotate=annotate
+        )
         for p in peptides
     ]
     with mgf_file.open("w+") as mgf_ref:
@@ -53,7 +91,7 @@ def _create_mgf(peptides, mgf_file, random_state=42, annotate=True):
     return mgf_file
 
 
-def _create_mgf_entry(peptide, charge=2, annotate=True):
+def _create_mgf_entry(peptide, charge=2, mod_aa_mass=None, annotate=True):
     """
     Create a MassIVE-KB style MGF entry for a single PSM.
 
@@ -63,6 +101,8 @@ def _create_mgf_entry(peptide, charge=2, annotate=True):
         A peptide sequence.
     charge : int, optional
         The peptide charge state.
+    mod_aa_mass : dict, optional
+        A dictionary that specifies the modified masses of amino acids.
     annotate: bool, optional
         Whether to add peptide annotation to entry
 
@@ -71,7 +111,12 @@ def _create_mgf_entry(peptide, charge=2, annotate=True):
     str
         The PSM entry in an MGF file format.
     """
-    precursor_mz = calculate_mass(peptide, charge=int(charge))
+    if mod_aa_mass is None:
+        precursor_mz = fast_mass(peptide, charge=int(charge))
+    else:
+        aa_mass = std_aa_mass.copy()
+        aa_mass.update(mod_aa_mass)
+        precursor_mz = fast_mass(peptide, charge=int(charge), aa_mass=aa_mass)
     mzs, intensities = _peptide_to_peaks(peptide, charge)
     frags = "\n".join([f"{m} {i}" for m, i in zip(mzs, intensities)])
 
@@ -218,6 +263,11 @@ def tiny_config(tmp_path):
         "precursor_mass_tol": 5,
         "isotope_error_range": [0, 1],
         "min_peptide_len": 6,
+        "max_peptide_len": 100,
+        "enzyme": "trypsin",
+        "digestion": "full",
+        "missed_cleavages": 0,
+        "max_mods": None,
         "predict_batch_size": 1024,
         "n_beams": 1,
         "top_match": 1,
@@ -236,7 +286,6 @@ def tiny_config(tmp_path):
         "dim_model": 512,
         "dropout": 0.0,
         "dim_intensity": None,
-        "max_length": 100,
         "learning_rate": 5e-4,
         "weight_decay": 1e-5,
         "train_batch_size": 32,
@@ -271,6 +320,11 @@ def tiny_config(tmp_path):
             "-17.027": -17.026549,
             "+43.006-17.027": 25.980265,
         },
+        "allowed_fixed_mods": "C:C+57.021",
+        "allowed_var_mods": (
+            "M:M+15.995,N:N+0.984,Q:Q+0.984,"
+            "nterm:+42.011,nterm:+43.006,nterm:-17.027,nterm:+43.006-17.027"
+        ),
     }
 
     cfg_file = tmp_path / "config.yml"
@@ -278,3 +332,8 @@ def tiny_config(tmp_path):
         yaml.dump(cfg, out_file)
 
     return cfg_file
+
+
+@pytest.fixture
+def residues_dict():
+    return depthcharge.masses.PeptideMass("massivekb").masses

@@ -5,20 +5,22 @@
 
 ###
 # The following parameters can be modified when running inference or when
-# fine-tuning an existing Casanovo model.
+# fine-tuning an existing Casanovo model. They also affect database search
+# parameters when running Casanovo in DB-search mode.
 ###
 
 # Max absolute difference allowed with respect to observed precursor m/z.
-# Predictions outside the tolerance range are assigned a negative peptide score.
+# denovo: Predictions outside the tolerance range are assigned a negative peptide score.
+# db-search: Select candidate peptides within the specified precursor m/z tolerance.
 precursor_mass_tol: 50  # ppm
 # Isotopes to consider when comparing predicted and observed precursor m/z's.
 isotope_error_range: [0, 1]
-# The minimum length of predicted peptides.
+# The minimum length of considered peptides.
 min_peptide_len: 6
+# The maximum length of considered peptides.
+max_peptide_len: 100
 # Number of spectra in one inference batch.
 predict_batch_size: 1024
-# Number of beams used in beam search.
-n_beams: 1
 # Number of PSMs for each spectrum.
 top_match: 1
 # The hardware accelerator to use. Must be one of:
@@ -28,6 +30,42 @@ accelerator: "auto"
 # indicate all available devices should be used. If left empty, the appropriate
 # number will be automatically selected for based on the chosen accelerator.
 devices:
+
+
+###
+# The following parameters are unique to Casanovo's de novo sequencing mode.
+###
+
+# Number of beams used in beam search.
+n_beams: 1
+
+
+###
+# The following parameters are unique to Casanovo's database search mode.
+###
+
+# Enzyme for in silico digestion, used to generate candidate peptides.
+# See pyteomics.parser.expasy_rules for valid enzymes.
+# Can also take a regex to specify custom digestion rules.
+enzyme: "trypsin"
+# Digestion type for candidate peptide generation.
+# full: standard digestion. 
+# semi: Include products of semi-specific cleavage.
+# non-specific: Include products of non-specific cleavage.
+digestion: "full"
+# Number of allowed missed cleavages when digesting protein.
+missed_cleavages: 0
+# Maximum number of variable amino acid modifications per peptide,
+# None generates all possible isoforms as candidates.
+max_mods: 1
+# Select which modifications from the vocabulary can be used in candidate creation.
+# Format: Comma-separated list of "aa:mod_residue", 
+# where aa is a standard amino acid (or "nterm" for an N-terminal mod)
+# and mod_residue is a key from the "residues" dictionary.
+# Example: "M:M+15.995,nterm:+43.006"
+allowed_fixed_mods: "C:C+57.021"
+allowed_var_mods: "M:M+15.995,N:N+0.984,Q:Q+0.984,nterm:+42.011,nterm:+43.006,nterm:-17.027,nterm:+43.006-17.027"
+
 
 ###
 # The following parameters should only be modified if you are training a new
@@ -77,8 +115,6 @@ dropout: 0.0
 # Number of dimensions to use for encoding peak intensity.
 # Projected up to `dim_model` by default and summed with the peak m/z encoding.
 dim_intensity:
-# Max decoded peptide length.
-max_length: 100
 # The number of iterations for the linear warm-up of the learning rate.
 warmup_iters: 100_000
 # The number of iterations for the cosine half period of the learning rate.

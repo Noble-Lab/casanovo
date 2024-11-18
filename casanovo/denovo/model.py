@@ -2,8 +2,10 @@
 
 import collections
 import heapq
+import itertools
 import logging
 import warnings
+from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
 
 import depthcharge.masses
@@ -16,7 +18,7 @@ from depthcharge.components import ModelMixin, PeptideDecoder, SpectrumEncoder
 
 from . import evaluate
 from .. import config
-from ..data import ms_io, psm
+from ..data import ms_io
 
 logger = logging.getLogger("casanovo")
 
@@ -32,37 +34,39 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
     dim_model : int
         The latent dimensionality used by the transformer model.
     n_head : int
-        The number of attention heads in each layer. ``dim_model`` must be
-        divisible by ``n_head``.
+        The number of attention heads in each layer. ``dim_model`` must
+        be divisible by ``n_head``.
     dim_feedforward : int
-        The dimensionality of the fully connected layers in the transformer
-        model.
+        The dimensionality of the fully connected layers in the
+        transformer model.
     n_layers : int
         The number of transformer layers.
     dropout : float
         The dropout probability for all layers.
     dim_intensity : Optional[int]
-        The number of features to use for encoding peak intensity. The remaining
-        (``dim_model - dim_intensity``) are reserved for encoding the m/z value.
-        If ``None``, the intensity will be projected up to ``dim_model`` using a
-        linear layer, then summed with the m/z encoding for each peak.
-    max_length : int
+        The number of features to use for encoding peak intensity. The
+        remaining (``dim_model - dim_intensity``) are reserved for
+        encoding the m/z value. If ``None``, the intensity will be
+        projected up to ``dim_model`` using a linear layer, then summed
+        with the m/z encoding for each peak.
+    max_peptide_len : int
         The maximum peptide length to decode.
     residues : Union[Dict[str, float], str]
-        The amino acid dictionary and their masses. By default ("canonical) this
-        is only the 20 canonical amino acids, with cysteine carbamidomethylated.
-        If "massivekb", this dictionary will include the modifications found in
-        MassIVE-KB. Additionally, a dictionary can be used to specify a custom
+        The amino acid dictionary and their masses. By default
+        ("canonical) this is only the 20 canonical amino acids, with
+        cysteine carbamidomethylated. If "massivekb", this dictionary
+        will include the modifications found in MassIVE-KB.
+        Additionally, a dictionary can be used to specify a custom
         collection of amino acids and masses.
     max_charge : int
         The maximum precursor charge to consider.
     precursor_mass_tol : float, optional
-        The maximum allowable precursor mass tolerance (in ppm) for correct
-        predictions.
+        The maximum allowable precursor mass tolerance (in ppm) for
+        correct predictions.
     isotope_error_range : Tuple[int, int]
-        Take into account the error introduced by choosing a non-monoisotopic
-        peak for fragmentation by not penalizing predicted precursor m/z's that
-        fit the specified isotope error:
+        Take into account the error introduced by choosing a
+        non-monoisotopic peak for fragmentation by not penalizing
+        predicted precursor m/z's that fit the specified isotope error:
         `abs(calc_mz - (precursor_mz - isotope * 1.00335 / precursor_charge))
         < precursor_mass_tol`
     min_peptide_len : int
@@ -73,16 +77,18 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         Number of PSMs to return for each spectrum.
     n_log : int
         The number of epochs to wait between logging messages.
-    tb_summarywriter : Optional[str]
-        Folder path to record performance metrics during training. If ``None``,
-        don't use a ``SummaryWriter``.
+    tb_summarywriter : Optional[Path]
+        Folder path to record performance metrics during training. If
+        ``None``, don't use a ``SummaryWriter``.
     train_label_smoothing : float
         Smoothing factor when calculating the training loss.
     warmup_iters : int
-        The number of iterations for the linear warm-up of the learning rate.
+        The number of iterations for the linear warm-up of the learning
+        rate.
     cosine_schedule_period_iters : int
-        The number of iterations for the cosine half period of the learning rate.
-    out_writer : Optional[str]
+        The number of iterations for the cosine half period of the
+        learning rate.
+    out_writer : Optional[ms_io.MztabWriter]
         The output writer for the prediction results.
     calculate_precision : bool
         Calculate the validation set precision during training.
@@ -99,7 +105,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         n_layers: int = 9,
         dropout: float = 0.0,
         dim_intensity: Optional[int] = None,
-        max_length: int = 100,
+        max_peptide_len: int = 100,
         residues: Union[Dict[str, float], str] = "canonical",
         max_charge: int = 5,
         precursor_mass_tol: float = 50,
@@ -108,9 +114,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         n_beams: int = 1,
         top_match: int = 1,
         n_log: int = 10,
-        tb_summarywriter: Optional[
-            torch.utils.tensorboard.SummaryWriter
-        ] = None,
+        tb_summarywriter: Optional[Path] = None,
         train_label_smoothing: float = 0.01,
         warmup_iters: int = 100_000,
         cosine_schedule_period_iters: int = 600_000,
@@ -147,8 +151,9 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         # Optimizer settings.
         self.warmup_iters = warmup_iters
         self.cosine_schedule_period_iters = cosine_schedule_period_iters
-        # `kwargs` will contain additional arguments as well as unrecognized
-        # arguments, including deprecated ones. Remove the deprecated ones.
+        # `kwargs` will contain additional arguments as well as
+        # unrecognized arguments, including deprecated ones. Remove the
+        # deprecated ones.
         for k in config._config_deprecated:
             kwargs.pop(k, None)
             warnings.warn(
@@ -158,7 +163,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         self.opt_kwargs = kwargs
 
         # Data properties.
-        self.max_length = max_length
+        self.max_peptide_len = max_peptide_len
         self.residues = residues
         self.precursor_mass_tol = precursor_mass_tol
         self.isotope_error_range = isotope_error_range
@@ -175,12 +180,12 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         self.n_log = n_log
         self._history = []
         if tb_summarywriter is not None:
-            self.tb_summarywriter = SummaryWriter(tb_summarywriter)
+            self.tb_summarywriter = SummaryWriter(str(tb_summarywriter))
         else:
-            self.tb_summarywriter = tb_summarywriter
+            self.tb_summarywriter = None
 
         # Output writer during predicting.
-        self.out_writer = out_writer
+        self.out_writer: ms_io.MztabWriter = out_writer
 
     def forward(
         self, spectra: torch.Tensor, precursors: torch.Tensor
@@ -192,20 +197,22 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         ----------
         spectra : torch.Tensor of shape (n_spectra, n_peaks, 2)
             The spectra for which to predict peptide sequences.
-            Axis 0 represents an MS/MS spectrum, axis 1 contains the peaks in
-            the MS/MS spectrum, and axis 2 is essentially a 2-tuple specifying
-            the m/z-intensity pair for each peak. These should be zero-padded,
-            such that all the spectra in the batch are the same length.
+            Axis 0 represents an MS/MS spectrum, axis 1 contains the
+            peaks in the MS/MS spectrum, and axis 2 is essentially a
+            2-tuple specifying the m/z-intensity pair for each peak.
+            These should be zero-padded, such that all the spectra in
+            the batch are the same length.
         precursors : torch.Tensor of size (n_spectra, 3)
-            The measured precursor mass (axis 0), precursor charge (axis 1), and
-            precursor m/z (axis 2) of each MS/MS spectrum.
+            The measured precursor mass (axis 0), precursor charge
+            (axis 1), and precursor m/z (axis 2) of each MS/MS spectrum.
 
         Returns
         -------
         pred_peptides : List[List[Tuple[float, np.ndarray, str]]]
-            For each spectrum, a list with the top peptide predictions. A
-            peptide predictions consists of a tuple with the peptide score,
-            the amino acid scores, and the predicted peptide sequence.
+            For each spectrum, a list with the top peptide predictions.
+            A peptide predictions consists of a tuple with the peptide
+            score, the amino acid scores, and the predicted peptide
+            sequence.
         """
         return self.beam_search_decode(
             spectra.to(self.encoder.device),
@@ -222,26 +229,28 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         ----------
         spectra : torch.Tensor of shape (n_spectra, n_peaks, 2)
             The spectra for which to predict peptide sequences.
-            Axis 0 represents an MS/MS spectrum, axis 1 contains the peaks in
-            the MS/MS spectrum, and axis 2 is essentially a 2-tuple specifying
-            the m/z-intensity pair for each peak. These should be zero-padded,
-            such that all the spectra in the batch are the same length.
+            Axis 0 represents an MS/MS spectrum, axis 1 contains the
+            peaks in the MS/MS spectrum, and axis 2 is essentially a
+            2-tuple specifying the m/z-intensity pair for each peak.
+            These should be zero-padded, such that all the spectra in
+            the batch are the same length.
         precursors : torch.Tensor of size (n_spectra, 3)
-            The measured precursor mass (axis 0), precursor charge (axis 1), and
-            precursor m/z (axis 2) of each MS/MS spectrum.
+            The measured precursor mass (axis 0), precursor charge
+            (axis 1), and precursor m/z (axis 2) of each MS/MS spectrum.
 
         Returns
         -------
         pred_peptides : List[List[Tuple[float, np.ndarray, str]]]
-            For each spectrum, a list with the top peptide prediction(s). A
-            peptide predictions consists of a tuple with the peptide score,
-            the amino acid scores, and the predicted peptide sequence.
+            For each spectrum, a list with the top peptide
+            prediction(s). A peptide predictions consists of a tuple
+            with the peptide score, the amino acid scores, and the
+            predicted peptide sequence.
         """
         memories, mem_masks = self.encoder(spectra)
 
         # Sizes.
         batch = spectra.shape[0]  # B
-        length = self.max_length + 1  # L
+        length = self.max_peptide_len + 1  # L
         vocab = self.decoder.vocab_size + 1  # V
         beam = self.n_beams  # S
 
@@ -269,16 +278,17 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         scores = einops.rearrange(scores, "B L V S -> (B S) L V")
 
         # The main decoding loop.
-        for step in range(0, self.max_length):
-            # Terminate beams exceeding the precursor m/z tolerance and track
-            # all finished beams (either terminated or stop token predicted).
+        for step in range(0, self.max_peptide_len):
+            # Terminate beams exceeding the precursor m/z tolerance and
+            # track all finished beams (either terminated or stop token
+            # predicted).
             (
                 finished_beams,
                 beam_fits_precursor,
                 discarded_beams,
             ) = self._finish_beams(tokens, precursors, step)
-            # Cache peptide predictions from the finished beams (but not the
-            # discarded beams).
+            # Cache peptide predictions from the finished beams (but not
+            # the discarded beams).
             self._cache_finished_beams(
                 tokens,
                 scores,
@@ -289,7 +299,8 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
             )
 
             # Stop decoding when all current beams have been finished.
-            # Continue with beams that have not been finished and not discarded.
+            # Continue with beams that have not been finished and not
+            # discarded.
             finished_beams |= discarded_beams
             if finished_beams.all():
                 break
@@ -300,14 +311,14 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
                 memories[~finished_beams, :, :],
                 mem_masks[~finished_beams, :],
             )
-            # Find the top-k beams with the highest scores and continue decoding
-            # those.
+            # Find the top-k beams with the highest scores and continue
+            # decoding those.
             tokens, scores = self._get_topk_beams(
                 tokens, scores, finished_beams, batch, step + 1
             )
 
-        # Return the peptide with the highest confidence score, within the
-        # precursor m/z tolerance if possible.
+        # Return the peptide with the highest confidence score, within
+        # the precursor m/z tolerance if possible.
         return list(self._get_top_peptide(pred_cache))
 
     def _finish_beams(
@@ -317,33 +328,33 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         step: int,
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """
-        Track all beams that have been finished, either by predicting the stop
-        token or because they were terminated due to exceeding the precursor
-        m/z tolerance.
+        Track all beams that have been finished, either by predicting
+        the stop token or because they were terminated due to exceeding
+        the precursor m/z tolerance.
 
         Parameters
         ----------
-        tokens : torch.Tensor of shape (n_spectra * n_beams, max_length)
+        tokens : torch.Tensor of shape (n_spectra * n_beams, max_peptide_len)
             Predicted amino acid tokens for all beams and all spectra.
          scores : torch.Tensor of shape
-         (n_spectra *  n_beams, max_length, n_amino_acids)
-            Scores for the predicted amino acid tokens for all beams and all
-            spectra.
+         (n_spectra *  n_beams, max_peptide_len, n_amino_acids)
+            Scores for the predicted amino acid tokens for all beams and
+            all spectra.
         step : int
             Index of the current decoding step.
 
         Returns
         -------
         finished_beams : torch.Tensor of shape (n_spectra * n_beams)
-            Boolean tensor indicating whether the current beams have been
-            finished.
+            Boolean tensor indicating whether the current beams have
+            been finished.
         beam_fits_precursor: torch.Tensor of shape (n_spectra * n_beams)
-            Boolean tensor indicating if current beams are within precursor m/z
-            tolerance.
+            Boolean tensor indicating if current beams are within
+            precursor m/z tolerance.
         discarded_beams : torch.Tensor of shape (n_spectra * n_beams)
-            Boolean tensor indicating whether the current beams should be
-            discarded (e.g. because they were predicted to end but violate the
-            minimum peptide length).
+            Boolean tensor indicating whether the current beams should
+            be discarded (e.g. because they were predicted to end but
+            violate the minimum peptide length).
         """
         # Check for tokens with a negative mass (i.e. neutral loss).
         aa_neg_mass = [None]
@@ -362,7 +373,8 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         beam_fits_precursor = torch.zeros(
             tokens.shape[0], dtype=torch.bool
         ).to(self.encoder.device)
-        # Beams with a stop token predicted in the current step can be finished.
+        # Beams with a stop token predicted in the current step can be
+        # finished.
         finished_beams = torch.zeros(tokens.shape[0], dtype=torch.bool).to(
             self.encoder.device
         )
@@ -374,8 +386,9 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
             self.encoder.device
         )
         discarded_beams[tokens[:, step] == 0] = True
-        # Discard beams with invalid modification combinations (i.e. N-terminal
-        # modifications occur multiple times or in internal positions).
+        # Discard beams with invalid modification combinations (i.e.
+        # N-terminal modifications occur multiple times or in internal
+        # positions).
         if step > 1:  # Only relevant for longer predictions.
             dim0 = torch.arange(tokens.shape[0])
             final_pos = torch.full((ends_stop_token.shape[0],), step)
@@ -392,8 +405,8 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
             ).any(dim=1)
             discarded_beams[multiple_mods | internal_mods] = True
 
-        # Check which beams should be terminated or discarded based on the
-        # predicted peptide.
+        # Check which beams should be terminated or discarded based on
+        # the predicted peptide.
         for i in range(len(finished_beams)):
             # Skip already discarded beams.
             if discarded_beams[i]:
@@ -408,15 +421,15 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
             elif not self.decoder.reverse and peptide[-1] == "$":
                 peptide = peptide[:-1]
                 peptide_len -= 1
-            # Discard beams that were predicted to end but don't fit the minimum
-            # peptide length.
+            # Discard beams that were predicted to end but don't fit the
+            # minimum peptide length.
             if finished_beams[i] and peptide_len < self.min_peptide_len:
                 discarded_beams[i] = True
                 continue
-            # Terminate the beam if it has not been finished by the model but
-            # the peptide mass exceeds the precursor m/z to an extent that it
-            # cannot be corrected anymore by a subsequently predicted AA with
-            # negative mass.
+            # Terminate the beam if it has not been finished by the
+            # model but the peptide mass exceeds the precursor m/z to an
+            # extent that it cannot be corrected anymore by a
+            # subsequently predicted AA with negative mass.
             precursor_charge = precursors[i, 1]
             precursor_mz = precursors[i, 2]
             matches_precursor_mz = exceeds_precursor_mz = False
@@ -442,16 +455,18 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
                             self.isotope_error_range[1] + 1,
                         )
                     ]
-                    # Terminate the beam if the calculated m/z for the predicted
-                    # peptide (without potential additional AAs with negative
-                    # mass) is within the precursor m/z tolerance.
+                    # Terminate the beam if the calculated m/z for the
+                    # predicted peptide (without potential additional
+                    # AAs with negative mass) is within the precursor
+                    # m/z tolerance.
                     matches_precursor_mz = aa is None and any(
                         abs(d) < self.precursor_mass_tol
                         for d in delta_mass_ppm
                     )
-                    # Terminate the beam if the calculated m/z exceeds the
-                    # precursor m/z + tolerance and hasn't been corrected by a
-                    # subsequently predicted AA with negative mass.
+                    # Terminate the beam if the calculated m/z exceeds
+                    # the precursor m/z + tolerance and hasn't been
+                    # corrected by a subsequently predicted AA with
+                    # negative mass.
                     if matches_precursor_mz:
                         exceeds_precursor_mz = False
                     else:
@@ -466,8 +481,8 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
                 except KeyError:
                     matches_precursor_mz = exceeds_precursor_mz = False
             # Finish beams that fit or exceed the precursor m/z.
-            # Don't finish beams that don't include a stop token if they don't
-            # exceed the precursor m/z tolerance yet.
+            # Don't finish beams that don't include a stop token if they
+            # don't exceed the precursor m/z tolerance yet.
             if finished_beams[i]:
                 beam_fits_precursor[i] = matches_precursor_mz
             elif exceeds_precursor_mz:
@@ -491,17 +506,17 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
 
         Parameters
         ----------
-        tokens : torch.Tensor of shape (n_spectra * n_beams, max_length)
+        tokens : torch.Tensor of shape (n_spectra * n_beams, max_peptide_len)
             Predicted amino acid tokens for all beams and all spectra.
          scores : torch.Tensor of shape
-         (n_spectra *  n_beams, max_length, n_amino_acids)
-            Scores for the predicted amino acid tokens for all beams and all
-            spectra.
+         (n_spectra *  n_beams, max_peptide_len, n_amino_acids)
+            Scores for the predicted amino acid tokens for all beams and
+            all spectra.
         step : int
             Index of the current decoding step.
         beams_to_cache : torch.Tensor of shape (n_spectra * n_beams)
-            Boolean tensor indicating whether the current beams are ready for
-            caching.
+            Boolean tensor indicating whether the current beams are
+            ready for caching.
         beam_fits_precursor: torch.Tensor of shape (n_spectra * n_beams)
             Boolean tensor indicating whether the beams are within the
             precursor m/z tolerance.
@@ -509,9 +524,9 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
                 int, List[Tuple[float, float, np.ndarray, torch.Tensor]]
         ]
             Priority queue with finished beams for each spectrum, ordered by
-            peptide score. For each finished beam, a tuple with the (negated)
-            peptide score, a random tie-breaking float, the amino acid-level
-            scores, and the predicted tokens is stored.
+            peptide score. For each finished beam, a tuple with the
+            (negated) peptide score, a random tie-breaking float, the
+            amino acid-level scores, and the predicted tokens is stored.
         """
         for i in range(len(beams_to_cache)):
             if not beams_to_cache[i]:
@@ -533,8 +548,8 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
                 continue
             smx = self.softmax(scores[i : i + 1, : step + 1, :])
             aa_scores = smx[0, range(len(pred_tokens)), pred_tokens].tolist()
-            # Add an explicit score 0 for the missing stop token in case this
-            # was not predicted (i.e. early stopping).
+            # Add an explicit score 0 for the missing stop token in case
+            # this was not predicted (i.e. early stopping).
             if not has_stop_token:
                 aa_scores.append(0)
             aa_scores = np.asarray(aa_scores)
@@ -544,8 +559,8 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
             )
             # Omit the stop token from the amino acid-level scores.
             aa_scores = aa_scores[:-1]
-            # Add the prediction to the cache (minimum priority queue, maximum
-            # the number of beams elements).
+            # Add the prediction to the cache (minimum priority queue,
+            # maximum the number of beams elements).
             if len(pred_cache[spec_idx]) < self.n_beams:
                 heapadd = heapq.heappush
             else:
@@ -569,22 +584,22 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         step: int,
     ) -> Tuple[torch.tensor, torch.tensor]:
         """
-        Find the top-k beams with the highest scores and continue decoding
-        those.
+        Find the top-k beams with the highest scores and continue
+        decoding those.
 
         Stop decoding for beams that have been finished.
 
         Parameters
         ----------
-        tokens : torch.Tensor of shape (n_spectra * n_beams, max_length)
+        tokens : torch.Tensor of shape (n_spectra * n_beams, max_peptide_len)
             Predicted amino acid tokens for all beams and all spectra.
          scores : torch.Tensor of shape
-         (n_spectra *  n_beams, max_length, n_amino_acids)
-            Scores for the predicted amino acid tokens for all beams and all
-            spectra.
+         (n_spectra *  n_beams, max_peptide_len, n_amino_acids)
+            Scores for the predicted amino acid tokens for all beams and
+            all spectra.
         finished_beams : torch.Tensor of shape (n_spectra * n_beams)
-            Boolean tensor indicating whether the current beams are ready for
-            caching.
+            Boolean tensor indicating whether the current beams are
+            ready for caching.
         batch: int
             Number of spectra in the batch.
         step : int
@@ -592,12 +607,12 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
 
         Returns
         -------
-        tokens : torch.Tensor of shape (n_spectra * n_beams, max_length)
+        tokens : torch.Tensor of shape (n_spectra * n_beams, max_peptide_len)
             Predicted amino acid tokens for all beams and all spectra.
          scores : torch.Tensor of shape
-         (n_spectra *  n_beams, max_length, n_amino_acids)
-            Scores for the predicted amino acid tokens for all beams and all
-            spectra.
+         (n_spectra *  n_beams, max_peptide_len, n_amino_acids)
+            Scores for the predicted amino acid tokens for all beams and
+            all spectra.
         """
         beam = self.n_beams  # S
         vocab = self.decoder.vocab_size + 1  # V
@@ -632,7 +647,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         ).float()
         # Mask out the index '0', i.e. padding token, by default.
         # FIXME: Set this to a very small, yet non-zero value, to only
-        # get padding after stop token.
+        #  get padding after stop token.
         active_mask[:, :beam] = 1e-8
 
         # Figure out the top K decodings.
@@ -660,24 +675,26 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         ],
     ) -> Iterable[List[Tuple[float, np.ndarray, str]]]:
         """
-        Return the peptide with the highest confidence score for each spectrum.
+        Return the peptide with the highest confidence score for each
+        spectrum.
 
         Parameters
         ----------
         pred_cache : Dict[
                 int, List[Tuple[float, float, np.ndarray, torch.Tensor]]
         ]
-            Priority queue with finished beams for each spectrum, ordered by
-            peptide score. For each finished beam, a tuple with the peptide
-            score, a random tie-breaking float, the amino acid-level scores,
-            and the predicted tokens is stored.
+            Priority queue with finished beams for each spectrum,
+            ordered by peptide score. For each finished beam, a tuple
+            with the peptide score, a random tie-breaking float, the
+            amino acid-level scores, and the predicted tokens is stored.
 
         Returns
         -------
         pred_peptides : Iterable[List[Tuple[float, np.ndarray, str]]]
-            For each spectrum, a list with the top peptide prediction(s). A
-            peptide predictions consists of a tuple with the peptide score,
-            the amino acid scores, and the predicted peptide sequence.
+            For each spectrum, a list with the top peptide
+            prediction(s). A peptide predictions consists of a tuple
+            with the peptide score, the amino acid scores, and the
+            predicted peptide sequence.
         """
         for peptides in pred_cache.values():
             if len(peptides) > 0:
@@ -707,13 +724,14 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         ----------
         spectra : torch.Tensor of shape (n_spectra, n_peaks, 2)
             The spectra for which to predict peptide sequences.
-            Axis 0 represents an MS/MS spectrum, axis 1 contains the peaks in
-            the MS/MS spectrum, and axis 2 is essentially a 2-tuple specifying
-            the m/z-intensity pair for each peak. These should be zero-padded,
-            such that all the spectra in the batch are the same length.
+            Axis 0 represents an MS/MS spectrum, axis 1 contains the
+            peaks in the MS/MS spectrum, and axis 2 is essentially a
+            2-tuple specifying the m/z-intensity pair for each peak.
+            These should be zero-padded, such that all the spectra in
+            the batch are the same length.
         precursors : torch.Tensor of size (n_spectra, 3)
-            The measured precursor mass (axis 0), precursor charge (axis 1), and
-            precursor m/z (axis 2) of each MS/MS spectrum.
+            The measured precursor mass (axis 0), precursor charge
+            (axis 1), and precursor m/z (axis 2) of each MS/MS spectrum.
         sequences : List[str] of length n_spectra
             The partial peptide sequences to predict.
 
@@ -738,8 +756,8 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         Parameters
         ----------
         batch : Tuple[torch.Tensor, torch.Tensor, List[str]]
-            A batch of (i) MS/MS spectra, (ii) precursor information, (iii)
-            peptide sequences as torch Tensors.
+            A batch of (i) MS/MS spectra, (ii) precursor information,
+            (iii) peptide sequences as torch Tensors.
         mode : str
             Logging key to describe the current stage.
 
@@ -772,8 +790,8 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         Parameters
         ----------
         batch : Tuple[torch.Tensor, torch.Tensor, List[str]]
-            A batch of (i) MS/MS spectra, (ii) precursor information, (iii)
-            peptide sequences.
+            A batch of (i) MS/MS spectra, (ii) precursor information,
+            (iii) peptide sequences.
 
         Returns
         -------
@@ -785,8 +803,8 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         if not self.calculate_precision:
             return loss
 
-        # Calculate and log amino acid and peptide match evaluation metrics from
-        # the predicted peptides.
+        # Calculate and log amino acid and peptide match evaluation
+        # metrics from the predicted peptides.
         peptides_pred, peptides_true = [], batch[2]
         for spectrum_preds in self.forward(batch[0], batch[1]):
             for _, _, pred in spectrum_preds:
@@ -794,42 +812,30 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
 
         aa_precision, _, pep_precision = evaluate.aa_match_metrics(
             *evaluate.aa_match_batch(
-                peptides_true,
-                peptides_pred,
-                self.decoder._peptide_mass.masses,
+                peptides_true, peptides_pred, self.decoder._peptide_mass.masses
             )
         )
         log_args = dict(on_step=False, on_epoch=True, sync_dist=True)
-        self.log(
-            "Peptide precision at coverage=1",
-            pep_precision,
-            **log_args,
-        )
-        self.log(
-            "AA precision at coverage=1",
-            aa_precision,
-            **log_args,
-        )
+        self.log("Peptide precision at coverage=1", pep_precision, **log_args)
+        self.log("AA precision at coverage=1", aa_precision, **log_args)
         return loss
 
     def predict_step(
         self, batch: Tuple[torch.Tensor, torch.Tensor, torch.Tensor], *args
-    ) -> List[Tuple[np.ndarray, float, float, str, float, np.ndarray]]:
+    ) -> List[ms_io.PepSpecMatch]:
         """
         A single prediction step.
 
         Parameters
         ----------
         batch : Tuple[torch.Tensor, torch.Tensor, torch.Tensor]
-            A batch of (i) MS/MS spectra, (ii) precursor information, (iii)
-            spectrum identifiers as torch Tensors.
+            A batch of (i) MS/MS spectra, (ii) precursor information,
+            (iii) spectrum identifiers as torch Tensors.
 
         Returns
         -------
-        predictions: List[Tuple[np.ndarray, float, float, str, float, np.ndarray]]
-            Model predictions for the given batch of spectra containing spectrum
-            ids, precursor information, peptide sequences as well as peptide
-            and amino acid-level confidence scores.
+        predictions: List[ms_io.PepSpecMatch]
+            Predicted PSMs for the given batch of spectra.
         """
         predictions = []
         for (
@@ -845,13 +851,16 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         ):
             for peptide_score, aa_scores, peptide in spectrum_preds:
                 predictions.append(
-                    (
-                        spectrum_i,
-                        precursor_charge,
-                        precursor_mz,
-                        peptide,
-                        peptide_score,
-                        aa_scores,
+                    ms_io.PepSpecMatch(
+                        sequence=peptide,
+                        spectrum_id=tuple(spectrum_i),
+                        peptide_score=peptide_score,
+                        charge=int(precursor_charge),
+                        calc_mz=self.peptide_mass_calculator.mass(
+                            peptide, precursor_charge
+                        ),
+                        exp_mz=precursor_mz,
+                        aa_scores=aa_scores,
                     )
                 )
 
@@ -892,38 +901,17 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         self._log_history()
 
     def on_predict_batch_end(
-        self,
-        outputs: List[Tuple[np.ndarray, List[str], torch.Tensor]],
-        *args,
+        self, outputs: List[ms_io.PepSpecMatch], *args
     ) -> None:
         """
-        Write the predicted peptide sequences and amino acid scores to the
-        output file.
+        Write the predicted peptide sequences and amino acid scores to
+        the output file.
         """
         if self.out_writer is None:
             return
-        # Triply nested lists: results -> batch -> step -> spectrum.
-        for (
-            spectrum_i,
-            charge,
-            precursor_mz,
-            peptide,
-            peptide_score,
-            aa_scores,
-        ) in outputs:
-            if len(peptide) == 0:
-                continue
-            self.out_writer.psms.append(
-                psm.PepSpecMatch(
-                    sequence=peptide,
-                    spectrum_id=tuple(spectrum_i),
-                    peptide_score=peptide_score,
-                    charge=int(charge),
-                    calc_mz=precursor_mz,
-                    exp_mz=self.peptide_mass_calculator.mass(peptide, charge),
-                    aa_scores=aa_scores,
-                )
-            )
+        for pred in outputs:
+            if len(pred.sequence) > 0:
+                self.out_writer.psms.append(pred)
 
     def _log_history(self) -> None:
         """
@@ -970,16 +958,18 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
 
     def configure_optimizers(
         self,
-    ) -> Tuple[torch.optim.Optimizer, Dict[str, Any]]:
+    ) -> Tuple[List[torch.optim.Optimizer], Dict[str, Any]]:
         """
         Initialize the optimizer.
 
-        This is used by pytorch-lightning when preparing the model for training.
+        This is used by pytorch-lightning when preparing the model for
+        training.
 
         Returns
         -------
-        Tuple[torch.optim.Optimizer, Dict[str, Any]]
-            The initialized Adam optimizer and its learning rate scheduler.
+        Tuple[List[torch.optim.Optimizer], Dict[str, Any]]
+            The initialized Adam optimizer and its learning rate
+            scheduler.
         """
         optimizer = torch.optim.Adam(self.parameters(), **self.opt_kwargs)
         # Apply learning rate scheduler per step.
@@ -989,18 +979,180 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         return [optimizer], {"scheduler": lr_scheduler, "interval": "step"}
 
 
+class DbSpec2Pep(Spec2Pep):
+    """
+    Subclass of Spec2Pep for the use of Casanovo as an MS/MS database
+    search score function.
+
+    Uses teacher forcing to 'query' Casanovo to score a peptide-spectrum
+    pair. Higher scores indicate a better match between the peptide and
+    spectrum. The amino acid-level scores are also returned.
+
+    Also note that although teacher-forcing is used within this method,
+    there is *no training* involved. This is a prediction-only method.
+    """
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.psm_batch_size = None
+
+    def predict_step(
+        self,
+        batch: Tuple[torch.Tensor, torch.Tensor, np.ndarray, np.ndarray],
+        *args,
+    ) -> List[ms_io.PepSpecMatch]:
+        """
+        A single prediction step.
+
+        Parameters
+        ----------
+        batch : Tuple[torch.Tensor, torch.Tensor, np.ndarray, np.ndarray]
+            A batch of (i) MS/MS spectra, (ii) precursor information,
+            (iii) spectrum identifiers, (iv) candidate peptides.
+
+        Returns
+        -------
+        predictions: List[ms_io.PepSpecMatch]
+            Predicted PSMs for the given batch of spectra.
+        """
+        predictions_all = collections.defaultdict(list)
+        for start_i in range(0, len(batch[0]), self.psm_batch_size):
+            psm_batch = [
+                b[start_i : start_i + self.psm_batch_size] for b in batch
+            ]
+            pred, truth = self._forward_step(
+                psm_batch[0], psm_batch[1], psm_batch[3]
+            )
+            pred = self.softmax(pred)
+            batch_peptide_scores, batch_aa_scores = _calc_match_score(
+                pred, truth, self.decoder.reverse
+            )
+            for (
+                charge,
+                precursor_mz,
+                spectrum_i,
+                peptide_score,
+                aa_scores,
+                peptide,
+            ) in zip(
+                psm_batch[1][:, 1].cpu().detach().numpy(),
+                psm_batch[1][:, 2].cpu().detach().numpy(),
+                psm_batch[2],
+                batch_peptide_scores,
+                batch_aa_scores,
+                psm_batch[3],
+            ):
+                spectrum_i = tuple(spectrum_i)
+                predictions_all[spectrum_i].append(
+                    ms_io.PepSpecMatch(
+                        sequence=peptide,
+                        spectrum_id=spectrum_i,
+                        peptide_score=peptide_score,
+                        charge=int(charge),
+                        calc_mz=self.peptide_mass_calculator.mass(
+                            peptide, charge
+                        ),
+                        exp_mz=precursor_mz,
+                        aa_scores=aa_scores,
+                        protein=self.protein_database.get_associated_protein(
+                            peptide
+                        ),
+                    )
+                )
+        # Filter the top-scoring prediction(s) for each spectrum.
+        predictions = list(
+            itertools.chain.from_iterable(
+                [
+                    *(
+                        sorted(
+                            spectrum_predictions,
+                            key=lambda p: p.peptide_score,
+                            reverse=True,
+                        )[: self.top_match]
+                        for spectrum_predictions in predictions_all.values()
+                    )
+                ]
+            )
+        )
+        return predictions
+
+
+def _calc_match_score(
+    batch_all_aa_scores: torch.Tensor,
+    truth_aa_indices: torch.Tensor,
+    decoder_reverse: bool = False,
+) -> Tuple[List[float], List[np.ndarray]]:
+    """
+    Calculate the score between the input spectra and associated
+    peptide.
+
+    Take in teacher-forced scoring of amino acids of the peptides (in a
+    batch) and use the truth labels to calculate a score between the
+    input spectra and associated peptide.
+
+    Parameters
+    ----------
+    batch_all_aa_scores : torch.Tensor
+        Amino acid scores for all amino acids in the vocabulary for
+        every prediction made to generate the associated peptide (for an
+        entire batch).
+    truth_aa_indices : torch.Tensor
+        Indices of the score for each actual amino acid in the peptide
+        (for an entire batch).
+    decoder_reverse : bool
+        Whether the decoder is reversed.
+
+    Returns
+    -------
+    peptide_scores: List[float]
+        The peptide score for each PSM in the batch.
+    aa_scores : List[np.ndarray]
+        The amino acid scores for each PSM in the batch.
+    """
+    # Remove trailing tokens from predictions based on decoder reversal.
+    if not decoder_reverse:
+        batch_all_aa_scores = batch_all_aa_scores[:, 1:]
+    else:
+        batch_all_aa_scores = batch_all_aa_scores[:, :-1]
+
+    # Vectorized scoring using efficient indexing.
+    rows = (
+        torch.arange(batch_all_aa_scores.shape[0])
+        .unsqueeze(-1)
+        .expand(-1, batch_all_aa_scores.shape[1])
+    )
+    cols = torch.arange(0, batch_all_aa_scores.shape[1]).expand_as(rows)
+
+    per_aa_scores = batch_all_aa_scores[rows, cols, truth_aa_indices]
+    per_aa_scores = per_aa_scores.cpu().detach().numpy()
+    per_aa_scores[per_aa_scores == 0] += 1e-10
+    score_mask = (truth_aa_indices != 0).cpu().detach().numpy()
+    peptide_scores, aa_scores = [], []
+    for psm_score, psm_mask in zip(per_aa_scores, score_mask):
+        psm_aa_scores, psm_peptide_score = _aa_pep_score(
+            psm_score[psm_mask], True
+        )
+        peptide_scores.append(psm_peptide_score)
+        aa_scores.append(psm_aa_scores)
+
+    return peptide_scores, aa_scores
+
+
 class CosineWarmupScheduler(torch.optim.lr_scheduler._LRScheduler):
     """
-    Learning rate scheduler with linear warm-up followed by cosine shaped decay.
+    Learning rate scheduler with linear warm-up followed by cosine
+    shaped decay.
 
     Parameters
     ----------
     optimizer : torch.optim.Optimizer
         Optimizer object.
     warmup_iters : int
-        The number of iterations for the linear warm-up of the learning rate.
+        The number of iterations for the linear warm-up of the learning
+        rate.
     cosine_schedule_period_iters : int
-        The number of iterations for the cosine half period of the learning rate.
+        The number of iterations for the cosine half period of the
+        learning rate.
     """
 
     def __init__(
@@ -1030,8 +1182,8 @@ def _calc_mass_error(
     calc_mz: float, obs_mz: float, charge: int, isotope: int = 0
 ) -> float:
     """
-    Calculate the mass error in ppm between the theoretical m/z and the observed
-    m/z, optionally accounting for an isotopologue mismatch.
+    Calculate the mass error in ppm between the theoretical m/z and the
+    observed m/z, optionally accounting for an isotopologue mismatch.
 
     Parameters
     ----------
@@ -1056,18 +1208,20 @@ def _aa_pep_score(
     aa_scores: np.ndarray, fits_precursor_mz: bool
 ) -> Tuple[np.ndarray, float]:
     """
-    Calculate amino acid and peptide-level confidence score from the raw amino
-    acid scores.
+    Calculate amino acid and peptide-level confidence score from the raw
+    amino acid scores.
 
-    The peptide score is the mean of the raw amino acid scores. The amino acid
-    scores are the mean of the raw amino acid scores and the peptide score.
+    The peptide score is the mean of the raw amino acid scores. The
+    amino acid scores are the mean of the raw amino acid scores and the
+    peptide score.
 
     Parameters
     ----------
     aa_scores : np.ndarray
         Amino acid level confidence scores.
     fits_precursor_mz : bool
-        Flag indicating whether the prediction fits the precursor m/z filter.
+        Flag indicating whether the prediction fits the precursor m/z
+        filter.
 
     Returns
     -------

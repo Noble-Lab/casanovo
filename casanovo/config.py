@@ -13,11 +13,12 @@ from . import utils
 logger = logging.getLogger("casanovo")
 
 
-# FIXME: This contains deprecated config options to be removed in the next major
-#  version update.
+# FIXME: This contains deprecated config options to be removed in the next
+#  major version update.
 _config_deprecated = dict(
     every_n_train_steps="val_check_interval",
     max_iters="cosine_schedule_period_iters",
+    max_length="max_peptide_len",
     save_top_k=None,
     model_save_folder_path=None,
 )
@@ -26,8 +27,8 @@ _config_deprecated = dict(
 class Config:
     """The Casanovo configuration options.
 
-    If a parameter is missing from a user's configuration file, the default
-    value is assumed.
+    If a parameter is missing from a user's configuration file, the
+    default value is assumed.
 
     Parameters
     ----------
@@ -61,7 +62,7 @@ class Config:
         n_layers=int,
         dropout=float,
         dim_intensity=int,
-        max_length=int,
+        max_peptide_len=int,
         residues=dict,
         n_log=int,
         tb_summarywriter=bool,
