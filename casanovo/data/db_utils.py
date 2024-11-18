@@ -150,8 +150,7 @@ class ProteinDatabase:
         # Calculate the mass of each peptide.
         mass_calculator = depthcharge.masses.PeptideMass(residues="massivekb")
         peptides["calc_mass"] = (
-            peptides["peptide"].apply(mass_calculator.mass)
-            .round(5)
+            peptides["peptide"].apply(mass_calculator.mass).round(5)
         )
         # Sort by peptide mass and index by peptide sequence.
         peptides.sort_values(
