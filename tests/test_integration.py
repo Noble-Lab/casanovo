@@ -150,7 +150,10 @@ def test_train_and_run(
     assert psms.loc[3, "sequence"] == "LESLLEK"
     assert psms.loc[3, "spectra_ref"] == "ms_run[2]:scan=17"
     assert psms.loc[4, "sequence"] == "PEPTLDEK"
-    assert psms.loc[4, "spectra_ref"] == "ms_run[2]:scan=111"
+    assert (
+        psms.loc[4, "spectra_ref"]
+        == "ms_run[2]:merged=11 frame=12 scanStart=763 scanEnd=787"
+    )
 
     # Finally, try evaluating:
     output_rootname = "test-eval"
