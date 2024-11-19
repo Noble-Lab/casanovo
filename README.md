@@ -4,13 +4,16 @@
 
 ![image](https://user-images.githubusercontent.com/32707537/152622912-ca87da20-a64c-4e3f-9ca1-721c6b0d9c64.png)
 
-If you use Casanovo in your work, please cite the following publications:
+Casanovo is a state-of-the-art deep learning tool designed for _de novo_ peptide sequencing.
+Powered by a transformer neural network, Casanovo "translates" peaks in MS/MS spectra into amino acid sequences with remarkable precision.
+Achieving state-of-the-art performance, Casanovo is a versatile and powerful tool for discovery, with impactful applications in bottom-up proteomics, immunopeptidomics, metaproteomics, and beyond.
 
-- Yilmaz, M., Fondrie, W. E., Bittremieux, W., Oh, S. & Noble, W. S. *De novo* mass spectrometry peptide sequencing with a transformer model. in *Proceedings of the 39th International Conference on Machine Learning - ICML '22* vol. 162 25514–25522 (PMLR, 2022). [https://proceedings.mlr.press/v162/yilmaz22a.html](https://proceedings.mlr.press/v162/yilmaz22a.html)
-- Yilmaz, M., Fondrie, W. E., Bittremieux, W., Melendez, C.F., Nelson, R., Ananth, V., Oh, S. & Noble, W. S. Sequence-to-sequence translation from mass spectra to peptides with a transformer model. in *Nature Communications* **15**, 6427 (2024). [doi:10.1038/s41467-024-49731-x](https://doi.org/10.1038/s41467-024-49731-x)
+Why choose Casanovo?
 
-## Documentation
+- Unmatched accuracy: Cutting-edge AI ensures precise and reliable peptide sequencing, even in challenging datasets.
+- Open-source innovation: Freely available and easy to integrate into existing visualization workflows.
+- Actively maintained: Join a growing network of researchers and developers to stay at the forefront of technology.
 
-#### https://casanovo.readthedocs.io/en/latest/
+## [Documentation](https://casanovo.readthedocs.io/en/latest/)
 
-
+## [Citation information](https://casanovo.readthedocs.io/en/latest/cite.html)
