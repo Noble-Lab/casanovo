@@ -163,4 +163,24 @@ If you want to store the output mzTab file in a different location than the curr
 
 This job should complete in < 1 minute.
 
-Congratulations! Casanovo is installed and running.
+Congratulations! Casanovo is installed and running in *de novo* mode.
+
+## Try Casanovo-DB on a small example
+
+Now let's use Casanovo to perform database search with the same MGF from above and a FASTA file.
+The example MGF file is available at [`sample_data/sample_preprocessed_spectra.mgf`](https://github.com/Noble-Lab/casanovo/blob/main/sample_data/sample_preprocessed_spectra.mgf).
+The example FASTA file is available at [`sample_data/human.fasta`](https://github.com/Noble-Lab/casanovo/blob/main/sample_data/human.fasta).
+
+To obtain PSM scores between these spectra and the fasta:
+1. Download the example MGF above.
+2. Download the example FASTA above.
+3. [Install Casanovo](#installation).
+4. Ensure your Casanovo conda environment is activated by typing `conda activate casanovo_env`. (If you named your environment differently, type in that name instead.)
+5. Perform database search with Casanovo-DB, replacing `[PATH_TO_MGF]` with the path to the example MGF file that you downloaded AND replacing `[PATH_TO_FASTA]` with the path to the example FASTA file that you downloaded:
+```sh
+casanovo db-search [PATH_TO_MGF]/sample_preprocessed_spectra.mgf [PATH_TO_FASTA]/human.fasta
+```
+
+This job should complete in < 15 minutes.
+
+Congratulations! Casanovo is installed and running in db-search mode.
