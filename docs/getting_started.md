@@ -113,6 +113,7 @@ To perform database search using Casanovo as a score function, use the `casanovo
 ```sh
 casanovo db-search spectra.mgf proteome.fasta
 ```
+![`casanovo configure --help`](images/db-search-help.svg)
 
 Casanovo will create candidates from the given fasta file, and score them against MS/MS spectra in mzML, mzXML, and MGF files.
 This will write PSM scores for the given MS/MS spectra and fasta file to the specified output file in mzTab format.
