@@ -106,6 +106,17 @@ casanovo sequence spectra.mgf
 Casanovo can predict peptide sequences for MS/MS spectra in mzML, mzXML, and MGF files.
 This will write peptide predictions for the given MS/MS spectra to the specified output file in mzTab format.
 
+### Perform database search using Casanovo
+
+To perform database search using Casanovo as a score function, use the `casanovo db-search` command:
+
+```sh
+casanovo db-search spectra.mgf proteome.fasta
+```
+
+Casanovo will create candidates from the given fasta file, and score them against MS/MS spectra in mzML, mzXML, and MGF files.
+This will write PSM scores for the given MS/MS spectra and fasta file to the specified output file in mzTab format.
+
 ### Evaluate *de novo* sequencing performance
 
 To evaluate _de novo_ sequencing performance based on known mass spectrum annotations, use the `casanovo sequence` command with the `--evaluate` option:
@@ -114,7 +125,6 @@ To evaluate _de novo_ sequencing performance based on known mass spectrum annota
 casanovo sequence annotated_spectra.mgf --evaluate
 ```
 ![`casanovo evaluate --help`](images/evaluate-help.svg)
-
 
 To evaluate the peptide predictions, ground truth peptide labels must to be provided as an annotated MGF file where the peptide sequence is denoted in the `SEQ` field. 
 Compatible MGF files are available from [MassIVE-KB](https://massive.ucsd.edu/ProteoSAFe/static/massive-kb-libraries.jsp).
