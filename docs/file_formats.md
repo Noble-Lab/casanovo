@@ -13,6 +13,14 @@ When you're ready to use Casanovo for *de novo* peptide sequencing, you can inpu
 All three of the above file formats can be used as input to Casanovo for *de novo* peptide sequencing.
 As the official PSI standard format containing the complete information from a mass spectrometry run, mzML should typically be preferred.
 
+### DB-Search fasta
+
+When using Casanovo in db-search mode, you will need to provide a fasta file *in addition to* one of the MS/MS spectra file formats listed above.
+
+- **[FASTA](https://www.ncbi.nlm.nih.gov/WebSub/html/help/protein.html)**: A simple text-based file format that stores genetic/proteomic sequence information.
+
+Fasta files can sometimes include amino acids that are not in Casanovo's vocabulary (e.g. U), and Casanovo-DB will not consider peptides that include these amino acids.
+
 ### Model weights
 
 In addition to MS/MS spectra, Casanovo also optionally accepts a model weights (.ckpt extension) input file when running in training, sequencing, or evaluating mode.
@@ -95,43 +103,50 @@ MTD	software[1]-setting[2]	config_filename = default
 MTD	software[1]-setting[3]	precursor_mass_tol = 50.0
 MTD	software[1]-setting[4]	isotope_error_range = (0, 1)
 MTD	software[1]-setting[5]	min_peptide_len = 6
-MTD	software[1]-setting[6]	predict_batch_size = 1024
-MTD	software[1]-setting[7]	n_beams = 10
-MTD	software[1]-setting[8]	top_match = 1
+MTD	software[1]-setting[6]	max_peptide_len = 100
+MTD	software[1]-setting[7]	predict_batch_size = 1024
+MTD	software[1]-setting[8]	top_match = 999
 MTD	software[1]-setting[9]	accelerator = auto
 MTD	software[1]-setting[10]	devices = None
-MTD	software[1]-setting[11]	random_seed = 454
-MTD	software[1]-setting[12]	n_log = 1
-MTD	software[1]-setting[13]	tb_summarywriter = None
-MTD	software[1]-setting[14]	save_top_k = 5
-MTD	software[1]-setting[15]	model_save_folder_path =
-MTD	software[1]-setting[16]	val_check_interval = 50000
-MTD	software[1]-setting[17]	n_peaks = 150
-MTD	software[1]-setting[18]	min_mz = 50.0
-MTD	software[1]-setting[19]	max_mz = 2500.0
-MTD	software[1]-setting[20]	min_intensity = 0.01
-MTD	software[1]-setting[21]	remove_precursor_tol = 2.0
-MTD	software[1]-setting[22]	max_charge = 10
-MTD	software[1]-setting[23]	dim_model = 512
-MTD	software[1]-setting[24]	n_head = 8
-MTD	software[1]-setting[25]	dim_feedforward = 1024
-MTD	software[1]-setting[26]	n_layers = 9
-MTD	software[1]-setting[27]	dropout = 0.0
-MTD	software[1]-setting[28]	dim_intensity = None
-MTD	software[1]-setting[29]	max_length = 100
-MTD	software[1]-setting[30]	warmup_iters = 100000
-MTD	software[1]-setting[31]	max_iters = 600000
-MTD	software[1]-setting[32]	learning_rate = 0.0005
-MTD	software[1]-setting[33]	weight_decay = 1e-05
-MTD	software[1]-setting[34]	train_label_smoothing = 0.01
-MTD	software[1]-setting[35]	train_batch_size = 32
-MTD	software[1]-setting[36]	max_epochs = 30
-MTD	software[1]-setting[37]	num_sanity_val_steps = 0
-MTD	software[1]-setting[38]	train_from_scratch = True
-MTD	software[1]-setting[39]	calculate_precision = False
-MTD	software[1]-setting[41]	n_workers = 20
+MTD	software[1]-setting[11]	n_beams = 10
+MTD	software[1]-setting[12]	enzyme = trypsin
+MTD	software[1]-setting[13]	digestion = full
+MTD	software[1]-setting[14]	missed_cleavages = 0
+MTD	software[1]-setting[15]	max_mods = 1
+MTD	software[1]-setting[16]	allowed_fixed_mods = C:C+57.021
+MTD	software[1]-setting[17]	allowed_var_mods = M:M+15.995,N:N+0.984,Q:Q+0.984,nterm:+42.011,nterm:+43.006,nterm:-17.027,nterm:+43.006-17.027
+MTD	software[1]-setting[18]	random_seed = 454
+MTD	software[1]-setting[19]	n_log = 1
+MTD	software[1]-setting[20]	tb_summarywriter = False
+MTD	software[1]-setting[21]	log_metrics = False
+MTD	software[1]-setting[22]	log_every_n_steps = 50
+MTD	software[1]-setting[23]	val_check_interval = 50000
+MTD	software[1]-setting[24]	n_peaks = 150
+MTD	software[1]-setting[25]	min_mz = 50.0
+MTD	software[1]-setting[26]	max_mz = 2500.0
+MTD	software[1]-setting[27]	min_intensity = 0.01
+MTD	software[1]-setting[28]	remove_precursor_tol = 2.0
+MTD	software[1]-setting[29]	max_charge = 10
+MTD	software[1]-setting[30]	dim_model = 512
+MTD	software[1]-setting[31]	n_head = 8
+MTD	software[1]-setting[32]	dim_feedforward = 1024
+MTD	software[1]-setting[33]	n_layers = 9
+MTD	software[1]-setting[34]	dropout = 0.0
+MTD	software[1]-setting[35]	dim_intensity = None
+MTD	software[1]-setting[36]	warmup_iters = 100000
+MTD	software[1]-setting[37]	cosine_schedule_period_iters = 600000
+MTD	software[1]-setting[38]	learning_rate = 0.0005
+MTD	software[1]-setting[39]	weight_decay = 1e-05
+MTD	software[1]-setting[40]	train_label_smoothing = 0.01
+MTD	software[1]-setting[41]	train_batch_size = 32
+MTD	software[1]-setting[42]	max_epochs = 30
+MTD	software[1]-setting[43]	num_sanity_val_steps = 0
+MTD	software[1]-setting[44]	calculate_precision = False
+MTD	software[1]-setting[46]	n_workers = 20
 MTD	ms_run[1]-location	file://[...]/my_example_input.mgf
 ```
+
+Note that settings that may only apply to some run modes (sequence, db-search, train, etc.) and not others are all present regardless if they are relevant to the mode Casanovo was run in.
 
 **PSM section**
 
@@ -179,6 +194,28 @@ The PSM identifier in the `PSM_ID` column is not necessarily identical to the sp
 - `PSM_ID` is one-based, whereas spectrum indices in `spectra_ref` are zero-based.
 - If multiple predictions are included per spectrum (configuration option `top_match`), each PSM will have a different identifier, but spectrum references will overlap.
 ```
+
+**Additional DB-search Information**
+
+When running casanovo in db-search mode, the output is silightly different. Below is an example of what the PSM section of a db-search run would look like:
+```
+PSH	sequence	PSM_ID	accession	unique	database	database_version	search_engine	search_engine_score[1]	modifications	retention_time	charge	exp_mass_to_charge	calc_mass_to_charge	spectra_ref	pre	post	start	end	opt_ms_run[1]_aa_scores
+PSM	THM+15.995ELGGK	1	sp|A5A616|MGTS_ECOLI	null	null	null	[MS, MS:1003281, Casanovo, 4.1.1.dev8+g258edb4.d20240329]	0.6994086	null	null	2	444.71582381688	444.7159	ms_run[1]:index=0	null	null	null	null	0.84454,0.81027,0.83296,0.56239,0.40844,0.83554,0.82437,0.84730,0.84514
+...
+```
+The field `accession` is no longer null, but populated:
+- `accession`: The SeqID for the protein that the peptide within this PSM came from during digestion.
+
+This information comes from the fasta file input to casanovo in db-search mode. Proteins within fasta files include a header, an example of which is shown below:
+```
+>sp|A5A616|MGTS_ECOLI Small protein MgtS OS=Escherichia coli (strain K12) OX=83333 GN=mgtS PE=1 SV=1
+[PROTEIN]
+```
+Standard convention is to consider all characters up until the first whitespace as the protein's SeqID. For the above protein, you would get:
+```
+>sp|A5A616|MGTS_ECOLI
+```
+There should be no space between the `>` and the SeqID.
 
 ## Casanovo configuration
 
