@@ -6,7 +6,7 @@
 
 Casanovo is a state-of-the-art deep learning tool designed for _de novo_ peptide sequencing.
 Powered by a transformer neural network, Casanovo "translates" peaks in MS/MS spectra into amino acid sequences with remarkable precision.
-Achieving state-of-the-art performance, Casanovo is a versatile and powerful tool for discovery, with impactful applications in bottom-up proteomics, immunopeptidomics, metaproteomics, and beyond.
+Casanovo can be used for to find unexpected peptide sequences in any data-dependent acquisition, bottom-up tandem mass spectrometry dataset, and is particularly useful for immunopeptidomics, metaproteomics, paleoproteomics, venomics, or any setting in which you are interested in identifying peptides that may not be in your protein database.
 
 Why choose Casanovo?
 

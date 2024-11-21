@@ -105,11 +105,10 @@ def main() -> None:
     - Official code repository: [https://github.com/Noble-Lab/casanovo]()
 
     If you use Casanovo in your work, please cite:
-    - Yilmaz, M., Fondrie, W. E., Bittremieux, W., Melendez, C.F.,
-    Nelson, R., Ananth, V., Oh, S. & Noble, W. S. Sequence-to-sequence
-    translation from mass spectra to peptides with a transformer model.
-    in Nature Communications 15, 6427 (2024).
-    doi:10.1038/s41467-024-49731-x
+    - Yilmaz, M., Fondrie, W. E., Bittremieux, W., Oh, S. & Noble, W. S.
+    De novo mass spectrometry peptide sequencing with a transformer
+    model. Proceedings of the 39th International Conference on Machine
+    Learning - ICML '22 (2022). doi:10.1101/2022.02.07.479481.
 
     For more information on how to cite different versions of Casanovo,
     please see [https://casanovo.readthedocs.io/en/latest/cite.html]().
