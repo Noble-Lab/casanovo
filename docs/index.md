@@ -21,6 +21,7 @@ maxdepth: 1
 ---
 Getting Started <getting_started.md>
 File Formats <file_formats.md>
+Nextflow Workflow <nextflow.md>
 FAQs <faq.md>
 Citing <cite.md>
 Contributing <CONTRIBUTING.md>
