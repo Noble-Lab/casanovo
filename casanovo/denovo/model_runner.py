@@ -16,8 +16,7 @@ import torch
 import torch.utils.data
 
 from lightning.pytorch.strategies import DDPStrategy
-from lightning.pytorch.callbacks import ModelCheckpoint
-from lightning.pytorch.loggers import TensorBoardLogger
+from lightning.pytorch.callbacks import ModelCheckpoint, LearningRateMonitor
 from torch.utils.data import DataLoader
 
 from depthcharge.tokenizers import PeptideTokenizer
@@ -114,11 +113,6 @@ class ModelRunner:
             ),
         ]
 
-        if config.tb_summarywriter is not None:
-            self.callbacks.append(
-                LearningRateMonitor(logging_interval="step", log_momentum=True)
-            )
-
     def __enter__(self):
         """Enter the context manager"""
         self.tmp_dir = tempfile.TemporaryDirectory()
@@ -155,6 +149,7 @@ class ModelRunner:
             config_filename=self.config.file,
         )
         self.initialize_trainer(train=True)
+        self.initialize_tokenizer()
         self.initialize_model(train=False, db_search=True)
         self.model.out_writer = self.writer
         self.model.psm_batch_size = self.config.predict_batch_size
@@ -172,10 +167,9 @@ class ModelRunner:
             self.config.allowed_var_mods,
             self.config.residues,
         )
-        test_index = self._get_index(peak_path, False, "db search")
-        self.writer.set_ms_run(test_index.ms_files)
-
-        self.initialize_data_module(test_index=test_index)
+        test_paths = self._get_input_paths(peak_path, False, "test")
+        self.writer.set_ms_run(test_paths)
+        self.initialize_data_module(test_paths=test_paths)
         self.loaders.protein_database = self.model.protein_database
         self.loaders.setup(stage="test", annotated=False)
         self.trainer.predict(self.model, self.loaders.db_dataloader())
@@ -215,13 +209,17 @@ class ModelRunner:
         """Log peptide precision and amino acid precision
 
         Calculate and log peptide precision and amino acid precision
-        based off of model predictions and spectrum annotations.
+        based off of model predictions and spectrum annotations
 
         Parameters
         ----------
         test_index : AnnotatedSpectrumIndex
             Index containing the annotated spectra used to generate model
             predictions
+        """
+        seq_pred = []
+        seq_true = []
+        pred_idx = 0
 
         for batch in test_dataloader:
             for peak_file, scan_id, curr_seq_true in zip(
@@ -251,16 +249,13 @@ class ModelRunner:
 
         if self.config["top_match"] > 1:
             logger.warning(
-                "The behavior for calculating evaluation metrics is undefined "
-                "when the 'top_match' configuration option is set to a value "
-                "greater than 1."
+                "The behavior for calculating evaluation metrics is undefined when "
+                "the 'top_match' configuration option is set to a value greater than 1."
             )
 
         logger.info("Peptide Precision: %.2f%%", 100 * pep_precision)
         logger.info("Amino Acid Precision: %.2f%%", 100 * aa_precision)
-        """
-        # TODO: Fix log_metrics, wait for eval bug fix to be merged in
-        return
+        logger.info("Amino Acid Recall: %.2f%%", 100 * aa_recall)
 
     def predict(
         self,
@@ -426,15 +421,6 @@ class ModelRunner:
         db_search : bool
             Determines whether to use the DB search model subclass.
         """
-        tb_summarywriter = None
-        if self.config.tb_summarywriter:
-            if self.output_dir is None:
-                logger.warning(
-                    "Can not create tensorboard because the output directory "
-                    "is not set in the model runner."
-                )
-            else:
-                tb_summarywriter = self.output_dir / "tensorboard"
         try:
             tokenizer = self.tokenizer
         except AttributeError:
@@ -446,8 +432,6 @@ class ModelRunner:
             dim_feedforward=self.config.dim_feedforward,
             n_layers=self.config.n_layers,
             dropout=self.config.dropout,
-            dim_intensity=self.config.dim_intensity,
-            max_length=self.config.max_length,
             max_charge=self.config.max_charge,
             precursor_mass_tol=self.config.precursor_mass_tol,
             isotope_error_range=self.config.isotope_error_range,
@@ -455,7 +439,6 @@ class ModelRunner:
             n_beams=self.config.n_beams,
             top_match=self.config.top_match,
             n_log=self.config.n_log,
-            tb_summarywriter=tb_summarywriter,
             train_label_smoothing=self.config.train_label_smoothing,
             warmup_iters=self.config.warmup_iters,
             cosine_schedule_period_iters=self.config.cosine_schedule_period_iters,
@@ -476,7 +459,6 @@ class ModelRunner:
             min_peptide_len=self.config.min_peptide_len,
             top_match=self.config.top_match,
             n_log=self.config.n_log,
-            tb_summarywriter=tb_summarywriter,
             train_label_smoothing=self.config.train_label_smoothing,
             warmup_iters=self.config.warmup_iters,
             cosine_schedule_period_iters=self.config.cosine_schedule_period_iters,

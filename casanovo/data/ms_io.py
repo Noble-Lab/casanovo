@@ -7,7 +7,6 @@ import os
 import re
 from pathlib import Path
 from typing import List
-import pprint
 import natsort
 
 from .. import __version__

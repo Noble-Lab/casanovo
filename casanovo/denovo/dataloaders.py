@@ -256,10 +256,12 @@ class DeNovoDataModule(pl.LightningDataModule):
     def _make_loader(
         self,
         dataset: torch.utils.data.Dataset,
-        shuffle: Optional[bool] = None,
+        batch_size: int,
+        shuffle: bool = False,
     ) -> torch.utils.data.DataLoader:
         """
         Create a PyTorch DataLoader.
+
         Parameters
         ----------
         dataset : torch.utils.data.Dataset
@@ -278,37 +280,33 @@ class DeNovoDataModule(pl.LightningDataModule):
         """
         return DataLoader(
             dataset,
-            shuffle=shuffle,
-            num_workers=0,  # self.n_workers,
-            # precision=torch.float32,
+            batch_size=batch_size,
             pin_memory=True,
+            num_workers=self.n_workers,
+            shuffle=shuffle,
         )
 
     def train_dataloader(self) -> torch.utils.data.DataLoader:
         """Get the training DataLoader."""
-        return self._make_loader(self.train_dataset, self.shuffle)
+        return self._make_loader(
+            self.train_dataset, self.train_batch_size, shuffle=self.shuffle
+        )
 
     def val_dataloader(self) -> torch.utils.data.DataLoader:
         """Get the validation DataLoader."""
-        return self._make_loader(self.valid_dataset)
+        return self._make_loader(self.valid_dataset, self.eval_batch_size)
 
     def test_dataloader(self) -> torch.utils.data.DataLoader:
         """Get the test DataLoader."""
-        return self._make_loader(self.test_dataset)
+        return self._make_loader(self.test_dataset, self.eval_batch_size)
 
     def predict_dataloader(self) -> torch.utils.data.DataLoader:
         """Get the predict DataLoader."""
-        return self._make_loader(self.test_dataset)
+        return self._make_loader(self.test_dataset, self.eval_batch_size)
 
     def db_dataloader(self) -> torch.utils.data.DataLoader:
         """Get a special dataloader for DB search."""
-        return self._make_loader(
-            self.test_dataset,
-            self.eval_batch_size,
-            collate_fn=functools.partial(
-                prepare_psm_batch, protein_database=self.protein_database
-            ),
-        )
+        return self._make_loader(self.test_dataset, self.eval_batch_size)
 
 
 def scale_to_unit_norm(spectrum):

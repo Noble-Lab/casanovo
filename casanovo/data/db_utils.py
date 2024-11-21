@@ -7,7 +7,6 @@ import re
 import string
 from typing import Dict, Iterator, Pattern, Set, Tuple
 
-import depthcharge.masses
 import numpy as np
 import pandas as pd
 import pyteomics.fasta
@@ -53,8 +52,8 @@ class ProteinDatabase:
         A comma-separated string of fixed modifications to consider.
     allowed_var_mods : str
         A comma-separated string of variable modifications to consider.
-    residues : Dict[str, float]
-        A dictionary of amino acid masses.
+    tokenizer: depthcharge.tokenizers.PeptideTokenizer
+        Used to access residues.
     """
 
     def __init__(
@@ -95,13 +94,14 @@ class ProteinDatabase:
             digestion,
             missed_cleavages,
         )
-        self.db_peptides = self._digest_fasta(peptide_generator)
+        self.db_peptides = self._digest_fasta(peptide_generator, residues)
         self.precursor_tolerance = precursor_tolerance
         self.isotope_error = isotope_error
 
     def _digest_fasta(
         self,
         peptide_generator: Iterator[Tuple[str, str]],
+        residues: Dict[str, float],
     ) -> pd.DataFrame:
         """
         Digests a FASTA file and returns the peptides, their masses,
@@ -148,10 +148,7 @@ class ProteinDatabase:
             .reset_index()
         )
         # Calculate the mass of each peptide.
-        mass_calculator = depthcharge.masses.PeptideMass(residues="massivekb")
-        peptides["calc_mass"] = (
-            peptides["peptide"].apply(mass_calculator.mass).round(5)
-        )
+        peptides["calc_mass"] = peptides["peptide"].map(residues).round(5)
         # Sort by peptide mass and index by peptide sequence.
         peptides.sort_values(
             by=["calc_mass", "peptide"], ascending=True, inplace=True
