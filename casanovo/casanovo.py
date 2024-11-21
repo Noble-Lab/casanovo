@@ -109,7 +109,7 @@ def main() -> None:
     De novo mass spectrometry peptide sequencing with a transformer
     model. Proceedings of the 39th International Conference on Machine
     Learning - ICML '22 (2022).
-    [link=https://proceedings.mlr.press/v162/yilmaz22a.html]https://proceedings.mlr.press/v162/yilmaz22a.html[/link].
+    [https://proceedings.mlr.press/v162/yilmaz22a.html]().
 
     For more information on how to cite different versions of Casanovo,
     please see [https://casanovo.readthedocs.io/en/latest/cite.html]().
