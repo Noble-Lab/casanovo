@@ -95,20 +95,24 @@ class _SharedParams(click.RichCommand):
 def main() -> None:
     """# Casanovo
 
-    Casanovo de novo sequences peptides from tandem mass spectra using a
-    Transformer model. Casanovo currently supports mzML, mzXML, and MGF files
-    for de novo sequencing and annotated MGF files, such as those from
-    MassIVE-KB, for training new models.
+    Casanovo is a state-of-the-art deep learning tool designed for de
+    novo peptide sequencing. Powered by a transformer neural network,
+    Casanovo "translates" peaks in MS/MS spectra into amino acid
+    sequences.
 
     Links:
     - Documentation: [https://casanovo.readthedocs.io]()
     - Official code repository: [https://github.com/Noble-Lab/casanovo]()
 
     If you use Casanovo in your work, please cite:
-    - Yilmaz, M., Fondrie, W. E., Bittremieux, W., Oh, S. & Noble, W. S. De novo
-    mass spectrometry peptide sequencing with a transformer model. Proceedings
-    of the 39th International Conference on Machine Learning - ICML '22 (2022)
-    doi:10.1101/2022.02.07.479481.
+    - Yilmaz, M., Fondrie, W. E., Bittremieux, W., Oh, S. & Noble, W. S.
+    De novo mass spectrometry peptide sequencing with a transformer
+    model. Proceedings of the 39th International Conference on Machine
+    Learning - ICML '22 (2022).
+    [https://proceedings.mlr.press/v162/yilmaz22a.html]().
+
+    For more information on how to cite different versions of Casanovo,
+    please see [https://casanovo.readthedocs.io/en/latest/cite.html]().
 
     """
     return
