@@ -12,75 +12,14 @@ from casanovo import casanovo
 TEST_DIR = Path(__file__).resolve().parent
 
 
-def test_db_search(
-    mgf_medium, tiny_fasta_file, tiny_config, tmp_path, monkeypatch
-):
-    # Run a command:
-    monkeypatch.setattr(casanovo, "__version__", "4.1.0")
-    run = functools.partial(
-        CliRunner().invoke, casanovo.main, catch_exceptions=False
-    )
-
-    output_rootname = "db"
-    output_filename = (tmp_path / output_rootname).with_suffix(".mztab")
-
-    search_args = [
-        "db-search",
-        "--config",
-        tiny_config,
-        "--output_dir",
-        str(tmp_path),
-        "--output_root",
-        output_rootname,
-        str(mgf_medium),
-        str(tiny_fasta_file),
-    ]
-
-    result = run(search_args)
-
-    assert result.exit_code == 0
-    assert output_filename.exists()
-
-    mztab = pyteomics.mztab.MzTab(str(output_filename))
-
-    psms = mztab.spectrum_match_table
-    assert list(psms.sequence) == [
-        "ATSIPAR",
-        "VTLSC+57.021R",
-        "LLIYGASTR",
-        "EIVMTQSPPTLSLSPGER",
-        "MEAPAQLLFLLLLWLPDTTR",
-        "ASQSVSSSYLTWYQQKPGQAPR",
-        "FSGSGSGTDFTLTISSLQPEDFAVYYC+57.021QQDYNLP",
-    ]
-
-    # Validate mztab output
-    validate_args = [
-        "java",
-        "-jar",
-        f"{TEST_DIR}/jmzTabValidator.jar",
-        "--check",
-        f"inFile={output_filename}",
-    ]
-
-    validate_result = subprocess.run(
-        validate_args,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
-    )
-
-    assert validate_result.returncode == 0
-    assert not any(
-        [
-            line.startswith("[Error-")
-            for line in validate_result.stdout.splitlines()
-        ]
-    )
-
-
 def test_train_and_run(
-    mgf_small, mzml_small, tiny_config, tmp_path, monkeypatch
+    mgf_small,
+    mzml_small,
+    tiny_config,
+    tmp_path,
+    monkeypatch,
+    mgf_medium,
+    tiny_fasta_file,
 ):
     # We can use this to explicitly test different versions.
     monkeypatch.setattr(casanovo, "__version__", "3.0.1")
@@ -165,7 +104,6 @@ def test_train_and_run(
         "--output_root",
         output_rootname,
         str(mgf_small),
-        str(mzml_small),
         "--evaluate",
     ]
 
@@ -212,6 +150,66 @@ def test_train_and_run(
     )
 
     assert output_filename.is_file()
+
+    monkeypatch.setattr(casanovo, "__version__", "4.1.0")
+    output_rootname = "db"
+    output_filename = (tmp_path / output_rootname).with_suffix(".mztab")
+
+    search_args = [
+        "db-search",
+        "--model",
+        str(model_file),
+        "--config",
+        tiny_config,
+        "--output_dir",
+        str(tmp_path),
+        "--output_root",
+        output_rootname,
+        str(mgf_small),
+        str(tiny_fasta_file),
+    ]
+
+    result = run(search_args)
+
+    assert result.exit_code == 0
+    assert output_filename.exists()
+
+    mztab = pyteomics.mztab.MzTab(str(output_filename))
+
+    psms = mztab.spectrum_match_table
+    assert list(psms.sequence) == [
+        "ATSIPAR",
+        "VTLSC+57.021R",
+        "LLIYGASTR",
+        "EIVMTQSPPTLSLSPGER",
+        "MEAPAQLLFLLLLWLPDTTR",
+        "ASQSVSSSYLTWYQQKPGQAPR",
+        "FSGSGSGTDFTLTISSLQPEDFAVYYC+57.021QQDYNLP",
+    ]
+
+    # Validate mztab output
+    validate_args = [
+        "java",
+        "-jar",
+        f"{TEST_DIR}/jmzTabValidator.jar",
+        "--check",
+        f"inFile={output_filename}",
+    ]
+
+    validate_result = subprocess.run(
+        validate_args,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+
+    assert validate_result.returncode == 0
+    assert not any(
+        [
+            line.startswith("[Error-")
+            for line in validate_result.stdout.splitlines()
+        ]
+    )
 
 
 def test_auxilliary_cli(tmp_path, mgf_small, monkeypatch):

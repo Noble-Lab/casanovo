@@ -28,7 +28,6 @@ import torch
 from casanovo import casanovo
 from casanovo import utils
 from casanovo.data import db_utils, ms_io
-from casanovo.data.datasets import SpectrumDataset, AnnotatedSpectrumDataset
 from casanovo.denovo.evaluate import aa_match, aa_match_batch, aa_match_metrics
 from casanovo.denovo.model import Spec2Pep, _aa_pep_score, _calc_match_score
 from casanovo.data import ms_io
@@ -1232,7 +1231,7 @@ def test_beam_search_decode(tiny_config):
 
     # Sizes.
     batch = 1  # B
-    length = model.max_length + 1  # L
+    length = model.max_peptide_len + 1  # L
     vocab = len(model.tokenizer) + 1  # V
     beam = model.n_beams  # S
     step = 3
@@ -1365,7 +1364,7 @@ def test_beam_search_decode(tiny_config):
     mzs = ints = torch.zeros(1, 5)
     precursors = torch.tensor([[469.25364, 2.0, 235.63410]])
     assert len(list(model.beam_search_decode(mzs, ints, precursors))[0]) == 0
-    model.max_length = 100
+    model.max_peptide_len = 100
 
     # Re-initialize scores and tokens to further test caching functionality.
     scores = torch.full(
@@ -1552,7 +1551,7 @@ def test_beam_search_decode(tiny_config):
     # Sizes and other variables.
     batch = 2  # B
     beam = model.n_beams  # S
-    length = model.max_length + 1  # L
+    length = model.max_peptide_len + 1  # L
     vocab = len(model.tokenizer) + 1  # V
     step = 4
 
@@ -1594,7 +1593,7 @@ def test_beam_search_decode(tiny_config):
     )
     batch = 2  # B
     beam = model.n_beams  # S
-    length = model.max_length + 1  # L
+    length = model.max_peptide_len + 1  # L
     vocab = len(model.tokenizer) + 1  # V
     step = 4
 
