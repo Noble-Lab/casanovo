@@ -108,7 +108,8 @@ def main() -> None:
     - Yilmaz, M., Fondrie, W. E., Bittremieux, W., Oh, S. & Noble, W. S.
     De novo mass spectrometry peptide sequencing with a transformer
     model. Proceedings of the 39th International Conference on Machine
-    Learning - ICML '22 (2022). doi:10.1101/2022.02.07.479481.
+    Learning - ICML '22 (2022).
+    [link=https://proceedings.mlr.press/v162/yilmaz22a.html]https://proceedings.mlr.press/v162/yilmaz22a.html[/link].
 
     For more information on how to cite different versions of Casanovo,
     please see [https://casanovo.readthedocs.io/en/latest/cite.html]().
