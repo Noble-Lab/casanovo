@@ -6,21 +6,19 @@ import logging
 import os
 import tempfile
 import warnings
+from datetime import datetime
 from pathlib import Path
 from typing import Iterable, List, Optional, Union
-from datetime import datetime
 
 import lightning.pytorch as pl
 import lightning.pytorch.loggers
 import torch
 import torch.utils.data
-
-from lightning.pytorch.strategies import DDPStrategy
-from lightning.pytorch.callbacks import ModelCheckpoint, LearningRateMonitor
-from torch.utils.data import DataLoader
-
 from depthcharge.tokenizers import PeptideTokenizer
 from depthcharge.tokenizers.peptides import MskbPeptideTokenizer
+from lightning.pytorch.callbacks import LearningRateMonitor, ModelCheckpoint
+from lightning.pytorch.strategies import DDPStrategy
+from torch.utils.data import DataLoader
 
 from .. import utils
 from ..config import Config
@@ -28,7 +26,6 @@ from ..data import db_utils, ms_io
 from ..denovo.dataloaders import DeNovoDataModule
 from ..denovo.evaluate import aa_match_batch, aa_match_metrics
 from ..denovo.model import DbSpec2Pep, Spec2Pep
-
 
 logger = logging.getLogger("casanovo")
 

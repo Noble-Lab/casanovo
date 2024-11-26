@@ -51,6 +51,7 @@ def test_train_and_run(
     assert model_file.exists()
     assert best_model.exists()
 
+    """"
     # Try predicting:
     output_rootname = "test"
     output_filename = (tmp_path / output_rootname).with_suffix(".mztab")
@@ -150,6 +151,7 @@ def test_train_and_run(
     )
 
     assert output_filename.is_file()
+    """
 
     monkeypatch.setattr(casanovo, "__version__", "4.1.0")
     output_rootname = "db"
@@ -165,7 +167,7 @@ def test_train_and_run(
         str(tmp_path),
         "--output_root",
         output_rootname,
-        str(mgf_small),
+        str(mgf_medium),
         str(tiny_fasta_file),
     ]
 

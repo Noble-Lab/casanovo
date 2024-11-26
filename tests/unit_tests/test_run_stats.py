@@ -4,8 +4,7 @@ import string
 import numpy as np
 import pandas as pd
 
-from casanovo.utils import get_score_bins, get_peptide_lengths
-
+from casanovo.utils import get_peptide_lengths, get_score_bins
 
 np.random.seed(4000)
 random.seed(4000)

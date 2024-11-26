@@ -12,7 +12,6 @@ import pandas as pd
 import pyteomics.fasta
 import pyteomics.parser
 
-
 logger = logging.getLogger("casanovo")
 
 # CONSTANTS
@@ -148,7 +147,7 @@ class ProteinDatabase:
             .reset_index()
         )
         # Calculate the mass of each peptide.
-        peptides["calc_mass"] = peptides["peptide"].map(residues).round(5)
+        peptides["calc_mass"] = peptides["peptide"].apply(residues).round(5)
         # Sort by peptide mass and index by peptide sequence.
         peptides.sort_values(
             by=["calc_mass", "peptide"], ascending=True, inplace=True

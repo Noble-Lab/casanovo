@@ -4,7 +4,7 @@ import logging
 import shutil
 import warnings
 from pathlib import Path
-from typing import Optional, Dict, Callable, Tuple, Union
+from typing import Callable, Dict, Optional, Tuple, Union
 
 import yaml
 

@@ -1,13 +1,13 @@
 """Transformer encoder and decoder for the de novo sequencing task."""
 
-import torch
 from collections.abc import Callable
 
+import torch
+from depthcharge.encoders import FloatEncoder, PeakEncoder, PositionalEncoder
 from depthcharge.tokenizers import Tokenizer
-from depthcharge.encoders import PeakEncoder, FloatEncoder, PositionalEncoder
 from depthcharge.transformers import (
-    SpectrumTransformerEncoder,
     AnalyteTransformerDecoder,
+    SpectrumTransformerEncoder,
 )
 
 
