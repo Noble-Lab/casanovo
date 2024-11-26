@@ -442,7 +442,10 @@ def test_aa_pep_score():
     assert peptide_score == pytest.approx(0.5)
 
 
-def test_peptide_generator_errors(residues_dict, tiny_fasta_file):
+def test_peptide_generator_errors(tiny_fasta_file):
+    residues_dict = (
+        depthcharge.tokenizers.PeptideTokenizer.from_massivekb().residues
+    )
     with pytest.raises(FileNotFoundError):
         [
             (a, b)
@@ -561,7 +564,7 @@ def test_calc_match_score():
     )
 
 
-def test_digest_fasta_cleave(tiny_fasta_file, residues_dict):
+def test_digest_fasta_cleave(tiny_fasta_file):
     # No missed cleavages
     expected_normal = [
         "ATSIPAR",
@@ -631,12 +634,12 @@ def test_digest_fasta_cleave(tiny_fasta_file, residues_dict):
                 "M:M+15.995,N:N+0.984,Q:Q+0.984,"
                 "nterm:+42.011,nterm:+43.006,nterm:-17.027,nterm:+43.006-17.027"
             ),
-            residues=residues_dict,
+            tokenizer=depthcharge.tokenizers.PeptideTokenizer.from_massivekb(),
         )
         assert pdb.db_peptides.index.to_list() == expected
 
 
-def test_digest_fasta_mods(tiny_fasta_file, residues_dict):
+def test_digest_fasta_mods(tiny_fasta_file):
     # 1 modification allowed
     # fixed: C+57.02146
     # variable: 1M+15.994915,1N+0.984016,1Q+0.984016
@@ -709,12 +712,14 @@ def test_digest_fasta_mods(tiny_fasta_file, residues_dict):
             "M:M+15.995,N:N+0.984,Q:Q+0.984,"
             "nterm:+42.011,nterm:+43.006,nterm:-17.027,nterm:+43.006-17.027"
         ),
-        residues=residues_dict,
+        tokenizer=depthcharge.tokenizers.PeptideTokenizer.from_massivekb(),
     )
+
+    expected_1mod.sort(key=pdb._calc_pep_mass)
     assert pdb.db_peptides.index.to_list() == expected_1mod
 
 
-def test_length_restrictions(tiny_fasta_file, residues_dict):
+def test_length_restrictions(tiny_fasta_file):
     # length between 20 and 50
     expected_long = [
         "MEAPAQLLFLLLLWLPDTTR",
@@ -740,7 +745,7 @@ def test_length_restrictions(tiny_fasta_file, residues_dict):
             "M:M+15.995,N:N+0.984,Q:Q+0.984,"
             "nterm:+42.011,nterm:+43.006,nterm:-17.027,nterm:+43.006-17.027"
         ),
-        residues=residues_dict,
+        tokenizer=depthcharge.tokenizers.PeptideTokenizer.from_massivekb(),
     )
     assert pdb.db_peptides.index.to_list() == expected_long
 
@@ -759,12 +764,12 @@ def test_length_restrictions(tiny_fasta_file, residues_dict):
             "M:M+15.995,N:N+0.984,Q:Q+0.984,"
             "nterm:+42.011,nterm:+43.006,nterm:-17.027,nterm:+43.006-17.027"
         ),
-        residues=residues_dict,
+        tokenizer=depthcharge.tokenizers.PeptideTokenizer.from_massivekb(),
     )
     assert pdb.db_peptides.index.to_list() == expected_short
 
 
-def test_digest_fasta_enzyme(tiny_fasta_file, residues_dict):
+def test_digest_fasta_enzyme(tiny_fasta_file):
     # arg-c enzyme
     expected_argc = [
         "ATSIPAR",
@@ -924,8 +929,9 @@ def test_digest_fasta_enzyme(tiny_fasta_file, residues_dict):
             "M:M+15.995,N:N+0.984,Q:Q+0.984,"
             "nterm:+42.011,nterm:+43.006,nterm:-17.027,nterm:+43.006-17.027"
         ),
-        residues=residues_dict,
+        tokenizer=depthcharge.tokenizers.PeptideTokenizer.from_massivekb(),
     )
+    expected_argc.sort(key=pdb._calc_pep_mass)
     assert pdb.db_peptides.index.to_list() == expected_argc
 
     pdb = db_utils.ProteinDatabase(
@@ -943,8 +949,9 @@ def test_digest_fasta_enzyme(tiny_fasta_file, residues_dict):
             "M:M+15.995,N:N+0.984,Q:Q+0.984,"
             "nterm:+42.011,nterm:+43.006,nterm:-17.027,nterm:+43.006-17.027"
         ),
-        residues=residues_dict,
+        tokenizer=depthcharge.tokenizers.PeptideTokenizer.from_massivekb(),
     )
+    expected_aspn.sort(key=pdb._calc_pep_mass)
     assert pdb.db_peptides.index.to_list() == expected_aspn
 
     # Test regex rule instead of named enzyme
@@ -963,8 +970,9 @@ def test_digest_fasta_enzyme(tiny_fasta_file, residues_dict):
             "M:M+15.995,N:N+0.984,Q:Q+0.984,"
             "nterm:+42.011,nterm:+43.006,nterm:-17.027,nterm:+43.006-17.027"
         ),
-        residues=residues_dict,
+        tokenizer=depthcharge.tokenizers.PeptideTokenizer.from_massivekb(),
     )
+    expected_argc.sort(key=pdb._calc_pep_mass)
     assert pdb.db_peptides.index.to_list() == expected_argc
 
     # Test semispecific digest
@@ -983,8 +991,9 @@ def test_digest_fasta_enzyme(tiny_fasta_file, residues_dict):
             "M:M+15.995,N:N+0.984,Q:Q+0.984,"
             "nterm:+42.011,nterm:+43.006,nterm:-17.027,nterm:+43.006-17.027"
         ),
-        residues=residues_dict,
+        tokenizer=depthcharge.tokenizers.PeptideTokenizer.from_massivekb(),
     )
+    expected_semispecific.sort(key=pdb._calc_pep_mass)
     assert pdb.db_peptides.index.to_list() == expected_semispecific
 
     # Test nonspecific digest
@@ -1003,12 +1012,13 @@ def test_digest_fasta_enzyme(tiny_fasta_file, residues_dict):
             "M:M+15.995,N:N+0.984,Q:Q+0.984,"
             "nterm:+42.011,nterm:+43.006,nterm:-17.027,nterm:+43.006-17.027"
         ),
-        residues=residues_dict,
+        tokenizer=depthcharge.tokenizers.PeptideTokenizer.from_massivekb(),
     )
+    expected_nonspecific.sort(key=pdb._calc_pep_mass)
     assert pdb.db_peptides.index.to_list() == expected_nonspecific
 
 
-def test_get_candidates(tiny_fasta_file, residues_dict):
+def test_get_candidates(tiny_fasta_file):
     # precursor_window is 10000
     expected_smallwindow = ["LLIYGASTR"]
 
@@ -1033,7 +1043,7 @@ def test_get_candidates(tiny_fasta_file, residues_dict):
             "M:M+15.995,N:N+0.984,Q:Q+0.984,"
             "nterm:+42.011,nterm:+43.006,nterm:-17.027,nterm:+43.006-17.027"
         ),
-        residues=residues_dict,
+        tokenizer=depthcharge.tokenizers.PeptideTokenizer.from_massivekb(),
     )
     candidates = pdb.get_candidates(precursor_mz=496.2, charge=2)
     assert expected_smallwindow == list(candidates)
@@ -1053,7 +1063,7 @@ def test_get_candidates(tiny_fasta_file, residues_dict):
             "M:M+15.995,N:N+0.984,Q:Q+0.984,"
             "nterm:+42.011,nterm:+43.006,nterm:-17.027,nterm:+43.006-17.027"
         ),
-        residues=residues_dict,
+        tokenizer=depthcharge.tokenizers.PeptideTokenizer.from_massivekb(),
     )
     candidates = pdb.get_candidates(precursor_mz=496.2, charge=2)
     assert expected_midwindow == list(candidates)
@@ -1073,13 +1083,13 @@ def test_get_candidates(tiny_fasta_file, residues_dict):
             "M:M+15.995,N:N+0.984,Q:Q+0.984,"
             "nterm:+42.011,nterm:+43.006,nterm:-17.027,nterm:+43.006-17.027"
         ),
-        residues=residues_dict,
+        tokenizer=depthcharge.tokenizers.PeptideTokenizer.from_massivekb(),
     )
     candidates = pdb.get_candidates(precursor_mz=496.2, charge=2)
     assert expected_widewindow == list(candidates)
 
 
-def test_get_candidates_isotope_error(tiny_fasta_file, residues_dict):
+def test_get_candidates_isotope_error(tiny_fasta_file):
     # Tide isotope error windows for 496.2, 2+:
     # 0: [980.481617, 1000.289326]
     # 1: [979.491114, 999.278813]
@@ -1140,7 +1150,7 @@ def test_get_candidates_isotope_error(tiny_fasta_file, residues_dict):
             "M:M+15.995,N:N+0.984,Q:Q+0.984,"
             "nterm:+42.011,nterm:+43.006,nterm:-17.027,nterm:+43.006-17.027"
         ),
-        residues=residues_dict,
+        tokenizer=depthcharge.tokenizers.PeptideTokenizer.from_massivekb(),
     )
     pdb.db_peptides = peptide_list
     candidates = pdb.get_candidates(precursor_mz=496.2, charge=2)
@@ -1161,7 +1171,7 @@ def test_get_candidates_isotope_error(tiny_fasta_file, residues_dict):
             "M:M+15.995,N:N+0.984,Q:Q+0.984,"
             "nterm:+42.011,nterm:+43.006,nterm:-17.027,nterm:+43.006-17.027"
         ),
-        residues=residues_dict,
+        tokenizer=depthcharge.tokenizers.PeptideTokenizer.from_massivekb(),
     )
     pdb.db_peptides = peptide_list
     candidates = pdb.get_candidates(precursor_mz=496.2, charge=2)
@@ -1182,7 +1192,7 @@ def test_get_candidates_isotope_error(tiny_fasta_file, residues_dict):
             "M:M+15.995,N:N+0.984,Q:Q+0.984,"
             "nterm:+42.011,nterm:+43.006,nterm:-17.027,nterm:+43.006-17.027"
         ),
-        residues=residues_dict,
+        tokenizer=depthcharge.tokenizers.PeptideTokenizer.from_massivekb(),
     )
     pdb.db_peptides = peptide_list
     candidates = pdb.get_candidates(precursor_mz=496.2, charge=2)
@@ -1203,7 +1213,7 @@ def test_get_candidates_isotope_error(tiny_fasta_file, residues_dict):
             "M:M+15.995,N:N+0.984,Q:Q+0.984,"
             "nterm:+42.011,nterm:+43.006,nterm:-17.027,nterm:+43.006-17.027"
         ),
-        residues=residues_dict,
+        tokenizer=depthcharge.tokenizers.PeptideTokenizer.from_massivekb(),
     )
     pdb.db_peptides = peptide_list
     candidates = pdb.get_candidates(precursor_mz=496.2, charge=2)

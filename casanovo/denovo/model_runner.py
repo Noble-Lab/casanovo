@@ -162,7 +162,7 @@ class ModelRunner:
             self.config.isotope_error_range,
             self.config.allowed_fixed_mods,
             self.config.allowed_var_mods,
-            self.config.residues,
+            self.model.tokenizer,
         )
         test_paths = self._get_input_paths(peak_path, False, "test")
         self.writer.set_ms_run(test_paths)
