@@ -255,42 +255,7 @@ def _create_mzml(peptides, mzml_file, random_state=42):
 
 
 @pytest.fixture
-def residues_dict():
-    return {
-        "G": 57.021464,
-        "A": 71.037114,
-        "S": 87.032028,
-        "P": 97.052764,
-        "V": 99.068414,
-        "T": 101.047670,
-        "C[Carbamidomethyl]": 160.030649,  # 103.009185 + 57.021464
-        "L": 113.084064,
-        "I": 113.084064,
-        "N": 114.042927,
-        "D": 115.026943,
-        "Q": 128.058578,
-        "K": 128.094963,
-        "E": 129.042593,
-        "M": 131.040485,
-        "H": 137.058912,
-        "F": 147.068414,
-        "R": 156.101111,
-        "Y": 163.063329,
-        "W": 186.079313,
-        # Amino acid modifications.
-        "M[Oxidation]": 147.035400,  # Met oxidation:   131.040485 + 15.994915
-        "N[Deamidated]": 115.026943,  # Asn deamidation: 114.042927 + 0.984016
-        "Q[Deamidated]": 129.042594,  # Gln deamidation: 128.058578 + 0.984016
-        # N-terminal modifications.
-        "[Acetyl]-": 42.010565,  # Acetylation
-        "[Carbamyl]-": 43.005814,  # Carbamylation "+43.006"
-        "[Ammonia-loss]-": -17.026549,  # NH3 loss
-        "[+25.980265]-": 25.980265,  # Carbamylation and NH3 loss
-    }
-
-
-@pytest.fixture
-def tiny_config(tmp_path, residues_dict):
+def tiny_config(tmp_path):
     """A config file for a tiny model."""
     cfg = {
         "n_head": 2,
@@ -343,7 +308,37 @@ def tiny_config(tmp_path, residues_dict):
         "replace_isoleucine_with_leucine": True,
         "reverse_peptides": False,
         "mskb_tokenizer": True,
-        "residues": residues_dict,
+        "residues": {
+            "G": 57.021464,
+            "A": 71.037114,
+            "S": 87.032028,
+            "P": 97.052764,
+            "V": 99.068414,
+            "T": 101.047670,
+            "C[Carbamidomethyl]": 160.030649,  # 103.009185 + 57.021464
+            "L": 113.084064,
+            "I": 113.084064,
+            "N": 114.042927,
+            "D": 115.026943,
+            "Q": 128.058578,
+            "K": 128.094963,
+            "E": 129.042593,
+            "M": 131.040485,
+            "H": 137.058912,
+            "F": 147.068414,
+            "R": 156.101111,
+            "Y": 163.063329,
+            "W": 186.079313,
+            # Amino acid modifications.
+            "M[Oxidation]": 147.035400,  # Met oxidation:   131.040485 + 15.994915
+            "N[Deamidated]": 115.026943,  # Asn deamidation: 114.042927 + 0.984016
+            "Q[Deamidated]": 129.042594,  # Gln deamidation: 128.058578 + 0.984016
+            # N-terminal modifications.
+            "[Acetyl]-": 42.010565,  # Acetylation
+            "[Carbamyl]-": 43.005814,  # Carbamylation "+43.006"
+            "[Ammonia-loss]-": -17.026549,  # NH3 loss
+            "[+25.980265]-": 25.980265,  # Carbamylation and NH3 loss
+        },
         "allowed_fixed_mods": "C:C+57.021",
         "allowed_var_mods": (
             "M:M+15.995,N:N+0.984,Q:Q+0.984,"
