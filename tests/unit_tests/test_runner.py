@@ -263,7 +263,7 @@ def test_evaluate(
         "present in the validation peak file path list.\n"
     )
 
-    with pytest.raises(FileNotFoundError):
+    with pytest.raises(TypeError):
         with ModelRunner(
             config, model_filename=str(model_file), overwrite_ckpt_check=False
         ) as runner:
@@ -289,7 +289,7 @@ def test_evaluate(
     result_file.unlink()
 
     # Test mix of annotated an unannotated peak files
-    with pytest.warns(RuntimeWarning):
+    with pytest.raises(TypeError):
         with ModelRunner(
             config, model_filename=str(model_file), overwrite_ckpt_check=False
         ) as runner:

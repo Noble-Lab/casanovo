@@ -41,10 +41,9 @@ import torch
 import tqdm
 from lightning.pytorch import seed_everything
 
-from . import __version__
-from . import utils
-from .denovo import ModelRunner
+from . import __version__, utils
 from .config import Config
+from .denovo import ModelRunner
 
 logger = logging.getLogger("casanovo")
 click.rich_click.USE_MARKDOWN = True
