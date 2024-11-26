@@ -715,7 +715,7 @@ def test_digest_fasta_mods(tiny_fasta_file):
         tokenizer=depthcharge.tokenizers.PeptideTokenizer.from_massivekb(),
     )
 
-    expected_1mod.sort(key=pdb._calc_pep_mass)
+    pdb.db_peptides.to_csv("foo.csv")
     assert pdb.db_peptides.index.to_list() == expected_1mod
 
 

@@ -7,6 +7,7 @@ import re
 import string
 from typing import Dict, Iterator, Pattern, Set, Tuple
 
+import depthcharge.constants
 import depthcharge.tokenizers
 import numpy as np
 import pandas as pd
@@ -179,9 +180,12 @@ class ProteinDatabase:
         float
             The neutral mass of the peptide
         """
-        return self.tokenizer.calculate_precursor_ions(
-            self.tokenizer.tokenize(pep), torch.tensor([1])
-        ).item()
+        return (
+            self.tokenizer.masses[self.tokenizer.tokenize(pep)]
+            .sum(dim=1)
+            .item()
+            + depthcharge.constants.H2O
+        )
 
     def get_candidates(
         self,
