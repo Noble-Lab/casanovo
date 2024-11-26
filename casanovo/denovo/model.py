@@ -1166,12 +1166,20 @@ class DbSpec2Pep(Spec2Pep):
                 peptide_score,
                 aa_scores,
                 file_name,
-            ) in list():
-                spectrum_id = (file_name, scan)
-                predictions_all[spectrum_i].append(
+            ) in zip(
+                psm_batch["scan"],
+                psm_batch["precursor_charge"],
+                psm_batch["precursor_mz"],
+                self.tokenizer.detokenize(psm_batch["seq"]),
+                batch_peptide_scores,
+                batch_aa_scores,
+                psm_batch["peak_file"],
+            ):
+                spectrum_id = (file_name[0], scan[0])
+                predictions_all[spectrum_id].append(
                     psm.PepSpecMatch(
                         sequence=peptide,
-                        spectrum_id=spectrum_i,
+                        spectrum_id=spectrum_id,
                         peptide_score=peptide_score,
                         charge=int(charge),
                         calc_mz=self.peptide_mass_calculator.mass(
@@ -1185,38 +1193,6 @@ class DbSpec2Pep(Spec2Pep):
                     )
                 )
 
-            for (
-                charge,
-                precursor_mz,
-                spectrum_i,
-                peptide_score,
-                aa_scores,
-                peptide,
-            ) in zip(
-                psm_batch[1][:, 1].cpu().detach().numpy(),
-                psm_batch[1][:, 2].cpu().detach().numpy(),
-                psm_batch[2],
-                batch_peptide_scores,
-                batch_aa_scores,
-                psm_batch[3],
-            ):
-                spectrum_i = tuple(spectrum_i)
-                predictions_all[spectrum_i].append(
-                    psm.PepSpecMatch(
-                        sequence=peptide,
-                        spectrum_id=spectrum_i,
-                        peptide_score=peptide_score,
-                        charge=int(charge),
-                        calc_mz=self.peptide_mass_calculator.mass(
-                            peptide, charge
-                        ),
-                        exp_mz=precursor_mz,
-                        aa_scores=aa_scores,
-                        protein=self.protein_database.get_associated_protein(
-                            peptide
-                        ),
-                    )
-                )
         # Filter the top-scoring prediction(s) for each spectrum.
         predictions = list(
             itertools.chain.from_iterable(
@@ -1276,7 +1252,10 @@ class DbSpec2Pep(Spec2Pep):
 
                 candidate_peps = candidate_peps[peps_to_add:]
 
-        if not self._pep_batch_ready(candidate_peps):
+        if (
+            not self._pep_batch_ready(candidate_peps)
+            and num_candidate_psms > 0
+        ):
             yield self._finalize_psm_batch(psm_batch)
 
     def _pep_batch_ready(self, num_candidate_psms: int) -> bool:
