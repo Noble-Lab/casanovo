@@ -106,18 +106,6 @@ casanovo sequence spectra.mgf
 Casanovo can predict peptide sequences for MS/MS spectra in mzML, mzXML, and MGF files.
 This will write peptide predictions for the given MS/MS spectra to the specified output file in mzTab format.
 
-### Perform database search using Casanovo
-
-To perform database search using Casanovo as a score function, use the `casanovo db-search` command:
-
-```sh
-casanovo db-search spectra.mgf proteome.fasta
-```
-![`casanovo db-search --help`](images/db-search-help.svg)
-
-Casanovo will create candidates from the given fasta file, and score them against MS/MS spectra in mzML, mzXML, and MGF files.
-This will write PSM scores for the given MS/MS spectra and fasta file to the specified output file in mzTab format.
-
 ### Evaluate *de novo* sequencing performance
 
 To evaluate _de novo_ sequencing performance based on known mass spectrum annotations, use the `casanovo sequence` command with the `--evaluate` option:
@@ -142,6 +130,25 @@ casanovo train --validation_peak_path validation_spectra.mgf training_spectra.mg
 Training and validation MS/MS data need to be provided as annotated MGF files, where the peptide sequence is denoted in the `SEQ` field.
 
 If a training is continued for a previously trained model, specify the starting model weights using `--model`.
+
+### Perform database search using Casanovo
+
+To perform database search using Casanovo as a score function, use the `casanovo db-search` command:
+
+```sh
+casanovo db-search spectra.mgf proteome.fasta
+```
+![`casanovo db-search --help`](images/db-search-help.svg)
+
+Casanovo will create candidates from the given fasta file, and score them against MS/MS spectra in mzML, mzXML, and MGF files.
+This will write PSM scores for the given MS/MS spectra and fasta file to the specified output file in mzTab format.
+
+The paper regarding Casanovo-DB can be found [here](https://academic.oup.com/bioinformatics/article/40/Supplement_1/i410/7700854).
+
+```{note}
+Please note that this is an *experimental feature* that may run very slowly for large jobs.
+```
+
 
 ## Try Casanovo on a small example
 
@@ -169,7 +176,7 @@ Congratulations! Casanovo is installed and running in *de novo* mode.
 
 Now let's use Casanovo to perform database search with the same MGF from above and a FASTA file.
 The example MGF file is available at [`sample_data/sample_preprocessed_spectra.mgf`](https://github.com/Noble-Lab/casanovo/blob/main/sample_data/sample_preprocessed_spectra.mgf).
-The example FASTA file is available at [`sample_data/human.fasta`](https://github.com/Noble-Lab/casanovo/blob/main/sample_data/human.fasta).
+The example FASTA file is available at [`sample_data/preprocessed_mouse.fasta`](https://github.com/Noble-Lab/casanovo/blob/main/sample_data/preprocessed_mouse.fasta).
 
 To obtain PSM scores between these spectra and the fasta:
 1. Download the example MGF above.
@@ -181,6 +188,6 @@ To obtain PSM scores between these spectra and the fasta:
 casanovo db-search [PATH_TO_MGF]/sample_preprocessed_spectra.mgf [PATH_TO_FASTA]/human.fasta
 ```
 
-This job should complete in < 15 minutes.
+This job should complete in < 1 minute.
 
 Congratulations! Casanovo is installed and running in db-search mode.
