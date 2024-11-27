@@ -305,7 +305,7 @@ def tiny_config(tmp_path):
         "gradient_clip_val": None,
         "gradient_clip_algorithm": None,
         "precision": "32-true",
-        "replace_isoleucine_with_leucine": True,
+        "replace_isoleucine_with_leucine": False,
         "reverse_peptides": False,
         "mskb_tokenizer": True,
         "residues": {
@@ -339,10 +339,10 @@ def tiny_config(tmp_path):
             "[Ammonia-loss]-": -17.026549,  # NH3 loss
             "[+25.980265]-": 25.980265,  # Carbamylation and NH3 loss
         },
-        "allowed_fixed_mods": "C:C+57.021",
+        "allowed_fixed_mods": "C:C[Carbamidomethyl]",
         "allowed_var_mods": (
-            "M:M+15.995,N:N+0.984,Q:Q+0.984,"
-            "nterm:+42.011,nterm:+43.006,nterm:-17.027,nterm:+43.006-17.027"
+            "M:M[Oxidation],N:N[Deamidated],Q:Q[Deamidated],"
+            "nterm:[Acetyl]-,nterm:[Carbamyl]-,nterm:[Ammonia-loss]-,nterm:[+25.980265]-"
         ),
     }
 
