@@ -668,21 +668,21 @@ def test_digest_fasta_mods(tiny_fasta_file):
         "+42.011EIVMTQSPPTLSLSPGER",
         "+43.006EIVMTQSPPTLSLSPGER",
         "-17.027MEAPAQLLFLLLLWLPDTTR",
-        "-17.027M+15.995EAPAQLLFLLLLWLPDTTR",  #
+        "-17.027M+15.995EAPAQLLFLLLLWLPDTTR",
         "MEAPAQLLFLLLLWLPDTTR",
         "MEAPAQ+0.984LLFLLLLWLPDTTR",
         "M+15.995EAPAQLLFLLLLWLPDTTR",
         "+43.006-17.027MEAPAQLLFLLLLWLPDTTR",
-        "+43.006-17.027M+15.995EAPAQLLFLLLLWLPDTTR",  #
+        "+43.006-17.027M+15.995EAPAQLLFLLLLWLPDTTR",
         "+42.011MEAPAQLLFLLLLWLPDTTR",
         "+43.006MEAPAQLLFLLLLWLPDTTR",
-        "+42.011M+15.995EAPAQLLFLLLLWLPDTTR",  #
-        "+43.006M+15.995EAPAQLLFLLLLWLPDTTR",  #
+        "+42.011M+15.995EAPAQLLFLLLLWLPDTTR",
+        "+43.006M+15.995EAPAQLLFLLLLWLPDTTR",
         "-17.027ASQSVSSSYLTWYQQKPGQAPR",
         "ASQSVSSSYLTWYQQKPGQAPR",
-        "ASQ+0.984SVSSSYLTWYQQKPGQAPR",
         "ASQSVSSSYLTWYQ+0.984QKPGQAPR",
         "ASQSVSSSYLTWYQQ+0.984KPGQAPR",
+        "ASQ+0.984SVSSSYLTWYQQKPGQAPR",
         "ASQSVSSSYLTWYQQKPGQ+0.984APR",
         "+43.006-17.027ASQSVSSSYLTWYQQKPGQAPR",
         "+42.011ASQSVSSSYLTWYQQKPGQAPR",
@@ -690,9 +690,9 @@ def test_digest_fasta_mods(tiny_fasta_file):
         "-17.027FSGSGSGTDFTLTISSLQPEDFAVYYC+57.021QQDYNLP",
         "FSGSGSGTDFTLTISSLQPEDFAVYYC+57.021QQDYNLP",
         "FSGSGSGTDFTLTISSLQ+0.984PEDFAVYYC+57.021QQDYNLP",
+        "FSGSGSGTDFTLTISSLQPEDFAVYYC+57.021QQDYN+0.984LP",
         "FSGSGSGTDFTLTISSLQPEDFAVYYC+57.021Q+0.984QDYNLP",
         "FSGSGSGTDFTLTISSLQPEDFAVYYC+57.021QQ+0.984DYNLP",
-        "FSGSGSGTDFTLTISSLQPEDFAVYYC+57.021QQDYN+0.984LP",
         "+43.006-17.027FSGSGSGTDFTLTISSLQPEDFAVYYC+57.021QQDYNLP",
         "+42.011FSGSGSGTDFTLTISSLQPEDFAVYYC+57.021QQDYNLP",
         "+43.006FSGSGSGTDFTLTISSLQPEDFAVYYC+57.021QQDYNLP",
@@ -714,8 +714,6 @@ def test_digest_fasta_mods(tiny_fasta_file):
         ),
         tokenizer=depthcharge.tokenizers.PeptideTokenizer.from_massivekb(),
     )
-
-    pdb.db_peptides.to_csv("foo.csv")
     assert pdb.db_peptides.index.to_list() == expected_1mod
 
 
@@ -838,8 +836,8 @@ def test_digest_fasta_enzyme(tiny_fasta_file):
         "QSPPTL",
         "SPGERV",
         "ISSLQP",
-        "RATSIP",
         "TSIPAR",
+        "RATSIP",
         "MEAPAQ",
         "RASQSV",
         "TISSLQ",
@@ -872,8 +870,8 @@ def test_digest_fasta_enzyme(tiny_fasta_file):
         "AQLLFL",
         "QPEDFA",
         "TLSC+57.021RA",
-        "C+57.021RASQS",
         "SC+57.021RASQ",
+        "C+57.021RASQS",
         "DFTLTI",
         "PDTTRE",
         "TTREIV",
@@ -890,8 +888,8 @@ def test_digest_fasta_enzyme(tiny_fasta_file):
         "LWLPDT",
         "QLLFLL",
         "LQPEDF",
-        "REIVMT",
         "TREIVM",
+        "REIVMT",
         "QDYNLP",
         "LLLWLP",
         "SSYLTW",
@@ -910,8 +908,8 @@ def test_digest_fasta_enzyme(tiny_fasta_file):
         "TWYQQK",
         "VYYC+57.021QQ",
         "YLTWYQ",
-        "YC+57.021QQDY",
         "YYC+57.021QQD",
+        "YC+57.021QQDY",
     ]
 
     pdb = db_utils.ProteinDatabase(
@@ -931,7 +929,6 @@ def test_digest_fasta_enzyme(tiny_fasta_file):
         ),
         tokenizer=depthcharge.tokenizers.PeptideTokenizer.from_massivekb(),
     )
-    expected_argc.sort(key=pdb._calc_pep_mass)
     assert pdb.db_peptides.index.to_list() == expected_argc
 
     pdb = db_utils.ProteinDatabase(
@@ -951,7 +948,6 @@ def test_digest_fasta_enzyme(tiny_fasta_file):
         ),
         tokenizer=depthcharge.tokenizers.PeptideTokenizer.from_massivekb(),
     )
-    expected_aspn.sort(key=pdb._calc_pep_mass)
     assert pdb.db_peptides.index.to_list() == expected_aspn
 
     # Test regex rule instead of named enzyme
@@ -972,7 +968,6 @@ def test_digest_fasta_enzyme(tiny_fasta_file):
         ),
         tokenizer=depthcharge.tokenizers.PeptideTokenizer.from_massivekb(),
     )
-    expected_argc.sort(key=pdb._calc_pep_mass)
     assert pdb.db_peptides.index.to_list() == expected_argc
 
     # Test semispecific digest
@@ -993,7 +988,6 @@ def test_digest_fasta_enzyme(tiny_fasta_file):
         ),
         tokenizer=depthcharge.tokenizers.PeptideTokenizer.from_massivekb(),
     )
-    expected_semispecific.sort(key=pdb._calc_pep_mass)
     assert pdb.db_peptides.index.to_list() == expected_semispecific
 
     # Test nonspecific digest
@@ -1014,7 +1008,12 @@ def test_digest_fasta_enzyme(tiny_fasta_file):
         ),
         tokenizer=depthcharge.tokenizers.PeptideTokenizer.from_massivekb(),
     )
-    expected_nonspecific.sort(key=pdb._calc_pep_mass)
+    peptide_list = pdb.db_peptides.index.to_list()
+
+    first = peptide_list[:50]
+    second = peptide_list[50:100]
+    third = peptide_list[100:]
+
     assert pdb.db_peptides.index.to_list() == expected_nonspecific
 
 
