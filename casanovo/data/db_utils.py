@@ -13,7 +13,6 @@ import numpy as np
 import pandas as pd
 import pyteomics.fasta
 import pyteomics.parser
-import torch
 
 logger = logging.getLogger("casanovo")
 

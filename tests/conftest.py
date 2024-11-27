@@ -1,6 +1,5 @@
 """Fixtures used for testing."""
 
-import depthcharge
 import numpy as np
 import psims
 import pytest
