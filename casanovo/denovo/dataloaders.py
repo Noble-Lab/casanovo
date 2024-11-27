@@ -1,11 +1,10 @@
 """Data loaders for the de novo sequencing task."""
 
-import functools
 import logging
 import os
 import tempfile
 from pathlib import Path
-from typing import Callable, Iterable, List, Optional, Tuple
+from typing import Iterable, Optional
 
 import lightning.pytorch as pl
 import numpy as np
@@ -20,8 +19,6 @@ from depthcharge.data import (
 from depthcharge.tokenizers import PeptideTokenizer
 from torch.utils.data import DataLoader
 from torch.utils.data.datapipes.iter.combinatorics import ShufflerIterDataPipe
-
-from ..data import db_utils
 
 logger = logging.getLogger("casanovo")
 

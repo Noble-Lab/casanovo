@@ -730,23 +730,6 @@ class Spec2Pep(pl.LightningModule):
             else:
                 yield []
 
-    def _unsqueeze_batch(self, batch: Dict[str, Any]) -> None:
-        """
-        Unsqueeze the first dimension of each tensor in the batch.
-
-
-        Parameters
-        ----------
-        batch : Dict[str, Any]
-            A dictionary where each key corresponds to a component of the batch,
-            and the values are tensors or other data structures.
-        """
-        for k in batch.keys():
-            try:
-                batch[k] = batch[k].squeeze(0)
-            except:
-                continue
-
     def _process_batch(self, batch):
         """Prepare batch returned from AnnotatedSpectrumDataset of the
             latest depthcharge version
@@ -768,7 +751,12 @@ class Spec2Pep(pl.LightningModule):
             sequences (during training).
 
         """
-        self._unsqueeze_batch(batch)
+        for k in batch.keys():
+            try:
+                batch[k] = batch[k].squeeze(0)
+            except:
+                continue
+
         precursor_mzs = batch["precursor_mz"]
         precursor_charges = batch["precursor_charge"]
         precursor_masses = (precursor_mzs - 1.007276) * precursor_charges
