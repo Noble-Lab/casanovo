@@ -321,7 +321,6 @@ class Spec2Pep(pl.LightningModule):
             tokens, scores = self._get_topk_beams(
                 tokens, scores, finished_beams, batch, step + 1
             )
-            tokens = tokens
 
         # Return the peptide with the highest confidence score, within the
         # precursor m/z tolerance if possible.

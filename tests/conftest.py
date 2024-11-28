@@ -263,7 +263,7 @@ def tiny_config(tmp_path):
         "train_label_smoothing": 0.01,
         "warmup_iters": 1,
         "cosine_schedule_period_iters": 1,
-        "max_epochs": 20,
+        "max_epochs": 15,
         "val_check_interval": 1,
         "accelerator": "cpu",
         "precursor_mass_tol": 5,
