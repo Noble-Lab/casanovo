@@ -42,7 +42,7 @@ def test_train_and_run(
     ]
 
     result = run(train_args)
-    model_file = tmp_path / "train.epoch=19-step=20.ckpt"
+    model_file = tmp_path / "train.epoch=14-step=15.ckpt"
     best_model = tmp_path / "train.best.ckpt"
     assert result.exit_code == 0
     assert model_file.exists()
