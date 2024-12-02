@@ -3,10 +3,10 @@ import subprocess
 from pathlib import Path
 
 import pyteomics.mztab
+import pytest
 from click.testing import CliRunner
 
 from casanovo import casanovo
-
 
 TEST_DIR = Path(__file__).resolve().parent
 
@@ -227,6 +227,9 @@ def test_auxilliary_cli(tmp_path, monkeypatch):
 
     run(["configure", "-o", "test.yaml"])
     assert Path("test.yaml").exists()
+
+    with pytest.raises(FileExistsError):
+        run(["configure", "-o", "test.yaml"])
 
     res = run("version")
     assert res.output

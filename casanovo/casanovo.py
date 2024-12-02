@@ -41,10 +41,9 @@ import torch
 import tqdm
 from lightning.pytorch import seed_everything
 
-from . import __version__
-from . import utils
-from .denovo import ModelRunner
+from . import __version__, utils
 from .config import Config
+from .denovo import ModelRunner
 
 logger = logging.getLogger("casanovo")
 click.rich_click.USE_MARKDOWN = True
@@ -369,8 +368,11 @@ def configure(
     output_path, _ = _setup_output(
         output_dir, output_root, force_overwrite, "info"
     )
-    config_fname = output_root if output_root is not None else "config"
-    config_fname += ".yaml"
+    config_fname = output_root if output_root is not None else "casanovo"
+    config_fname = Path(config_fname).with_suffix(".yaml")
+    if not force_overwrite:
+        utils.check_dir_file_exists(output_path, str(config_fname))
+
     config_path = str(output_path / config_fname)
     Config.copy_default(config_path)
     logger.info(f"Wrote {config_path}\n")
