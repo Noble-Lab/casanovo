@@ -338,20 +338,42 @@ def version() -> None:
 
 @main.command()
 @click.option(
-    "-o",
-    "--output",
-    help="The output configuration file.",
-    default="casanovo.yaml",
-    type=click.Path(dir_okay=False),
+    "-d",
+    "--output_dir",
+    help="The destination directory for log and config file.",
+    type=click.Path(dir_okay=True),
+    required=False,
 )
-def configure(output: Path) -> None:
+@click.option(
+    "-o",
+    "--output_root",
+    help="The root name for log and config file.",
+    type=click.Path(dir_okay=False),
+    required=False,
+)
+@click.option(
+    "-f",
+    "--force_overwrite",
+    help="Whether to overwrite output files.",
+    is_flag=True,
+    show_default=True,
+    default=False,
+)
+def configure(
+    output_dir: str, output_root: str, force_overwrite: bool
+) -> None:
     """Generate a Casanovo configuration file to customize.
 
     The casanovo configuration file is in the YAML format.
     """
-    Config.copy_default(str(output))
-    setup_logging(output, "info")
-    logger.info(f"Wrote {output}\n")
+    output_path, _ = _setup_output(
+        output_dir, output_root, force_overwrite, "info"
+    )
+    config_fname = output_root if output_root is not None else "config"
+    config_fname += ".yaml"
+    config_path = str(output_path / config_fname)
+    Config.copy_default(config_path)
+    logger.info(f"Wrote {config_path}\n")
 
 
 def setup_logging(
