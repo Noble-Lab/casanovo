@@ -1288,8 +1288,8 @@ class DbSpec2Pep(Spec2Pep):
             True if the batch is ready, False otherwise.
         """
         return (
-            num_candidate_psms % self.psm_batch_size
-        ) == self.psm_batch_size - 1
+            num_candidate_psms % self.psm_batch_size == 0
+        ) and num_candidate_psms != 0
 
     def _initialize_psm_batch(self, batch: Dict[str, Any]) -> Dict[str, List]:
         """

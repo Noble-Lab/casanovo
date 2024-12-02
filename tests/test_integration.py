@@ -8,7 +8,6 @@ import pytest
 from click.testing import CliRunner
 
 from casanovo import casanovo
-from casanovo.config import Config
 
 TEST_DIR = Path(__file__).resolve().parent
 

@@ -63,8 +63,8 @@ max_mods: 1
 # where aa is a standard amino acid (or "nterm" for an N-terminal mod)
 # and mod_residue is a key from the "residues" dictionary.
 # Example: "M:M+15.995,nterm:+43.006"
-allowed_fixed_mods: "C:C+57.021"
-allowed_var_mods: "M:M+15.995,N:N+0.984,Q:Q+0.984,nterm:+42.011,nterm:+43.006,nterm:-17.027,nterm:+43.006-17.027"
+allowed_fixed_mods: "C:C[Carbamidomethyl]"
+allowed_var_mods: "M:M[Oxidation],N:N[Deamidated],Q:Q[Deamidated],nterm:[Acetyl]-,nterm:[Carbamyl]-,nterm:[Ammonia-loss]-,nterm:[+25.980265]-"
 
 
 ###
