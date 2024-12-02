@@ -99,7 +99,6 @@ class ProteinDatabase:
         )
         self.tokenizer = tokenizer
         self.db_peptides = self._digest_fasta(peptide_generator)
-        self.db_peptides.to_csv("data/db_upgrade_new_mods.csv")
         self.precursor_tolerance = precursor_tolerance
         self.isotope_error = isotope_error
 
