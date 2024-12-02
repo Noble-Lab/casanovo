@@ -263,7 +263,7 @@ def tiny_config(tmp_path):
         "train_label_smoothing": 0.01,
         "warmup_iters": 1,
         "cosine_schedule_period_iters": 1,
-        "max_epochs": 15,
+        "max_epochs": 20,
         "val_check_interval": 1,
         "accelerator": "cpu",
         "precursor_mass_tol": 5,
@@ -304,7 +304,7 @@ def tiny_config(tmp_path):
         "gradient_clip_val": None,
         "gradient_clip_algorithm": None,
         "precision": "32-true",
-        "replace_isoleucine_with_leucine": False,
+        "replace_isoleucine_with_leucine": True,
         "reverse_peptides": False,
         "mskb_tokenizer": True,
         "residues": {
