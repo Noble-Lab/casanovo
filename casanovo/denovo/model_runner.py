@@ -494,7 +494,9 @@ class ModelRunner:
             self.model = Model.load_from_checkpoint(
                 self.model_filename, map_location=device, **loaded_model_params
             )
-
+            # Use tokenizer initialized from config file instead of loaded
+            # from checkpoint file
+            self.model.tokenizer = tokenizer
             architecture_params = set(model_params.keys()) - set(
                 loaded_model_params.keys()
             )
@@ -515,6 +517,7 @@ class ModelRunner:
                     map_location=device,
                     **model_params,
                 )
+                self.model.tokenizer = tokenizer
             except RuntimeError:
                 raise RuntimeError(
                     "Weights file incompatible with the current version of "
