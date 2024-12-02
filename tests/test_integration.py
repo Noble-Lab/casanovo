@@ -6,6 +6,7 @@ import pyteomics.mztab
 from click.testing import CliRunner
 
 from casanovo import casanovo
+from casanovo.config import Config
 
 TEST_DIR = Path(__file__).resolve().parent
 
@@ -14,6 +15,7 @@ def test_train_and_run(
     mgf_small,
     mzml_small,
     tiny_config,
+    tiny_config_db,
     tmp_path,
     monkeypatch,
     mgf_medium,
@@ -158,7 +160,7 @@ def test_train_and_run(
         "--model",
         str(model_file),
         "--config",
-        tiny_config,
+        tiny_config_db,
         "--output_dir",
         str(tmp_path),
         "--output_root",

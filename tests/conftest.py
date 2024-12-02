@@ -253,9 +253,8 @@ def _create_mzml(peptides, mzml_file, random_state=42):
     return mzml_file
 
 
-@pytest.fixture
-def tiny_config(tmp_path):
-    """A config file for a tiny model."""
+def get_config_file(file_path, file_name, additional_cfg=None):
+    """Get Casanovo config yaml file"""
     cfg = {
         "n_head": 2,
         "dim_feedforward": 10,
@@ -345,8 +344,27 @@ def tiny_config(tmp_path):
         ),
     }
 
-    cfg_file = tmp_path / "config.yml"
+    if additional_cfg is not None:
+        cfg.update(additional_cfg)
+
+    cfg_file = file_path / file_name
     with cfg_file.open("w+") as out_file:
         yaml.dump(cfg, out_file)
 
     return cfg_file
+
+
+@pytest.fixture
+def tiny_config(tmp_path):
+    """A config file for a tiny model."""
+    return get_config_file(tmp_path, "config.yml")
+
+
+@pytest.fixture
+def tiny_config_db(tmp_path):
+    """A config file for a db search."""
+    return get_config_file(
+        tmp_path,
+        "config_db.yml",
+        additional_cfg={"replace_isoleucine_with_leucine": False},
+    )
