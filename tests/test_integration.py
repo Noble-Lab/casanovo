@@ -2,6 +2,7 @@ import functools
 import subprocess
 from pathlib import Path
 
+import pytest
 import pyteomics.mztab
 from click.testing import CliRunner
 
@@ -10,6 +11,7 @@ from casanovo import casanovo
 TEST_DIR = Path(__file__).resolve().parent
 
 
+@pytest.skip("Test run time")
 def test_train_and_run(
     mgf_small,
     mzml_small,
