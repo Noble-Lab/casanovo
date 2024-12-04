@@ -184,22 +184,43 @@ class ModelRunner:
         valid_peak_path : iterable of str
             The path to the MS data files for validation.
         """
+        print("Starting training process.")
+        print("Initializing trainer for training.")
         self.initialize_trainer(train=True)
+
+        print("Initializing tokenizer.")
         self.initialize_tokenizer()
+
+        print("Initializing model for training.")
         self.initialize_model(train=True)
 
+        print(f"Preparing training data paths: {train_peak_path}")
         train_paths = self._get_input_paths(train_peak_path, True, "train")
-        valid_paths = self._get_input_paths(valid_peak_path, True, "valid")
-        self.initialize_data_module(train_paths, valid_paths)
-        self.loaders.setup()
-        # logger.info(f'TRAIN PSMs: {self.loaders.train_dataset.n_spectra}')
-        # logger.info(f'VAL PSMs: {self.loaders.valid_dataset.n_spectra}')
+        print(f"Training data paths resolved: {train_paths}")
 
+        print(f"Preparing validation data paths: {valid_peak_path}")
+        valid_paths = self._get_input_paths(valid_peak_path, True, "valid")
+        print(f"Validation data paths resolved: {valid_paths}")
+
+        print("Initializing data module with training and validation paths.")
+        self.initialize_data_module(train_paths, valid_paths)
+        print("Setting up data loaders.")
+        self.loaders.setup()
+
+        print(
+            f"Number of spectra in training dataset: {self.loaders.train_dataset.n_spectra}"
+        )
+        print(
+            f"Number of spectra in validation dataset: {self.loaders.valid_dataset.n_spectra}"
+        )
+
+        print("Starting model training.")
         self.trainer.fit(
             self.model,
             self.loaders.train_dataloader(),
             self.loaders.val_dataloader(),
         )
+        print("Training process completed.")
 
     def log_metrics(self, test_dataloader: DataLoader) -> None:
         """Log peptide precision and amino acid precision
