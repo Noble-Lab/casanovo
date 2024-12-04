@@ -1,7 +1,7 @@
 """Peptide spectrum match dataclass."""
 
 import dataclasses
-from typing import Tuple, Iterable
+from typing import Iterable, Tuple
 
 
 @dataclasses.dataclass

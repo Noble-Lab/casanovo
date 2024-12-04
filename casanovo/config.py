@@ -4,7 +4,7 @@ import logging
 import shutil
 import warnings
 from pathlib import Path
-from typing import Optional, Dict, Callable, Tuple, Union
+from typing import Callable, Dict, Optional, Tuple, Union
 
 import yaml
 
@@ -55,6 +55,12 @@ class Config:
         max_charge=int,
         precursor_mass_tol=float,
         isotope_error_range=lambda min_max: (int(min_max[0]), int(min_max[1])),
+        enzyme=str,
+        digestion=str,
+        missed_cleavages=int,
+        max_mods=int,
+        allowed_fixed_mods=str,
+        allowed_var_mods=str,
         min_peptide_len=int,
         dim_model=int,
         n_head=int,
@@ -83,6 +89,16 @@ class Config:
         calculate_precision=bool,
         accelerator=str,
         devices=int,
+        lance_dir=str,
+        shuffle=bool,
+        buffer_size=int,
+        reverse_peptides=bool,
+        replace_isoleucine_with_leucine=bool,
+        accumulate_grad_batches=int,
+        gradient_clip_val=float,
+        gradient_clip_algorithm=str,
+        precision=str,
+        mskb_tokenizer=bool,
     )
 
     def __init__(self, config_file: Optional[str] = None):

@@ -44,7 +44,7 @@ jobs:
         flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
     - name: Run unit and system tests
       run: |
-        pytest --cov=casanovo tests/
+        pytest -s --cov=casanovo tests/
     - name: Upload coverage to codecov
       uses: codecov/codecov-action@v4
       with:
