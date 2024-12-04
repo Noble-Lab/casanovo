@@ -207,13 +207,6 @@ class ModelRunner:
         print("Setting up data loaders.")
         self.loaders.setup()
 
-        print(
-            f"Number of spectra in training dataset: {self.loaders.train_dataset.n_spectra}"
-        )
-        print(
-            f"Number of spectra in validation dataset: {self.loaders.valid_dataset.n_spectra}"
-        )
-
         print("Starting model training.")
         self.trainer.fit(
             self.model,
