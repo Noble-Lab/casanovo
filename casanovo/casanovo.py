@@ -41,10 +41,9 @@ import torch
 import tqdm
 from lightning.pytorch import seed_everything
 
-from . import __version__
-from . import utils
-from .denovo import ModelRunner
+from . import __version__, utils
 from .config import Config
+from .denovo import ModelRunner
 
 logger = logging.getLogger("casanovo")
 click.rich_click.USE_MARKDOWN = True
@@ -139,7 +138,7 @@ def main() -> None:
     "peak_path",
     required=True,
     nargs=-1,
-    type=click.Path(exists=True, dir_okay=False),
+    type=click.Path(exists=True, dir_okay=True),
 )
 @click.option(
     "--evaluate",
@@ -206,7 +205,7 @@ def sequence(
     "peak_path",
     required=True,
     nargs=-1,
-    type=click.Path(exists=True, dir_okay=False),
+    type=click.Path(exists=True, dir_okay=True),
 )
 @click.argument(
     "fasta_path",
@@ -266,7 +265,7 @@ def db_search(
     "train_peak_path",
     required=True,
     nargs=-1,
-    type=click.Path(exists=True, dir_okay=False),
+    type=click.Path(exists=True, dir_okay=True),
 )
 @click.option(
     "-p",
@@ -277,7 +276,7 @@ def db_search(
     """,
     required=False,
     multiple=True,
-    type=click.Path(exists=True, dir_okay=False),
+    type=click.Path(exists=True, dir_okay=True),
 )
 def train(
     train_peak_path: Tuple[str],
