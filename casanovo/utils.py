@@ -39,7 +39,8 @@ def n_workers() -> int:
         The number of workers.
     """
     # Windows or MacOS: no multiprocessing.
-    if platform.system() in ["Windows", "Darwin"]:
+    # FIXME: remove multi-threading issue workaround.
+    if platform.system() in ["Windows", "Darwin"] or True:
         logger.warning(
             "Dataloader multiprocessing is currently not supported on Windows "
             "or MacOS; using only a single thread."
