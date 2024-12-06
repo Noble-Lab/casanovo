@@ -44,6 +44,7 @@ def test_version():
     assert casanovo.__version__ is not None
 
 
+@pytest.mark.skip(reason="Skipping due to Linux deadlock issue")
 def test_n_workers(monkeypatch):
     """Check that n_workers is correct without a GPU."""
     monkeypatch.setattr("torch.cuda.is_available", lambda: False)

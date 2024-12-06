@@ -38,9 +38,12 @@ def n_workers() -> int:
     int
         The number of workers.
     """
+    # FIXME: remove multiprocessing Linux deadlock issue workaround when
+    # deadlock issue is resolved.
+    return 0
+
     # Windows or MacOS: no multiprocessing.
-    # FIXME: remove multi-threading issue workaround.
-    if platform.system() in ["Windows", "Darwin"] or True:
+    if platform.system() in ["Windows", "Darwin"]:
         logger.warning(
             "Dataloader multiprocessing is currently not supported on Windows "
             "or MacOS; using only a single thread."
