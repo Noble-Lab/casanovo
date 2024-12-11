@@ -23,6 +23,7 @@ Getting Started <getting_started.md>
 File Formats <file_formats.md>
 Nextflow Workflow <nextflow.md>
 FAQs <faq.md>
+Applications of Casanovo <applications.md>
 Citing <cite.md>
 Contributing <CONTRIBUTING.md>
 Code of Conduct <CODE_OF_CONDUCT.md>
