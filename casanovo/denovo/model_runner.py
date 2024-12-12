@@ -112,13 +112,18 @@ class ModelRunner:
         ]
 
         # Early stop
-        if config._user_config.get("val_patience_interval") != -1:
+        if config.val_patience_interval != -1:
+            logger.info(
+                "Early stop patience interval %s", config.val_patience_interval
+            )
             self.callbacks.append(
                 EarlyStopping(
                     monitor="valid_CELoss",
-                    patience=config._user_config.get("val_patience_interval"),
+                    patience=config.val_patience_interval,
                 )
             )
+        else:
+            logger.info("Early stopping disabled")
 
     def __enter__(self):
         """Enter the context manager"""

@@ -250,7 +250,10 @@ def test_evaluate(
     # Test evaluation with annotated peak file
     result_file = tmp_path / "result.mztab"
     with ModelRunner(
-        config, model_filename=str(model_file), overwrite_ckpt_check=False
+        config,
+        model_filename=str(model_file),
+        output_dir=tmp_path,
+        overwrite_ckpt_check=False,
     ) as runner:
         runner.predict([mgf_small], result_file, evaluate=True)
 
@@ -265,19 +268,28 @@ def test_evaluate(
 
     with pytest.raises(TypeError):
         with ModelRunner(
-            config, model_filename=str(model_file), overwrite_ckpt_check=False
+            config,
+            model_filename=str(model_file),
+            output_dir=tmp_path,
+            overwrite_ckpt_check=False,
         ) as runner:
             runner.predict([mzml_small], result_file, evaluate=True)
 
     with pytest.raises(TypeError, match=exception_string):
         with ModelRunner(
-            config, model_filename=str(model_file), overwrite_ckpt_check=False
+            config,
+            model_filename=str(model_file),
+            output_dir=tmp_path,
+            overwrite_ckpt_check=False,
         ) as runner:
             runner.predict([mgf_small_unannotated], result_file, evaluate=True)
 
     with pytest.raises(TypeError, match=exception_string):
         with ModelRunner(
-            config, model_filename=str(model_file), overwrite_ckpt_check=False
+            config,
+            model_filename=str(model_file),
+            output_dir=tmp_path,
+            overwrite_ckpt_check=False,
         ) as runner:
             runner.predict(
                 [mgf_small_unannotated, mzml_small], result_file, evaluate=True
@@ -291,7 +303,10 @@ def test_evaluate(
     # Test mix of annotated an unannotated peak files
     with pytest.raises(TypeError):
         with ModelRunner(
-            config, model_filename=str(model_file), overwrite_ckpt_check=False
+            config,
+            model_filename=str(model_file),
+            output_dir=tmp_path,
+            overwrite_ckpt_check=False,
         ) as runner:
             runner.predict([mgf_small, mzml_small], result_file, evaluate=True)
 
@@ -300,7 +315,10 @@ def test_evaluate(
 
     with pytest.raises(TypeError, match=exception_string):
         with ModelRunner(
-            config, model_filename=str(model_file), overwrite_ckpt_check=False
+            config,
+            model_filename=str(model_file),
+            output_dir=tmp_path,
+            overwrite_ckpt_check=False,
         ) as runner:
             runner.predict(
                 [mgf_small, mgf_small_unannotated], result_file, evaluate=True
@@ -311,7 +329,10 @@ def test_evaluate(
 
     with pytest.raises(TypeError, match=exception_string):
         with ModelRunner(
-            config, model_filename=str(model_file), overwrite_ckpt_check=False
+            config,
+            model_filename=str(model_file),
+            output_dir=tmp_path,
+            overwrite_ckpt_check=False,
         ) as runner:
             runner.predict(
                 [mgf_small, mgf_small_unannotated, mzml_small],
@@ -360,7 +381,7 @@ def test_metrics_logging(tmp_path, mgf_small, tiny_config):
     assert csv_path.is_dir()
 
 
-def test_log_metrics(monkeypatch, tiny_config):
+def test_log_metrics(monkeypatch, tiny_config, tmp_path):
     def get_mock_loader(psm_list, tokenizer):
         return [
             {
@@ -385,7 +406,8 @@ def test_log_metrics(monkeypatch, tiny_config):
         mock_logger = unittest.mock.MagicMock()
         ctx.setattr("casanovo.denovo.model_runner.logger", mock_logger)
 
-        with ModelRunner(Config(tiny_config)) as runner:
+        with ModelRunner(Config(tiny_config), output_dir=tmp_path) as runner:
+            psm_file_path = tmp_path / "psms.csv"
             runner.writer = unittest.mock.MagicMock()
             runner.model = unittest.mock.MagicMock()
             runner.model.tokenizer = (
@@ -413,6 +435,8 @@ def test_log_metrics(monkeypatch, tiny_config):
             assert pep_precision == pytest.approx(100)
             assert aa_precision == pytest.approx(100)
             assert aa_recall == pytest.approx(100)
+            assert psm_file_path.is_file()
+            psm_file_path.unlink()
 
             # Test 50% peptide precision (one wrong)
             infer_psms = [
@@ -435,6 +459,8 @@ def test_log_metrics(monkeypatch, tiny_config):
             assert pep_precision == pytest.approx(100 * (1 / 2))
             assert aa_precision == pytest.approx(100 * (5 / 6))
             assert aa_recall == pytest.approx(100 * (5 / 6))
+            assert psm_file_path.is_file()
+            psm_file_path.unlink()
 
             # Test skipped spectra
             act_psms = [
@@ -462,6 +488,8 @@ def test_log_metrics(monkeypatch, tiny_config):
             assert pep_precision == pytest.approx(100 * (4 / 5))
             assert aa_precision == pytest.approx(100)
             assert aa_recall == pytest.approx(100 * (4 / 5))
+            assert psm_file_path.is_file()
+            psm_file_path.unlink()
 
             infer_psms = [
                 get_mock_psm("PEP", ("foo", "index=1")),
@@ -480,6 +508,8 @@ def test_log_metrics(monkeypatch, tiny_config):
             assert pep_precision == pytest.approx(100 * (4 / 5))
             assert aa_precision == pytest.approx(100)
             assert aa_recall == pytest.approx(100 * (4 / 5))
+            assert psm_file_path.is_file()
+            psm_file_path.unlink()
 
             infer_psms = [
                 get_mock_psm("PEP", ("foo", "index=1")),
@@ -496,6 +526,8 @@ def test_log_metrics(monkeypatch, tiny_config):
             assert pep_precision == pytest.approx(100 * (2 / 5))
             assert aa_precision == pytest.approx(100)
             assert aa_recall == pytest.approx(100 * (2 / 5))
+            assert psm_file_path.is_file()
+            psm_file_path.unlink()
 
             infer_psms = [
                 get_mock_psm("PEP", ("foo", "index=1")),
@@ -512,6 +544,8 @@ def test_log_metrics(monkeypatch, tiny_config):
             assert pep_precision == pytest.approx(100 * (2 / 5))
             assert aa_precision == pytest.approx(100)
             assert aa_recall == pytest.approx(100 * (2 / 5))
+            assert psm_file_path.is_file()
+            psm_file_path.unlink()
 
             # Test un-inferred spectra
             act_psms = [
@@ -539,3 +573,5 @@ def test_log_metrics(monkeypatch, tiny_config):
             assert pep_precision == pytest.approx(0)
             assert aa_precision == pytest.approx(100)
             assert aa_recall == pytest.approx(100 * (2 / 3))
+            assert psm_file_path.is_file()
+            psm_file_path.unlink()

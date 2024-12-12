@@ -264,6 +264,7 @@ def get_config_file(file_path, file_name, additional_cfg=None):
         "cosine_schedule_period_iters": 1,
         "max_epochs": 20,
         "val_check_interval": 1,
+        "val_patience_interval": -1,
         "accelerator": "cpu",
         "precursor_mass_tol": 5,
         "isotope_error_range": [0, 1],
