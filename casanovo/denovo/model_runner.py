@@ -345,6 +345,18 @@ class ModelRunner:
             for true_seq, pred_seq, conf in zip(seq_true, seq_pred, pred_conf):
                 writer.writerow([true_seq, pred_seq, conf])
 
+        with open(self.output_dir / "psms.csv", mode="w", newline="") as file:
+            writer = csv.writer(file)
+            writer.writerow(
+                [
+                    "Ground Truth Peptide",
+                    "Predicted Peptide",
+                    "Prediction Confidence",
+                ]
+            )
+            for true_seq, pred_seq, conf in zip(seq_true, seq_pred, pred_conf):
+                writer.writerow([true_seq, pred_seq, conf])
+
     def predict(
         self,
         peak_path: Iterable[str],
