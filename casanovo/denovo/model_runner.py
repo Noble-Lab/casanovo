@@ -114,7 +114,7 @@ class ModelRunner:
         # Early stop
         if config.val_patience_interval != -1:
             logger.info(
-                "Early stop patience interval %s", config.val_patience_interval
+                "Early stop patience interval %d", config.val_patience_interval
             )
             self.callbacks.append(
                 EarlyStopping(
