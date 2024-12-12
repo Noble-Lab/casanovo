@@ -86,6 +86,7 @@ class Config:
         max_epochs=int,
         num_sanity_val_steps=int,
         val_check_interval=int,
+        val_patience_interval=int,
         calculate_precision=bool,
         accelerator=str,
         devices=int,

@@ -1,6 +1,7 @@
 """Training and testing functionality for the de novo peptide sequencing
 model."""
 
+import csv
 import glob
 import logging
 import os
@@ -16,6 +17,7 @@ import torch.utils.data
 from depthcharge.tokenizers import PeptideTokenizer
 from depthcharge.tokenizers.peptides import MskbPeptideTokenizer
 from lightning.pytorch.callbacks import LearningRateMonitor, ModelCheckpoint
+from lightning.pytorch.callbacks.early_stopping import EarlyStopping
 from lightning.pytorch.strategies import DDPStrategy
 from torch.utils.data import DataLoader
 
@@ -108,6 +110,15 @@ class ModelRunner:
                 enable_version_counter=False,
             ),
         ]
+
+        # Early stop
+        if config._user_config.get("val_patience_interval") != -1:
+            self.callbacks.append(
+                EarlyStopping(
+                    monitor="valid_CELoss",
+                    patience=config._user_config.get("val_patience_interval"),
+                )
+            )
 
     def __enter__(self):
         """Enter the context manager"""
@@ -215,6 +226,7 @@ class ModelRunner:
         """
         seq_pred = []
         seq_true = []
+        pred_conf = []
         pred_idx = 0
 
         for batch in test_dataloader:
@@ -234,9 +246,11 @@ class ModelRunner:
                         self.writer.psms[pred_idx].sequence
                     ).squeeze(0)
                     seq_pred.append(next_pred_tokens.tolist())
+                    pred_conf.append(self.writer.psms[pred_idx].peptide_score)
                     pred_idx += 1
                 else:
                     seq_pred.append(None)
+                    pred_conf.append(-1.0)
 
         residue_dict = {
             pep_idx: self.model.tokenizer.residues[pep_str]
@@ -260,6 +274,18 @@ class ModelRunner:
         logger.info("Peptide Precision: %.2f%%", 100 * pep_precision)
         logger.info("Amino Acid Precision: %.2f%%", 100 * aa_precision)
         logger.info("Amino Acid Recall: %.2f%%", 100 * aa_recall)
+
+        with open(self.output_dir / "psms.csv", mode="w", newline="") as file:
+            writer = csv.writer(file)
+            writer.writerow(
+                [
+                    "Ground Truth Peptide",
+                    "Predicted Peptide",
+                    "Prediction Confidence",
+                ]
+            )
+            for true_seq, pred_seq, conf in zip(seq_true, seq_pred, pred_conf):
+                writer.writerow([true_seq, pred_seq, conf])
 
     def predict(
         self,
