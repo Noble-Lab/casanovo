@@ -4,22 +4,29 @@
 
 ### MS/MS spectra
 
-When you're ready to use Casanovo for *de novo* peptide sequencing, you can input your MS/MS spectra in one of the following formats:
+When you're ready to use Casanovo, you can input your MS/MS spectra in one of the following formats:
 
 - **[mzML](https://doi.org/10.1074/mcp.R110.000133)**: XML-based mass spectrometry community standard file format developed by the Proteomics Standards Initiative (PSI).
 - **[mzXML](https://doi.org/10.1038/nbt1031)**: XML-based predecessor of mzML. Although supported by Casanovo, mzML should typically be preferred instead.
 - **[MGF](https://www.matrixscience.com/help/data_file_help.html)**: A simple text-based peak file, though not as rich in detail as mzML.
 
-All three of the above file formats can be used as input to Casanovo for *de novo* peptide sequencing.
+All three of the above file formats can be used as input to Casanovo for *de novo* peptide sequencing and database searching.
 As the official PSI standard format containing the complete information from a mass spectrometry run, mzML should typically be preferred.
 
-### DB-Search fasta
+### FASTA (optional)
 
-When using Casanovo in db-search mode, you will need to provide a fasta file *in addition to* one of the MS/MS spectra file formats listed above.
+When using Casanovo for database searching, you will additionally need to provide a relevant FASTA file.
+This is not necessary when using Casanovo for *de novo* peptide sequencing.
 
 - **[FASTA](https://www.ncbi.nlm.nih.gov/WebSub/html/help/protein.html)**: A simple text-based file format that stores genetic/proteomic sequence information.
 
-Fasta files can sometimes include amino acids that are not in Casanovo's vocabulary (e.g. U), and Casanovo-DB will not consider peptides that include these amino acids.
+```{note}
+Remember to add decoy sequences and common contaminants to your FASTA file, as Casanovo will not do this automatically.
+```
+
+```{warning}
+In case the FASTA file contains amino acids that are not in Casanovo's vocabulary, peptides containing those residues will be ignored.
+```
 
 ### Model weights
 
@@ -36,10 +43,10 @@ See the [command line interface documentation](cli.rst) for more details.
 
 ## Output: Understanding the mzTab format
 
-After Casanovo processes your input file(s), it provides the sequencing results in an **[mzTab]((https://doi.org/10.1074/mcp.O113.036681))** file.
+After Casanovo processes your input file(s), it provides the results in an **[mzTab]((https://doi.org/10.1074/mcp.O113.036681))** file.
 This file is divided into two main sections:
 
-1. **Metadata section**: This part describes general information about the file and the Casanovo sequencing task.
+1. **Metadata section**: This part describes general information about the file and the Casanovo task.
 2. **Peptide–spectrum match (PSM) section**: Details of the peptide sequences that Casanovo predicted for the MS/MS spectra.
 
 mzTab files can contain additional sections to include protein identifications and quantification information as well.
@@ -105,7 +112,7 @@ MTD	software[1]-setting[4]	isotope_error_range = (0, 1)
 MTD	software[1]-setting[5]	min_peptide_len = 6
 MTD	software[1]-setting[6]	max_peptide_len = 100
 MTD	software[1]-setting[7]	predict_batch_size = 1024
-MTD	software[1]-setting[8]	top_match = 999
+MTD	software[1]-setting[8]	top_match = 1
 MTD	software[1]-setting[9]	accelerator = auto
 MTD	software[1]-setting[10]	devices = None
 MTD	software[1]-setting[11]	n_beams = 10
@@ -146,7 +153,10 @@ MTD	software[1]-setting[46]	n_workers = 20
 MTD	ms_run[1]-location	file://[...]/my_example_input.mgf
 ```
 
-Note that settings that may only apply to some run modes (sequence, db-search, train, etc.) and not others are all present regardless if they are relevant to the mode Casanovo was run in.
+```{info}
+Some of these configuration settings may only apply to specific modes of operation (`sequence`, `db-search`, `train`, etc.).
+Irrespective of the mode of operation used, all settings will be reported in the mzTab file.
+```
 
 **PSM section**
 
