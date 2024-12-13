@@ -684,7 +684,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
                 yield [
                     (
                         pep_score,
-                        aa_scores,
+                        aa_scores[::-1] if self.decoder.reverse else aa_scores,
                         "".join(self.decoder.detokenize(pred_tokens)),
                     )
                     for pep_score, _, aa_scores, pred_tokens in heapq.nlargest(
