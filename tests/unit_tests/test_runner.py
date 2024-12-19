@@ -366,9 +366,7 @@ def test_log_metrics(monkeypatch, tiny_config):
             {
                 "peak_file": [psm.spectrum_id[0] for psm in psm_list],
                 "scan_id": [psm.spectrum_id[1] for psm in psm_list],
-                "seq": tokenizer.tokenize(
-                    [psm.sequence for psm in psm_list]
-                ).unsqueeze(0),
+                "seq": tokenizer.tokenize([psm.sequence for psm in psm_list]),
             }
         ]
 
