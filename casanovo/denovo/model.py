@@ -938,13 +938,13 @@ class Spec2Pep(pl.LightningModule):
             for peptide_score, aa_scores, peptide in spectrum_preds:
                 predictions.append(
                     (
-                        scan[0],
+                        scan,
                         precursor_charge,
                         precursor_mz,
                         peptide,
                         peptide_score,
                         aa_scores,
-                        file_name[0],
+                        file_name,
                     )
                 )
 
@@ -1162,7 +1162,7 @@ class DbSpec2Pep(Spec2Pep):
                 batch_aa_scores,
                 psm_batch["peak_file"],
             ):
-                spectrum_id = (file_name[0], scan[0])
+                spectrum_id = (file_name, scan)
                 predictions_all[spectrum_id].append(
                     psm.PepSpecMatch(
                         sequence=peptide,

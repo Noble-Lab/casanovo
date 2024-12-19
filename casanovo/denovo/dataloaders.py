@@ -10,6 +10,7 @@ import lightning.pytorch as pl
 import numpy as np
 import pyarrow as pa
 import torch
+import torch.utils.data._utils.collate
 from depthcharge.data import (
     AnnotatedSpectrumDataset,
     CustomField,
@@ -253,7 +254,6 @@ class DeNovoDataModule(pl.LightningDataModule):
     def _make_loader(
         self,
         dataset: torch.utils.data.Dataset,
-        batch_size: int,
         shuffle: bool = False,
     ) -> torch.utils.data.DataLoader:
         """
@@ -263,8 +263,6 @@ class DeNovoDataModule(pl.LightningDataModule):
         ----------
         dataset : torch.utils.data.Dataset
             A PyTorch Dataset.
-        batch_size : int
-            The batch size to use.
         shuffle : bool
             Option to shuffle the batches.
 
@@ -275,7 +273,7 @@ class DeNovoDataModule(pl.LightningDataModule):
         """
         return DataLoader(
             dataset,
-            batch_size=batch_size,
+            batch_size=None,
             pin_memory=True,
             num_workers=self.n_workers,
             shuffle=shuffle,
@@ -283,25 +281,23 @@ class DeNovoDataModule(pl.LightningDataModule):
 
     def train_dataloader(self) -> torch.utils.data.DataLoader:
         """Get the training DataLoader."""
-        return self._make_loader(
-            self.train_dataset, self.train_batch_size, shuffle=self.shuffle
-        )
+        return self._make_loader(self.train_dataset, shuffle=self.shuffle)
 
     def val_dataloader(self) -> torch.utils.data.DataLoader:
         """Get the validation DataLoader."""
-        return self._make_loader(self.valid_dataset, self.eval_batch_size)
+        return self._make_loader(self.valid_dataset)
 
     def test_dataloader(self) -> torch.utils.data.DataLoader:
         """Get the test DataLoader."""
-        return self._make_loader(self.test_dataset, self.eval_batch_size)
+        return self._make_loader(self.test_dataset)
 
     def predict_dataloader(self) -> torch.utils.data.DataLoader:
         """Get the predict DataLoader."""
-        return self._make_loader(self.test_dataset, self.eval_batch_size)
+        return self._make_loader(self.test_dataset)
 
     def db_dataloader(self) -> torch.utils.data.DataLoader:
         """Get a special dataloader for DB search."""
-        return self._make_loader(self.test_dataset, self.eval_batch_size)
+        return self._make_loader(self.test_dataset)
 
 
 def scale_to_unit_norm(spectrum):

@@ -221,7 +221,7 @@ class ModelRunner:
             for peak_file, scan_id, curr_seq_true in zip(
                 batch["peak_file"],
                 batch["scan_id"],
-                self.model.tokenizer.detokenize(batch["seq"][0]),
+                self.model.tokenizer.detokenize(batch["seq"]),
             ):
                 spectrum_id_true = (peak_file, scan_id)
                 seq_true.append(curr_seq_true)
