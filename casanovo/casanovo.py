@@ -6,6 +6,7 @@ import logging
 import os
 import re
 import shutil
+import socket
 import sys
 import warnings
 from pathlib import Path
@@ -125,6 +126,7 @@ def main() -> None:
     nargs=-1,
     type=click.Path(exists=True, dir_okay=False),
 )
+
 def sequence(
     peak_path: Tuple[str],
     model: Optional[str],
@@ -138,6 +140,14 @@ def sequence(
     to sequence peptides.
     """
     output = setup_logging(output, verbosity)
+    
+    # Log important metadata at the start
+    hostname = socket.gethostname()
+    full_command = " ".join(sys.argv)
+    logger.info("Starting sequencing run...")
+    logger.info("Hostname: %s", hostname)
+    logger.info("Full command: %s", full_command)
+    
     config, model = setup_model(model, config, output, False)
     with ModelRunner(config, model) as runner:
         logger.info("Sequencing peptides from:")
@@ -208,10 +218,18 @@ def train(
 ) -> None:
     """Train a Casanovo model on your own data.
 
-    TRAIN_PEAK_PATH must be one or more annoated MGF files, such as those
-    provided by MassIVE-KB, from which to train a new Casnovo model.
+    TRAIN_PEAK_PATH must be one or more annotated MGF files, such as those
+    provided by MassIVE-KB, from which to train a new Casanovo model.
     """
     output = setup_logging(output, verbosity)
+    
+    # Log important metadata at the start
+    hostname = socket.gethostname()
+    full_command = " ".join(sys.argv)
+    logger.info("Starting training run...")
+    logger.info("Hostname: %s", hostname)
+    logger.info("Full command: %s", full_command)
+    
     config, model = setup_model(model, config, output, True)
     with ModelRunner(config, model) as runner:
         logger.info("Training a model from:")
