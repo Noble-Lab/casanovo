@@ -218,6 +218,57 @@ class ModelRunner:
             self.loaders.val_dataloader(),
         )
 
+    def dump_psms(
+        self,
+        seq_pred: List[List[int] | None],
+        seq_true: List[List[int] | None],
+        pred_conf: List[float],
+    ) -> None:
+        """
+        Save predicted and true psms to CSV file
+
+        Parameters
+        ----------
+        seq_pred : List[List[int] | None]
+            A list of predicted sequences represented as a list of tokens
+        seq_true : List[List[int] | None]
+            A list of ground truth sequences represented as a list of tokens
+        pred_conf : List[float]
+            A list of prediction confidence scores (database search scores)
+            for each psm
+        """
+
+        def detokenize_helper(sequence: List[List[int] | None]) -> List[str]:
+            return [
+                (
+                    ""
+                    if seq is None
+                    else "".join(
+                        self.model.tokenizer.detokenize([seq], join=False)[0]
+                    )
+                )
+                for seq in sequence
+            ]
+
+        seq_pred = detokenize_helper(seq_pred)
+        seq_true = detokenize_helper(seq_true)
+        file_prefix = (
+            "" if self.output_rootname is None else self.output_rootname + "."
+        )
+        with open(
+            self.output_dir / (file_prefix + "psms.csv"), mode="w", newline=""
+        ) as file:
+            writer = csv.writer(file)
+            writer.writerow(
+                [
+                    "Ground Truth Peptide",
+                    "Predicted Peptide",
+                    "Prediction Confidence",
+                ]
+            )
+            for true_seq, pred_seq, conf in zip(seq_true, seq_pred, pred_conf):
+                writer.writerow([true_seq, pred_seq, conf])
+
     def log_metrics(self, test_dataloader: DataLoader) -> None:
         """Log peptide precision and amino acid precision
 
@@ -280,18 +331,7 @@ class ModelRunner:
         logger.info("Peptide Precision: %.2f%%", 100 * pep_precision)
         logger.info("Amino Acid Precision: %.2f%%", 100 * aa_precision)
         logger.info("Amino Acid Recall: %.2f%%", 100 * aa_recall)
-
-        with open(self.output_dir / "psms.csv", mode="w", newline="") as file:
-            writer = csv.writer(file)
-            writer.writerow(
-                [
-                    "Ground Truth Peptide",
-                    "Predicted Peptide",
-                    "Prediction Confidence",
-                ]
-            )
-            for true_seq, pred_seq, conf in zip(seq_true, seq_pred, pred_conf):
-                writer.writerow([true_seq, pred_seq, conf])
+        self.dump_psms(seq_pred, seq_true, pred_conf)
 
     def predict(
         self,
