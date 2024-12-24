@@ -8,9 +8,9 @@ from spectrum_utils.utils import mass_diff
 
 
 def aa_match_prefix(
-    peptide1: List[str],
-    peptide2: List[str],
-    aa_dict: Dict[str, float],
+    peptide1: List[List[int]],
+    peptide2: List[List[int]],
+    aa_dict: Dict[int, float],
     cum_mass_threshold: float = 0.5,
     ind_mass_threshold: float = 0.1,
 ) -> Tuple[np.ndarray, bool]:
@@ -64,9 +64,9 @@ def aa_match_prefix(
 
 
 def aa_match_prefix_suffix(
-    peptide1: List[str],
-    peptide2: List[str],
-    aa_dict: Dict[str, float],
+    peptide1: List[List[int]],
+    peptide2: List[List[int]],
+    aa_dict: Dict[int, float],
     cum_mass_threshold: float = 0.5,
     ind_mass_threshold: float = 0.1,
 ) -> Tuple[np.ndarray, bool]:
@@ -127,9 +127,9 @@ def aa_match_prefix_suffix(
 
 
 def aa_match(
-    peptide1: List[str] | None,
-    peptide2: List[str] | None,
-    aa_dict: Dict[str, float],
+    peptide1: List[List[int]] | None,
+    peptide2: List[List[int]] | None,
+    aa_dict: Dict[int, float],
     cum_mass_threshold: float = 0.5,
     ind_mass_threshold: float = 0.1,
     mode: str = "best",
