@@ -221,25 +221,33 @@ class ModelRunner:
             for peak_file, scan_id, curr_seq_true in zip(
                 batch["peak_file"],
                 batch["scan_id"],
-                self.model.tokenizer.detokenize(batch["seq"]),
+                batch["seq"],
             ):
                 spectrum_id_true = (peak_file, scan_id)
-                seq_true.append(curr_seq_true)
+                seq_true.append(curr_seq_true.tolist())
                 if (
                     pred_idx < len(self.writer.psms)
                     and self.writer.psms[pred_idx].spectrum_id
                     == spectrum_id_true
                 ):
-                    seq_pred.append(self.writer.psms[pred_idx].sequence)
+                    next_pred_tokens = self.model.tokenizer.tokenize(
+                        self.writer.psms[pred_idx].sequence
+                    ).squeeze(0)
+                    seq_pred.append(next_pred_tokens.tolist())
                     pred_idx += 1
                 else:
                     seq_pred.append(None)
 
+        residue_dict = {
+            pep_idx: self.model.tokenizer.residues[pep_str]
+            for pep_str, pep_idx in self.model.tokenizer.index.items()
+            if pep_str in self.model.tokenizer.residues
+        }
         aa_precision, aa_recall, pep_precision = aa_match_metrics(
             *aa_match_batch(
                 seq_true,
                 seq_pred,
-                self.model.tokenizer.residues,
+                residue_dict,
             )
         )
 
