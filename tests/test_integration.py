@@ -189,6 +189,9 @@ def test_train_and_run(
     assert psms.loc[2, "sequence"] == "PEPTLDEK"
     assert psms.loc[2, "spectra_ref"] == "ms_run[1]:index=1"
 
+    psms_file = (tmp_path / output_rootname).with_suffix(".psms.csv")
+    assert psms_file.is_file()
+
     # Validate mztab output
     validate_args = [
         "java",

@@ -1,6 +1,7 @@
 """Training and testing functionality for the de novo peptide sequencing
 model."""
 
+import csv
 import glob
 import logging
 import os
@@ -200,6 +201,34 @@ class ModelRunner:
             self.loaders.val_dataloader(),
         )
 
+    def dump_psms(
+        self,
+        seq_pred: List[str],
+        seq_true: List[str],
+        pred_conf: List[str],
+    ) -> None:
+        """ "Save predicted and true psms to CSV file"""
+        if self.output_dir is None:
+            logger.warning("Output dir not set, skipping PSM dump.")
+            return
+
+        file_prefix = (
+            "" if self.output_rootname is None else self.output_rootname + "."
+        )
+        with open(
+            self.output_dir / (file_prefix + "psms.csv"), mode="w", newline=""
+        ) as file:
+            writer = csv.writer(file)
+            writer.writerow(
+                [
+                    "Ground Truth Peptide",
+                    "Predicted Peptide",
+                    "Prediction Confidence",
+                ]
+            )
+            for true_seq, pred_seq, conf in zip(seq_true, seq_pred, pred_conf):
+                writer.writerow([true_seq, pred_seq, conf])
+
     def log_metrics(self, test_index: AnnotatedSpectrumIndex) -> None:
         """Log peptide precision and amino acid precision.
 
@@ -214,6 +243,7 @@ class ModelRunner:
         """
         seq_pred = []
         seq_true = []
+        pred_conf = []
         pred_idx = 0
 
         with test_index as t_ind:
@@ -223,9 +253,11 @@ class ModelRunner:
                     pred_idx
                 ].spectrum_id == t_ind.get_spectrum_id(true_idx):
                     seq_pred.append(self.writer.psms[pred_idx].sequence)
+                    pred_conf.append(self.writer.psms[pred_idx].peptide_score)
                     pred_idx += 1
                 else:
                     seq_pred.append(None)
+                    pred_conf.append(-1.0)
 
         aa_precision, aa_recall, pep_precision = aa_match_metrics(
             *aa_match_batch(
@@ -245,6 +277,7 @@ class ModelRunner:
         logger.info("Peptide Precision: %.2f%%", 100 * pep_precision)
         logger.info("Amino Acid Precision: %.2f%%", 100 * aa_precision)
         logger.info("Amino Acid Recall: %.2f%%", 100 * aa_recall)
+        self.dump_psms(seq_pred, seq_true, pred_conf)
 
     def predict(
         self,
