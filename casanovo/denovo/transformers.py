@@ -1,7 +1,10 @@
 """Transformer encoder and decoder for the de novo sequencing task."""
 
 from collections.abc import Callable
+from typing import Dict, Iterable, List
 
+import depthcharge.tokenizers.peptides
+import depthcharge.utils
 import torch
 from depthcharge.encoders import FloatEncoder, PeakEncoder, PositionalEncoder
 from depthcharge.tokenizers import Tokenizer
@@ -176,3 +179,68 @@ class SpectrumEncoder(SpectrumTransformerEncoder):
 
         """
         return self.latent_spectrum.squeeze(0).expand(mz_array.shape[0], -1)
+
+
+class ChimeraTokenizer(depthcharge.tokenizers.peptides.PeptideTokenizer):
+    def __init__(
+        self,
+        residues: Dict[str, float] | None = None,
+        replace_isoleucine_with_leucine: bool = False,
+        reverse: bool = False,
+        start_token: str | None = None,
+        stop_token: str | None = "$",
+        chimeric_separator_token: str = ":",
+    ) -> None:
+        self.chimeric_separator_token = chimeric_separator_token
+        residues[chimeric_separator_token] = 0.0
+        super().__init__(
+            residues=residues,
+            replace_isoleucine_with_leucine=replace_isoleucine_with_leucine,
+            reverse=reverse,
+            start_token=start_token,
+            stop_token=stop_token,
+        )
+
+    def compliment(
+        self,
+        sequences: Iterable[str] | str,
+    ) -> Iterable[str]:
+        """Get compliment sequences"""
+        compliment_sequences = []
+        for seq in depthcharge.utils.listify(sequences):
+            peptides = seq.split(self.chimeric_separator_token)
+            compliment = self.chimeric_separator_token.join(peptides[::-1])
+            compliment_sequences.append(compliment)
+
+        return compliment_sequences
+
+    def tokenize_compliment(
+        self,
+        sequences: Iterable[str] | str,
+        add_start: bool = False,
+        add_stop: bool = False,
+        to_strings: bool = False,
+    ) -> torch.tensor | List[List[str]]:
+        """Tokenize compliment sequences"""
+        return self.tokenize(
+            self.compliment(sequences),
+            add_start=add_start,
+            add_stop=add_stop,
+            to_strings=to_strings,
+        )
+
+    def split(self, sequence: str) -> list[str]:
+        """Split chimera peptide sequence"""
+        peptides = sequence.split(self.chimeric_separator_token)
+        if len(peptides) in [1, 2]:
+            split = super().split(peptides[0])
+            if len(peptides) == 2:
+                split += [self.chimeric_separator_token]
+                split += peptides[1]
+        else:
+            raise ValueError(
+                f"Sequence {sequence} contains more than chimeric separator,"
+                " sequences can contain at most two chimeric separators."
+            )
+
+        return split

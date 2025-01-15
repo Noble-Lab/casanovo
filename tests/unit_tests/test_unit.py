@@ -37,6 +37,7 @@ from casanovo.denovo.model import (
     _aa_pep_score,
     _calc_match_score,
 )
+from casanovo.denovo.transformers import ChimeraTokenizer
 
 
 def test_version():
@@ -1904,3 +1905,18 @@ def test_setup_output(tmp_path, monkeypatch):
 
         assert output_path.resolve() == target_path.resolve()
         assert output_root == "bar"
+
+
+def test_chimera_tokenizer(tiny_config):
+    """Test Chimeric tokenizer"""
+    config = casanovo.Config(tiny_config)
+    tokenizer = ChimeraTokenizer(residues=config.residues)
+    seqs = ["PEP:EPE", "PEPTEDE"]
+    assert tokenizer.compliment(seqs) == ["EPE:PEP", "PEPTEDE"]
+
+    tokens = tokenizer.tokenize(seqs, to_strings=True)
+    assert tokens == [list(seq) for seq in seqs]
+
+    seqs = ["p:e:p"]
+    with pytest.raises(ValueError):
+        tokenizer.tokenize(seqs, to_strings=True)
