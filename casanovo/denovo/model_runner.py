@@ -27,6 +27,7 @@ from ..data import db_utils, ms_io
 from ..denovo.dataloaders import DeNovoDataModule
 from ..denovo.evaluate import aa_match_batch, aa_match_metrics
 from ..denovo.model import DbSpec2Pep, Spec2Pep
+from .transformers import ChimeraTokenizer, MskbChimeraTokenizer
 
 logger = logging.getLogger("casanovo")
 
@@ -633,9 +634,9 @@ class ModelRunner:
     ) -> None:
         """Initialize the peptide tokenizer"""
         if self.config.mskb_tokenizer:
-            tokenizer_cs = MskbPeptideTokenizer
+            tokenizer_cs = MskbChimeraTokenizer
         else:
-            tokenizer_cs = PeptideTokenizer
+            tokenizer_cs = ChimeraTokenizer
 
         self.tokenizer = tokenizer_cs(
             residues=self.config.residues,

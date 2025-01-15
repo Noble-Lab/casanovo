@@ -207,7 +207,7 @@ def test_save_final_model(tmp_path, mgf_small, tiny_config):
     # Test checkpoint saving when val_check_interval is greater than training steps
     config = Config(tiny_config)
     config.val_check_interval = 50
-    model_file = tmp_path / "epoch=19-step=20.ckpt"
+    model_file = tmp_path / "epoch=24-step=25.ckpt"
     with ModelRunner(config, output_dir=tmp_path) as runner:
         runner.train([mgf_small], [mgf_small])
 
@@ -224,7 +224,7 @@ def test_save_final_model(tmp_path, mgf_small, tiny_config):
     # Test checkpoint saving when val_check_interval is not a factor of training steps
     config.val_check_interval = 15
     validation_file = tmp_path / "foobar.best.ckpt"
-    model_file = tmp_path / "foobar.epoch=19-step=20.ckpt"
+    model_file = tmp_path / "foobar.epoch=24-step=25.ckpt"
     with ModelRunner(
         config, output_dir=tmp_path, output_rootname="foobar"
     ) as runner:

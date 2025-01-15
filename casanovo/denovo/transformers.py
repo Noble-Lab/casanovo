@@ -3,6 +3,7 @@
 from collections.abc import Callable
 from typing import Dict, Iterable, List
 
+import depthcharge.primitives
 import depthcharge.tokenizers.peptides
 import depthcharge.utils
 import torch
@@ -192,7 +193,9 @@ class ChimeraTokenizer(depthcharge.tokenizers.peptides.PeptideTokenizer):
         chimeric_separator_token: str = ":",
     ) -> None:
         self.chimeric_separator_token = chimeric_separator_token
+        residues = dict() if residues is None else residues
         residues[chimeric_separator_token] = 0.0
+
         super().__init__(
             residues=residues,
             replace_isoleucine_with_leucine=replace_isoleucine_with_leucine,
@@ -240,7 +243,11 @@ class ChimeraTokenizer(depthcharge.tokenizers.peptides.PeptideTokenizer):
         else:
             raise ValueError(
                 f"Sequence {sequence} contains more than chimeric separator,"
-                " sequences can contain at most two chimeric separators."
+                " sequences can contain at most one chimeric separators."
             )
 
         return split
+
+
+class MskbChimeraTokenizer(ChimeraTokenizer):
+    _parse_peptide = depthcharge.primitives.Peptide.from_massivekb
