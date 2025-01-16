@@ -767,8 +767,11 @@ class Spec2Pep(pl.LightningModule):
         # spectra = torch.stack([mzs, ints], dim=2)
 
         seqs = batch["seq"] if "seq" in batch else None
+        seq_comp = (
+            batch["seq_compliment"] if "seq_compliment" in batch else None
+        )
 
-        return mzs, ints, precursors, seqs
+        return mzs, ints, precursors, seqs, seq_comp
 
     def _forward_step(
         self,
@@ -792,7 +795,7 @@ class Spec2Pep(pl.LightningModule):
         tokens : torch.Tensor of shape (n_spectra, length)
             The predicted tokens for each spectrum.
         """
-        mzs, ints, precursors, tokens = self._process_batch(batch)
+        mzs, ints, precursors, tokens, tokens_comp = self._process_batch(batch)
         memories, mem_masks = self.encoder(mzs, ints)
         decoded = self.decoder(
             tokens=tokens,
