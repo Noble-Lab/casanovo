@@ -145,9 +145,13 @@ class Spec2Pep(pl.LightningModule):
         self.softmax = torch.nn.Softmax(2)
         ignore_index = 0
         self.celoss = torch.nn.CrossEntropyLoss(
-            ignore_index=ignore_index, label_smoothing=train_label_smoothing
+            ignore_index=ignore_index,
+            label_smoothing=train_label_smoothing,
+            reduce=False,
         )
-        self.val_celoss = torch.nn.CrossEntropyLoss(ignore_index=ignore_index)
+        self.val_celoss = torch.nn.CrossEntropyLoss(
+            ignore_index=ignore_index, reduce=False
+        )
         # Optimizer settings.
         self.warmup_iters = warmup_iters
         self.cosine_schedule_period_iters = cosine_schedule_period_iters
@@ -213,7 +217,7 @@ class Spec2Pep(pl.LightningModule):
             score, the amino acid scores, and the predicted peptide
             sequence.
         """
-        mzs, ints, precursors, _ = self._process_batch(batch)
+        mzs, ints, precursors, _, _ = self._process_batch(batch)
         return self.beam_search_decode(mzs, ints, precursors)
 
     def beam_search_decode(
@@ -803,7 +807,20 @@ class Spec2Pep(pl.LightningModule):
             memory_key_padding_mask=mem_masks,
             precursors=precursors,
         )
-        return decoded, tokens
+
+        # FIXME: No compliment tokens in DB search mode
+        if tokens_comp is not None:
+            decoded_comp = self.decoder(
+                tokens=tokens_comp,
+                memory=memories,
+                memory_key_padding_mask=mem_masks,
+                precursors=precursors,
+            )
+        else:
+            tokens_comp = tokens
+            decoded_comp = decoded
+
+        return decoded, tokens, decoded_comp, tokens_comp
 
     def training_step(
         self,
@@ -829,13 +846,17 @@ class Spec2Pep(pl.LightningModule):
         torch.Tensor
             The loss of the training step.
         """
-        pred, truth = self._forward_step(batch)
+        pred, truth, pred_comp, truth_comp = self._forward_step(batch)
         pred = pred[:, :-1, :].reshape(-1, self.vocab_size)
+        pred_comp = pred_comp[:, :-1, :].reshape(-1, self.vocab_size)
 
-        if mode == "train":
-            loss = self.celoss(pred, truth.flatten())
-        else:
-            loss = self.val_celoss(pred, truth.flatten())
+        loss_fun = self.celoss if mode == "Train" else self.val_celoss
+        loss_one = loss_fun(pred, truth.flatten()).unsqueeze(-1)
+        loss_two = loss_fun(pred_comp, truth_comp.flatten()).unsqueeze(-1)
+        loss = torch.cat((-loss_one, -loss_two), dim=1)
+        loss = -torch.logsumexp(loss, dim=1)
+        loss = torch.mean(loss)
+
         self.log(
             f"{mode}_CELoss",
             loss.detach(),
@@ -921,7 +942,7 @@ class Spec2Pep(pl.LightningModule):
         predictions: List[ms_io.PepSpecMatch]
             Predicted PSMs for the given batch of spectra.
         """
-        _, _, precursors, _ = self._process_batch(batch)
+        _, _, precursors, _, _ = self._process_batch(batch)
         prec_charges = precursors[:, 1].cpu().detach().numpy()
         prec_mzs = precursors[:, 2].cpu().detach().numpy()
         predictions = []
@@ -1141,7 +1162,7 @@ class DbSpec2Pep(Spec2Pep):
 
         predictions_all = collections.defaultdict(list)
         for psm_batch in self._psm_batches(batch):
-            pred, truth = self._forward_step(psm_batch)
+            pred, truth, _, _ = self._forward_step(psm_batch)
             pred = self.softmax(pred)
             batch_peptide_scores, batch_aa_scores = _calc_match_score(
                 pred,

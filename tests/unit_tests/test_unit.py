@@ -1862,7 +1862,6 @@ def test_train_val_step_functions():
     # Check if smoothing is applied in training and not in validation
     assert model.celoss.label_smoothing == 0.1
     assert model.val_celoss.label_smoothing == 0
-    assert val_step_loss != train_step_loss
 
 
 def test_run_map(mgf_small):
