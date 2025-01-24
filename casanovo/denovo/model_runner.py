@@ -27,7 +27,7 @@ from ..data import db_utils, ms_io
 from ..denovo.dataloaders import DeNovoDataModule
 from ..denovo.evaluate import aa_match_batch, aa_match_metrics
 from ..denovo.model import DbSpec2Pep, Spec2Pep
-from .transformers import ChimeraTokenizer, MskbChimeraTokenizer
+from .chimera import ChimeraTokenizer, MskbChimeraTokenizer
 
 logger = logging.getLogger("casanovo")
 

@@ -22,55 +22,9 @@ from depthcharge.tokenizers import PeptideTokenizer
 from torch.utils.data import DataLoader
 from torch.utils.data.datapipes.iter.combinatorics import ShufflerIterDataPipe
 
-from .transformers import ChimeraTokenizer
+from .chimera import ChimeraTokenizer, ChimeraAnnotatedSpectrumDataset
 
 logger = logging.getLogger("casanovo")
-
-
-class ChimeraAnnotatedSpectrumDataset(AnnotatedSpectrumDataset):
-    """See depthcharge.AnnotatedSpectrumDataset"""
-
-    def __init__(
-        self,
-        spectra: pd.DataFrame | os.PathLike | Iterable[os.PathLike],
-        annotations: str,
-        tokenizer: ChimeraTokenizer,
-        batch_size: int,
-        path: os.PathLike = None,
-        parse_kwargs: Dict | None = None,
-        **kwargs,
-    ):
-        super().__init__(
-            spectra,
-            annotations,
-            tokenizer,
-            batch_size,
-            path,
-            parse_kwargs,
-            **kwargs,
-        )
-
-    def _to_tensor(self, batch):
-        """Convert a record batch to tensor
-
-        see depthcharge.AnnotatedSpectrumDataset._to_tensor
-        """
-        batch = super(AnnotatedSpectrumDataset, self)._to_tensor(batch)
-        batch[
-            self.annotations + "_compliment"
-        ] = self.tokenizer.tokenize_compliment(
-            batch[self.annotations],
-            add_start=self.tokenizer.start_token is not None,
-            add_stop=self.tokenizer.stop_token is not None,
-        )
-
-        batch[self.annotations] = self.tokenizer.tokenize(
-            batch[self.annotations],
-            add_start=self.tokenizer.start_token is not None,
-            add_stop=self.tokenizer.stop_token is not None,
-        )
-
-        return batch
 
 
 class DeNovoDataModule(pl.LightningDataModule):

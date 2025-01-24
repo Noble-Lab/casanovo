@@ -37,7 +37,7 @@ from casanovo.denovo.model import (
     _aa_pep_score,
     _calc_match_score,
 )
-from casanovo.denovo.transformers import ChimeraTokenizer
+from casanovo.denovo.chimera import ChimeraTokenizer
 
 
 def test_version():
