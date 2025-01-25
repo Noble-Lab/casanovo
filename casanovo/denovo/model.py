@@ -13,6 +13,7 @@ import numpy as np
 import torch
 from depthcharge.tokenizers import PeptideTokenizer
 
+from .chimera import ChimeraTokenizer
 from .. import config
 from ..data import ms_io, psm
 from ..denovo.transformers import PeptideDecoder, SpectrumEncoder
@@ -437,6 +438,13 @@ class Spec2Pep(pl.LightningModule):
             # Discard beams that were predicted to end but don't fit the minimum
             # peptide length.
             if finished_beams[i] and peptide_len < self.min_peptide_len:
+                discarded_beams[i] = True
+                continue
+            # Discard beams that contain more than chimeric separator
+            chimeric_separator = self.tokenizer.index[
+                self.tokenizer.chimeric_separator_token
+            ]
+            if (pred_tokens == chimeric_separator).sum() > 1:
                 discarded_beams[i] = True
                 continue
             # Terminate the beam if it has not been finished by the model but

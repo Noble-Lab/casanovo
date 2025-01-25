@@ -1,9 +1,10 @@
 import os
-from typing import Dict, Iterable, List
+from typing import Dict, Iterable, List, Tuple
 
 import depthcharge.utils
 import pandas as pd
 import torch
+from depthcharge.constants import PROTON, H2O
 
 from .dataloaders import AnnotatedSpectrumDataset
 
@@ -73,6 +74,60 @@ class ChimeraTokenizer(depthcharge.tokenizers.peptides.PeptideTokenizer):
             )
 
         return split
+
+    def calculate_precursor_ions(
+        self,
+        tokens: torch.Tensor | Iterable[str],
+        charges: torch.Tensor,
+        give_max_mz: bool = True,
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        """Calculate the m/z for precursor ions.
+
+        Parameters
+        ----------
+        tokens : torch.Tensor of shape (n_sequences, len_seq)
+            The tokens corresponding to the peptide sequence.
+        charges : torch.Tensor of shape (n_sequences,)
+            The charge state for each peptide.
+        give_max_mz : bool (default True)
+            Whether to return the max m/z for each peptide in a chimera, or
+            whether to return both
+
+        Returns
+        -------
+        torch.Tensor.
+            The monoisotopic m/z for each charged peptide. Will be size
+            (n_sequences,) if max_mz is set to true, (n_sequences, 2)
+            otherwise. In the case that give_max is set to true the
+
+        """
+        if isinstance(tokens[0], str):
+            tokens = self.tokenize(depthcharge.utils.listify(tokens))
+
+        if not isinstance(charges, torch.Tensor):
+            charges = torch.tensor(charges)
+            if not charges.shape:
+                charges = charges[None]
+
+        chimera_separator = self.index[self.chimeric_separator_token]
+        masses = self.masses[tokens].cumsum(dim=1)
+        is_separator = tokens == chimera_separator
+        is_chimeric = is_separator.sum(dim=1)
+        if is_chimeric.max().item() > 1:
+            raise ValueError(
+                "Sequences can contain at most one chimeric separator."
+            )
+
+        mass_one = (masses * is_separator).sum(dim=1, keepdim=True)
+        mass_two = masses[:, -1] - mass_one
+        mz_two = (mass_two + H2O) / charges + PROTON
+        mz_one = ((mass_one + H2O) / charges + PROTON) * is_chimeric
+        calc_mz = torch.cat((mz_one, mz_two), dim=1)
+
+        if give_max_mz:
+            calc_mz = calc_mz.max(dim=1).values
+
+        return calc_mz
 
 
 class MskbChimeraTokenizer(ChimeraTokenizer):

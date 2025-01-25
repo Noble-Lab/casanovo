@@ -1328,9 +1328,7 @@ def test_beam_search_decode(tiny_config):
         n_beams=4,
         residues="massivekb",
         min_peptide_len=4,
-        tokenizer=depthcharge.tokenizers.peptides.PeptideTokenizer(
-            residues=config.residues
-        ),
+        tokenizer=ChimeraTokenizer(residues=config.residues),
     )
     model.decoder.reverse = False  # For simplicity.
 
@@ -1505,9 +1503,7 @@ def test_beam_search_decode(tiny_config):
     model = Spec2Pep(
         n_beams=1,
         min_peptide_len=2,
-        tokenizer=depthcharge.tokenizers.peptides.MskbPeptideTokenizer(
-            residues=config.residues
-        ),
+        tokenizer=ChimeraTokenizer(residues=config.residues),
     )
     vocab = len(model.tokenizer) + 1
     beam = model.n_beams  # S
@@ -1582,9 +1578,7 @@ def test_beam_search_decode(tiny_config):
     # Test _finish_beams() for tokens with a negative mass.
     model = Spec2Pep(
         n_beams=2,
-        tokenizer=depthcharge.tokenizers.peptides.MskbPeptideTokenizer(
-            residues=config.residues
-        ),
+        tokenizer=ChimeraTokenizer(residues=config.residues),
     )
     beam = model.n_beams  # S
     step = 1
@@ -1608,9 +1602,7 @@ def test_beam_search_decode(tiny_config):
     model = Spec2Pep(
         n_beams=3,
         min_peptide_len=3,
-        tokenizer=depthcharge.tokenizers.peptides.PeptideTokenizer(
-            residues=config.residues
-        ),
+        tokenizer=ChimeraTokenizer(residues=config.residues),
     )
     beam = model.n_beams  # S
     step = 4
@@ -1644,13 +1636,34 @@ def test_beam_search_decode(tiny_config):
     )
     assert torch.equal(discarded_beams, torch.tensor([False, True, True]))
 
+    # Test that sequences with more than one chimeric seperator are discarded
+    tokens = torch.zeros((3, 6), dtype=torch.int64)
+    sequences = [
+        ["K", "A", "A", "A", "A"],
+        ["K", "A", "A", ":", "A"],
+        ["K", ":", "A", ":", "A"],
+    ]
+
+    for i, seq in enumerate(sequences):
+        tokens[i, : step + 1] = torch.tensor(
+            [model.tokenizer.index[aa] for aa in seq]
+        )
+
+    finished_beams, beam_fits_precursor, discarded_beams = model._finish_beams(
+        tokens, precursors, step
+    )
+
+    assert torch.equal(finished_beams, torch.tensor([False, False, False]))
+    assert torch.equal(
+        beam_fits_precursor, torch.tensor([False, False, False])
+    )
+    assert torch.equal(discarded_beams, torch.tensor([False, False, True]))
+
     # Test _get_topk_beams() with finished beams in the batch.
     model = Spec2Pep(
         n_beams=1,
         min_peptide_len=3,
-        tokenizer=depthcharge.tokenizers.peptides.PeptideTokenizer(
-            residues=config.residues
-        ),
+        tokenizer=ChimeraTokenizer(residues=config.residues),
     )
 
     # Sizes and other variables.
@@ -1692,9 +1705,7 @@ def test_beam_search_decode(tiny_config):
     model = Spec2Pep(
         n_beams=1,
         min_peptide_len=3,
-        tokenizer=depthcharge.tokenizers.peptides.PeptideTokenizer(
-            residues=config.residues
-        ),
+        tokenizer=ChimeraTokenizer(residues=config.residues),
     )
     batch = 2  # B
     beam = model.n_beams  # S
@@ -1919,3 +1930,30 @@ def test_chimera_tokenizer(tiny_config):
     seqs = ["p:e:p"]
     with pytest.raises(ValueError):
         tokenizer.tokenize(seqs, to_strings=True)
+
+    normal_tokenizer = depthcharge.tokenizers.PeptideTokenizer(
+        residues=config.residues
+    )
+    mass_one = normal_tokenizer.calculate_precursor_ions(
+        ["LESLLEK"], torch.Tensor([1.0])
+    )
+    mass_two = tokenizer.calculate_precursor_ions(
+        ["LESLLEK"], torch.Tensor([1.0])
+    )
+    assert mass_one == pytest.approx(mass_two)
+
+    mass_one = normal_tokenizer.calculate_precursor_ions(
+        ["LESLLEK"], torch.Tensor([1.0])
+    )
+    mass_two = tokenizer.calculate_precursor_ions(
+        ["LESLLEK:LESL"], torch.Tensor([1.0])
+    )
+    assert mass_one == pytest.approx(mass_two)
+
+    mass_one = normal_tokenizer.calculate_precursor_ions(
+        ["LESLLEK"], torch.Tensor([1.0])
+    )
+    mass_two = tokenizer.calculate_precursor_ions(
+        ["LESL:LESLLEK"], torch.Tensor([1.0])
+    )
+    assert mass_one == pytest.approx(mass_two)
