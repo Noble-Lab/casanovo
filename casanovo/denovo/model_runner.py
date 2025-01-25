@@ -382,16 +382,18 @@ class ModelRunner:
             running model evaluation. Files that are not an annotated
             peak file format will be ignored if evaluate is set to true.
         """
-        self.writer = ms_io.MztabWriter(results_path)
+        self.initialize_trainer(train=False)
+        self.initialize_tokenizer()
+        self.initialize_model(train=False)
+        self.writer = ms_io.MztabWriter(
+            results_path,
+            chimeric_separator=self.tokenizer.chimeric_separator_token,
+        )
         self.writer.set_metadata(
             self.config,
             model=str(self.model_filename),
             config_filename=self.config.file,
         )
-
-        self.initialize_trainer(train=False)
-        self.initialize_tokenizer()
-        self.initialize_model(train=False)
         self.model.out_writer = self.writer
 
         test_paths = self._get_input_paths(peak_path, False, "test")

@@ -25,7 +25,8 @@ class MztabWriter:
         The name of the mzTab file.
     """
 
-    def __init__(self, filename: str):
+    def __init__(self, filename: str, chimeric_separator: str = ":"):
+        self.chimeric_separator = chimeric_separator
         self.filename = filename
         self.metadata = [
             ("mzTab-version", "1.0.0"),
@@ -189,32 +190,35 @@ class MztabWriter:
                 if Path(filename).suffix == ".mgf" and idx.isnumeric():
                     idx = f"index={idx}"
 
-                writer.writerow(
-                    [
-                        "PSM",
-                        psm.sequence,  # sequence
-                        i,  # PSM_ID
-                        psm.protein,  # accession
-                        "null",  # unique
-                        "null",  # database
-                        "null",  # database_version
-                        f"[MS, MS:1003281, Casanovo, {__version__}]",
-                        psm.peptide_score,  # search_engine_score[1]
-                        # FIXME: Modifications should be specified as
-                        #  controlled vocabulary terms.
-                        "null",  # modifications
-                        # FIXME: Can we get the retention time from the data
-                        #  loader?
-                        "null",  # retention_time
-                        psm.charge,  # charge
-                        psm.exp_mz,  # exp_mass_to_charge
-                        psm.calc_mz,  # calc_mass_to_charge
-                        f"ms_run[{self._run_map[filename]}]:{idx}",
-                        "null",  # pre
-                        "null",  # post
-                        "null",  # start
-                        "null",  # end
-                        # opt_ms_run[1]_aa_scores
-                        ",".join(list(map("{:.5f}".format, psm.aa_scores))),
-                    ]
-                )
+                for curr_seq in psm.sequence.split(self.chimeric_separator):
+                    writer.writerow(
+                        [
+                            "PSM",
+                            curr_seq,  # sequence
+                            i,  # PSM_ID
+                            psm.protein,  # accession
+                            "null",  # unique
+                            "null",  # database
+                            "null",  # database_version
+                            f"[MS, MS:1003281, Casanovo, {__version__}]",
+                            psm.peptide_score,  # search_engine_score[1]
+                            # FIXME: Modifications should be specified as
+                            #  controlled vocabulary terms.
+                            "null",  # modifications
+                            # FIXME: Can we get the retention time from the data
+                            #  loader?
+                            "null",  # retention_time
+                            psm.charge,  # charge
+                            psm.exp_mz,  # exp_mass_to_charge
+                            psm.calc_mz,  # calc_mass_to_charge
+                            f"ms_run[{self._run_map[filename]}]:{idx}",
+                            "null",  # pre
+                            "null",  # post
+                            "null",  # start
+                            "null",  # end
+                            # opt_ms_run[1]_aa_scores
+                            ",".join(
+                                list(map("{:.5f}".format, psm.aa_scores))
+                            ),
+                        ]
+                    )
