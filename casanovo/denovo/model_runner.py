@@ -62,6 +62,9 @@ class ModelRunner:
         output_rootname: Optional[str | None] = None,
         overwrite_ckpt_check: Optional[bool] = True,
     ) -> None:
+        if config.top_match != 1:
+            raise ValueError("Top match must be one in chimera mode.")
+
         """Initialize a ModelRunner"""
         self.config = config
         self.model_filename = model_filename

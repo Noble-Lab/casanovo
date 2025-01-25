@@ -65,6 +65,11 @@ def test_initialize_model(tmp_path, mgf_small):
         runner.initialize_tokenizer()
         runner.initialize_model(train=False)
 
+    # top_match > 1 should raise an exception in chimera mode
+    config.top_match = 2
+    with pytest.raises(ValueError):
+        runner = ModelRunner(config=config, model_filename=str(weights))
+
 
 def test_save_and_load_weights(tmp_path, mgf_small, tiny_config):
     """Test saving and loading weights"""
