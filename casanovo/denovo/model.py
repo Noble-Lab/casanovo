@@ -4,6 +4,7 @@ import collections
 import heapq
 import itertools
 import logging
+import time
 import warnings
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
@@ -18,7 +19,7 @@ from depthcharge.components import ModelMixin, PeptideDecoder, SpectrumEncoder
 
 from . import evaluate
 from .. import config
-from ..data import ms_io
+from ..data import ms_io, psm
 
 logger = logging.getLogger("casanovo")
 
@@ -822,7 +823,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
 
     def predict_step(
         self, batch: Tuple[torch.Tensor, torch.Tensor, torch.Tensor], *args
-    ) -> List[ms_io.PepSpecMatch]:
+    ) -> List[psm.PepSpecMatch]:
         """
         A single prediction step.
 
@@ -834,7 +835,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
 
         Returns
         -------
-        predictions: List[ms_io.PepSpecMatch]
+        predictions: List[psm.PepSpecMatch]
             Predicted PSMs for the given batch of spectra.
         """
         predictions = []
@@ -851,7 +852,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         ):
             for peptide_score, aa_scores, peptide in spectrum_preds:
                 predictions.append(
-                    ms_io.PepSpecMatch(
+                    psm.PepSpecMatch(
                         sequence=peptide,
                         spectrum_id=tuple(spectrum_i),
                         peptide_score=peptide_score,
@@ -861,6 +862,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
                         ),
                         exp_mz=precursor_mz,
                         aa_scores=aa_scores,
+                        sequence_time=time.perf_counter(),
                     )
                 )
 
@@ -901,7 +903,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         self._log_history()
 
     def on_predict_batch_end(
-        self, outputs: List[ms_io.PepSpecMatch], *args
+        self, outputs: List[psm.PepSpecMatch], *args
     ) -> None:
         """
         Write the predicted peptide sequences and amino acid scores to
@@ -1000,7 +1002,7 @@ class DbSpec2Pep(Spec2Pep):
         self,
         batch: Tuple[torch.Tensor, torch.Tensor, np.ndarray, np.ndarray],
         *args,
-    ) -> List[ms_io.PepSpecMatch]:
+    ) -> List[psm.PepSpecMatch]:
         """
         A single prediction step.
 
@@ -1012,7 +1014,7 @@ class DbSpec2Pep(Spec2Pep):
 
         Returns
         -------
-        predictions: List[ms_io.PepSpecMatch]
+        predictions: List[psm.PepSpecMatch]
             Predicted PSMs for the given batch of spectra.
         """
         predictions_all = collections.defaultdict(list)
@@ -1044,7 +1046,7 @@ class DbSpec2Pep(Spec2Pep):
             ):
                 spectrum_i = tuple(spectrum_i)
                 predictions_all[spectrum_i].append(
-                    ms_io.PepSpecMatch(
+                    psm.PepSpecMatch(
                         sequence=peptide,
                         spectrum_id=spectrum_i,
                         peptide_score=peptide_score,

@@ -1,7 +1,7 @@
 """Peptide spectrum match dataclass."""
 
 import dataclasses
-from typing import Tuple, Iterable
+from typing import Optional, Tuple, Iterable
 
 
 @dataclasses.dataclass
@@ -31,6 +31,8 @@ class PepSpecMatch:
     aa_scores : Iterable[float]
         A list of scores for individual amino acids in the peptide
         sequence, where len(aa_scores) == len(sequence).
+    sequence_time : Optional[float], default=None
+        System time in seconds at inference completion
     protein : str
         Protein associated with the peptide sequence (for db mode).
     """
@@ -42,4 +44,5 @@ class PepSpecMatch:
     calc_mz: float
     exp_mz: float
     aa_scores: Iterable[float]
+    sequence_time: Optional[float] = None
     protein: str = "null"

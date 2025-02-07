@@ -5,6 +5,7 @@ import glob
 import logging
 import os
 import tempfile
+import time
 import uuid
 import warnings
 from pathlib import Path
@@ -73,6 +74,7 @@ class ModelRunner:
         self.model = None
         self.loaders = None
         self.writer = None
+        self.sequence_start_time = None
 
         if output_dir is None:
             self.callbacks = []
@@ -285,6 +287,7 @@ class ModelRunner:
         self.writer.set_ms_run(test_index.ms_files)
         self.initialize_data_module(test_index=test_index)
         self.loaders.setup(stage="test", annotated=False)
+        self.sequence_start_time = time.perf_counter()
         self.trainer.predict(self.model, self.loaders.test_dataloader())
 
         if evaluate:

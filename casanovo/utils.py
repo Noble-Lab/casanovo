@@ -161,6 +161,30 @@ def get_report_dict(
     }
 
 
+def log_intro_report(start_time: Optional[float] = None) -> None:
+    """
+    log start of run report
+
+    parameters
+    ----------
+    start_time : Optional[float], default=None
+        The start time of the sequencing run in seconds since the epoch.
+    """
+    if start_time is not None:
+        start_datetime = datetime.fromtimestamp(start_time)
+        logger.info(
+            "Run Start Time: %s",
+            start_datetime.strftime("%y/%m/%d %H:%M:%S"),
+        )
+
+        logger.info("Executing Command: %s", " ".join(sys.argv))
+        logger.info("Executing on Host Machine: %s", socket.gethostname())
+
+    if torch.cuda.is_available():
+        gpu_name = torch.cuda.get_device_name()
+        logger.info("Executing on GPU: %s", gpu_name)
+
+
 def log_run_report(
     start_time: Optional[float] = None, end_time: Optional[float] = None
 ) -> None:
@@ -174,22 +198,16 @@ def log_run_report(
     end_time : Optional[float], default=None
         The end time of the sequencing run in seconds since the epoch.
     """
-    logger.info("======= End of Run Report =======")
-    if start_time is not None and end_time is not None:
-        start_datetime = datetime.fromtimestamp(start_time)
+    if end_time is not None:
         end_datetime = datetime.fromtimestamp(end_time)
-        delta_datetime = end_datetime - start_datetime
-        logger.info(
-            "Run Start Time: %s",
-            start_datetime.strftime("%y/%m/%d %H:%M:%S"),
-        )
         logger.info(
             "Run End Time: %s", end_datetime.strftime("%y/%m/%d %H:%M:%S")
         )
-        logger.info("Time Elapsed: %s", delta_datetime)
 
-    logger.info("Executed Command: %s", " ".join(sys.argv))
-    logger.info("Executed on Host Machine: %s", socket.gethostname())
+        if start_time is not None:
+            start_datetime = datetime.fromtimestamp(start_time)
+            delta_datetime = end_datetime - start_datetime
+            logger.info("Time Elapsed: %s", delta_datetime)
 
     if torch.cuda.is_available():
         gpu_util = torch.cuda.max_memory_allocated()
@@ -199,6 +217,7 @@ def log_run_report(
 def log_annotate_report(
     predictions: List[PepSpecMatch],
     start_time: Optional[float] = None,
+    sequence_start_time: Optional[float] = None,
     end_time: Optional[float] = None,
     score_bins: Iterable[float] = SCORE_BINS,
 ) -> None:
@@ -211,6 +230,8 @@ def log_annotate_report(
         PSM predictions.
     start_time : Optional[float], default=None
         The start time of the sequencing run in seconds since the epoch.
+    sequence_start_time : Optional[float], default=None
+        The inference start time in seconds since the epoch.
     end_time : Optional[float], default=None
         The end time of the sequencing run in seconds since the epoch.
     score_bins: Iterable[float], Optional
@@ -253,6 +274,32 @@ def log_annotate_report(
         logger.info(
             "Median Peptide Length: %d", run_report["median_sequence_length"]
         )
+
+        sequence_end_time = predictions[-1].sequence_time
+        if sequence_start_time is not None and sequence_end_time is not None:
+            sequence_start_time = datetime.fromtimestamp(sequence_start_time)
+            sequence_end_time = datetime.fromtimestamp(sequence_end_time)
+            sequence_time_elapsed = sequence_end_time - sequence_start_time
+
+            if start_time is not None:
+                start_time = datetime.fromtimestamp(start_time)
+                setup_time = sequence_start_time - start_time
+
+                logger.info("Setup Time Elapsed: %s", setup_time)
+
+            logger.info(
+                "Sequencing Start Time: %s",
+                sequence_start_time.strftime("%y/%m/%d %H:%M:%S"),
+            )
+            logger.info(
+                "Sequencing End Time: %s",
+                sequence_end_time.strftime("%y/%m/%d %H:%M:%S"),
+            )
+            logger.info("Sequencing Time Elapsed: %s", sequence_time_elapsed)
+            logger.info(
+                "Spectra Sequenced Per Second: %.4f spectra/s",
+                len(predictions) / sequence_time_elapsed.total_seconds(),
+            )
 
 
 def check_dir_file_exists(

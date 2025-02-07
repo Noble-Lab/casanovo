@@ -181,7 +181,8 @@ def sequence(
     config, model = setup_model(
         model, config, output_path, output_root_name, False
     )
-    start_time = time.time()
+    start_time = time.perf_counter()
+    utils.log_intro_report(start_time=start_time)
     with ModelRunner(
         config,
         model,
@@ -202,7 +203,10 @@ def sequence(
             evaluate=evaluate,
         )
         utils.log_annotate_report(
-            runner.writer.psms, start_time=start_time, end_time=time.time()
+            runner.writer.psms,
+            start_time=start_time,
+            sequence_start_time=runner.sequence_start_time,
+            end_time=time.perf_counter(),
         )
 
 
@@ -241,7 +245,8 @@ def db_search(
     config, model = setup_model(
         model, config, output_path, output_root_name, False
     )
-    start_time = time.time()
+    start_time = time.perf_counter()
+    utils.log_intro_report(start_time=start_time)
     with ModelRunner(
         config,
         model,
@@ -262,7 +267,9 @@ def db_search(
             str((output_path / output_root_name).with_suffix(".mztab")),
         )
         utils.log_annotate_report(
-            runner.writer.psms, start_time=start_time, end_time=time.time()
+            runner.writer.psms,
+            start_time=start_time,
+            end_time=time.perf_counter(),
         )
 
 
@@ -306,7 +313,8 @@ def train(
     config, model = setup_model(
         model, config, output_path, output_root_name, True
     )
-    start_time = time.time()
+    start_time = time.perf_counter()
+    utils.log_intro_report(start_time=start_time)
     with ModelRunner(
         config,
         model,
@@ -326,7 +334,9 @@ def train(
             logger.info("  %s", peak_file)
 
         runner.train(train_peak_path, validation_peak_path)
-        utils.log_run_report(start_time=start_time, end_time=time.time())
+        utils.log_run_report(
+            start_time=start_time, end_time=time.perf_counter()
+        )
 
 
 @main.command()
