@@ -844,11 +844,13 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
             precursor_mz,
             spectrum_i,
             spectrum_preds,
+            batch_time,
         ) in zip(
             batch[1][:, 1].cpu().detach().numpy(),
             batch[1][:, 2].cpu().detach().numpy(),
             batch[2],
             self.forward(batch[0], batch[1]),
+            itertools.repeat(time.perf_counter()),
         ):
             for peptide_score, aa_scores, peptide in spectrum_preds:
                 predictions.append(
@@ -862,7 +864,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
                         ),
                         exp_mz=precursor_mz,
                         aa_scores=aa_scores,
-                        sequence_time=time.perf_counter(),
+                        sequence_time=batch_time,
                     )
                 )
 

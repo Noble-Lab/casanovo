@@ -44,7 +44,6 @@ class MztabWriter:
         ]
         self._run_map = {}
         self.psms: List[PepSpecMatch] = []
-        self.start_time = None
 
     def set_metadata(self, config: Config, **kwargs) -> None:
         """
