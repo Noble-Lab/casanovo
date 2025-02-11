@@ -92,7 +92,7 @@ def test_save_and_load_weights(tmp_path, mgf_small, tiny_config):
     assert "meta tensor; no data!" in str(err.value)
 
     # Try without arch:
-    ckpt_data = torch.load(ckpt)
+    ckpt_data = torch.load(ckpt, weights_only=False)
     del ckpt_data["hyper_parameters"]
     torch.save(ckpt_data, ckpt)
 
@@ -118,7 +118,7 @@ def test_save_and_load_weights_deprecated(tmp_path, mgf_small, tiny_config):
         runner.trainer.save_checkpoint(ckpt)
 
     # Replace the new config option with the deprecated one.
-    ckpt_data = torch.load(ckpt)
+    ckpt_data = torch.load(ckpt, weights_only=False)
     ckpt_data["hyper_parameters"]["max_iters"] = 5
     del ckpt_data["hyper_parameters"]["cosine_schedule_period_iters"]
     torch.save(ckpt_data, str(ckpt))
