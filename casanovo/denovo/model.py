@@ -452,7 +452,7 @@ class Spec2Pep(pl.LightningModule):
             # cannot be corrected anymore by a subsequently predicted AA with
             # negative mass.
             precursor_charge = precursors[i, 1]
-            precursor_mz = precursors[i, 2]
+            precursor_mz = precursors[i, 0]
             matches_precursor_mz = exceeds_precursor_mz = False
 
             # Send tokenizer masses to correct device for calculate_precursor_ions()
@@ -768,11 +768,11 @@ class Spec2Pep(pl.LightningModule):
             except:
                 continue
 
-        precursor_mzs = batch["precursor_mz"]
-        precursor_charges = batch["precursor_charge"]
-        precursor_masses = (precursor_mzs - 1.007276) * precursor_charges
+        precursor_masses = batch["precursor_mass"]
+        precursor_charges_one = batch["precursor_charge_one"]
+        precursor_charges_two = batch["precursor_charge_two"]
         precursors = torch.vstack(
-            [precursor_masses, precursor_charges, precursor_mzs]
+            [precursor_masses, precursor_charges_one, precursor_charges_two]
         ).T  # .float()
 
         mzs, ints = batch["mz_array"], batch["intensity_array"]

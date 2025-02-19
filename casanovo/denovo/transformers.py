@@ -67,7 +67,7 @@ class PeptideDecoder(AnalyteTransformerDecoder):
             padding_int=padding_int,
         )
 
-        self.charge_encoder = torch.nn.Embedding(max_charge, d_model)
+        self.charge_encoder = torch.nn.Embedding(max_charge + 1, d_model)
         self.mass_encoder = FloatEncoder(d_model)
 
         # override final layer:
@@ -106,8 +106,9 @@ class PeptideDecoder(AnalyteTransformerDecoder):
 
         """
         masses = self.mass_encoder(precursors[:, None, 0]).squeeze(1)
-        charges = self.charge_encoder(precursors[:, 1].int() - 1)
-        precursors = masses + charges
+        charges_one = self.charge_encoder(precursors[:, 1].int())
+        charges_two = self.charge_encoder(precursors[:, 2].int())
+        precursors = masses + charges_one + charges_two
         return precursors
 
 

@@ -13,7 +13,6 @@ import pyarrow as pa
 import torch
 import torch.utils.data._utils.collate
 from depthcharge.data import (
-    AnnotatedSpectrumDataset,
     CustomField,
     SpectrumDataset,
     preprocessing,
@@ -22,7 +21,11 @@ from depthcharge.tokenizers import PeptideTokenizer
 from torch.utils.data import DataLoader
 from torch.utils.data.datapipes.iter.combinatorics import ShufflerIterDataPipe
 
-from .chimera import ChimeraTokenizer, ChimeraAnnotatedSpectrumDataset
+from .chimera import (
+    ChimeraTokenizer,
+    ChimeraAnnotatedSpectrumDataset,
+    ChimeraSpectrumDataset,
+)
 
 logger = logging.getLogger("casanovo")
 
@@ -191,7 +194,7 @@ class DeNovoDataModule(pl.LightningDataModule):
                     paths[0], **anno_dataset_params
                 )
             else:
-                dataset = SpectrumDataset.from_lance(
+                dataset = ChimeraSpectrumDataset.from_lance(
                     paths[0], **dataset_params
                 )
         else:
@@ -203,7 +206,7 @@ class DeNovoDataModule(pl.LightningDataModule):
                     **anno_dataset_params,
                 )
             else:
-                dataset = SpectrumDataset(
+                dataset = ChimeraSpectrumDataset(
                     spectra=paths,
                     path=lance_path,
                     parse_kwargs=parse_kwargs,
