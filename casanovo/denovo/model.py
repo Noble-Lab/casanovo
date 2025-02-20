@@ -451,7 +451,7 @@ class Spec2Pep(pl.LightningModule):
             # cannot be corrected anymore by a subsequently predicted AA with
             # negative mass.
             precursor_charge = precursors[i, 1]
-            precursor_mz = precursors[i, 0]
+            precursor_mz = precursors[i, 2]
             matches_precursor_mz = exceeds_precursor_mz = False
 
             # Send tokenizer masses to correct device for calculate_precursor_ions()

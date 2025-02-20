@@ -1350,7 +1350,7 @@ def test_beam_search_decode(tiny_config):
 
     # Ground truth peptide is "PEPK".
     true_peptide = "PEPK"
-    precursors = precursors = torch.tensor([469.25364, 2.0, 235.63410]).repeat(
+    precursors = torch.tensor([469.25364, 2.0, 235.63410]).repeat(
         beam * batch, 1
     )
     # Fill scores and tokens with relevant predictions.
@@ -1465,7 +1465,7 @@ def test_beam_search_decode(tiny_config):
     model.max_peptide_len = 0
     # 1 spectrum with 5 peaks (2 values: m/z and intensity).
     mzs = ints = torch.zeros(1, 5)
-    precursors = torch.tensor([[469.25364, 2.0, 0.0]])
+    precursors = torch.tensor([[469.25364, 2.0, 235.63410]])
     assert len(list(model.beam_search_decode(mzs, ints, precursors))[0]) == 0
     model.max_peptide_len = 100
 
@@ -1521,7 +1521,9 @@ def test_beam_search_decode(tiny_config):
 
     # Ground truth peptide is "PEPK".
     true_peptide = "PEPK"
-    precursors = torch.tensor([469.25364, 2.0, 0.0]).repeat(beam * batch, 1)
+    precursors = torch.tensor([469.25364, 2.0, 235.63410]).repeat(
+        beam * batch, 1
+    )
     scores[:, range(step), :] = 1
     tokens[0, : step + 1] = model.tokenizer.tokenize(
         true_peptide, add_stop=True
@@ -1582,7 +1584,9 @@ def test_beam_search_decode(tiny_config):
     step = 1
 
     # Ground truth peptide is "-17.027GK".
-    precursors = torch.tensor([186.10044, 2.0, 2.0]).repeat(beam * batch, 1)
+    precursors = torch.tensor([186.10044, 2.0, 94.05750]).repeat(
+        beam * batch, 1
+    )
     tokens = torch.zeros(batch * beam, length, dtype=torch.int64)
     tokens[:, : step + 1] = model.tokenizer.tokenize(["GK", "AK"])
 
@@ -1604,7 +1608,9 @@ def test_beam_search_decode(tiny_config):
     step = 4
 
     # Ground truth peptide is irrelevant for this test.
-    precursors = torch.tensor([1861.0044, 2.0, 1.0]).repeat(beam * batch, 1)
+    precursors = torch.tensor([1861.0044, 2.0, 940.5750]).repeat(
+        beam * batch, 1
+    )
 
     # sequences with invalid mass modifications will raise an exception if
     # tokenized using tokenizer.tokenize
