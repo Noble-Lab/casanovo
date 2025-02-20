@@ -144,14 +144,13 @@ class Spec2Pep(pl.LightningModule):
             max_charge=max_charge,
         )
         self.softmax = torch.nn.Softmax(2)
-        ignore_index = 0
         self.celoss = torch.nn.CrossEntropyLoss(
-            ignore_index=ignore_index,
+            ignore_index=0,
             label_smoothing=train_label_smoothing,
             reduce=False,
         )
         self.val_celoss = torch.nn.CrossEntropyLoss(
-            ignore_index=ignore_index, reduce=False
+            ignore_index=0, reduce=False
         )
         # Optimizer settings.
         self.warmup_iters = warmup_iters
@@ -768,22 +767,40 @@ class Spec2Pep(pl.LightningModule):
             except:
                 continue
 
-        precursor_masses = batch["precursor_mass"]
-        precursor_charges_one = batch["precursor_charge_one"]
-        precursor_charges_two = batch["precursor_charge_two"]
+        precursor_mzs = batch["precursor_mz"]
+        precursor_charges = batch["precursor_charge"]
+        precursor_masses = (precursor_mzs - 1.007276) * precursor_charges
         precursors = torch.vstack(
-            [precursor_masses, precursor_charges_one, precursor_charges_two]
+            [precursor_masses, precursor_charges, precursor_mzs]
         ).T  # .float()
 
         mzs, ints = batch["mz_array"], batch["intensity_array"]
         # spectra = torch.stack([mzs, ints], dim=2)
 
-        seqs = batch["seq"] if "seq" in batch else None
-        seq_comp = (
-            batch["seq_compliment"] if "seq_compliment" in batch else None
-        )
+        if "seq" in batch:
+            seqs = batch["seq"]
 
-        return mzs, ints, precursors, seqs, seq_comp
+            if "seq_compliment" in batch:
+                seqs_comp = (
+                    batch["seq_compliment"]
+                    if "seq_compliment" in batch
+                    else None
+                )
+
+                # Chimera may be inferred in either order if both precursors
+                # have the same charge, else the peptide with the reported
+                # (and embedded) charge must be inferred first.
+                charges_equal = (
+                    batch["precursor_charge"] == batch["precursor_charge_two"]
+                )
+                seqs_comp[~charges_equal] = seqs[~charges_equal]
+            else:
+                seqs_comp = None
+        else:
+            seqs = None
+            seqs_comp = None
+
+        return mzs, ints, precursors, seqs, seqs_comp
 
     def _forward_step(
         self,

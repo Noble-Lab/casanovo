@@ -64,8 +64,7 @@ def test_train_and_run(
         "--output_root",
         output_rootname,
         str(mgf_small),
-        # TODO: support for mzml yet
-        # str(mzml_small),
+        str(mzml_small),
     ]
 
     result = run(predict_args)
@@ -74,7 +73,7 @@ def test_train_and_run(
 
     mztab = pyteomics.mztab.MzTab(str(output_filename))
     # Verify that both input peak files are listed in the metadata.
-    for i, filename in enumerate(["small.mgf"], 1):
+    for i, filename in enumerate(["small.mgf", "small.mzml"], 1):
         assert f"ms_run[{i}]-location" in mztab.metadata
         assert mztab.metadata[f"ms_run[{i}]-location"].endswith(filename)
 

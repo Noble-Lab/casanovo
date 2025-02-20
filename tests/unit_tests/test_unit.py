@@ -1350,7 +1350,9 @@ def test_beam_search_decode(tiny_config):
 
     # Ground truth peptide is "PEPK".
     true_peptide = "PEPK"
-    precursors = torch.tensor([469.25364, 2.0, 0.0]).repeat(beam * batch, 1)
+    precursors = precursors = torch.tensor([469.25364, 2.0, 235.63410]).repeat(
+        beam * batch, 1
+    )
     # Fill scores and tokens with relevant predictions.
     scores[:, : step + 1, :] = 0
     for i, (peptide, add_stop) in enumerate(
