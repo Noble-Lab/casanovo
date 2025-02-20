@@ -227,3 +227,25 @@ def test_auxilliary_cli(tmp_path, monkeypatch):
 
     res = run("version")
     assert res.output
+
+
+def test_harness_chimera(tiny_config, tmp_path):
+    chimera_mgf = TEST_DIR.parent / "data" / "chimeras.mgf"
+
+    run = functools.partial(
+        CliRunner().invoke, casanovo.main, catch_exceptions=False
+    )
+
+    # Train a tiny model:
+    train_args = [
+        "train",
+        str(chimera_mgf),
+        "--config",
+        tiny_config,
+        "--output_dir",
+        str(tmp_path),
+        "--output_root",
+        "train",
+    ]
+
+    run(train_args)

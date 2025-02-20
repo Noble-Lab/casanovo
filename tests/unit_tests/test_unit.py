@@ -1949,3 +1949,21 @@ def test_chimera_tokenizer(tiny_config):
         ["LESL:LESLLEK"], torch.Tensor([1.0])
     )
     assert mass_one == pytest.approx(mass_two)
+
+    mass_one = normal_tokenizer.calculate_precursor_ions(
+        ["LESLLEK"], torch.Tensor([1.0])
+    )
+    mass_two = tokenizer.calculate_precursor_ions(
+        ["LESL:LESLLEK"],
+        torch.Tensor([1.0]),
+        charges_two=torch.Tensor([1.0]),
+        give_max_mz=True,
+    )
+    assert mass_one == pytest.approx(mass_two)
+
+    with pytest.raises(ValueError):
+        tokenizer.calculate_precursor_ions(
+            ["LESL:LESLLEK"],
+            torch.Tensor([1.0]),
+            give_max_mz=True,
+        )

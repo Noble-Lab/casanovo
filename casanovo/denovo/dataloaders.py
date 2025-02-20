@@ -21,11 +21,7 @@ from depthcharge.tokenizers import PeptideTokenizer
 from torch.utils.data import DataLoader
 from torch.utils.data.datapipes.iter.combinatorics import ShufflerIterDataPipe
 
-from .chimera import (
-    ChimeraTokenizer,
-    ChimeraAnnotatedSpectrumDataset,
-    ChimeraSpectrumDataset,
-)
+from .chimera import ChimeraTokenizer, ChimeraAnnotatedSpectrumDataset
 
 logger = logging.getLogger("casanovo")
 
@@ -140,7 +136,16 @@ class DeNovoDataModule(pl.LightningDataModule):
         ]
 
         self.custom_field_anno = [
-            CustomField("seq", lambda x: x["params"]["seq"], pa.string())
+            CustomField("seq", lambda x: x["params"]["seq"], pa.string()),
+            CustomField(
+                "charge_two",
+                lambda x: (
+                    "0"
+                    if "charge_two" not in x["params"]
+                    else x["params"]["charge_two"]
+                ),
+                pa.string(),
+            ),
         ]
 
     def make_dataset(self, paths, annotated, mode, shuffle):
@@ -194,7 +199,7 @@ class DeNovoDataModule(pl.LightningDataModule):
                     paths[0], **anno_dataset_params
                 )
             else:
-                dataset = ChimeraSpectrumDataset.from_lance(
+                dataset = SpectrumDataset.from_lance(
                     paths[0], **dataset_params
                 )
         else:
@@ -206,7 +211,7 @@ class DeNovoDataModule(pl.LightningDataModule):
                     **anno_dataset_params,
                 )
             else:
-                dataset = ChimeraSpectrumDataset(
+                dataset = SpectrumDataset(
                     spectra=paths,
                     path=lance_path,
                     parse_kwargs=parse_kwargs,
