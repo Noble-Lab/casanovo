@@ -4,7 +4,7 @@
 
 ### MS/MS spectra
 
-When you're ready to use Casanovo, you can input your MS/MS spectra in one of the following formats:
+When you are ready to use Casanovo, you can input your MS/MS spectra in one of the following formats:
 
 - **[mzML](https://doi.org/10.1074/mcp.R110.000133)**: XML-based mass spectrometry community standard file format developed by the Proteomics Standards Initiative (PSI).
 - **[mzXML](https://doi.org/10.1038/nbt1031)**: XML-based predecessor of mzML. Although supported by Casanovo, mzML should typically be preferred instead.
@@ -180,6 +180,16 @@ Key information for each PSM is as follows:
 - `spectra_ref`: Unique identifier linking the prediction back to the original spectrum in the input file(s).
 - `opt_ms_run[1]_aa_scores`: Casanovo predicts peptides in an autoregressive fashion, one amino acid at a time. This column contains comma-separated scores of the individual amino acid predictions.
 
+When running Casanovo in _database searching mode_ rather than *de novo* peptide sequencing mode, the PSM section will look slightly differently:
+
+```
+PSH	sequence	PSM_ID	accession	unique	database	database_version	search_engine	search_engine_score[1]	modifications	retention_time	charge	exp_mass_to_charge	calc_mass_to_charge	spectra_ref	pre	post	start	end	opt_ms_run[1]_aa_scores
+PSM	THM+15.995ELGGK	1	sp|A5A616|MGTS_ECOLI	null	null	null	[MS, MS:1003281, Casanovo, 4.1.1.dev8+g258edb4.d20240329]	0.6994086	null	null	2	444.71582381688	444.7159	ms_run[1]:index=0	null	null	null	null	0.84454,0.81027,0.83296,0.56239,0.40844,0.83554,0.82437,0.84730,0.84514
+...
+```
+
+In this case, each PSM contains additional information in the `accession` column referring to the identifier of the protein the matched peptide is derived from.
+
 ```{note}
 Scores in Casanovo range from -1 to 1, where 1 indicates high confidence in the prediction.
 A score below 0 occurs for a predicted peptide sequence that mismatches the observed precursor mass, in which case the score is penalized by subtracting 1.
@@ -204,28 +214,6 @@ The PSM identifier in the `PSM_ID` column is not necessarily identical to the sp
 - `PSM_ID` is one-based, whereas spectrum indices in `spectra_ref` are zero-based.
 - If multiple predictions are included per spectrum (configuration option `top_match`), each PSM will have a different identifier, but spectrum references will overlap.
 ```
-
-**Additional DB-search Information**
-
-When running casanovo in db-search mode, the output is silightly different. Below is an example of what the PSM section of a db-search run would look like:
-```
-PSH	sequence	PSM_ID	accession	unique	database	database_version	search_engine	search_engine_score[1]	modifications	retention_time	charge	exp_mass_to_charge	calc_mass_to_charge	spectra_ref	pre	post	start	end	opt_ms_run[1]_aa_scores
-PSM	THM+15.995ELGGK	1	sp|A5A616|MGTS_ECOLI	null	null	null	[MS, MS:1003281, Casanovo, 4.1.1.dev8+g258edb4.d20240329]	0.6994086	null	null	2	444.71582381688	444.7159	ms_run[1]:index=0	null	null	null	null	0.84454,0.81027,0.83296,0.56239,0.40844,0.83554,0.82437,0.84730,0.84514
-...
-```
-The field `accession` is no longer null, but populated:
-- `accession`: The SeqID for the protein that the peptide within this PSM came from during digestion.
-
-This information comes from the fasta file input to casanovo in db-search mode. Proteins within fasta files include a header, an example of which is shown below:
-```
->sp|A5A616|MGTS_ECOLI Small protein MgtS OS=Escherichia coli (strain K12) OX=83333 GN=mgtS PE=1 SV=1
-[PROTEIN]
-```
-Standard convention is to consider all characters up until the first whitespace as the protein's SeqID. For the above protein, you would get:
-```
->sp|A5A616|MGTS_ECOLI
-```
-There should be no space between the `>` and the SeqID.
 
 ## Casanovo configuration
 
