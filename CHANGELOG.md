@@ -24,6 +24,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ### Fixed
 
 - Precursor charges are exported as integers instead of floats in the mzTab output file, in compliance with the mzTab specification.
+- Fixed log entries written to the config file instead of the log file when running the `configure` command.
 
 ### Removed
 

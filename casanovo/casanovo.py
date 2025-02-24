@@ -41,10 +41,9 @@ import torch
 import tqdm
 from lightning.pytorch import seed_everything
 
-from . import __version__
-from . import utils
-from .denovo import ModelRunner
+from . import __version__, utils
 from .config import Config
+from .denovo import ModelRunner
 
 logger = logging.getLogger("casanovo")
 click.rich_click.USE_MARKDOWN = True
@@ -52,21 +51,13 @@ click.rich_click.STYLE_HELPTEXT = ""
 click.rich_click.SHOW_ARGUMENTS = True
 
 
-class _SharedParams(click.RichCommand):
-    """Options shared between most Casanovo commands"""
+class _SharedFileIOParams(click.RichCommand):
+    """File IO options shared between most Casanovo commands"""
 
     def __init__(self, *args, **kwargs) -> None:
         """Define shared options."""
         super().__init__(*args, **kwargs)
         self.params += [
-            click.Option(
-                ("-m", "--model"),
-                help="""
-                Either the model weights (.ckpt file) or a URL pointing to the 
-                model weights file. If not provided, Casanovo will try to 
-                download the latest release automatically.
-                """,
-            ),
             click.Option(
                 ("-d", "--output_dir"),
                 help="The destination directory for output files.",
@@ -78,30 +69,44 @@ class _SharedParams(click.RichCommand):
                 type=click.Path(dir_okay=False),
             ),
             click.Option(
-                ("-c", "--config"),
-                help="""
-                The YAML configuration file overriding the default options.
-                """,
-                type=click.Path(exists=True, dir_okay=False),
+                ("-f", "--force_overwrite"),
+                help="Whether to overwrite output files.",
+                is_flag=True,
+                show_default=True,
+                default=False,
             ),
             click.Option(
                 ("-v", "--verbosity"),
-                help="""
-                Set the verbosity of console logging messages. Log files are
-                always set to 'debug'.
-                """,
+                help=(
+                    "Set the verbosity of console logging messages."
+                    " Log files are always set to 'debug'."
+                ),
                 type=click.Choice(
                     ["debug", "info", "warning", "error"],
                     case_sensitive=False,
                 ),
                 default="info",
             ),
+        ]
+
+
+class _SharedParams(_SharedFileIOParams):
+    """Options shared between main Casanovo commands"""
+
+    def __init__(self, *args, **kwargs) -> None:
+        """Define shared options."""
+        super().__init__(*args, **kwargs)
+        self.params += [
             click.Option(
-                ("-f", "--force_overwrite"),
-                help="Whether to overwrite output files.",
-                is_flag=True,
-                show_default=True,
-                default=False,
+                ("-m", "--model"),
+                help="""Either the model weights (.ckpt file) or a URL pointing to 
+                the model weights file. If not provided, Casanovo will try to 
+                download the latest release automatically.""",
+            ),
+            click.Option(
+                ("-c", "--config"),
+                help="The YAML configuration file overriding the default options.",
+                type=click.Path(exists=True, dir_okay=False),
             ),
         ]
 
@@ -336,22 +341,25 @@ def version() -> None:
     sys.stdout.write("\n".join(versions) + "\n")
 
 
-@main.command()
-@click.option(
-    "-o",
-    "--output",
-    help="The output configuration file.",
-    default="casanovo.yaml",
-    type=click.Path(dir_okay=False),
-)
-def configure(output: Path) -> None:
+@main.command(cls=_SharedFileIOParams)
+def configure(
+    output_dir: str, output_root: str, verbosity: str, force_overwrite: bool
+) -> None:
     """Generate a Casanovo configuration file to customize.
 
     The casanovo configuration file is in the YAML format.
     """
-    Config.copy_default(str(output))
-    setup_logging(output, "info")
-    logger.info(f"Wrote {output}\n")
+    output_path, _ = _setup_output(
+        output_dir, output_root, force_overwrite, verbosity
+    )
+    config_fname = output_root if output_root is not None else "casanovo"
+    config_fname = Path(config_fname).with_suffix(".yaml")
+    if not force_overwrite:
+        utils.check_dir_file_exists(output_path, str(config_fname))
+
+    config_path = str(output_path / config_fname)
+    Config.copy_default(config_path)
+    logger.info(f"Wrote {config_path}")
 
 
 def setup_logging(

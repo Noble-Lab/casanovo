@@ -20,7 +20,7 @@ classifiers = [
 requires-python = ">=3.8"
 dependencies = [
     "appdirs",
-    "lightning>=2.1",
+    "lightning>=2.4",
     "click",
     "depthcharge-ms>=0.2.3,<0.3.0",
     "natsort",
@@ -34,7 +34,7 @@ dependencies = [
     "scikit-learn",
     "spectrum_utils",
     "tensorboard",
-    "torch>=2.1",
+    "torch>=2.2",
     "tqdm",
 ]
 dynamic = ["version"]

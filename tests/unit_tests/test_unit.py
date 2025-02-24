@@ -573,7 +573,6 @@ def test_calc_match_score():
 
 
 def test_digest_fasta_cleave(tiny_fasta_file, residues_dict):
-
     # No missed cleavages
     expected_normal = [
         "ATSIPAR",
@@ -1092,7 +1091,6 @@ def test_get_candidates(tiny_fasta_file, residues_dict):
 
 
 def test_get_candidates_isotope_error(tiny_fasta_file, residues_dict):
-
     # Tide isotope error windows for 496.2, 2+:
     # 0: [980.481617, 1000.289326]
     # 1: [979.491114, 999.278813]
