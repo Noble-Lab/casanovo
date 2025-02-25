@@ -196,8 +196,7 @@ def sequence(
         for peak_file in peak_path:
             logger.info("  %s", peak_file)
 
-        results_path = output_path / output_root_name
-        results_path = results_path.with_name(results_path.name + ".mztab")
+        results_path = output_path / f"{output_root_name}.mztab"
         runner.predict(
             peak_path,
             str(results_path),
@@ -258,8 +257,7 @@ def db_search(
         logger.info("Using the following FASTA file:")
         logger.info("  %s", fasta_path)
 
-        results_path = output_path / output_root_name
-        results_path = results_path.with_name(results_path.name + ".mztab")
+        results_path = output_path / f"{output_root_name}.mztab"
         runner.db_search(
             peak_path,
             fasta_path,
