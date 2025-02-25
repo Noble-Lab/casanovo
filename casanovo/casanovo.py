@@ -196,9 +196,10 @@ def sequence(
         for peak_file in peak_path:
             logger.info("  %s", peak_file)
 
+        results_path = output_path / f"{output_root_name}.mztab"
         runner.predict(
             peak_path,
-            str((output_path / output_root_name).with_suffix(".mztab")),
+            str(results_path),
             evaluate=evaluate,
         )
         utils.log_annotate_report(
@@ -256,10 +257,11 @@ def db_search(
         logger.info("Using the following FASTA file:")
         logger.info("  %s", fasta_path)
 
+        results_path = output_path / f"{output_root_name}.mztab"
         runner.db_search(
             peak_path,
             fasta_path,
-            str((output_path / output_root_name).with_suffix(".mztab")),
+            str(results_path),
         )
         utils.log_annotate_report(
             runner.writer.psms, start_time=start_time, end_time=time.time()
@@ -648,7 +650,8 @@ def _setup_output(
     if not overwrite:
         utils.check_dir_file_exists(output_path, f"{output_root}.log")
 
-    setup_logging((output_path / output_root).with_suffix(".log"), verbosity)
+    log_file_path = output_path / f"{output_root}.log"
+    setup_logging(log_file_path, verbosity)
     return output_path, output_root
 
 
