@@ -650,8 +650,7 @@ def _setup_output(
     if not overwrite:
         utils.check_dir_file_exists(output_path, f"{output_root}.log")
 
-    log_file_path = output_path / output_root
-    log_file_path = log_file_path.with_name(log_file_path.name + ".log")
+    log_file_path = output_path / f"{output_root}.log"
     setup_logging(log_file_path, verbosity)
     return output_path, output_root
 
