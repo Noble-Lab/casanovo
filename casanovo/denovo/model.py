@@ -777,29 +777,10 @@ class Spec2Pep(pl.LightningModule):
         mzs, ints = batch["mz_array"], batch["intensity_array"]
         # spectra = torch.stack([mzs, ints], dim=2)
 
-        if "seq" in batch:
-            seqs = batch["seq"]
-
-            if "seq_compliment" in batch:
-                seqs_comp = (
-                    batch["seq_compliment"]
-                    if "seq_compliment" in batch
-                    else None
-                )
-
-                # Chimera may be inferred in either order if both precursors
-                # have the same charge, else the peptide with the reported
-                # (and embedded) charge must be inferred first.
-                charges_equal = (
-                    batch["precursor_charge"] == batch["precursor_charge_two"]
-                )
-                seqs_comp[~charges_equal] = seqs[~charges_equal]
-            else:
-                seqs_comp = None
-        else:
-            seqs = None
-            seqs_comp = None
-
+        seqs = batch["seq"] if "seq" in batch else None
+        seqs_comp = (
+            batch["seq_compliment"] if "seq_compliment" in batch else None
+        )
         return mzs, ints, precursors, seqs, seqs_comp
 
     def _forward_step(
