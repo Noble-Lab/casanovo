@@ -1681,7 +1681,7 @@ def test_spectrum_id_mgf(mgf_small, tmp_path):
 
 
 def test_spectrum_id_mzml(mzml_small, tmp_path):
-    """Test that spectra from mzML files are specified by their scan number."""
+    """Test that spectra from mzML files are specified by their scan id."""
     mzml_small2 = tmp_path / "mzml_small2.mzml"
     shutil.copy(mzml_small, mzml_small2)
 
@@ -1689,15 +1689,15 @@ def test_spectrum_id_mzml(mzml_small, tmp_path):
         tmp_path / "index.hdf5", [mzml_small, mzml_small2], overwrite=True
     )
     dataset = SpectrumDataset(index)
-    for i, (filename, scan_nr) in enumerate(
+    for i, (filename, scan_id) in enumerate(
         [
-            (mzml_small, 17),
-            (mzml_small, 111),
-            (mzml_small2, 17),
-            (mzml_small2, 111),
+            (mzml_small, "scan=17"),
+            (mzml_small, "merged=11 frame=12 scanStart=763 scanEnd=787"),
+            (mzml_small2, "scan=17"),
+            (mzml_small2, "merged=11 frame=12 scanStart=763 scanEnd=787"),
         ]
     ):
-        spectrum_id = str(filename), f"scan={scan_nr}"
+        spectrum_id = str(filename), scan_id
         assert dataset.get_spectrum_id(i) == spectrum_id
 
 
