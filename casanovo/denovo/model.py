@@ -850,7 +850,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
                     spectrum_i,
                     precursor_charge,
                     precursor_mz,
-                    peak_embeddings[0, :],
+                    peak_embeddings[0, :].clone(),
                 )
             )
 
