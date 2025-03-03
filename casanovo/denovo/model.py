@@ -853,14 +853,24 @@ class Spec2Pep(pl.LightningModule):
             The loss of the training step.
         """
         pred, truth, pred_comp, truth_comp = self._forward_step(batch)
+        batch_size, seq_length = truth.shape
         pred = pred[:, :-1, :].reshape(-1, self.vocab_size)
         pred_comp = pred_comp[:, :-1, :].reshape(-1, self.vocab_size)
 
         loss_fun = self.celoss if mode == "Train" else self.val_celoss
-        loss_one = loss_fun(pred, truth.flatten()).unsqueeze(-1)
-        loss_two = loss_fun(pred_comp, truth_comp.flatten()).unsqueeze(-1)
-        loss = torch.cat((-loss_one, -loss_two), dim=1)
-        loss = -torch.logsumexp(loss, dim=1)
+        loss_one = (
+            loss_fun(pred, truth.flatten())
+            .reshape((batch_size, seq_length))
+            .mean(dim=1, keepdim=True)
+        )
+        loss_two = (
+            loss_fun(pred_comp, truth_comp.flatten())
+            .reshape((batch_size, seq_length))
+            .mean(dim=1, keepdim=True)
+        )
+
+        loss = torch.cat((loss_one, loss_two), dim=1)
+        loss, _ = torch.min(loss, dim=1)
         loss = torch.mean(loss)
 
         self.log(
