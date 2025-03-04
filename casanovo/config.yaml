@@ -89,6 +89,19 @@ lance_dir:
 # Model validation and checkpointing frequency in training steps.
 val_check_interval: 50_000
 
+# SPIKE DETECTION OPTIONS
+# Whether to enable loss spike and NaN detection
+spike_detection: false
+# Spike detection window size in batches
+spike_detection_window: 10
+# Spike detection warmup batches
+spike_detection_warmup: 1
+# Spike detection relative tolerance
+spike_detection_rtol: 2.0
+# Whether to dump spike-causing batches to output dir
+# Batches that caused spike and/or NaN will be dumped as a json file
+spike_detection_dump_exclude: true
+
 # SPECTRUM PROCESSING OPTIONS
 # Number of the most intense peaks to retain, any remaining peaks are discarded.
 n_peaks: 150

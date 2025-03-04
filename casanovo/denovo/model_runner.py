@@ -15,7 +15,11 @@ import torch
 import torch.utils.data
 from depthcharge.tokenizers import PeptideTokenizer
 from depthcharge.tokenizers.peptides import MskbPeptideTokenizer
-from lightning.pytorch.callbacks import LearningRateMonitor, ModelCheckpoint
+from lightning.pytorch.callbacks import (
+    LearningRateMonitor,
+    ModelCheckpoint,
+    SpikeDetection,
+)
 from lightning.pytorch.strategies import DDPStrategy
 from torch.utils.data import DataLoader
 
@@ -108,6 +112,31 @@ class ModelRunner:
                 enable_version_counter=False,
             ),
         ]
+
+        if self.config.spike_detection:
+            exclude_batches_path = None
+            if (
+                self.config.spike_detection_dump_exclude
+                and output_dir is not None
+            ):
+                exclude_filename = prefix + "spike_batches.json"
+                exclude_batches_path = output_dir / exclude_filename
+            else:
+                logger.warning(
+                    "Excluded batches will not be dumped since output_dir"
+                    " is not set in the model runner."
+                )
+
+            self.callbacks.append(
+                SpikeDetection(
+                    window=self.config.spike_detection_window,
+                    warmup=self.config.spike_detection_warmup,
+                    rtol=self.config.spike_detection_rtol,
+                    exclude_batches_path=exclude_batches_path,
+                    # Detect NaN
+                    finite_only=False,
+                )
+            )
 
     def __enter__(self):
         """Enter the context manager"""
