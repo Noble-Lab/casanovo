@@ -8,6 +8,7 @@ import pytest
 from click.testing import CliRunner
 
 from casanovo import casanovo
+from casanovo.config import Config
 
 TEST_DIR = Path(__file__).resolve().parent
 
@@ -253,3 +254,8 @@ def test_auxilliary_cli(tmp_path, mgf_small, monkeypatch):
 
     res = run("version")
     assert res.output
+
+    with open("casanovo.yaml") as f:
+        config_file_keys = set(yaml.safe_load(f).keys())
+        config_object_keys = set(Config._config_types.keys())
+        assert config_file_keys == config_object_keys
