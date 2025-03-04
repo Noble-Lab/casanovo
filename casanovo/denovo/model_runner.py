@@ -133,8 +133,6 @@ class ModelRunner:
                     warmup=self.config.spike_detection_warmup,
                     rtol=self.config.spike_detection_rtol,
                     exclude_batches_path=exclude_batches_path,
-                    # Detect NaN
-                    finite_only=False,
                 )
             )
 
