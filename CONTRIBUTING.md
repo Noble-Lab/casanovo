@@ -87,7 +87,7 @@ up the pre-commit hook:
 pip install black pre-commit
 
 # Using conda
-conda -c conda-forge black pre-commit
+conda install -c conda-forge black pre-commit
 ```
 
 2. Navigate to your local copy of the Casanovo repository and activate the hook:
