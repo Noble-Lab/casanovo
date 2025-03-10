@@ -92,14 +92,20 @@ All data for the _nine-species benchmark_ are available as annotated MGF files o
 Annotated MGF files that are directly compatible with Casanovo are available in the `/MSV000090982/updates/2024-05-14_woutb_71950b89/peak/9speciesbenchmark` FTP directory.
 Using these data, Casanovo was trained in a cross-validated fashion, training on eight species and testing on the remaining species.
 
-The _MassIVE-KB training data_ was derived from PSMs used to compile the MassIVE-KB v1 spectral library and consists of 30 million PSMs.
+The _MassIVE-KB training data_ are derived from PSMs used to compile the MassIVE-KB v1 spectral library and consists of 30 million PSMs.
 These PSMs were obtained by collecting up to the top 100 PSMs for each of the precursors (as defined by a peptidoform and charge) included in MassIVE-KB.
-To compile this dataset yourself, on the [MassIVE website](https://massive.ucsd.edu/ProteoSAFe/static/massive.jsp), go to [MassIVE Knowledge Base](https://massive.ucsd.edu/ProteoSAFe/static/massive-kb-libraries.jsp) > [Human HCD Spectral Library](https://massive.ucsd.edu/ProteoSAFe/status.jsp?task=82c0124b6053407fa41ba98f53fd8d89) > [All Candidate library spectra](https://massive.ucsd.edu/ProteoSAFe/result.jsp?task=82c0124b6053407fa41ba98f53fd8d89&view=candidate_library_spectra) > Download.
-This will give you a zipped TSV file with the metadata and peptide identifications for all 30 million PSMs.
-Using the filename (column "filename") you can then retrieve the corresponding peak files from the MassIVE FTP server and extract the desired spectra using their scan number (column "scan").
+
+The data are available as annotated MGF files on Zenodo:
+- [MassIVE-KB v1 30 million PSMs](https://doi.org/10.5281/zenodo.14973856)
+- [MassIVE-KB v1 30 million PSMs training/validation/test splits](https://doi.org/10.5281/zenodo.14967861)
+
+The dataset was originally compiled through the following steps:
+- On the [MassIVE website](https://massive.ucsd.edu/ProteoSAFe/static/massive.jsp), go to [MassIVE Knowledge Base](https://massive.ucsd.edu/ProteoSAFe/static/massive-kb-libraries.jsp) > [Human HCD Spectral Library](https://massive.ucsd.edu/ProteoSAFe/status.jsp?task=82c0124b6053407fa41ba98f53fd8d89) > [All Candidate library spectra](https://massive.ucsd.edu/ProteoSAFe/result.jsp?task=82c0124b6053407fa41ba98f53fd8d89&view=candidate_library_spectra) > Download.
+- This will give you a zipped TSV file with the metadata and peptide identifications for all 30 million PSMs.
+- Using the filename (column "filename") you can then retrieve the corresponding peak files from the MassIVE FTP server (done using a wget script) and extract the desired spectra using their scan number (column "scan").
 
 The _non-enzymatic dataset_, used to train a non-tryptic version of Casanovo, was created by selecting PSMs with a uniform distribution of amino acids at the C-terminal peptide positions from two datasets: MassIVE-KB and PROSPECT.
-Training, validation, and test splits for the non-enzymatic dataset are available as annotated MGF files on MassIVE with [dataset identifier MSV000094014]](https://doi.org/doi:10.25345/C5KS6JG0W).
+Training, validation, and test splits for the non-enzymatic dataset are available as annotated MGF files on MassIVE with [dataset identifier MSV000094014](https://doi.org/doi:10.25345/C5KS6JG0W).
 
 **How do I know which model to use after training Casanovo?**
 
