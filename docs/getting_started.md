@@ -14,7 +14,7 @@ Check out the [Windows](https://docs.anaconda.com/anaconda/install/windows/#), [
 
 Once you have conda installed, you can use this helpful [cheat sheet](https://docs.conda.io/projects/conda/en/4.6.0/_downloads/52a95608c49671267e40c689e0bc00ca/conda-cheatsheet.pdf) to see common commands and what they do.
 
-### Create a conda environment
+### Create a Conda Cnvironment
 
 First, open the terminal (MacOS and Linux) or the Anaconda Prompt (Windows).
 All of the commands that follow should be entered into this terminal or Anaconda Prompt window---that is, your *shell*.
@@ -39,7 +39,7 @@ If this is the case, then you have set up conda and the environment correctly.
 Be sure to retype in the activation command into your terminal when you reopen anaconda and want to use Casanovo.
 ```
 
-### *Optional:* Install PyTorch manually
+### *Optional:* Install PyTorch Manually
 
 Casanovo employs the PyTorch machine learning framework, which by default will be installed automatically along with the other dependencies.
 However, if you have a graphics processing unit (GPU) that you want Casanovo to use, we recommend installing PyTorch manually.
@@ -71,7 +71,7 @@ casanovo configure
 When using Casanovo to sequence peptides from mass spectra or evaluate a previous model's performance, you can change some of the parameters in the first section of this file.
 Parameters in the second section will not have an effect unless you are training a new Casanovo model.
 
-### Download model weights
+### Download Model Weights
 
 Using Casanovo to sequence peptides from new mass spectra, Casanovo needs compatible pretrained model weights to make its predictions.
 By default, Casanovo will try to download the latest compatible model weights from GitHub when it is run. 
@@ -94,7 +94,7 @@ Alternatively, model weigths for Casanovo version 4.x as described in [Yilmaz et
 We recommend a Linux system with a dedicated GPU to achieve optimal runtime performance.
 ```
 
-### Sequence new mass spectra
+### Sequence New Mass Spectra
 
 To sequence your own mass spectra with Casanovo, use the `casanovo sequence` command:
 
@@ -106,7 +106,7 @@ casanovo sequence -o results.mztab spectra.mgf
 Casanovo can predict peptide sequences for MS/MS spectra in mzML, mzXML, and MGF files.
 This will write peptide predictions for the given MS/MS spectra to the specified output file in mzTab format.
 
-### Evaluate *de novo* sequencing performance
+### Evaluate *De Novo* Sequencing Performance
 
 To evaluate _de novo_ sequencing performance based on known mass spectrum annotations, use the `casanovo evaluate` command:
 
@@ -119,7 +119,7 @@ casanovo evaluate annotated_spectra.mgf
 To evaluate the peptide predictions, ground truth peptide labels must to be provided as an annotated MGF file where the peptide sequence is denoted in the `SEQ` field. 
 Compatible MGF files are available from [MassIVE-KB](https://massive.ucsd.edu/ProteoSAFe/static/massive-kb-libraries.jsp).
 
-### Train a new model
+### Train a New Model
 
 To train a model from scratch, run:
 
@@ -132,7 +132,7 @@ Training and validation MS/MS data need to be provided as annotated MGF files, w
 
 If a training is continued for a previously trained model, specify the starting model weights using `--model`.
 
-## Try Casanovo on a small example
+## Try Casanovo On a Small Example
 
 Let's use Casanovo to sequence peptides from a small collection of mass spectra in an MGF file (~100 MS/MS spectra).
 The example MGF file is available at [`sample_data/sample_preprocessed_spectra.mgf`](https://github.com/Noble-Lab/casanovo/blob/main/sample_data/sample_preprocessed_spectra.mgf).
