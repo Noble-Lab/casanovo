@@ -2,15 +2,16 @@
 
 ## Running Casanovo
 
-**I installed Casanovo and it worked before, but I after reopening Anaconda it says that Casanovo is not installed.**
+### I installed Casanovo and it worked before, but I after reopening Anaconda it says that Casanovo is not installed.
 
-Make sure you are in the `casanovo_env` environment. You can ensure this by typing:
+Make sure you are in the `casanovo_env` environment.
+You can ensure this by typing:
 
 ```sh
 conda activate casanovo_env
 ```
 
-**Which command-line options are available?**
+### Which command-line options are available?
 
 Run the following command in your command prompt to see all possible command-line configuration options:
 
@@ -21,7 +22,7 @@ casanovo --help
 Additionally, you can use a configuration file to fully customize Casanovo.
 You can find the `config.yaml` configuration file that is used by default [here](https://github.com/Noble-Lab/casanovo/blob/main/casanovo/config.yaml).
 
-**How do I solve a "PermissionError: GitHub API rate limit exceeded" error when trying to run Casanovo?**
+### How do I solve a "PermissionError: GitHub API rate limit exceeded" error when trying to run Casanovo?
 
 When running Casanovo in `denovo` or `eval` mode, Casanovo needs compatible pretrained model weights to make predictions.
 If no model weights file is specified using the `--model` command-line parameter, Casanovo will automatically try to download the latest compatible model file from GitHub and save it to its cache for subsequent use.
@@ -31,7 +32,7 @@ You can avoid this error by explicitly specifying the model file using the `--mo
 
 ## GPU Troubleshooting
 
-**Casanovo is very slow even when running on the GPU. How can I speed it up?**
+### Casanovo is very slow even when running on the GPU. How can I speed it up?
 
 It is highly recommended to run Casanovo on the GPU to get the maximum performance.
 If Casanovo is slow despite your system having a GPU, then the GPU might not be configured correctly.
@@ -50,13 +51,13 @@ Try to run Casanovo again and use `watch nvidia-smi` to inspect whether it can u
 If this is still not the case, please [open an issue on GitHub](https://github.com/Noble-Lab/casanovo/issues/new).
 Include full information about your system setup, the installed CUDA toolkit and Pytorch versions, and the troubleshooting steps you have performed.
 
-**Why do I get a "CUDA out of memory" error when trying to run Casanovo?**
+### Why do I get a "CUDA out of memory" error when trying to run Casanovo?
 
 This means that there was not enough (free) memory available on your GPU to run Casanovo, which is especially likely to happen when you are using a smaller, consumer-grade GPU.
 Depending on whether the error occurred during `train` or `denovo` mode, we recommend decreasing the `train_batch_size` or `predict_batch_size` options, respectively, in the [config file](https://github.com/Noble-Lab/casanovo/blob/main/casanovo/config.yaml) to reduce the number of spectra that are processed simultaneously.
 Additionally, we recommend shutting down any other processes that may be running on the GPU, so that Casanovo can exclusively use the GPU.
 
-**How can I run Casanovo on a specific GPU device?**
+### How can I run Casanovo on a specific GPU device?
 
 You can control which GPU(s) Casanovo uses by setting the `devices` option in the [configuration file](https://github.com/Noble-Lab/casanovo/blob/main/casanovo/config.yaml).
 This setting also controls the number of cores to use when running on a CPU only (which can be specified using the `accelerator` option).
@@ -84,7 +85,7 @@ This will need to be set with each new shell session, or you can add it to your 
 
 ## Training Casanovo
 
-**Where can I find the data that Casanovo was trained on?**
+### Where can I find the data that Casanovo was trained on?
 
 Different versions of Casanovo were trained on distinct datasets, as detailed below.
 For explanations about the different versions, please refer to the [citation information page](cite).
@@ -120,7 +121,7 @@ Casanovo v4.2 was trained on a combined tryptic and non-tryptic dataset, as desc
 This dataset consists of 2 million PSMs sampled from MassIVE-KB, with tryptic peptides sampled from the MassIVE-KB v1 data described above and multi-enzyme data derived from the corresponding subsection of MassIVE-KB v2.0.15.
 The data are available [on Zenodo](https://zenodo.org/records/12587317) as annotated MGF files for the training and test splits in the `mskb_final` subdirectory.
 
-**How do I know which model to use after training Casanovo?**
+### How do I know which model to use after training Casanovo?
 
 By default, Casanovo saves a snapshot of the model weights after every 50,000 training steps.
 Note that the number of samples that are processed during a single training step depends on the batch size.
@@ -131,7 +132,7 @@ Note that taking very frequent model snapshots will result in slower training ti
 When saving a model snapshot, Casanovo will use the validation data to compute performance measures (training loss, validation loss, amino acid precision, and peptide precision) and print this information to the console and log file.
 After your training job is finished, you can identify the model that achieves the maximum peptide and amino acid precision from the log file and use the corresponding model snapshot.
 
-**Even though I added new post-translational modifications to the configuration file, Casanovo didn't identify those peptides.**
+### Even though I added new post-translational modifications to the configuration file, Casanovo didn't identify those peptides.
 
 Casanovo can only make predictions using post-translational modifications (PTMs) that were included when training the model.
 If you want to add new types of PTMs, then you will need to retrain the model.
@@ -152,7 +153,7 @@ To include new PTMs in Casanovo, you need to:
 It is unfortunately not possible to finetune a pre-trained Casanovo model to add new types of PTMs.
 Instead, such a model must be trained from scratch.
 
-**How can I change the learning rate schedule used during training?**
+### How can I change the learning rate schedule used during training?
 
 By default, Casanovo uses a learning rate schedule that combines linear warm up followed by a cosine decay (as implemented in `CosineWarmupScheduler` in `casanovo/denovo/model.py`) during training.
 To use a different learning rate schedule, you can specify an alternative learning rate scheduler as follows (in the `lr_scheduler` variable in function `Spec2Pep.configure_optimizers` in `casanovo/denovo/model.py`):
@@ -165,21 +166,21 @@ You can use any of the scheduler classes available in [`torch.optim.lr_scheduler
 
 ## Miscellaneous
 
-**Can I use Casanovo to sequence antibodies?**
+### Can I use Casanovo to sequence antibodies?
 
 Yes, antibody sequencing is one of the popular uses for de novo sequencing technology.
 [This article](https://academic.oup.com/bib/article/24/1/bbac542/6955273) carried out a systematic comparison of six de novo sequencing tools (Novor, pNovo 3, DeepNovo, SMSNet, PointNovo and Casanovo).  Casanovo fared very well in this comparison: "Casanovo exhibits the highest number of correct peptide predictions compared with all other de novo algorithms across all enzymes demonstrating the advantage of using transformers for peptide sequencing. Furthermore, Casanovo predicts amino acids with overall superior precision."
 
 In practice, you may want to try providing your Casanovo output file to the [Stitch software](https://github.com/snijderlab/stitch), which performs template-based assembly of de novo peptide reads to reconstruct antibody sequences ([Schulte and Snyder 2024](https://www.biorxiv.org/content/10.1101/2024.02.20.581155v1)).
 
-**Where can I find Casanovo model weights trained on the nine-species benchmark?**
+### Where can I find Casanovo model weights trained on the nine-species benchmark?
 
 You can find the Casanovo weights corresponding to the nine-species benchmark [on Zenodo](https://doi.org/10.5281/zenodo.10694984), compatible with Casanovo v4.x.x.
 These weights correspond to training and validation on eight species using the default configurations, with the remaining species held out for testing, as indicated by the file names.
 Note that these weights are only intended for evaluation purposes on this specific benchmark dataset.
 For general-purpose usage of Casanovo, use its [default weights](https://casanovo.readthedocs.io/en/latest/getting_started.html#download-model-weights) instead, as these will give significantly improved performance.
 
-**How can I generate a precision–coverage curve?**
+### How can I generate a precision–coverage curve?
 
 You can evaluate a trained Casanovo model compared to ground-truth peptide labels using a precision–coverage curve.
 
