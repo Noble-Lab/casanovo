@@ -21,7 +21,7 @@ maxdepth: 1
 ---
 Getting Started <getting_started.md>
 File Formats <file_formats.md>
-Nextflow Workflow <nextflow.md>
+Downstream Tools <downstream_tools.md>
 FAQs <faq.md>
 Applications <applications.md>
 Citing <cite.md>

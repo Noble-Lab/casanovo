@@ -1,4 +1,4 @@
-# File formats
+# File Formats
 
 ## Input file formats for Casanovo
 
