@@ -30,7 +30,7 @@ class DeNovoDataModule(pl.LightningDataModule):
 
     Parameters
     ----------
-    lance_dir : Optional[str]
+    lance_dir : str
         Directory to store Lance spectrum index files.
     train_paths : Sequence[str], optional
         Spectrum Lance path(s) for model training.
