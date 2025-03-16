@@ -1,6 +1,5 @@
 """Fixtures used for testing."""
 
-import depthcharge
 import numpy as np
 import psims
 import pytest
@@ -81,9 +80,13 @@ def _create_mgf(
     rng = np.random.default_rng(random_state)
     entries = [
         _create_mgf_entry(
-            p, rng.choice([2, 3]), mod_aa_mass=mod_aa_mass, annotate=annotate
+            p,
+            i,
+            rng.choice([2, 3]),
+            mod_aa_mass=mod_aa_mass,
+            annotate=annotate,
         )
-        for p in peptides
+        for i, p in enumerate(peptides)
     ]
     with mgf_file.open("w+") as mgf_ref:
         mgf_ref.write("\n".join(entries))
@@ -91,7 +94,9 @@ def _create_mgf(
     return mgf_file
 
 
-def _create_mgf_entry(peptide, charge=2, mod_aa_mass=None, annotate=True):
+def _create_mgf_entry(
+    peptide, title, charge=2, mod_aa_mass=None, annotate=True
+):
     """
     Create a MassIVE-KB style MGF entry for a single PSM.
 
@@ -122,6 +127,7 @@ def _create_mgf_entry(peptide, charge=2, mod_aa_mass=None, annotate=True):
 
     mgf = [
         "BEGIN IONS",
+        f"TITLE={title}",
         f"PEPMASS={precursor_mz}",
         f"CHARGE={charge}+",
         f"{frags}",
@@ -247,9 +253,8 @@ def _create_mzml(peptides, mzml_file, random_state=42):
     return mzml_file
 
 
-@pytest.fixture
-def tiny_config(tmp_path):
-    """A config file for a tiny model."""
+def get_config_file(file_path, file_name, additional_cfg=None):
+    """Get Casanovo config yaml file"""
     cfg = {
         "n_head": 2,
         "dim_feedforward": 10,
@@ -291,6 +296,16 @@ def tiny_config(tmp_path):
         "train_batch_size": 32,
         "num_sanity_val_steps": 0,
         "calculate_precision": False,
+        "lance_dir": None,
+        "shuffle": False,
+        "buffer_size": 64,
+        "accumulate_grad_batches": 1,
+        "gradient_clip_val": None,
+        "gradient_clip_algorithm": None,
+        "precision": "32-true",
+        "replace_isoleucine_with_leucine": True,
+        "reverse_peptides": False,
+        "mskb_tokenizer": True,
         "residues": {
             "G": 57.021464,
             "A": 71.037114,
@@ -298,7 +313,7 @@ def tiny_config(tmp_path):
             "P": 97.052764,
             "V": 99.068414,
             "T": 101.047670,
-            "C+57.021": 160.030649,
+            "C[Carbamidomethyl]": 160.030649,  # 103.009185 + 57.021464
             "L": 113.084064,
             "I": 113.084064,
             "N": 114.042927,
@@ -312,22 +327,27 @@ def tiny_config(tmp_path):
             "R": 156.101111,
             "Y": 163.063329,
             "W": 186.079313,
-            "M+15.995": 147.035400,
-            "N+0.984": 115.026943,
-            "Q+0.984": 129.042594,
-            "+42.011": 42.010565,
-            "+43.006": 43.005814,
-            "-17.027": -17.026549,
-            "+43.006-17.027": 25.980265,
+            # Amino acid modifications.
+            "M[Oxidation]": 147.035400,  # Met oxidation:   131.040485 + 15.994915
+            "N[Deamidated]": 115.026943,  # Asn deamidation: 114.042927 + 0.984016
+            "Q[Deamidated]": 129.042594,  # Gln deamidation: 128.058578 + 0.984016
+            # N-terminal modifications.
+            "[Acetyl]-": 42.010565,  # Acetylation
+            "[Carbamyl]-": 43.005814,  # Carbamylation "+43.006"
+            "[Ammonia-loss]-": -17.026549,  # NH3 loss
+            "[+25.980265]-": 25.980265,  # Carbamylation and NH3 loss
         },
-        "allowed_fixed_mods": "C:C+57.021",
+        "allowed_fixed_mods": "C:C[Carbamidomethyl]",
         "allowed_var_mods": (
-            "M:M+15.995,N:N+0.984,Q:Q+0.984,"
-            "nterm:+42.011,nterm:+43.006,nterm:-17.027,nterm:+43.006-17.027"
+            "M:M[Oxidation],N:N[Deamidated],Q:Q[Deamidated],"
+            "nterm:[Acetyl]-,nterm:[Carbamyl]-,nterm:[Ammonia-loss]-,nterm:[+25.980265]-"
         ),
     }
 
-    cfg_file = tmp_path / "config.yml"
+    if additional_cfg is not None:
+        cfg.update(additional_cfg)
+
+    cfg_file = file_path / file_name
     with cfg_file.open("w+") as out_file:
         yaml.dump(cfg, out_file)
 
@@ -335,5 +355,16 @@ def tiny_config(tmp_path):
 
 
 @pytest.fixture
-def residues_dict():
-    return depthcharge.masses.PeptideMass("massivekb").masses
+def tiny_config(tmp_path):
+    """A config file for a tiny model."""
+    return get_config_file(tmp_path, "config.yml")
+
+
+@pytest.fixture
+def tiny_config_db(tmp_path):
+    """A config file for a db search."""
+    return get_config_file(
+        tmp_path,
+        "config_db.yml",
+        additional_cfg={"replace_isoleucine_with_leucine": False},
+    )

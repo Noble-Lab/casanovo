@@ -63,8 +63,8 @@ max_mods: 1
 # where aa is a standard amino acid (or "nterm" for an N-terminal mod)
 # and mod_residue is a key from the "residues" dictionary.
 # Example: "M:M+15.995,nterm:+43.006"
-allowed_fixed_mods: "C:C+57.021"
-allowed_var_mods: "M:M+15.995,N:N+0.984,Q:Q+0.984,nterm:+42.011,nterm:+43.006,nterm:-17.027,nterm:+43.006-17.027"
+allowed_fixed_mods: "C:C[Carbamidomethyl]"
+allowed_var_mods: "M:M[Oxidation],N:N[Deamidated],Q:Q[Deamidated],nterm:[Acetyl]-,nterm:[Carbamyl]-,nterm:[Ammonia-loss]-,nterm:[+25.980265]-"
 
 
 ###
@@ -84,6 +84,8 @@ tb_summarywriter: false
 log_metrics: false
 # How often to log optimizer parameters in steps
 log_every_n_steps: 50
+# Path to save lance instances
+lance_dir:
 # Model validation and checkpointing frequency in training steps.
 val_check_interval: 50_000
 
@@ -125,6 +127,10 @@ learning_rate: 5e-4
 weight_decay: 1e-5
 # Amount of label smoothing when computing the training loss.
 train_label_smoothing: 0.01
+# Shuffle dataset during training.
+# A buffer of size buffer_size is filled and examples from this buffer are randomly sampled.
+shuffle: True
+buffer_size: 100_000
 
 # TRAINING/INFERENCE OPTIONS
 # Number of spectra in one training batch.
@@ -137,6 +143,19 @@ num_sanity_val_steps: 0
 # This is expensive, so we recommend against it.
 calculate_precision: False
 
+# Additional Pytorch lightning trainer flags
+accumulate_grad_batches: 1
+gradient_clip_val: 
+gradient_clip_algorithm: 
+precision: "32-true" # '16-true', '16-mixed', 'bf16-true', 'bf16-mixed', '32-true', '64-true', '64', '32', '16', 'bf16'
+
+# Replace I by L in peptide sequences
+replace_isoleucine_with_leucine: True
+# Reverse peptide sequences
+reverse_peptides: True
+# mskb tokenizer, otherwise proforma syntax
+mskb_tokenizer: True
+
 # AMINO ACID AND MODIFICATION VOCABULARY
 residues:
   "G": 57.021464
@@ -145,7 +164,7 @@ residues:
   "P": 97.052764
   "V": 99.068414
   "T": 101.047670
-  "C+57.021": 160.030649 # 103.009185 + 57.021464
+  "C[Carbamidomethyl]": 160.030649 # 103.009185 + 57.021464 
   "L": 113.084064
   "I": 113.084064
   "N": 114.042927
@@ -160,11 +179,11 @@ residues:
   "Y": 163.063329
   "W": 186.079313
   # Amino acid modifications.
-  "M+15.995": 147.035400    # Met oxidation:   131.040485 + 15.994915
-  "N+0.984": 115.026943     # Asn deamidation: 114.042927 +  0.984016
-  "Q+0.984": 129.042594     # Gln deamidation: 128.058578 +  0.984016
+  "M[Oxidation]": 147.035400    # Met oxidation:   131.040485 + 15.994915
+  "N[Deamidated]": 115.026943     # Asn deamidation: 114.042927 +  0.984016
+  "Q[Deamidated]": 129.042594     # Gln deamidation: 128.058578 +  0.984016
   # N-terminal modifications.
-  "+42.011": 42.010565      # Acetylation
-  "+43.006": 43.005814      # Carbamylation
-  "-17.027": -17.026549     # NH3 loss
-  "+43.006-17.027": 25.980265      # Carbamylation and NH3 loss
+  "[Acetyl]-": 42.010565      # Acetylation
+  "[Carbamyl]-": 43.005814  # Carbamylation "+43.006"
+  "[Ammonia-loss]-": -17.026549     # NH3 loss
+  "[+25.980265]-": 25.980265      # Carbamylation and NH3 loss

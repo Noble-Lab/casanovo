@@ -4,6 +4,7 @@ import shutil
 import unittest.mock
 from pathlib import Path
 
+import depthcharge.tokenizers.peptides
 import pytest
 import torch
 
@@ -16,16 +17,25 @@ def test_initialize_model(tmp_path, mgf_small):
     """Test initializing a new or existing model."""
     config = Config()
     config.model_save_folder_path = tmp_path
+    # Initializing model without initializing tokenizer raises an error
+    with pytest.raises(RuntimeError):
+        ModelRunner(config=config).initialize_model(train=True)
+
     # No model filename given, so train from scratch.
-    ModelRunner(config=config).initialize_model(train=True)
+    runner = ModelRunner(config=config)
+    runner.initialize_tokenizer()
+    runner.initialize_model(train=True)
 
     # No model filename given during inference = error.
     with pytest.raises(ValueError):
-        ModelRunner(config=config).initialize_model(train=False)
+        runner = ModelRunner(config=config)
+        runner.initialize_tokenizer()
+        runner.initialize_model(train=False)
 
     # Non-existing model filename given during inference = error.
     with pytest.raises(FileNotFoundError):
         runner = ModelRunner(config=config, model_filename="blah")
+        runner.initialize_tokenizer()
         runner.initialize_model(train=False)
 
     # Train a quick model.
@@ -38,10 +48,12 @@ def test_initialize_model(tmp_path, mgf_small):
 
     # Resume training from previous model.
     runner = ModelRunner(config=config, model_filename=str(ckpt))
+    runner.initialize_tokenizer()
     runner.initialize_model(train=True)
 
     # Inference with previous model.
     runner = ModelRunner(config=config, model_filename=str(ckpt))
+    runner.initialize_tokenizer()
     runner.initialize_model(train=False)
 
     # If the model initialization throws and EOFError, then the Spec2Pep model
@@ -50,6 +62,7 @@ def test_initialize_model(tmp_path, mgf_small):
     weights.touch()
     with pytest.raises(EOFError):
         runner = ModelRunner(config=config, model_filename=str(weights))
+        runner.initialize_tokenizer()
         runner.initialize_model(train=False)
 
 
@@ -74,6 +87,7 @@ def test_save_and_load_weights(tmp_path, mgf_small, tiny_config):
         # Now load the weights into a new model
         # The device should be meta for all the weights.
         runner = ModelRunner(config=other_config, model_filename=str(ckpt))
+        runner.initialize_tokenizer()
         runner.initialize_model(train=False)
 
     obs_layers = runner.model.encoder.transformer_encoder.num_layers
@@ -127,6 +141,7 @@ def test_save_and_load_weights_deprecated(tmp_path, mgf_small, tiny_config):
     with ModelRunner(
         config=config, model_filename=str(ckpt), overwrite_ckpt_check=False
     ) as runner:
+        runner.initialize_tokenizer()
         runner.initialize_model(train=False)
         assert runner.model.cosine_schedule_period_iters == 5
     # Fine-tuning.
@@ -141,7 +156,7 @@ def test_save_and_load_weights_deprecated(tmp_path, mgf_small, tiny_config):
             assert "max_iters" not in runner.model.opt_kwargs
 
 
-def test_calculate_precision(tmp_path, mgf_small, tiny_config):
+def test_calculate_precision(tmp_path, mgf_small, tiny_config, monkeypatch):
     """Test that this parameter is working correctly."""
     config = Config(tiny_config)
     config.n_layers = 1
@@ -149,22 +164,42 @@ def test_calculate_precision(tmp_path, mgf_small, tiny_config):
     config.calculate_precision = False
     config.tb_summarywriter = str(tmp_path)
 
-    runner = ModelRunner(config=config, output_dir=tmp_path)
-    with runner:
-        runner.train([mgf_small], [mgf_small])
+    with monkeypatch.context() as ctx:
+        mock_logger = unittest.mock.MagicMock()
+        ctx.setattr("casanovo.denovo.model.logger", mock_logger)
+        runner = ModelRunner(config=config, output_dir=tmp_path)
+        with runner:
+            runner.train([mgf_small], [mgf_small])
 
-    assert "valid_aa_precision" not in runner.model.history.columns
-    assert "valid_pep_precision" not in runner.model.history.columns
+        logged_items = [
+            item
+            for call in mock_logger.info.call_args_list
+            for arg in call.args
+            for item in (arg.split("\t") if isinstance(arg, str) else [arg])
+        ]
+
+        assert "AA precision" not in logged_items
+        assert "Peptide precision" not in logged_items
 
     config.calculate_precision = True
-    runner = ModelRunner(
-        config=config, output_dir=tmp_path, overwrite_ckpt_check=False
-    )
-    with runner:
-        runner.train([mgf_small], [mgf_small])
+    with monkeypatch.context() as ctx:
+        mock_logger = unittest.mock.MagicMock()
+        ctx.setattr("casanovo.denovo.model.logger", mock_logger)
+        runner = ModelRunner(
+            config=config, output_dir=tmp_path, overwrite_ckpt_check=False
+        )
+        with runner:
+            runner.train([mgf_small], [mgf_small])
 
-    assert "valid_aa_precision" in runner.model.history.columns
-    assert "valid_pep_precision" in runner.model.history.columns
+        logged_items = [
+            item
+            for call in mock_logger.info.call_args_list
+            for arg in call.args
+            for item in (arg.split("\t") if isinstance(arg, str) else [arg])
+        ]
+
+        assert "AA precision" in logged_items
+        assert "Peptide precision" in logged_items
 
 
 def test_save_final_model(tmp_path, mgf_small, tiny_config):
@@ -223,12 +258,12 @@ def test_evaluate(
     result_file.unlink()
 
     exception_string = (
-        "Error creating annotated spectrum index. "
-        "This may be the result of having an unannotated MGF file "
+        "Error creating annotated spectrum dataloaders. "
+        "This may be the result of having an unannotated peak file "
         "present in the validation peak file path list.\n"
     )
 
-    with pytest.raises(FileNotFoundError):
+    with pytest.raises(TypeError):
         with ModelRunner(
             config, model_filename=str(model_file), overwrite_ckpt_check=False
         ) as runner:
@@ -254,7 +289,7 @@ def test_evaluate(
     result_file.unlink()
 
     # Test mix of annotated an unannotated peak files
-    with pytest.warns(RuntimeWarning):
+    with pytest.raises(TypeError):
         with ModelRunner(
             config, model_filename=str(model_file), overwrite_ckpt_check=False
         ) as runner:
@@ -326,19 +361,14 @@ def test_metrics_logging(tmp_path, mgf_small, tiny_config):
 
 
 def test_log_metrics(monkeypatch, tiny_config):
-    def get_mock_index(psm_list):
-        mock_test_index = unittest.mock.MagicMock()
-        mock_test_index.__enter__.return_value = mock_test_index
-        mock_test_index.__exit__.return_value = False
-        mock_test_index.n_spectra = len(psm_list)
-        mock_test_index.get_spectrum_id = lambda idx: psm_list[idx].spectrum_id
-
-        mock_spectra = [
-            (None, None, None, None, curr_psm.sequence)
-            for curr_psm in psm_list
+    def get_mock_loader(psm_list, tokenizer):
+        return [
+            {
+                "peak_file": [psm.spectrum_id[0] for psm in psm_list],
+                "scan_id": [psm.spectrum_id[1] for psm in psm_list],
+                "seq": tokenizer.tokenize([psm.sequence for psm in psm_list]),
+            }
         ]
-        mock_test_index.__getitem__.side_effect = lambda idx: mock_spectra[idx]
-        return mock_test_index
 
     def get_mock_psm(sequence, spectrum_id):
         return PepSpecMatch(
@@ -357,6 +387,10 @@ def test_log_metrics(monkeypatch, tiny_config):
 
         with ModelRunner(Config(tiny_config)) as runner:
             runner.writer = unittest.mock.MagicMock()
+            runner.model = unittest.mock.MagicMock()
+            runner.model.tokenizer = (
+                depthcharge.tokenizers.peptides.MskbPeptideTokenizer()
+            )
 
             # Test 100% peptide precision
             infer_psms = [
@@ -370,7 +404,7 @@ def test_log_metrics(monkeypatch, tiny_config):
             ]
 
             runner.writer.psms = infer_psms
-            mock_index = get_mock_index(act_psms)
+            mock_index = get_mock_loader(act_psms, runner.model.tokenizer)
             runner.log_metrics(mock_index)
 
             pep_precision = mock_logger.info.call_args_list[-3][0][1]
@@ -392,7 +426,7 @@ def test_log_metrics(monkeypatch, tiny_config):
             ]
 
             runner.writer.psms = infer_psms
-            mock_index = get_mock_index(act_psms)
+            mock_index = get_mock_loader(act_psms, runner.model.tokenizer)
             runner.log_metrics(mock_index)
 
             pep_precision = mock_logger.info.call_args_list[-3][0][1]
@@ -419,7 +453,7 @@ def test_log_metrics(monkeypatch, tiny_config):
             ]
 
             runner.writer.psms = infer_psms
-            mock_index = get_mock_index(act_psms)
+            mock_index = get_mock_loader(act_psms, runner.model.tokenizer)
             runner.log_metrics(mock_index)
 
             pep_precision = mock_logger.info.call_args_list[-3][0][1]
@@ -437,7 +471,7 @@ def test_log_metrics(monkeypatch, tiny_config):
             ]
 
             runner.writer.psms = infer_psms
-            mock_index = get_mock_index(act_psms)
+            mock_index = get_mock_loader(act_psms, runner.model.tokenizer)
             runner.log_metrics(mock_index)
 
             pep_precision = mock_logger.info.call_args_list[-3][0][1]
@@ -453,7 +487,7 @@ def test_log_metrics(monkeypatch, tiny_config):
             ]
 
             runner.writer.psms = infer_psms
-            mock_index = get_mock_index(act_psms)
+            mock_index = get_mock_loader(act_psms, runner.model.tokenizer)
             runner.log_metrics(mock_index)
 
             pep_precision = mock_logger.info.call_args_list[-3][0][1]
@@ -469,7 +503,7 @@ def test_log_metrics(monkeypatch, tiny_config):
             ]
 
             runner.writer.psms = infer_psms
-            mock_index = get_mock_index(act_psms)
+            mock_index = get_mock_loader(act_psms, runner.model.tokenizer)
             runner.log_metrics(mock_index)
 
             pep_precision = mock_logger.info.call_args_list[-3][0][1]
@@ -496,7 +530,7 @@ def test_log_metrics(monkeypatch, tiny_config):
             ]
 
             runner.writer.psms = infer_psms
-            mock_index = get_mock_index(act_psms)
+            mock_index = get_mock_loader(act_psms, runner.model.tokenizer)
             runner.log_metrics(mock_index)
 
             pep_precision = mock_logger.info.call_args_list[-3][0][1]

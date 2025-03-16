@@ -7,12 +7,12 @@ import re
 import string
 from typing import Dict, Iterator, Pattern, Set, Tuple
 
-import depthcharge.masses
+import depthcharge.constants
+import depthcharge.tokenizers
 import numpy as np
 import pandas as pd
 import pyteomics.fasta
 import pyteomics.parser
-
 
 logger = logging.getLogger("casanovo")
 
@@ -53,8 +53,8 @@ class ProteinDatabase:
         A comma-separated string of fixed modifications to consider.
     allowed_var_mods : str
         A comma-separated string of variable modifications to consider.
-    residues : Dict[str, float]
-        A dictionary of amino acid masses.
+    tokenizer: depthcharge.tokenizers.PeptideTokenizer
+        Used to access residues.
     """
 
     def __init__(
@@ -70,7 +70,7 @@ class ProteinDatabase:
         isotope_error: Tuple[int, int],
         allowed_fixed_mods: str,
         allowed_var_mods: str,
-        residues: Dict[str, float],
+        tokenizer: depthcharge.tokenizers.PeptideTokenizer,
     ):
         self.fixed_mods, self.var_mods, self.swap_map = _construct_mods_dict(
             allowed_fixed_mods, allowed_var_mods
@@ -86,7 +86,9 @@ class ProteinDatabase:
             missed_cleavages,
             min_peptide_len,
             max_peptide_len,
-            set([aa[0] for aa in residues.keys() if aa[0].isalpha()]),
+            set(
+                [aa[0] for aa in tokenizer.residues.keys() if aa[0].isalpha()]
+            ),
         )
         logger.info(
             "Digesting FASTA file (enzyme = %s, digestion = %s, missed "
@@ -95,6 +97,7 @@ class ProteinDatabase:
             digestion,
             missed_cleavages,
         )
+        self.tokenizer = tokenizer
         self.db_peptides = self._digest_fasta(peptide_generator)
         self.precursor_tolerance = precursor_tolerance
         self.isotope_error = isotope_error
@@ -148,9 +151,8 @@ class ProteinDatabase:
             .reset_index()
         )
         # Calculate the mass of each peptide.
-        mass_calculator = depthcharge.masses.PeptideMass(residues="massivekb")
         peptides["calc_mass"] = (
-            peptides["peptide"].apply(mass_calculator.mass).round(5)
+            peptides["peptide"].apply(self._calc_pep_mass).round(5)
         )
         # Sort by peptide mass and index by peptide sequence.
         peptides.sort_values(
@@ -162,6 +164,27 @@ class ProteinDatabase:
             "Digestion complete. %s peptides generated.", f"{len(peptides):,d}"
         )
         return peptides
+
+    def _calc_pep_mass(self, pep: str) -> float:
+        """
+        Calculates the neutral mass of a peptide sequence.
+
+        Parameters
+        ----------
+        pep : str
+            The peptide sequence for which the mass is to be calculated.
+
+        Returns
+        -------
+        float
+            The neutral mass of the peptide
+        """
+        return (
+            self.tokenizer.masses[self.tokenizer.tokenize(pep)]
+            .sum(dim=1)
+            .item()
+            + depthcharge.constants.H2O
+        )
 
     def get_candidates(
         self,
