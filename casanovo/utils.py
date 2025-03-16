@@ -17,7 +17,6 @@ import torch
 
 from .data.psm import PepSpecMatch
 
-
 SCORE_BINS = (0.0, 0.5, 0.9, 0.95, 0.99)
 
 logger = logging.getLogger("casanovo")
@@ -39,6 +38,10 @@ def n_workers() -> int:
     int
         The number of workers.
     """
+    # FIXME: remove multiprocessing Linux deadlock issue workaround when
+    # deadlock issue is resolved.
+    return 0
+
     # Windows or MacOS: no multiprocessing.
     if platform.system() in ["Windows", "Darwin"]:
         logger.warning(
