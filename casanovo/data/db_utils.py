@@ -54,7 +54,7 @@ class ProteinDatabase:
     allowed_var_mods : str
         A comma-separated string of variable modifications to consider.
     tokenizer: depthcharge.tokenizers.PeptideTokenizer
-        Used to access residues.
+        Tokenizer to parse and process peptide sequences.
     """
 
     def __init__(
@@ -86,9 +86,7 @@ class ProteinDatabase:
             missed_cleavages,
             min_peptide_len,
             max_peptide_len,
-            set(
-                [aa[0] for aa in tokenizer.residues.keys() if aa[0].isalpha()]
-            ),
+            set([r[0] for r in tokenizer.residues.keys() if r[0].isalpha()]),
         )
         logger.info(
             "Digesting FASTA file (enzyme = %s, digestion = %s, missed "
@@ -177,7 +175,7 @@ class ProteinDatabase:
         Returns
         -------
         float
-            The neutral mass of the peptide
+            The neutral mass of the peptide.
         """
         return (
             self.tokenizer.masses[self.tokenizer.tokenize(pep)]

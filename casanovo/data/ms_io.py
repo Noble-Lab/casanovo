@@ -178,15 +178,13 @@ class MztabWriter:
                     "opt_ms_run[1]_aa_scores",
                 ]
             )
+            by_id = operator.attrgetter("spectrum_id")
             for i, psm in enumerate(
-                natsort.natsorted(
-                    self.psms, key=operator.attrgetter("spectrum_id")
-                ),
+                natsort.natsorted(self.psms, key=by_id),
                 1,
             ):
-                filename = psm.spectrum_id[0]
-                idx = psm.spectrum_id[1]
-                if Path(filename).suffix == ".mgf" and idx.isnumeric():
+                filename, idx = psm.spectrum_id
+                if Path(filename).suffix.lower() == ".mgf" and idx.isnumeric():
                     idx = f"index={idx}"
 
                 writer.writerow(
