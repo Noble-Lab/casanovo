@@ -253,52 +253,58 @@ def _create_mzml(peptides, mzml_file, random_state=42):
     return mzml_file
 
 
-def get_config_file(file_path, file_name, additional_cfg=None):
-    """Get Casanovo config yaml file"""
+def _get_config_file(file_path, file_name, additional_cfg=None):
+    """A standard config for a tiny model."""
     cfg = {
-        "n_head": 2,
-        "dim_feedforward": 10,
-        "n_layers": 1,
-        "train_label_smoothing": 0.01,
-        "warmup_iters": 1,
-        "cosine_schedule_period_iters": 1,
-        "max_epochs": 20,
-        "val_check_interval": 1,
-        "accelerator": "cpu",
-        "precursor_mass_tol": 5,
+        "precursor_mass_tol": 50,
         "isotope_error_range": [0, 1],
         "min_peptide_len": 6,
         "max_peptide_len": 100,
+        "predict_batch_size": 1024,
+        "top_match": 1,
+        "accelerator": "cpu",
+        "devices": None,
+        "n_beams": 1,
         "enzyme": "trypsin",
         "digestion": "full",
         "missed_cleavages": 0,
         "max_mods": None,
-        "predict_batch_size": 1024,
-        "n_beams": 1,
-        "top_match": 1,
-        "devices": None,
+        "allowed_fixed_mods": "C:C[Carbamidomethyl]",
+        "allowed_var_mods": (
+            "M:M[Oxidation],N:N[Deamidated],Q:Q[Deamidated], nterm:[Acetyl]-,"
+            "nterm:[Carbamyl]-,nterm:[Ammonia-loss]-,"
+            "nterm:[Carbamyl][Ammonia-loss]-"
+        ),
         "random_seed": 454,
         "n_log": 1,
         "tb_summarywriter": False,
         "log_metrics": False,
         "log_every_n_steps": 50,
+        "lance_dir": None,
+        "val_check_interval": 1,
         "n_peaks": 150,
         "min_mz": 50.0,
         "max_mz": 2500.0,
         "min_intensity": 0.01,
         "remove_precursor_tol": 2.0,
-        "max_charge": 10,
+        "max_charge": 4,
         "dim_model": 512,
+        "n_head": 2,
+        "dim_feedforward": 10,
+        "n_layers": 1,
         "dropout": 0.0,
         "dim_intensity": None,
+        "warmup_iters": 1,
+        "cosine_schedule_period_iters": 1,
         "learning_rate": 5e-4,
         "weight_decay": 1e-5,
+        "train_label_smoothing": 0.01,
         "train_batch_size": 32,
+        "max_epochs": 20,
+        "shuffle": False,
+        "shuffle_buffer_size": 64,
         "num_sanity_val_steps": 0,
         "calculate_precision": False,
-        "lance_dir": None,
-        "shuffle": False,
-        "buffer_size": 64,
         "accumulate_grad_batches": 1,
         "gradient_clip_val": None,
         "gradient_clip_algorithm": None,
@@ -313,7 +319,7 @@ def get_config_file(file_path, file_name, additional_cfg=None):
             "P": 97.052764,
             "V": 99.068414,
             "T": 101.047670,
-            "C[Carbamidomethyl]": 160.030649,  # 103.009185 + 57.021464
+            "C[Carbamidomethyl]": 160.030649,
             "L": 113.084064,
             "I": 113.084064,
             "N": 114.042927,
@@ -328,20 +334,15 @@ def get_config_file(file_path, file_name, additional_cfg=None):
             "Y": 163.063329,
             "W": 186.079313,
             # Amino acid modifications.
-            "M[Oxidation]": 147.035400,  # Met oxidation:   131.040485 + 15.994915
-            "N[Deamidated]": 115.026943,  # Asn deamidation: 114.042927 + 0.984016
-            "Q[Deamidated]": 129.042594,  # Gln deamidation: 128.058578 + 0.984016
+            "M[Oxidation]": 147.035400,
+            "N[Deamidated]": 115.026943,
+            "Q[Deamidated]": 129.042594,
             # N-terminal modifications.
-            "[Acetyl]-": 42.010565,  # Acetylation
-            "[Carbamyl]-": 43.005814,  # Carbamylation "+43.006"
-            "[Ammonia-loss]-": -17.026549,  # NH3 loss
-            "[+25.980265]-": 25.980265,  # Carbamylation and NH3 loss
+            "[Acetyl]-": 42.010565,
+            "[Carbamyl]-": 43.005814,
+            "[Ammonia-loss]-": -17.026549,
+            "[Carbamyl][Ammonia-loss]-": 25.980265,
         },
-        "allowed_fixed_mods": "C:C[Carbamidomethyl]",
-        "allowed_var_mods": (
-            "M:M[Oxidation],N:N[Deamidated],Q:Q[Deamidated],"
-            "nterm:[Acetyl]-,nterm:[Carbamyl]-,nterm:[Ammonia-loss]-,nterm:[+25.980265]-"
-        ),
     }
 
     if additional_cfg is not None:
@@ -357,13 +358,13 @@ def get_config_file(file_path, file_name, additional_cfg=None):
 @pytest.fixture
 def tiny_config(tmp_path):
     """A config file for a tiny model."""
-    return get_config_file(tmp_path, "config.yml")
+    return _get_config_file(tmp_path, "config.yml")
 
 
 @pytest.fixture
 def tiny_config_db(tmp_path):
     """A config file for a db search."""
-    return get_config_file(
+    return _get_config_file(
         tmp_path,
         "config_db.yml",
         additional_cfg={"replace_isoleucine_with_leucine": False},

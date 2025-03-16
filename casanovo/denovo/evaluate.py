@@ -21,11 +21,11 @@ def aa_match_prefix(
 
     Parameters
     ----------
-    peptide1 : List[str]
+    peptide1 : List[List[int]]
         The first tokenized peptide sequence to be compared.
-    peptide2 : List[str]
+    peptide2 : List[List[int]]
         The second tokenized peptide sequence to be compared.
-    aa_dict : Dict[str, float]
+    aa_dict : Dict[int, float]
         Mapping of amino acid tokens to their mass values.
     cum_mass_threshold : float
         Mass threshold in Dalton to accept cumulative mass-matching amino acid
@@ -76,11 +76,11 @@ def aa_match_prefix_suffix(
 
     Parameters
     ----------
-    peptide1 : List[str]
+    peptide1 : List[List[int]]
         The first tokenized peptide sequence to be compared.
-    peptide2 : List[str]
+    peptide2 : List[List[int]]
         The second tokenized peptide sequence to be compared.
-    aa_dict : Dict[str, float]
+    aa_dict : Dict[int, float]
         Mapping of amino acid tokens to their mass values.
     cum_mass_threshold : float
         Mass threshold in Dalton to accept cumulative mass-matching amino acid
@@ -139,11 +139,11 @@ def aa_match(
 
     Parameters
     ----------
-    peptide1 : List[str] | None,
+    peptide1 : List[List[int]] | None,
         The first tokenized peptide sequence to be compared.
-    peptide2 : List[str] | None
+    peptide2 : List[List[int]] | None
         The second tokenized peptide sequence to be compared.
-    aa_dict : Dict[str, float]
+    aa_dict : Dict[int, float]
         Mapping of amino acid tokens to their mass values.
     cum_mass_threshold : float
         Mass threshold in Dalton to accept cumulative mass-matching amino acid

@@ -17,7 +17,7 @@ def test_initialize_model(tmp_path, mgf_small):
     """Test initializing a new or existing model."""
     config = Config()
     config.model_save_folder_path = tmp_path
-    # Initializing model without initializing tokenizer raises an error
+    # Initializing model without initializing tokenizer raises an error.
     with pytest.raises(RuntimeError):
         ModelRunner(config=config).initialize_model(train=True)
 
@@ -258,9 +258,9 @@ def test_evaluate(
     result_file.unlink()
 
     exception_string = (
-        "Error creating annotated spectrum dataloaders. "
-        "This may be the result of having an unannotated peak file "
-        "present in the validation peak file path list.\n"
+        "Error creating annotated spectrum dataloaders. This may "
+        "be the result of having an unannotated peak file present "
+        "in the validation peak file path list."
     )
 
     with pytest.raises(TypeError):
