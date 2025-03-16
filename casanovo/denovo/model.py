@@ -214,7 +214,10 @@ class Spec2Pep(pl.LightningModule):
         return self.beam_search_decode(mzs, ints, precursors)
 
     def beam_search_decode(
-        self, mzs: torch.Tensor, intensities: torch.Tensor, precursors: torch.Tensor
+        self,
+        mzs: torch.Tensor,
+        intensities: torch.Tensor,
+        precursors: torch.Tensor,
     ) -> List[List[Tuple[float, np.ndarray, str]]]:
         """
         Beam search decoding of the spectrum predictions.
@@ -737,9 +740,9 @@ class Spec2Pep(pl.LightningModule):
             else:
                 yield []
 
-    def _process_batch(self, batch: Dict[str, torch.Tensor]) -> Tuple[
-        torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor
-    ]:
+    def _process_batch(
+        self, batch: Dict[str, torch.Tensor]
+    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         """
         Convert a SpectrumDataset batch to tensors.
 
