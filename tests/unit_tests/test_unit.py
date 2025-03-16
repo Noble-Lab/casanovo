@@ -572,7 +572,7 @@ def test_calc_match_score():
     )
 
 
-def test_digest_fasta_cleave(tiny_fasta_file):
+def test_digest_fasta_cleave(tiny_fasta_file, residues_dict):
     # No missed cleavages
     expected_normal = [
         "ATSIPAR",
@@ -1187,7 +1187,7 @@ def test_get_candidates(tiny_fasta_file):
     assert expected_widewindow == list(candidates)
 
 
-def test_get_candidates_isotope_error(tiny_fasta_file):
+def test_get_candidates_isotope_error(tiny_fasta_file, residues_dict):
     # Tide isotope error windows for 496.2, 2+:
     # 0: [980.481617, 1000.289326]
     # 1: [979.491114, 999.278813]
@@ -1439,6 +1439,25 @@ def test_beam_search_decode(tiny_config):
             for pep in list(model._get_top_peptide(test_cache))[0]
         ]
     ) == {"PEPK", "PEPP"}
+
+    # Test reverse aa scores when decoder is reversed
+    pred_cache = {
+        0: [(1.0, 0.42, np.array([1.0, 0.0]), torch.Tensor([4, 14]))]
+    }
+
+    model.decoder.reverse = True
+    top_peptides = list(model._get_top_peptide(pred_cache))
+    assert len(top_peptides) == 1
+    assert len(top_peptides[0]) == 1
+    assert np.allclose(top_peptides[0][0][1], np.array([0.0, 1.0]))
+    assert top_peptides[0][0][2] == "EP"
+
+    model.decoder.reverse = False
+    top_peptides = list(model._get_top_peptide(pred_cache))
+    assert len(top_peptides) == 1
+    assert len(top_peptides[0]) == 1
+    assert np.allclose(top_peptides[0][0][1], np.array([1.0, 0.0]))
+    assert top_peptides[0][0][2] == "PE"
 
     # Test _get_topk_beams().
     # Set scores to proceed generating the unfinished beam.

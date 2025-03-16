@@ -17,6 +17,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 - Removed the `evaluate` sub-command, and all model evaluation functionality has been moved to the `sequence` command using the new `--evaluate` flag.
 - The `--output` option has been split into two options, `--output_dir` and `--output_root`.
+- The path suffix (extension) of `--output_root` will no longer be removed as it was with the old `--output` option.
 - The `--validation_peak_path` is now optional when training; if `--validation_peak_path` is not set then the `train_peak_path` will also be used for validation.
 - The `tb_summarywriter` config option is now a boolean config option, and if set to true the TensorBoard summary will be written to a sub-directory of the output directory named `tensorboard`.
 - The Casanovo model peptide level score is now reported as the geometric mean of the raw amino acid scores, rather then the arithmetic mean.
@@ -24,6 +25,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ### Fixed
 
 - Precursor charges are exported as integers instead of floats in the mzTab output file, in compliance with the mzTab specification.
+- Fixed log entries written to the config file instead of the log file when running the `configure` command.
 
 ### Removed
 

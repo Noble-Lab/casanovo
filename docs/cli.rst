@@ -7,4 +7,4 @@ For Casanovo installation instructions, see the :doc:`Getting Started <getting_s
 .. click:: casanovo.casanovo:main
    :prog: casanovo
    :nested: full
-   :commands: configure, evaluate, sequence, train, version
+   :commands: configure, db-search, evaluate, sequence, train, version

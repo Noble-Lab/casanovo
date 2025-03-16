@@ -1,8 +1,10 @@
 import functools
 import subprocess
+import yaml
 from pathlib import Path
 
 import pyteomics.mztab
+import pytest
 from click.testing import CliRunner
 
 from casanovo import casanovo
@@ -211,7 +213,7 @@ def test_train_and_run(
     )
 
 
-def test_auxilliary_cli(tmp_path, monkeypatch):
+def test_auxilliary_cli(tmp_path, mgf_small, monkeypatch):
     """Test the secondary CLI commands"""
     run = functools.partial(
         CliRunner().invoke, casanovo.main, catch_exceptions=False
@@ -223,6 +225,31 @@ def test_auxilliary_cli(tmp_path, monkeypatch):
 
     run(["configure", "-o", "test.yaml"])
     assert Path("test.yaml").exists()
+
+    with pytest.raises(FileExistsError):
+        run(["configure", "-o", "test.yaml"])
+
+    with open("casanovo.yaml") as f_in, open("small.yaml", "w") as f_out:
+        config = yaml.safe_load(f_in)
+        config["max_epochs"] = 1
+        config["n_layers"] = 1
+        yaml.dump(config, f_out)
+
+    train_args = [
+        "train",
+        "--validation_peak_path",
+        str(mgf_small),
+        "--config",
+        "small.yaml",
+        "--output_dir",
+        str(tmp_path),
+        "--output_root",
+        "train",
+        str(mgf_small),
+    ]
+
+    result = run(train_args)
+    assert result.exit_code == 0
 
     res = run("version")
     assert res.output
