@@ -65,7 +65,7 @@ class DeNovoDataModule(pl.LightningDataModule):
         The NumPy random state. ``None`` leaves mass spectra in the order they
         were parsed.
     shuffle: Optional[bool]
-        Should the training dataset be shuffled? Suffling based on specified buffer_size
+        Should the training dataset be shuffled? Shuffling based on specified buffer_size
     buffer_size: Optional[int]
         See more here:
         https://huggingface.co/docs/datasets/v1.11.0/dataset_streaming.html#shuffling-the-dataset-shuffle

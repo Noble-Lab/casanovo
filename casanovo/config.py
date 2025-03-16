@@ -10,6 +10,7 @@ import yaml
 
 from . import utils
 
+
 logger = logging.getLogger("casanovo")
 
 
@@ -25,7 +26,8 @@ _config_deprecated = dict(
 
 
 class Config:
-    """The Casanovo configuration options.
+    """
+    The Casanovo configuration options.
 
     If a parameter is missing from a user's configuration file, the
     default value is assumed.
@@ -46,59 +48,59 @@ class Config:
 
     _default_config = Path(__file__).parent / "config.yaml"
     _config_types = dict(
-        random_seed=int,
-        n_peaks=int,
-        min_mz=float,
-        max_mz=float,
-        min_intensity=float,
-        remove_precursor_tol=float,
-        max_charge=int,
         precursor_mass_tol=float,
         isotope_error_range=lambda min_max: (int(min_max[0]), int(min_max[1])),
+        min_peptide_len=int,
+        max_peptide_len=int,
+        predict_batch_size=int,
+        top_match=int,
+        accelerator=str,
+        devices=int,
+        n_beams=int,
         enzyme=str,
         digestion=str,
         missed_cleavages=int,
         max_mods=int,
         allowed_fixed_mods=str,
         allowed_var_mods=str,
-        min_peptide_len=int,
+        random_seed=int,
+        n_log=int,
+        tb_summarywriter=bool,
+        log_metrics=bool,
+        log_every_n_steps=int,
+        lance_dir=str,
+        val_check_interval=int,
+        n_peaks=int,
+        min_mz=float,
+        max_mz=float,
+        min_intensity=float,
+        remove_precursor_tol=float,
+        max_charge=int,
         dim_model=int,
         n_head=int,
         dim_feedforward=int,
         n_layers=int,
         dropout=float,
         dim_intensity=int,
-        max_peptide_len=int,
-        residues=dict,
-        n_log=int,
-        tb_summarywriter=bool,
-        log_metrics=bool,
-        log_every_n_steps=int,
-        train_label_smoothing=float,
         warmup_iters=int,
         cosine_schedule_period_iters=int,
         learning_rate=float,
         weight_decay=float,
+        train_label_smoothing=float,
         train_batch_size=int,
-        predict_batch_size=int,
-        n_beams=int,
-        top_match=int,
         max_epochs=int,
-        num_sanity_val_steps=int,
-        val_check_interval=int,
-        calculate_precision=bool,
-        accelerator=str,
-        devices=int,
-        lance_dir=str,
         shuffle=bool,
-        buffer_size=int,
-        reverse_peptides=bool,
-        replace_isoleucine_with_leucine=bool,
+        shuffle_buffer_size=int,
+        num_sanity_val_steps=int,
+        calculate_precision=bool,
         accumulate_grad_batches=int,
         gradient_clip_val=float,
         gradient_clip_algorithm=str,
         precision=str,
-        mskb_tokenizer=bool,
+        replace_isoleucine_with_leucine=bool,
+        reverse_peptides=bool,
+        massivekb_tokenizer=bool,
+        residues=dict,
     )
 
     def __init__(self, config_file: Optional[str] = None):
@@ -143,29 +145,35 @@ class Config:
                         "Unrecognized config option(s): "
                         f"{', '.join(config_unknown)}"
                     )
-        # Validate:
+        # Validate.
         for key, val in self._config_types.items():
             self.validate_param(key, val)
 
         self._params["n_workers"] = utils.n_workers()
 
     def __getitem__(self, param: str) -> Union[int, bool, str, Tuple, Dict]:
-        """Retrieve a parameter"""
+        """Retrieve a parameter."""
         return self._params[param]
 
     def __getattr__(self, param: str) -> Union[int, bool, str, Tuple, Dict]:
-        """Retrieve a parameter"""
+        """Retrieve a parameter."""
         return self._params[param]
 
-    def validate_param(self, param: str, param_type: Callable):
-        """Verify a parameter is the correct type.
+    def validate_param(self, param: str, param_type: Callable) -> None:
+        """
+        Verify that a parameter is the correct type.
 
         Parameters
         ----------
         param : str
-            The Casanovo parameter
+            The Casanovo parameter.
         param_type : Callable
             The expected callable type of the parameter.
+
+        Raises
+        ------
+        TypeError
+            If the parameter is not the correct type.
         """
         try:
             param_val = self._user_config.get(param, self._params[param])
@@ -185,12 +193,13 @@ class Config:
             )
 
     def items(self) -> Tuple[str, ...]:
-        """Return the parameters"""
+        """Return the parameters."""
         return self._params.items()
 
     @classmethod
     def copy_default(cls, output: str) -> None:
-        """Copy the default YAML configuration.
+        """
+        Copy the default YAML configuration.
 
         Parameters
         ----------

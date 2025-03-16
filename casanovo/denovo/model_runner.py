@@ -397,17 +397,17 @@ class ModelRunner:
 
             additional_cfg = dict(
                 devices=devices,
-                callbacks=self.callbacks,
-                enable_checkpointing=True,
+                val_check_interval=self.config.val_check_interval,
                 max_epochs=self.config.max_epochs,
                 num_sanity_val_steps=self.config.num_sanity_val_steps,
-                strategy=self._get_strategy(),
-                val_check_interval=self.config.val_check_interval,
-                check_val_every_n_epoch=None,
-                logger=logger,
                 accumulate_grad_batches=self.config.accumulate_grad_batches,
                 gradient_clip_val=self.config.gradient_clip_val,
                 gradient_clip_algorithm=self.config.gradient_clip_algorithm,
+                callbacks=self.callbacks,
+                check_val_every_n_epoch=None,
+                enable_checkpointing=True,
+                logger=logger,
+                strategy=self._get_strategy(),
             )
 
             trainer_cfg.update(additional_cfg)
@@ -431,45 +431,45 @@ class ModelRunner:
             raise RuntimeError("Please use `initialize_tokenizer()` first.")
 
         model_params = dict(
+            precursor_mass_tol=self.config.precursor_mass_tol,
+            isotope_error_range=self.config.isotope_error_range,
+            min_peptide_len=self.config.min_peptide_len,
+            top_match=self.config.top_match,
+            n_beams=self.config.n_beams,
+            n_log=self.config.n_log,
+            max_charge=self.config.max_charge,
             dim_model=self.config.dim_model,
             n_head=self.config.n_head,
             dim_feedforward=self.config.dim_feedforward,
             n_layers=self.config.n_layers,
             dropout=self.config.dropout,
-            max_charge=self.config.max_charge,
-            precursor_mass_tol=self.config.precursor_mass_tol,
-            isotope_error_range=self.config.isotope_error_range,
-            min_peptide_len=self.config.min_peptide_len,
-            n_beams=self.config.n_beams,
-            top_match=self.config.top_match,
-            n_log=self.config.n_log,
-            train_label_smoothing=self.config.train_label_smoothing,
             warmup_iters=self.config.warmup_iters,
             cosine_schedule_period_iters=self.config.cosine_schedule_period_iters,
             lr=self.config.learning_rate,
             weight_decay=self.config.weight_decay,
-            out_writer=self.writer,
+            train_label_smoothing=self.config.train_label_smoothing,
             calculate_precision=self.config.calculate_precision,
+            out_writer=self.writer,
             tokenizer=tokenizer,
         )
 
         # Reconfigurable non-architecture related parameters for a
         # loaded model.
         loaded_model_params = dict(
-            max_peptide_len=self.config.max_peptide_len,
             precursor_mass_tol=self.config.precursor_mass_tol,
             isotope_error_range=self.config.isotope_error_range,
-            n_beams=self.config.n_beams,
             min_peptide_len=self.config.min_peptide_len,
+            max_peptide_len=self.config.max_peptide_len,
             top_match=self.config.top_match,
+            n_beams=self.config.n_beams,
             n_log=self.config.n_log,
-            train_label_smoothing=self.config.train_label_smoothing,
             warmup_iters=self.config.warmup_iters,
             cosine_schedule_period_iters=self.config.cosine_schedule_period_iters,
             lr=self.config.learning_rate,
             weight_decay=self.config.weight_decay,
-            out_writer=self.writer,
+            train_label_smoothing=self.config.train_label_smoothing,
             calculate_precision=self.config.calculate_precision,
+            out_writer=self.writer,
         )
 
         if self.model_filename is None:
@@ -536,7 +536,7 @@ class ModelRunner:
         self,
     ) -> None:
         """Initialize the peptide tokenizer"""
-        if self.config.mskb_tokenizer:
+        if self.config.massivekb_tokenizer:
             tokenizer_cs = MskbPeptideTokenizer
         else:
             tokenizer_cs = PeptideTokenizer
