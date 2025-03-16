@@ -588,7 +588,7 @@ class ModelRunner:
             max_charge=self.config.max_charge,
             tokenizer=tokenizer,
             shuffle=self.config.shuffle,
-            shuffle_buffer_size=self.config.buffer_size,
+            shuffle_buffer_size=self.config.shuffle_buffer_size,
             n_workers=self.config.n_workers,
             lance_dir=lance_dir,
         )

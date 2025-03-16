@@ -311,7 +311,7 @@ def _get_config_file(file_path, file_name, additional_cfg=None):
         "precision": "32-true",
         "replace_isoleucine_with_leucine": True,
         "reverse_peptides": False,
-        "mskb_tokenizer": True,
+        "massivekb_tokenizer": True,
         "residues": {
             "G": 57.021464,
             "A": 71.037114,

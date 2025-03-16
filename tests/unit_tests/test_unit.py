@@ -572,7 +572,7 @@ def test_calc_match_score():
     )
 
 
-def test_digest_fasta_cleave(tiny_fasta_file, residues_dict):
+def test_digest_fasta_cleave(tiny_fasta_file):
     # No missed cleavages
     expected_normal = [
         "ATSIPAR",
@@ -1187,7 +1187,7 @@ def test_get_candidates(tiny_fasta_file):
     assert expected_widewindow == list(candidates)
 
 
-def test_get_candidates_isotope_error(tiny_fasta_file, residues_dict):
+def test_get_candidates_isotope_error(tiny_fasta_file):
     # Tide isotope error windows for 496.2, 2+:
     # 0: [980.481617, 1000.289326]
     # 1: [979.491114, 999.278813]
@@ -1799,6 +1799,7 @@ def test_spectrum_id_mgf(mgf_small, tmp_path):
     mgf_small2 = tmp_path / "mgf_small2.mgf"
     shutil.copy(mgf_small, mgf_small2)
     data_module = DeNovoDataModule(
+        lance_dir=tmp_path.name,
         train_paths=[mgf_small, mgf_small2],
         valid_paths=[mgf_small, mgf_small2],
         test_paths=[mgf_small, mgf_small2],
@@ -1831,6 +1832,7 @@ def test_spectrum_id_mzml(mzml_small, tmp_path):
     mzml_small2 = tmp_path / "mzml_small2.mzml"
     shutil.copy(mzml_small, mzml_small2)
     data_module = DeNovoDataModule(
+        lance_dir=tmp_path.name,
         test_paths=[mzml_small, mzml_small2],
         shuffle=False,
     )
