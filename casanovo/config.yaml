@@ -138,7 +138,7 @@ max_epochs: 30
 # Shuffle dataset during training.
 shuffle: true
 # Number of samples to buffer while randomly shuffling the training data.
-shuffle_buffer_size: 100_000
+shuffle_buffer_size: 10_000
 # Number of validation steps to run before training begins.
 num_sanity_val_steps: 0
 # Calculate peptide and amino acid precision during training.

@@ -2,14 +2,13 @@
 
 import logging
 import os
-import tempfile
-from pathlib import Path
-from typing import Iterable, Optional
+import pathlib
+from typing import Optional, Sequence
 
 import lightning.pytorch as pl
 import numpy as np
 import pyarrow as pa
-import torch
+import spectrum_utils.spectrum as sus
 import torch.utils.data._utils.collate
 from depthcharge.data import (
     AnnotatedSpectrumDataset,
@@ -21,6 +20,7 @@ from depthcharge.tokenizers import PeptideTokenizer
 from torch.utils.data import DataLoader
 from torch.utils.data.datapipes.iter.combinatorics import ShufflerIterDataPipe
 
+
 logger = logging.getLogger("casanovo")
 
 
@@ -30,12 +30,14 @@ class DeNovoDataModule(pl.LightningDataModule):
 
     Parameters
     ----------
-    train_paths : str, optional
-            A spectrum lance path for model training.
-    valid_paths : str, optional
-        A spectrum lance path for validation.
-    test_paths : str, optional
-        A spectrum lance path for evaluation or inference.
+    lance_dir : Optional[str]
+        Directory to store Lance spectrum index files.
+    train_paths : Sequence[str], optional
+        Spectrum Lance path(s) for model training.
+    valid_paths : Sequence[str], optional
+        Spectrum Lance path(s) for validation.
+    test_paths : Sequence[str], optional
+        Spectrum Lance path(s) for evaluation or inference.
     train_batch_size : int
         The batch size to use for training.
     eval_batch_size : int
@@ -54,28 +56,27 @@ class DeNovoDataModule(pl.LightningDataModule):
     remove_precursor_tol : float
         Remove peaks within the given mass tolerance in Dalton around
         the precursor mass.
-    n_workers : int, optional
-        The number of workers to use for data loading. By default, the number of
-        available CPU cores on the current machine is used.
     max_charge: int
-        Remove PSMs which precursor charge higher than specified max_charge
+        Remove PSMs which precursor charge higher than specified
+        max_charge.
     tokenizer: Optional[PeptideTokenizer]
-        Peptide tokenizer for tokenizing sequences
-    random_state : Optional[int]
-        The NumPy random state. ``None`` leaves mass spectra in the order they
-        were parsed.
+        Tokenizer for processing peptide sequences.
     shuffle: Optional[bool]
-        Should the training dataset be shuffled? Shuffling based on specified buffer_size
-    buffer_size: Optional[int]
-        See more here:
-        https://huggingface.co/docs/datasets/v1.11.0/dataset_streaming.html#shuffling-the-dataset-shuffle
+        Shuffle the training dataset or not. Default is True.
+    shuffle_buffer_size: Optional[int]
+        Number of samples to buffer for randomly shuffling the training
+        data.
+    n_workers : int, optional
+        The number of workers to use for data loading. By default, the
+        number of available CPU cores on the current machine is used.
     """
 
     def __init__(
         self,
-        train_paths: Optional[Iterable[str]] = None,
-        valid_paths: Optional[Iterable[str]] = None,
-        test_paths: Optional[str] = None,
+        lance_dir: str,
+        train_paths: Optional[Sequence[str]] = None,
+        valid_paths: Optional[Sequence[str]] = None,
+        test_paths: Optional[Sequence[str]] = None,
         train_batch_size: int = 128,
         eval_batch_size: int = 1028,
         n_peaks: Optional[int] = 150,
@@ -83,136 +84,59 @@ class DeNovoDataModule(pl.LightningDataModule):
         max_mz: float = 2500.0,
         min_intensity: float = 0.01,
         remove_precursor_tol: float = 2.0,
-        n_workers: Optional[int] = None,
-        random_state: Optional[int] = None,
         max_charge: Optional[int] = 10,
         tokenizer: Optional[PeptideTokenizer] = None,
-        lance_dir: Optional[str] = None,
         shuffle: Optional[bool] = True,
-        buffer_size: Optional[int] = 100_000,
+        shuffle_buffer_size: Optional[int] = 10_000,
+        n_workers: Optional[int] = None,
     ):
         super().__init__()
+
+        self.lance_dir = lance_dir
+
         self.train_paths = train_paths
         self.valid_paths = valid_paths
         self.test_paths = test_paths
+
         self.train_batch_size = train_batch_size
         self.eval_batch_size = eval_batch_size
+
+        # Spectrum preprocessing functions.
+        self.preprocessing_fn = [
+            preprocessing.set_mz_range(min_mz=min_mz, max_mz=max_mz),
+            preprocessing.remove_precursor_peak(remove_precursor_tol, "Da"),
+            preprocessing.filter_intensity(min_intensity, n_peaks),
+            preprocessing.scale_intensity("root", 1),
+            _scale_to_unit_norm,
+        ]
+        self.valid_charge = np.arange(1, max_charge + 1)
 
         self.tokenizer = (
             tokenizer if tokenizer is not None else PeptideTokenizer()
         )
-        self.lance_dir = (
-            lance_dir
-            if lance_dir is not None
-            else tempfile.TemporaryDirectory(suffix=".lance").name
+
+        # Set to None to disable shuffling, otherwise Torch throws an error.
+        self.shuffle = shuffle if shuffle else None
+        self.shuffle_buffer_size = shuffle_buffer_size
+
+        self.n_workers = n_workers if n_workers is not None else os.cpu_count()
+
+        # Custom fields to read from the input files.
+        # FIXME: Double-check why we need these first two.
+        self.custom_field_test_mgf = CustomField(
+            "title", lambda x: x["params"]["title"], pa.string()
+        )
+        self.custom_field_test_mzml = CustomField(
+            "title", lambda x: x["id"], pa.string()
+        )
+        self.custom_field_anno = CustomField(
+            "seq", lambda x: x["params"]["seq"], pa.string()
         )
 
         self.train_dataset = None
         self.valid_dataset = None
         self.test_dataset = None
         self.protein_database = None
-
-        self.n_workers = n_workers if n_workers is not None else os.cpu_count()
-        self.shuffle = (
-            shuffle if shuffle else None
-        )  # set to None if not wanted. Otherwise torch throws and error
-        self.buffer_size = buffer_size
-
-        self.valid_charge = np.arange(1, max_charge + 1)
-        self.preprocessing_fn = [
-            preprocessing.set_mz_range(min_mz=min_mz, max_mz=max_mz),
-            preprocessing.remove_precursor_peak(remove_precursor_tol, "Da"),
-            preprocessing.filter_intensity(min_intensity, n_peaks),
-            preprocessing.scale_intensity("root", 1),
-            scale_to_unit_norm,
-        ]
-        self.custom_field_test_mgf = [
-            CustomField("title", lambda x: x["params"]["title"], pa.string()),
-        ]
-        self.custom_field_test_mzml = [
-            CustomField("title", lambda x: x["id"], pa.string()),
-        ]
-
-        self.custom_field_anno = [
-            CustomField("seq", lambda x: x["params"]["seq"], pa.string())
-        ]
-
-    def make_dataset(self, paths, annotated, mode, shuffle):
-        """Make spectrum datasets.
-
-        Parameters
-        ----------
-        paths : Iterable[str]
-            Paths to input datasets
-        annotated: bool
-            True if peptide sequence annotations are available for the test
-            data.
-        mode: str {"train", "valid", "test"}
-            The mode indicating name of lance instance
-        shuffle: bool
-            Indicates whether to shuffle training data based on buffer_size
-        """
-        custom_fields = self.custom_field_anno if annotated else []
-
-        if mode == "test":
-            if all([Path(f).suffix in (".mgf") for f in paths]):
-                custom_fields = custom_fields + self.custom_field_test_mgf
-            if all(
-                [Path(f).suffix in (".mzml", ".mzxml", ".mzML") for f in paths]
-            ):
-                custom_fields = custom_fields + self.custom_field_test_mzml
-
-        lance_path = f"{self.lance_dir}/{mode}.lance"
-
-        parse_kwargs = dict(
-            preprocessing_fn=self.preprocessing_fn,
-            custom_fields=custom_fields,
-            valid_charge=self.valid_charge,
-        )
-
-        dataset_params = dict(
-            batch_size=(
-                self.train_batch_size
-                if mode == "train"
-                else self.eval_batch_size
-            )
-        )
-        anno_dataset_params = dataset_params | dict(
-            tokenizer=self.tokenizer,
-            annotations="seq",
-        )
-
-        if any([Path(f).suffix in (".lance") for f in paths]):
-            if annotated:
-                dataset = AnnotatedSpectrumDataset.from_lance(
-                    paths[0], **anno_dataset_params
-                )
-            else:
-                dataset = SpectrumDataset.from_lance(
-                    paths[0], **dataset_params
-                )
-        else:
-            if annotated:
-                dataset = AnnotatedSpectrumDataset(
-                    spectra=paths,
-                    path=lance_path,
-                    parse_kwargs=parse_kwargs,
-                    **anno_dataset_params,
-                )
-            else:
-                dataset = SpectrumDataset(
-                    spectra=paths,
-                    path=lance_path,
-                    parse_kwargs=parse_kwargs,
-                    **dataset_params,
-                )
-
-        if shuffle:
-            dataset = ShufflerIterDataPipe(
-                dataset, buffer_size=self.buffer_size
-            )
-
-        return dataset
 
     def setup(self, stage: str = None, annotated: bool = True) -> None:
         """
@@ -229,14 +153,14 @@ class DeNovoDataModule(pl.LightningDataModule):
         """
         if stage in (None, "fit", "validate"):
             if self.train_paths is not None:
-                self.train_dataset = self.make_dataset(
+                self.train_dataset = self._make_dataset(
                     self.train_paths,
                     annotated=True,
                     mode="train",
                     shuffle=self.shuffle,
                 )
             if self.valid_paths is not None:
-                self.valid_dataset = self.make_dataset(
+                self.valid_dataset = self._make_dataset(
                     self.valid_paths,
                     annotated=True,
                     mode="valid",
@@ -244,17 +168,95 @@ class DeNovoDataModule(pl.LightningDataModule):
                 )
         if stage in (None, "test"):
             if self.test_paths is not None:
-                self.test_dataset = self.make_dataset(
+                self.test_dataset = self._make_dataset(
                     self.test_paths,
                     annotated=annotated,
                     mode="test",
                     shuffle=False,
                 )
 
+    def _make_dataset(
+        self, paths, annotated, mode, shuffle
+    ) -> torch.utils.data.Dataset:
+        """
+        Make spectrum datasets.
+
+        Parameters
+        ----------
+        paths : Iterable[str]
+            Paths to read the spectrum input data from.
+        annotated: bool
+            True if peptide sequence annotations are available for the
+            test data.
+        mode: str {"train", "valid", "test"}
+            The mode indicating name of lance instance
+        shuffle: bool
+            Shuffle the dataset or not.
+
+        Returns
+        -------
+        torch.utils.data.Dataset
+            A PyTorch Dataset for the given peak files.
+        """
+        custom_fields = [self.custom_field_anno] if annotated else []
+        if mode == "test":
+            if all([pathlib.Path(f).suffix.lower() == ".mgf" for f in paths]):
+                custom_fields.append(self.custom_field_test_mgf)
+            if all(
+                [
+                    pathlib.Path(f).suffix.lower() in (".mzml", ".mzxml")
+                    for f in paths
+                ]
+            ):
+                custom_fields.append(self.custom_field_test_mzml)
+
+        lance_path = pathlib.Path(f"{self.lance_dir}/{mode}.lance")
+
+        parse_params = dict(
+            preprocessing_fn=self.preprocessing_fn,
+            valid_charge=self.valid_charge,
+            custom_fields=custom_fields,
+        )
+
+        dataset_params = dict(
+            batch_size=(
+                self.train_batch_size
+                if mode == "train"
+                else self.eval_batch_size
+            )
+        )
+        anno_dataset_params = dataset_params | dict(
+            tokenizer=self.tokenizer,
+            annotations="seq",
+        )
+
+        if annotated:
+            Dataset, params = AnnotatedSpectrumDataset, anno_dataset_params
+        else:
+            Dataset, params = SpectrumDataset, dataset_params
+
+        if (
+            len(paths) == 1
+            and pathlib.Path(paths[0]).suffix.lower() == ".lance"
+        ):
+            dataset = Dataset.from_lance(paths[0], **params)
+        else:
+            dataset = Dataset(
+                spectra=paths,
+                path=lance_path,
+                parse_kwargs=parse_params,
+                **params,
+            )
+
+        if shuffle:
+            dataset = ShufflerIterDataPipe(
+                dataset, buffer_size=self.shuffle_buffer_size
+            )
+
+        return dataset
+
     def _make_loader(
-        self,
-        dataset: torch.utils.data.Dataset,
-        shuffle: bool = False,
+        self, dataset: torch.utils.data.Dataset, shuffle: bool = False
     ) -> torch.utils.data.DataLoader:
         """
         Create a PyTorch DataLoader.
@@ -300,10 +302,19 @@ class DeNovoDataModule(pl.LightningDataModule):
         return self._make_loader(self.test_dataset)
 
 
-def scale_to_unit_norm(spectrum):
+def _scale_to_unit_norm(spectrum: sus.MsmsSpectrum) -> sus.MsmsSpectrum:
     """
-    Scaling function used in Casanovo
-    slightly differing from the depthcharge implementation
+    Scale fragment ion intensities to unit norm.
+
+    Parameters
+    ----------
+    spectrum : sus.MsmsSpectrum
+        The spectrum for which to scale the fragment ion intensities.
+
+    Returns
+    -------
+    sus.MsmsSpectrum
+        The spectrum with scaled fragment ion intensities.
     """
     spectrum._inner._intensity = spectrum.intensity / np.linalg.norm(
         spectrum.intensity
