@@ -13,7 +13,7 @@ import shutil
 import tempfile
 import unittest
 import unittest.mock
-
+import contextlib
 import depthcharge.masses
 import einops
 import github
@@ -27,7 +27,12 @@ from casanovo import utils
 from casanovo.data import db_utils, ms_io
 from casanovo.data.datasets import SpectrumDataset, AnnotatedSpectrumDataset
 from casanovo.denovo.evaluate import aa_match, aa_match_batch, aa_match_metrics
-from casanovo.denovo.model import Spec2Pep, _aa_pep_score, _calc_match_score
+from casanovo.denovo.model import (
+    Spec2Pep,
+    _aa_pep_score,
+    _calc_match_score,
+    PeptideDecoder,
+)
 from depthcharge.data import SpectrumIndex, AnnotatedSpectrumIndex
 
 
@@ -1771,3 +1776,218 @@ def test_setup_output(tmp_path, monkeypatch):
 
         assert output_path.resolve() == target_path.resolve()
         assert output_root == "bar"
+
+
+@contextlib.contextmanager
+def fake_decoder_init_context():
+    """
+    Temporarily replace PeptideDecoder.__init__ so that after initialization,
+    the key "FAKEAA" is deliberately removed from _aa2idx to simulate an unknown residue.
+    """
+    original_decoder_init = PeptideDecoder.__init__
+
+    def fake_decoder_init(self, *args, **kwargs):
+
+        original_decoder_init(self, *args, **kwargs)
+        # Deliberately remove "FAKEAA" from _aa2idx if it exists
+        if "FAKEAA" in self._aa2idx:
+            del self._aa2idx["FAKEAA"]
+
+    # Replace the __init__ with our fake version
+    PeptideDecoder.__init__ = fake_decoder_init
+    try:
+        yield
+    finally:
+        PeptideDecoder.__init__ = original_decoder_init
+
+
+def test_unknown_residue_trigger_keyerror():
+    with fake_decoder_init_context():
+
+        custom_residues = {
+            "A": 71.03711,  # Normal residue
+            "FAKEAA": 999.999,  # (will be removed in the decoder)
+        }
+
+        model = Spec2Pep(residues=custom_residues)
+        assert "FAKEAA" not in model.decoder._aa2idx
+        idx_A = model.decoder._aa2idx["A"]
+        expected_mass = 71.03711
+        assert torch.isclose(
+            model.token_masses[idx_A], torch.tensor(expected_mass)
+        )
+        mass_sum = model.token_masses.sum().item()
+        assert mass_sum < expected_mass * 2
+
+
+def test_cache_finished_beams_branches():
+    # Create a model for a single spectrum with 4 beams.
+    model = Spec2Pep(n_beams=4, top_match=2)
+    stop_idx = model.decoder._aa2idx["$"]  # Get the index for the stop token
+
+    # Construct tokens with shape (4, 3) representing 4 beams, each of length 3 (using tokens[:, :3] at step=2)
+    tokens = torch.tensor(
+        [
+            [
+                4,
+                14,
+                4,
+            ],  # Beam 0: Last token is not the stop token => extra 0 score should be appended.
+            [
+                4,
+                14,
+                4,
+            ],  # Beam 1: Identical to beam 0 => considered duplicate and skipped.
+            [
+                4,
+                14,
+                stop_idx,
+            ],  # Beam 2: Last token is the stop token => no extra 0 score appended.
+            [
+                4,
+                14,
+                5,
+            ],  # Beam 3: New beam; when pred_cache is full, heapq.heappushpop is triggered.
+        ]
+    )
+
+    # All beams are eligible for caching.
+    beams_to_cache = torch.tensor([True, True, True, True])
+    # Simulate that all beams meet the precursor m/z condition.
+    beam_fits_precursor = torch.tensor([True, True, True, True])
+    step = 2
+
+    vocab_size = model.decoder.vocab_size + 1
+    scores = torch.zeros((4, step + 1, vocab_size), dtype=torch.float)
+    for i in range(4):
+        for j in range(step + 1):
+            idx = tokens[i, j].item()
+            scores[i, j, idx] = 0.8
+
+    pred_cache = {0: []}
+    model._cache_finished_beams(
+        tokens=tokens,
+        scores=scores,
+        step=step,
+        beams_to_cache=beams_to_cache,
+        beam_fits_precursor=beam_fits_precursor,
+        pred_cache=pred_cache,
+    )
+
+    assert len(pred_cache[0]) <= 4
+
+
+def test_get_topk_beams_cumulative_masses():
+    """
+    We cover both branches:
+      - step == 0: cumulative_masses_new[b, s] = token_masses[new_token_idx]
+      - step > 0: cumulative_masses_new[b, s] = cumulative_masses[b, prev_beam_idx] + token_masses[new_token_idx]
+    """
+    model = Spec2Pep(n_beams=2)
+    vocab_size = model.decoder.vocab_size + 1
+    model._cumulative_masses = torch.tensor([0.0, 0.0], dtype=torch.float)
+    tokens = torch.zeros((2, 5), dtype=torch.long)
+    scores = torch.zeros((2, 5, vocab_size), dtype=torch.float)
+
+    finished_beams = torch.tensor([False, False], dtype=torch.bool)
+
+    batch = 1
+    step = 0
+    tokens[0, 0] = 4
+    tokens[1, 0] = 6
+    scores[0, 0, 4] = 1.0
+    scores[1, 0, 6] = 2.0
+
+    tokens_out, scores_out = model._get_topk_beams(
+        tokens, scores, finished_beams, batch, step
+    )
+    cm_after_step0 = model._cumulative_masses.clone()
+    assert (
+        cm_after_step0 > 0
+    ).all(), "step=0 should set cumulative masses to the new token's mass"
+
+    step = 1
+    tokens[0, 1] = 10
+    tokens[1, 1] = 12
+    scores[0, 1, 10] = 3.0
+    scores[1, 1, 12] = 4.0
+
+    tokens_out, scores_out = model._get_topk_beams(
+        tokens, scores, finished_beams, batch, step
+    )
+    cm_after_step1 = model._cumulative_masses
+    assert (
+        cm_after_step1 > cm_after_step0
+    ).all(), "step=1 should add new token mass to the previous beam mass"
+
+
+def test_finish_beams_scenarios():
+    model = Spec2Pep(
+        n_beams=2,
+        min_peptide_len=3,
+        residues="canonical",
+        precursor_mass_tol=50,
+        isotope_error_range=(0, 1),
+    )
+
+    tokens = torch.zeros((2, 5), dtype=torch.long)
+    tokens[0, 0] = model.stop_token
+    tokens[1, 0] = 4
+    precursors = torch.tensor(
+        [
+            [500.0, 2.0, 250.0],  # For beam0
+            [600.0, 2.0, 300.0],  # For beam1
+        ],
+        dtype=torch.float,
+    )
+
+    finished, fits_precursor, discarded = model._finish_beams(
+        tokens, precursors, step=0
+    )
+
+    assert (
+        discarded[0].item() is True
+    ), "Beam0 should be discarded for short peptide"
+    assert finished[1].item() is False, "Beam1 should not be finished"
+    assert discarded[1].item() is False, "Beam1 should not be discarded"
+
+    model2 = Spec2Pep(
+        n_beams=2,
+        min_peptide_len=3,
+        residues="canonical",
+        precursor_mass_tol=50,
+        isotope_error_range=(0, 1),
+    )
+    model2._cumulative_masses = torch.tensor([50.0, 50.0], dtype=torch.float)
+    step = 2
+
+    tokens2 = torch.zeros((2, 5), dtype=torch.long)
+    if model2.nterm_idx.numel() > 0:
+        nterm_token = model2.nterm_idx[0].item()
+    else:
+        nterm_token = 12
+    tokens2[0, 0] = 4
+    tokens2[0, 1] = nterm_token
+    tokens2[0, 2] = nterm_token
+
+    tokens2[1, 0] = 4
+    tokens2[1, 1] = 4
+    tokens2[1, 2] = 0
+
+    precursors2 = torch.tensor(
+        [
+            [1000.0, 2.0, 500.0],
+            [1000.0, 2.0, 500.0],
+        ],
+        dtype=torch.float,
+    )
+
+    finished2, fits_precursor2, discarded2 = model2._finish_beams(
+        tokens2, precursors2, step=step
+    )
+    assert (
+        discarded2[0].item() is True
+    ), "Beam0 should be discarded due to multiple N-terminal modifications"
+    assert (
+        discarded2[1].item() is True
+    ), "Beam1 should be discarded because current token is 0"
