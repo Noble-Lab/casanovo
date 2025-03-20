@@ -194,7 +194,7 @@ class DeNovoDataModule(pl.LightningDataModule):
 
 
 def prepare_batch(
-    batch: List[Tuple[torch.Tensor, float, int, str]]
+    batch: List[Tuple[torch.Tensor, float, int, str]],
 ) -> Tuple[torch.Tensor, torch.Tensor, np.ndarray]:
     """
     Collate MS/MS spectra into a batch.

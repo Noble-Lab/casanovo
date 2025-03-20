@@ -17,14 +17,10 @@ from torch.utils.tensorboard import SummaryWriter
 from depthcharge.components import ModelMixin, PeptideDecoder, SpectrumEncoder
 
 
-try:
-    from . import evaluate
-    from .. import config
-    from ..data import ms_io
-except ImportError:
-    from casanovo.denovo import evaluate
-    from casanovo import config
-    from casanovo.data import ms_io
+from . import evaluate
+from .. import config
+from ..data import ms_io
+
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 logger = logging.getLogger("casanovo")
 
