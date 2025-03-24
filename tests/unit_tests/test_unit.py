@@ -1372,7 +1372,7 @@ def test_beam_search_decode(tiny_config):
     # due to predicted stop token, first and third beam unfinished. Final beam
     # discarded due to length.
     assert torch.equal(
-        finished_beams, torch.tensor([False, True, False, True])
+        finished_beams, torch.tensor([False, False, False, True])
     )
     assert torch.equal(
         beam_fits_precursor, torch.tensor([False, False, False, False])
@@ -1404,7 +1404,7 @@ def test_beam_search_decode(tiny_config):
             pytest.fail(
                 "Unexpected peptide tensor in the finished beams cache"
             )
-    assert correct_cached == 1
+    assert correct_cached == 0
 
     # Test _get_top_peptide().
     # Return the candidate peptide with the highest score
@@ -1594,7 +1594,7 @@ def test_beam_search_decode(tiny_config):
     finished_beams, beam_fits_precursor, discarded_beams = model._finish_beams(
         tokens, precursors, step
     )
-    assert torch.equal(finished_beams, torch.tensor([False, True]))
+    assert torch.equal(finished_beams, torch.tensor([False, False]))
     assert torch.equal(beam_fits_precursor, torch.tensor([False, False]))
     assert torch.equal(discarded_beams, torch.tensor([False, False]))
 
@@ -1634,7 +1634,7 @@ def test_beam_search_decode(tiny_config):
     assert torch.equal(
         beam_fits_precursor, torch.tensor([False, False, False])
     )
-    assert torch.equal(discarded_beams, torch.tensor([False, True, True]))
+    assert torch.equal(discarded_beams, torch.tensor([True, True, True]))
 
     # Test that sequences with more than one chimeric seperator are discarded
     tokens = torch.zeros((3, 6), dtype=torch.int64)

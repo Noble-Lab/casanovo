@@ -7,6 +7,7 @@ import logging
 import warnings
 from typing import Any, Dict, Generator, Iterable, List, Optional, Tuple, Union
 
+import depthcharge.constants
 import einops
 import lightning.pytorch as pl
 import numpy as np
@@ -174,6 +175,7 @@ class Spec2Pep(pl.LightningModule):
         self.min_peptide_len = min_peptide_len
         self.n_beams = n_beams
         self.top_match = top_match
+        self.max_charge = max_charge
 
         self.stop_token = self.tokenizer.stop_int
 
@@ -372,18 +374,10 @@ class Spec2Pep(pl.LightningModule):
                 # aa_neg_mass.append(aa)
                 aa_neg_mass_idx.append(self.tokenizer.index[aa])
 
-        # Find N-terminal residues.
-        n_term = torch.Tensor(
-            [
-                self.tokenizer.index[aa]
-                for aa in self.tokenizer.index
-                if aa.startswith("[") and aa.endswith("]-")
-            ]
-        ).to(self.decoder.device)
-
         beam_fits_precursor = torch.zeros(
             tokens.shape[0], dtype=torch.bool
         ).to(self.encoder.device)
+
         # Beams with a stop token predicted in the current step can be finished.
         finished_beams = torch.zeros(tokens.shape[0], dtype=torch.bool).to(
             self.encoder.device
@@ -397,23 +391,39 @@ class Spec2Pep(pl.LightningModule):
         )
 
         discarded_beams[tokens[:, step] == 0] = True
+
         # Discard beams with invalid modification combinations (i.e. N-terminal
-        # modifications occur multiple times or in internal positions).
-        if step > 1:  # Only relevant for longer predictions.
-            dim0 = torch.arange(tokens.shape[0])
-            final_pos = torch.full((ends_stop_token.shape[0],), step)
-            final_pos[ends_stop_token] = step - 1
-            # Multiple N-terminal modifications.
-            multiple_mods = torch.isin(
-                tokens[dim0, final_pos], n_term
-            ) & torch.isin(tokens[dim0, final_pos - 1], n_term)
-            # N-terminal modifications occur at an internal position.
-            # Broadcasting trick to create a two-dimensional mask.
-            mask = (final_pos - 1)[:, None] >= torch.arange(tokens.shape[1])
-            internal_mods = torch.isin(
-                torch.where(mask.to(self.encoder.device), tokens, 0), n_term
-            ).any(dim=1)
-            discarded_beams[multiple_mods | internal_mods] = True
+        # modifications occur multiple times or in internal positions)
+        n_term = torch.tensor(
+            [
+                self.tokenizer.index[aa]
+                for aa in self.tokenizer.index
+                if aa.startswith("[") and aa.endswith("]-")
+            ],
+            dtype=int,
+            device=self.decoder.device,
+        )
+
+        chimeric_separator = self.tokenizer.index[
+            self.tokenizer.chimeric_separator_token
+        ]
+
+        is_valid_position = torch.zeros_like(
+            tokens, dtype=bool, device=self.encoder.device
+        )
+        is_separator = tokens == chimeric_separator
+        is_n_term = torch.isin(tokens, n_term)
+
+        if not self.tokenizer.reverse:
+            is_valid_position[:, 1:] = is_separator[:, :-1]
+            is_valid_position[:, 0] = True
+        else:
+            is_valid_position[:, :-1] = is_separator[:, 1:]
+            is_valid_position[ends_stop_token, step - 1] = True
+            is_valid_position[~ends_stop_token, step] = True
+
+        is_n_term[is_valid_position] = False
+        discarded_beams |= torch.any(is_n_term)
 
         # Check which beams should be terminated or discarded based on the
         # predicted peptide.
@@ -440,9 +450,6 @@ class Spec2Pep(pl.LightningModule):
                 discarded_beams[i] = True
                 continue
             # Discard beams that contain more than chimeric separator
-            chimeric_separator = self.tokenizer.index[
-                self.tokenizer.chimeric_separator_token
-            ]
             if (pred_tokens == chimeric_separator).sum() > 1:
                 discarded_beams[i] = True
                 continue
@@ -450,73 +457,17 @@ class Spec2Pep(pl.LightningModule):
             # the peptide mass exceeds the precursor m/z to an extent that it
             # cannot be corrected anymore by a subsequently predicted AA with
             # negative mass.
-            precursor_charge = precursors[i, 1]
             precursor_mz = precursors[i, 2]
-            matches_precursor_mz = exceeds_precursor_mz = False
 
             # Send tokenizer masses to correct device for calculate_precursor_ions()
             self.tokenizer.masses = self.tokenizer.masses.type_as(precursor_mz)
 
-            for aa in [None] if finished_beams[i] else aa_neg_mass_idx:
-                if aa is None:
-                    calc_peptide = pred_tokens
-                else:
-                    calc_peptide = pred_tokens.detach().clone()
-                    calc_peptide = torch.cat(
-                        (
-                            calc_peptide,
-                            torch.tensor([aa]).type_as(calc_peptide),
-                        )
-                    )
-                try:
-                    calc_mz = self.tokenizer.calculate_precursor_ions(
-                        calc_peptide.unsqueeze(0),
-                        precursor_charge.unsqueeze(0),
-                    )[0]
-
-                    delta_mass_ppm = [
-                        _calc_mass_error(
-                            calc_mz,
-                            precursor_mz,
-                            precursor_charge,
-                            isotope,
-                        )
-                        for isotope in range(
-                            self.isotope_error_range[0],
-                            self.isotope_error_range[1] + 1,
-                        )
-                    ]
-                    # Terminate the beam if the calculated m/z for the predicted
-                    # peptide (without potential additional AAs with negative
-                    # mass) is within the precursor m/z tolerance.
-                    matches_precursor_mz = aa is None and any(
-                        abs(d) < self.precursor_mass_tol
-                        for d in delta_mass_ppm
-                    )
-                    # Terminate the beam if the calculated m/z exceeds the
-                    # precursor m/z + tolerance and hasn't been corrected by a
-                    # subsequently predicted AA with negative mass.
-                    if matches_precursor_mz:
-                        exceeds_precursor_mz = False
-                    else:
-                        exceeds_precursor_mz = all(
-                            d > self.precursor_mass_tol for d in delta_mass_ppm
-                        )
-                        exceeds_precursor_mz = (
-                            finished_beams[i] or aa is not None
-                        ) and exceeds_precursor_mz
-                    if matches_precursor_mz or exceeds_precursor_mz:
-                        break
-                except KeyError:
-                    matches_precursor_mz = exceeds_precursor_mz = False
             # Finish beams that fit or exceed the precursor m/z.
             # Don't finish beams that don't include a stop token if they don't
             # exceed the precursor m/z tolerance yet.
             if finished_beams[i]:
-                beam_fits_precursor[i] = matches_precursor_mz
-            elif exceeds_precursor_mz:
-                finished_beams[i] = True
-                beam_fits_precursor[i] = matches_precursor_mz
+                beam_fits_precursor[i] = True
+
         return finished_beams, beam_fits_precursor, discarded_beams
 
     def _cache_finished_beams(
@@ -775,7 +726,9 @@ class Spec2Pep(pl.LightningModule):
         ).T  # .float()
 
         mzs, ints = batch["mz_array"], batch["intensity_array"]
-        # spectra = torch.stack([mzs, ints], dim=2)
+        con_unsqueeze = lambda x: x.unsqueeze(0) if x.dim() == 1 else x
+        mzs = con_unsqueeze(mzs)
+        ints = con_unsqueeze(ints)
 
         seqs = batch["seq"] if "seq" in batch else None
         seqs_comp = (
@@ -1049,25 +1002,48 @@ class Spec2Pep(pl.LightningModule):
             if len(peptide) == 0:
                 continue
 
-            # Compute mass and detokenize
-            calc_mass = self.tokenizer.calculate_precursor_ions(
-                peptide.unsqueeze(0), torch.tensor([charge]).type_as(peptide)
-            )[0]
-            peptide = "".join(
-                self.tokenizer.detokenize(peptide.unsqueeze(0), join=False)[0]
-            )
+            separator_int = self.tokenizer.index[
+                self.tokenizer.chimeric_separator_token
+            ]
+            split_mask = peptide == separator_int
+            split_mask[-1] = True
+            split_mask[0] = True
+            split_idx = torch.where(split_mask)[0]
+            split_idx[-1] += 1
 
-            self.out_writer.psms.append(
-                psm.PepSpecMatch(
-                    sequence=peptide,
-                    spectrum_id=(file_name, scan),
-                    peptide_score=peptide_score,
-                    charge=int(charge),
-                    calc_mz=calc_mass.item(),
-                    exp_mz=precursor_mz,
-                    aa_scores=aa_scores,
+            for curr_start_idx, curr_end_idx in zip(
+                split_idx[:-1], split_idx[1:]
+            ):
+                next_aa_scores = aa_scores[curr_start_idx:curr_end_idx]
+                next_peptide = peptide[curr_start_idx:curr_end_idx]
+                if next_peptide[0] == separator_int:
+                    next_peptide = next_peptide[1:]
+
+                estimated_charge, calc_mz = _estimate_charge_state(
+                    next_peptide,
+                    self.tokenizer.masses,
+                    self.max_charge,
+                    precursor_mz,
                 )
-            )
+                next_aa_scores, next_pep_score = _aa_pep_score(
+                    next_aa_scores,
+                    abs(calc_mz - precursor_mz) < self.precursor_mass_tol,
+                )
+                next_peptide = self.tokenizer.detokenize(
+                    next_peptide.unsqueeze(0)
+                )[0]
+
+                self.out_writer.psms.append(
+                    psm.PepSpecMatch(
+                        sequence=next_peptide,
+                        spectrum_id=(file_name, scan),
+                        peptide_score=next_pep_score,
+                        charge=int(estimated_charge),
+                        calc_mz=calc_mz.item(),
+                        exp_mz=precursor_mz,
+                        aa_scores=next_aa_scores,
+                    )
+                )
 
     def on_train_start(self):
         """Log optimizer settings."""
@@ -1532,6 +1508,21 @@ def _aa_pep_score(
     if not fits_precursor_mz:
         peptide_score -= 1
     return aa_scores, peptide_score
+
+
+def _estimate_charge_state(
+    tokens: torch.Tensor,
+    masses: torch.Tensor,
+    max_charge: int,
+    precursor_mz: float,
+) -> Tuple[int, float]:
+    mass = masses[tokens].sum() + depthcharge.constants.H2O
+    charge_candidates = torch.arange(1, max_charge + 1, dtype=int)
+    mz_candidates = (mass / charge_candidates) + depthcharge.constants.PROTON
+    delta_mz = torch.abs(mz_candidates - precursor_mz)
+    min_idx = torch.argmin(delta_mz)
+
+    return charge_candidates[min_idx], mz_candidates[min_idx]
 
 
 def generate_tgt_mask(sz: int) -> torch.Tensor:
