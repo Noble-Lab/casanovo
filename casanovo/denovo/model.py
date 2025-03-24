@@ -1516,8 +1516,11 @@ def _estimate_charge_state(
     max_charge: int,
     precursor_mz: float,
 ) -> Tuple[int, float]:
+    masses = masses.to(tokens.device)
     mass = masses[tokens].sum() + depthcharge.constants.H2O
-    charge_candidates = torch.arange(1, max_charge + 1, dtype=int)
+    charge_candidates = torch.arange(
+        1, max_charge + 1, dtype=int, device=tokens.device
+    )
     mz_candidates = (mass / charge_candidates) + depthcharge.constants.PROTON
     delta_mz = torch.abs(mz_candidates - precursor_mz)
     min_idx = torch.argmin(delta_mz)
