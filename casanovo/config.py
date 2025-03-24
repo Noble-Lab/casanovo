@@ -143,6 +143,13 @@ class Config:
         try:
             param_val = self._user_config.get(param, self._params[param])
             if param == "residues":
+                for aa, mass in param_val.items():
+                    aa_str = str(aa)
+                    if len(aa_str) == 1 and aa_str == "C":
+                        warnings.warn("C carbamidomethylation must be a fixed modification.")
+                    elif len(aa_str) > 1 and aa_str[1] == "+":
+                        if aa_str not in ["M+15.995", "N+0.984", "Q+0.984", "C+57.021"]: 
+                            warnings.warn(f'{aa_str} is not a supported PTM.')
                 residues = {
                     str(aa): float(mass) for aa, mass in param_val.items()
                 }
