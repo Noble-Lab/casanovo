@@ -170,6 +170,11 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         )
         self.stop_token = self.decoder._aa2idx["$"]
 
+        # Check if config PTM and AAs are present in model alphabet
+        for aa in config.Config().residues:
+            if aa not in residues:
+                warnings.warn(f"Warning: {aa} is not in model alphabet.")
+
         # Logging.
         self.calculate_precision = calculate_precision
         self.n_log = n_log
