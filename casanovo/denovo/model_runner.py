@@ -150,7 +150,6 @@ class ModelRunner:
         self.initialize_tokenizer()
         self.initialize_model(train=False, db_search=True)
         self.model.out_writer = self.writer
-        self.model.psm_batch_size = self.config.predict_batch_size
         self.model.protein_database = db_utils.ProteinDatabase(
             fasta_path,
             self.config.enzyme,

@@ -1080,40 +1080,33 @@ def test_psm_batches(tiny_config):
         "scan_id": [1] * 12 + [2] * 12,
     }
 
-    for psm_batch_size in [24, 12, 8, 10]:
-        db_model.psm_batch_size = psm_batch_size
-        psm_batches = list(db_model._psm_batches(mock_batch))
-        assert len(psm_batches) == math.ceil(24 / psm_batch_size)
-        num_spectra = 0
-
-        for psm_batch in psm_batches:
-            end_idx = min(
-                num_spectra + psm_batch_size,
-                len(expected_batch_all["peak_file"]),
-            )
-            assert torch.allclose(
-                psm_batch["precursor_mz"],
-                expected_batch_all["precursor_mz"][num_spectra:end_idx],
-            )
-            assert torch.equal(
-                psm_batch["precursor_charge"],
-                expected_batch_all["precursor_charge"][num_spectra:end_idx],
-            )
-            assert torch.equal(
-                psm_batch["seq"],
-                expected_batch_all["seq"][num_spectra:end_idx],
-            )
-            assert (
-                psm_batch["peak_file"]
-                == expected_batch_all["peak_file"][num_spectra:end_idx]
-            )
-            assert (
-                psm_batch["scan_id"]
-                == expected_batch_all["scan_id"][num_spectra:end_idx]
-            )
-            num_spectra += len(psm_batch["peak_file"])
-
-        assert num_spectra == 24
+    num_spectra = 0
+    for psm_batch in db_model._psm_batches(mock_batch):
+        batch_size = len(psm_batch["peak_file"])
+        end_idx = min(
+            num_spectra + batch_size, len(expected_batch_all["peak_file"])
+        )
+        assert torch.allclose(
+            psm_batch["precursor_mz"],
+            expected_batch_all["precursor_mz"][num_spectra:end_idx],
+        )
+        assert torch.equal(
+            psm_batch["precursor_charge"],
+            expected_batch_all["precursor_charge"][num_spectra:end_idx],
+        )
+        assert torch.equal(
+            psm_batch["seq"], expected_batch_all["seq"][num_spectra:end_idx]
+        )
+        assert (
+            psm_batch["peak_file"]
+            == expected_batch_all["peak_file"][num_spectra:end_idx]
+        )
+        assert (
+            psm_batch["scan_id"]
+            == expected_batch_all["scan_id"][num_spectra:end_idx]
+        )
+        num_spectra += batch_size
+    assert num_spectra == 24
 
 
 def test_get_candidates(tiny_fasta_file):

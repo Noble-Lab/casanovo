@@ -1238,7 +1238,7 @@ class DbSpec2Pep(Spec2Pep):
             information for each candidate peptide to be scored
             against each spectrum.
         """
-        batch_size = batch["mz_array"].shape[0]
+        batch_size = batch["precursor_charge"].shape[0]
 
         # Determine the candidates to score for each spectrum and
         # compile into new batches with the same size as the original
@@ -1247,28 +1247,24 @@ class DbSpec2Pep(Spec2Pep):
         for i, (precursor_charge, precursor_mz) in enumerate(
             zip(batch["precursor_charge"], batch["precursor_mz"])
         ):
-            candidates.append(
-                (
-                    i,
-                    self.protein_database.get_candidates(
-                        precursor_mz, precursor_charge
-                    ),
-                )
-            )
+            for candidate in self.protein_database.get_candidates(
+                precursor_mz, precursor_charge
+            ):
+                candidates.append((i, candidate))
 
             # Yield a batch if sufficient candidates are found or all
             # spectra have been processed.
-            if len(candidates) >= batch_size or i == len(batch) - 1:
+            while len(candidates) >= batch_size or (
+                i == batch_size - 1 and len(candidates) > 0
+            ):
                 batch_candidates = candidates[:batch_size]
                 # Repeat the spectrum information for each candidate
                 # that should be matched to the spectrum.
                 psm_batch = {key: [] for key in [*batch.keys(), "seq"]}
-                for spec_i, spec_candidates in batch_candidates:
+                for spec_i, candidate in batch_candidates:
                     for key in batch.keys():
-                        psm_batch[key].extend(
-                            [batch[key][spec_i]] * len(spec_candidates)
-                        )
-                    psm_batch["seq"].extend(spec_candidates)
+                        psm_batch[key].append(batch[key][spec_i])
+                    psm_batch["seq"].append(candidate)
 
                 # Convert the batch elements to tensors.
                 for key in psm_batch.keys():
@@ -1276,11 +1272,11 @@ class DbSpec2Pep(Spec2Pep):
                         psm_batch[key] = torch.stack(psm_batch[key])
                 psm_batch["seq"] = self.tokenizer.tokenize(psm_batch["seq"])
 
-                # Remove the processed candidates from the list.
-                candidates = candidates[batch_size:]
-
                 # Yield the PSM batch for processing.
                 yield psm_batch
+
+                # Remove the processed candidates from the list.
+                candidates = candidates[batch_size:]
 
 
 def _calc_match_score(
