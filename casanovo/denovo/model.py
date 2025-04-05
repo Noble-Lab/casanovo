@@ -1093,20 +1093,40 @@ class DbSpec2Pep(Spec2Pep):
     search score function.
 
     Uses teacher forcing to 'query' Casanovo to score a peptide-spectrum
-    pair. Higher scores indicate a better match between the peptide and
-    spectrum. The amino acid-level scores are also returned.
-
-    Also note that although teacher-forcing is used within this method,
-    there is *no training* involved. This is a prediction-only method.
+    pair. Note that this does *not* involve training, but rather that
+    teacher forcing is used for predicting.
     """
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.psm_batch_size = None
+
+    def forward(self, batch: Dict[str, torch.Tensor]):
+        """
+        The forward step.
+
+        Parameters
+        ----------
+        batch : Dict[str, torch.Tensor]
+            A batch from the SpectrumDataset, which contains keys:
+            ``mz_array``, ``intensity_array``, ``precursor_mz``,
+            ``precursor_charge``, and ``seq``, each pointing to tensors
+            with the corresponding data.
+
+        Returns
+        -------
+        scores : torch.Tensor of shape (n_spectra, length, n_amino_acids)
+            The individual amino acid scores for each prediction,
+            converted to probabilities using a softmax.
+        tokens : torch.Tensor of shape (n_spectra, length)
+            The predicted tokens for each spectrum.
+        """
+        pred, truth = self._forward_step(batch)
+        pred = self.softmax(pred)
+        return pred, truth
 
     def predict_step(
         self,
-        batch: Dict[str, torch.Tensor | List],
+        batch: Dict[str, torch.Tensor],
         *args,
     ) -> List[ms_io.PepSpecMatch]:
         """
@@ -1114,39 +1134,26 @@ class DbSpec2Pep(Spec2Pep):
 
         Parameters
         ----------
-        batch : Dict[str, torch.Tensor | List]
+        batch : Dict[str, torch.Tensor]
             A batch from the SpectrumDataset, which contains keys:
             ``mz_array``, ``intensity_array``, ``precursor_mz``, and
             ``precursor_charge``, each pointing to tensors with the
-            corresponding data. The ``seq`` key is optional and
-            contains the peptide sequences for training.
+            corresponding data.
 
         Returns
         -------
-        predictions: List[ms_io.PepSpecMatch]
-            Predicted PSMs for the given batch of spectra.
+        predictions: List[psm.PepSpecMatch]
+            The predicted PSMs for the processed batch.
         """
-        for batch_key in [
-            "ms_level",
-            "precursor_mz",
-            "precursor_charge",
-            "mz_array",
-            "intensity_array",
-        ]:
-            batch[batch_key] = batch[batch_key].squeeze(0)
-
-        predictions_all = collections.defaultdict(list)
+        predictions = collections.defaultdict(list)
         for psm_batch in self._psm_batches(batch):
-            pred, truth = self._forward_step(psm_batch)
-            pred = self.softmax(pred)
-            batch_peptide_scores, batch_aa_scores = _calc_match_score(
-                pred, truth
-            )
+            pred, truth = self.forward(psm_batch)
+            peptide_scores, aa_scores = _calc_match_score(pred, truth)
 
             for (
                 filename,
                 scan,
-                charge,
+                precursor_charge,
                 precursor_mz,
                 peptide,
                 peptide_score,
@@ -1156,25 +1163,20 @@ class DbSpec2Pep(Spec2Pep):
                 psm_batch["scan_id"],
                 psm_batch["precursor_charge"],
                 psm_batch["precursor_mz"],
-                self.tokenizer.detokenize(psm_batch["seq"]),
-                batch_peptide_scores,
-                batch_aa_scores,
+                psm_batch["seq"],
+                peptide_scores,
+                aa_scores,
             ):
                 spectrum_id = (filename, scan)
-                predictions_all[spectrum_id].append(
+                predictions[spectrum_id].append(
                     psm.PepSpecMatch(
                         sequence=peptide,
                         spectrum_id=spectrum_id,
                         peptide_score=peptide_score,
-                        charge=int(charge),
-                        calc_mz=self.tokenizer.calculate_precursor_ions(
-                            peptide, charge
-                        ).item(),
+                        charge=int(precursor_charge),
+                        calc_mz=np.nan,
                         exp_mz=precursor_mz.item(),
                         aa_scores=aa_scores,
-                        protein=self.protein_database.get_associated_protein(
-                            peptide
-                        ),
                     )
                 )
 
@@ -1188,153 +1190,97 @@ class DbSpec2Pep(Spec2Pep):
                             key=lambda p: p.peptide_score,
                             reverse=True,
                         )[: self.top_match]
-                        for spectrum_predictions in predictions_all.values()
+                        for spectrum_predictions in predictions.values()
                     )
                 ]
             )
         )
+
+        # Determine the peptide sequence and parent proteins only for
+        # the retained PSMs.
+        for pred in predictions:
+            pred.sequence = self.tokenizer.detokenize(
+                torch.unsqueeze(pred.sequence, 0)
+            )[0]
+            pred.protein = self.protein_database.get_associated_protein(
+                pred.sequence
+            )
+
         return predictions
 
-    def on_predict_batch_end(
-        self, outputs: List[psm.PepSpecMatch], *args
-    ) -> None:
-        """
-        Write top scoring batches to the output writer.
-
-        Parameters
-        ----------
-        outputs : List[psm.PepSpecMatch]
-            List of peptide-spectrum matches predicted in the batch.
-        *args : tuple
-            Additional arguments.
-        """
-        self.out_writer.psms.extend(outputs)
-
     def _psm_batches(
-        self, batch: Dict[str, torch.Tensor | List]
-    ) -> Generator[Dict[str, Union[torch.Tensor, list]], None, None]:
+        self, batch: Dict[str, torch.Tensor]
+    ) -> Generator[Dict[str, torch.Tensor], None, None]:
         """
         Generates batches of candidate database PSMs.
 
+        PSM batches consist of repeated spectrum information for each
+        candidate peptide to be scored against each spectrum.
+        This method ensures that the batches provided to the model
+        are of a consistent size.
+
+        TODO: The batch creation and generation could potentially be
+         improved using a producer-consumer pattern.
+
         Parameters
         ----------
-        batch : Dict[str, torch.Tensor | List]
-            A batch of spectra to generate candidate PSMs for. FIXME
+        batch : Dict[str, torch.Tensor]
             A batch from the SpectrumDataset, which contains keys:
             ``mz_array``, ``intensity_array``, ``precursor_mz``, and
             ``precursor_charge``, each pointing to tensors with the
-            corresponding data. The ``seq`` key is optional and
-            contains the peptide sequences for training.
+            corresponding data.
 
-        Yields
-        ------
-        psm_batch : Dict[str, torch.Tensor | List]
-            A batch of candidate database PSMs ready for scoring.
+        Returns
+        -------
+        psm_batch : Generator[Dict[str, torch.Tensor], None, None]
+            A generator that yields batches of candidate database PSMs
+            ready for scoring. Each batch contains repeated spectrum
+            information for each candidate peptide to be scored
+            against each spectrum.
         """
-        num_candidate_psms = 0
-        psm_batch = self._initialize_psm_batch(batch)
+        batch_size = batch["mz_array"].shape[0]
 
-        for i, (precursor_mz, precursor_charge) in enumerate(
-            zip(batch["precursor_mz"], batch["precursor_charge"])
+        # Determine the candidates to score for each spectrum and
+        # compile into new batches with the same size as the original
+        # batch.
+        candidates = []
+        for i, (precursor_charge, precursor_mz) in enumerate(
+            zip(batch["precursor_charge"], batch["precursor_mz"])
         ):
-            candidate_peps = self.protein_database.get_candidates(
-                precursor_mz.item(), precursor_charge.item()
-            ).to_list()
-
-            if len(candidate_peps) == 0:
-                logger.debug(
-                    "No candidate peptides found for spectrum %s with "
-                    "precursor charge %d and precursor m/z %f",
-                    f"{batch['peak_file'][i]}:{batch['scan_id']}",
-                    precursor_charge,
-                    precursor_mz,
+            candidates.append(
+                (
+                    i,
+                    self.protein_database.get_candidates(
+                        precursor_mz, precursor_charge
+                    )
                 )
-                continue
+            )
 
-            while len(candidate_peps) > 0:
-                peps_to_add = min(
-                    self.psm_batch_size
-                    - (num_candidate_psms % self.psm_batch_size),
-                    len(candidate_peps),
-                )
+            # Yield a batch if sufficient candidates are found or all
+            # spectra have been processed.
+            if len(candidates) >= batch_size or i == len(batch) - 1:
+                batch_candidates = candidates[: batch_size]
+                # Repeat the spectrum information for each candidate
+                # that should be matched to the spectrum.
+                psm_batch = {key: [] for key in [*batch.keys(), "seq"]}
+                for spec_i, spec_candidates in batch_candidates:
+                    for key in batch.keys():
+                        psm_batch[key].extend(
+                            [batch[key][spec_i]] * len(spec_candidates)
+                        )
+                    psm_batch["seq"].extend(spec_candidates)
 
-                for key in batch.keys():
-                    psm_batch[key] += [batch[key][i]] * peps_to_add
+                # Convert the batch elements to tensors.
+                for key in psm_batch.keys():
+                    if isinstance(psm_batch[key][0], torch.Tensor):
+                        psm_batch[key] = torch.stack(psm_batch[key])
+                psm_batch["seq"] = self.tokenizer.tokenize(psm_batch["seq"])
 
-                psm_batch["seq"] += candidate_peps[:peps_to_add]
-                num_candidate_psms += peps_to_add
+                # Remove the processed candidates from the list.
+                candidates = candidates[batch_size:]
 
-                if self._pep_batch_ready(num_candidate_psms):
-                    yield self._finalize_psm_batch(psm_batch)
-                    psm_batch = self._initialize_psm_batch(batch)
-
-                candidate_peps = candidate_peps[peps_to_add:]
-
-        if (
-            not self._pep_batch_ready(num_candidate_psms)
-            and num_candidate_psms > 0
-        ):
-            yield self._finalize_psm_batch(psm_batch)
-
-    def _pep_batch_ready(self, num_candidate_psms: int) -> bool:
-        """
-        Checks if a batch of candidate PSMs is ready for processing.
-
-        Parameters
-        ----------
-        num_candidate_psms : int
-            Number of candidate PSMs processed so far.
-
-        Returns
-        -------
-        bool
-            True if the batch is ready, False otherwise.
-        """
-        return (
-            num_candidate_psms % self.psm_batch_size == 0
-        ) and num_candidate_psms != 0
-
-    def _initialize_psm_batch(self, batch: Dict[str, Any]) -> Dict[str, List]:
-        """
-        Initializes a new candidate PSM batch.
-
-        Parameters
-        ----------
-        batch : Dict[str, Any]
-            A batch of spectra to generate candidate PSMs for.
-
-        Returns
-        -------
-        psm_batch : Dict[str, List]
-            A dictionary representing the initialized PSM batch.
-        """
-        psm_batch = {key: list() for key in batch.keys()}
-        psm_batch["seq"] = list()
-        return psm_batch
-
-    def _finalize_psm_batch(
-        self, psm_batch: Dict[str, List[Any]]
-    ) -> Dict[str, torch.Tensor | List[Any]]:
-        """
-        Prepare a candidate PSM batch for scoring.
-
-        Parameters
-        ----------
-        psm_batch : Dict[str, List[Any]]
-            The current PSM batch to finalize.
-
-        Returns
-        -------
-        finalized_batch : Dict[str, torch.Tensor | List[Any]]
-            A finalized PSM batch ready for scoring.
-        """
-        for key in psm_batch.keys():
-            if isinstance(psm_batch[key][0], torch.Tensor):
-                psm_batch[key] = torch.stack(psm_batch[key])
-
-        psm_batch["seq"] = self.tokenizer.tokenize(psm_batch["seq"])
-        return psm_batch
-
+                # Yield the PSM batch for processing.
+                yield psm_batch
 
 def _calc_match_score(
     batch_all_aa_scores: torch.Tensor,

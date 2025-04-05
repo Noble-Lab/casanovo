@@ -273,7 +273,7 @@ def _get_config_file(file_path, file_name, additional_cfg=None):
         "allowed_var_mods": (
             "M:M[Oxidation],N:N[Deamidated],Q:Q[Deamidated], nterm:[Acetyl]-,"
             "nterm:[Carbamyl]-,nterm:[Ammonia-loss]-,"
-            "nterm:[Carbamyl][Ammonia-loss]-"
+            "nterm:[+25.980265]-"
         ),
         "random_seed": 454,
         "n_log": 1,
@@ -341,7 +341,7 @@ def _get_config_file(file_path, file_name, additional_cfg=None):
             "[Acetyl]-": 42.010565,
             "[Carbamyl]-": 43.005814,
             "[Ammonia-loss]-": -17.026549,
-            "[Carbamyl][Ammonia-loss]-": 25.980265,
+            "[+25.980265]-": 25.980265,
         },
     }
 

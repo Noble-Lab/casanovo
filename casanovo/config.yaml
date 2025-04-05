@@ -194,4 +194,5 @@ residues:
   "[Acetyl]-": 42.010565                  # Acetylation
   "[Carbamyl]-": 43.005814                # Carbamylation
   "[Ammonia-loss]-": -17.026549           # Ammonia loss
-  "[Carbamyl][Ammonia-loss]-": 25.980265  # Carbamylation and ammonia loss
+  "[+25.980265]-": 25.980265              # Carbamylation and ammonia loss
+  #"[Carbamyl][Ammonia-loss]-": 25.980265  # Carbamylation and ammonia loss
