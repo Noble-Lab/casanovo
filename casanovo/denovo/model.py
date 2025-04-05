@@ -1252,14 +1252,14 @@ class DbSpec2Pep(Spec2Pep):
                     i,
                     self.protein_database.get_candidates(
                         precursor_mz, precursor_charge
-                    )
+                    ),
                 )
             )
 
             # Yield a batch if sufficient candidates are found or all
             # spectra have been processed.
             if len(candidates) >= batch_size or i == len(batch) - 1:
-                batch_candidates = candidates[: batch_size]
+                batch_candidates = candidates[:batch_size]
                 # Repeat the spectrum information for each candidate
                 # that should be matched to the spectrum.
                 psm_batch = {key: [] for key in [*batch.keys(), "seq"]}
@@ -1281,6 +1281,7 @@ class DbSpec2Pep(Spec2Pep):
 
                 # Yield the PSM batch for processing.
                 yield psm_batch
+
 
 def _calc_match_score(
     batch_all_aa_scores: torch.Tensor,
