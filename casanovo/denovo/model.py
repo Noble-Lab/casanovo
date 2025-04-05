@@ -895,13 +895,12 @@ class Spec2Pep(pl.LightningModule):
 
         # Calculate and log amino acid and peptide match evaluation
         # metrics from the predicted peptides.
-        peptides_true = self.detokenizer.detokenize(batch["seq"])
+        peptides_true = self.tokenizer.detokenize(batch["seq"])
         peptides_pred = [
             pred
             for spectrum_preds in self.forward(batch)
             for _, _, pred in spectrum_preds
         ]
-        peptides_pred = self.detokenizer.detokenize(peptides_pred)
         aa_precision, _, pep_precision = evaluate.aa_match_metrics(
             *evaluate.aa_match_batch(
                 peptides_true, peptides_pred, self.tokenizer.residues

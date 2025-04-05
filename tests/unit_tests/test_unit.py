@@ -1852,8 +1852,8 @@ def test_train_val_step_functions():
     batch = {
         "mz_array": torch.zeros(1, 5),
         "intensity_array": torch.zeros(1, 5),
-        "precursor_mz": torch.tensor(235.63410).unsqueeze(0),
-        "precursor_charge": torch.tensor(2.0).unsqueeze(0),
+        "precursor_mz": torch.tensor(235.63410),
+        "precursor_charge": torch.tensor(2),
         "seq": tokenizer.tokenize(["PEPK"]),
     }
     train_batch = {key: val.unsqueeze(0) for key, val in batch.items()}
