@@ -1416,36 +1416,30 @@ def test_beam_search_decode(tiny_config):
         (0.94, 0.3, 4 * [0.94], model.tokenizer.tokenize("PEPP")[0]),
     )
 
-    assert torch.equal(
-        next(model._get_top_peptide(test_cache))[0][-1],
-        model.tokenizer.tokenize(["PEPK"])[0],
-    )
+    assert next(model._get_top_peptide(test_cache))[0][-1] == "PEPK"
     # Test that an empty predictions is returned when no beams have been
     # finished.
     empty_cache = collections.OrderedDict((i, []) for i in range(batch))
     assert len(list(model._get_top_peptide(empty_cache))[0]) == 0
-    # Test multiple PSM per spectrum and if it's highest scoring peptides
+    # Test multiple PSMs per spectrum and if it's highest scoring peptides.
     model.top_match = 2
     assert set(
-        [
-            model.tokenizer.detokenize(pep[-1].unsqueeze(0))[0]
-            for pep in list(model._get_top_peptide(test_cache))[0]
-        ]
+        [pep[-1] for pep in next(model._get_top_peptide(test_cache))]
     ) == {"PEPK", "PEPP"}
 
-    # Test reverse aa scores when decoder is reversed
+    # Test reverse AA scores when decoder is reversed.
     pred_cache = {
-        0: [(1.0, 0.42, np.array([1.0, 0.0]), torch.Tensor([4, 14]))]
+        0: [(1.0, 0.42, np.array([1.0, 0.0]), torch.IntTensor([4, 14]))]
     }
 
-    model.decoder.reverse = True
+    model.tokenizer.reverse = True
     top_peptides = list(model._get_top_peptide(pred_cache))
     assert len(top_peptides) == 1
     assert len(top_peptides[0]) == 1
     assert np.allclose(top_peptides[0][0][1], np.array([0.0, 1.0]))
     assert top_peptides[0][0][2] == "EP"
 
-    model.decoder.reverse = False
+    model.tokenizer.reverse = False
     top_peptides = list(model._get_top_peptide(pred_cache))
     assert len(top_peptides) == 1
     assert len(top_peptides[0]) == 1
