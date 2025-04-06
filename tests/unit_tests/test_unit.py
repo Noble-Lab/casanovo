@@ -1849,14 +1849,13 @@ def test_train_val_step_functions():
         tokenizer=tokenizer,
     )
 
-    batch = {
+    train_batch = {
         "mz_array": torch.zeros(1, 5),
         "intensity_array": torch.zeros(1, 5),
         "precursor_mz": torch.tensor(235.63410),
         "precursor_charge": torch.tensor(2),
         "seq": tokenizer.tokenize(["PEPK"]),
     }
-    train_batch = {key: val.unsqueeze(0) for key, val in batch.items()}
     val_batch = copy.deepcopy(train_batch)
 
     train_step_loss = model.training_step(train_batch)
