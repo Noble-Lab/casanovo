@@ -162,7 +162,7 @@ replace_isoleucine_with_leucine: true
 # Reverse peptide sequences.
 reverse_peptides: true
 # MassIVE-KB style tokenizer, otherwise ProForma syntax.
-massivekb_tokenizer: true
+massivekb_tokenizer: false
 
 # AMINO ACID AND MODIFICATION VOCABULARY
 residues:

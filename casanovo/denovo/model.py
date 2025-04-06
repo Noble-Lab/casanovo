@@ -266,7 +266,7 @@ class Spec2Pep(pl.LightningModule):
         ).type_as(mzs)
 
         tokens = torch.zeros(
-            batch, length, beam, dtype=torch.int64, device=self.encoder.device
+            batch, length, beam, dtype=torch.int64, device=self.device
         )
 
         # Create cache for decoded beams.
@@ -275,7 +275,7 @@ class Spec2Pep(pl.LightningModule):
         # Get the first prediction.
         pred = self.decoder(
             tokens=torch.zeros(
-                batch, 0, dtype=torch.int64, device=self.encoder.device
+                batch, 0, dtype=torch.int64, device=self.device
             ),
             memory=memories,
             memory_key_padding_mask=mem_masks,

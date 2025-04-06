@@ -111,9 +111,7 @@ class DeNovoDataModule(pl.LightningDataModule):
         ]
         self.valid_charge = np.arange(1, max_charge + 1)
 
-        self.tokenizer = (
-            tokenizer if tokenizer is not None else PeptideTokenizer()
-        )
+        self.tokenizer = tokenizer or PeptideTokenizer()
 
         # Set to None to disable shuffling, otherwise Torch throws an error.
         self.shuffle = shuffle if shuffle else None
@@ -122,13 +120,6 @@ class DeNovoDataModule(pl.LightningDataModule):
         self.n_workers = n_workers if n_workers is not None else os.cpu_count()
 
         # Custom fields to read from the input files.
-        # FIXME: Double-check why we need these first two.
-        self.custom_field_test_mgf = CustomField(
-            "title", lambda x: x["params"]["title"], pa.string()
-        )
-        self.custom_field_test_mzml = CustomField(
-            "title", lambda x: x["id"], pa.string()
-        )
         self.custom_field_anno = CustomField(
             "seq", lambda x: x["params"]["seq"], pa.string()
         )
@@ -199,17 +190,6 @@ class DeNovoDataModule(pl.LightningDataModule):
             A PyTorch Dataset for the given peak files.
         """
         custom_fields = [self.custom_field_anno] if annotated else []
-        if mode == "test":
-            if all([pathlib.Path(f).suffix.lower() == ".mgf" for f in paths]):
-                custom_fields.append(self.custom_field_test_mgf)
-            if all(
-                [
-                    pathlib.Path(f).suffix.lower() in (".mzml", ".mzxml")
-                    for f in paths
-                ]
-            ):
-                custom_fields.append(self.custom_field_test_mzml)
-
         lance_path = pathlib.Path(f"{self.lance_dir}/{mode}.lance")
 
         parse_params = dict(
