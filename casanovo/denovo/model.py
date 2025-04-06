@@ -786,8 +786,8 @@ class Spec2Pep(pl.LightningModule):
             [precursor_masses, precursor_charges, precursor_mzs]
         ).T
 
-        mzs = batch["mz_array"].squeeze(0)
-        intensities = batch["intensity_array"].squeeze(0)
+        mzs = batch["mz_array"]
+        intensities = batch["intensity_array"]
         seqs = batch.get("seq")
 
         return mzs, intensities, precursors, seqs

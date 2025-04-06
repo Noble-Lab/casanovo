@@ -30,8 +30,8 @@ def tiny_fasta_file(tmp_path):
 
 @pytest.fixture
 def mgf_medium(tmp_path):
-    """An MGF file with 7 spectra and scan numbers,
-    C+57.021 mass modification considered"""
+    """An MGF file with 7 spectra and scan numbers, C+57.021 mass
+    modification considered."""
     peptides = [
         "ATSIPAR",
         "VTLSCR",

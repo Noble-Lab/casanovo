@@ -49,9 +49,6 @@ def test_train_and_run(
     assert model_file.exists()
     assert best_model.exists()
 
-    assert model_file.exists()
-    assert best_model.exists()
-
     # Run Casanovo in de novo prediction mode.
     output_rootname = "test"
     output_filename = (tmp_path / output_rootname).with_suffix(".mztab")
