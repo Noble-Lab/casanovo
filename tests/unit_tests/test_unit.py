@@ -1362,9 +1362,9 @@ def test_beam_search_decode(tiny_config):
     finished_beams, beam_fits_precursor, discarded_beams = model._finish_beams(
         tokens, precursors, step
     )
-    # Second beam finished due to the precursor m/z filter, final beam finished
-    # due to predicted stop token, first and third beam unfinished. Final beam
-    # discarded due to length.
+    # Second beam finished due to the precursor m/z filter, final beam
+    # finished due to predicted stop token, first and third beam
+    # unfinished. Final beam discarded due to length.
     assert torch.equal(
         finished_beams, torch.tensor([False, True, False, True])
     )
@@ -1401,7 +1401,7 @@ def test_beam_search_decode(tiny_config):
     assert correct_cached == 1
 
     # Test _get_top_peptide().
-    # Return the candidate peptide with the highest score
+    # Return the candidate peptide with the highest score.
     test_cache = collections.OrderedDict((i, []) for i in range(batch))
     heapq.heappush(
         test_cache[0],
@@ -1421,7 +1421,8 @@ def test_beam_search_decode(tiny_config):
     # finished.
     empty_cache = collections.OrderedDict((i, []) for i in range(batch))
     assert len(list(model._get_top_peptide(empty_cache))[0]) == 0
-    # Test multiple PSMs per spectrum and if it's highest scoring peptides.
+    # Test multiple PSMs per spectrum and that these are the highest
+    # scoring peptides.
     model.top_match = 2
     assert set(
         [pep[-1] for pep in next(model._get_top_peptide(test_cache))]
@@ -1429,7 +1430,14 @@ def test_beam_search_decode(tiny_config):
 
     # Test reverse AA scores when decoder is reversed.
     pred_cache = {
-        0: [(1.0, 0.42, np.array([1.0, 0.0]), torch.IntTensor([4, 14]))]
+        0: [
+            (
+                1.0,
+                0.42,
+                np.array([1.0, 0.0]),
+                model.tokenizer.tokenize("PE")[0],
+            )
+        ]
     }
 
     model.tokenizer.reverse = True
