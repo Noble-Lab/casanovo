@@ -220,14 +220,14 @@ class ModelRunner:
             for peak_file, scan_id, true_seq in zip(
                 batch["peak_file"], batch["scan_id"], batch["seq"]
             ):
-                true_seqs.append(true_seq)
+                true_seqs.append(true_seq.cpu().detach().numpy())
                 if pred_i < len(self.writer.psms) and self.writer.psms[
                     pred_i
                 ].spectrum_id == (peak_file, scan_id):
                     pred_tokens = self.model.tokenizer.tokenize(
                         self.writer.psms[pred_i].sequence
                     ).squeeze(0)
-                    pred_seqs.append(pred_tokens)
+                    pred_seqs.append(pred_tokens.cpu().detach().numpy())
                     pred_i += 1
                 else:
                     pred_seqs.append(None)

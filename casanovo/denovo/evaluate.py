@@ -228,6 +228,7 @@ def aa_match_batch(
     aa_matches_batch, n_aa1, n_aa2 = [], 0, 0
     for peptide1, peptide2 in zip(peptides1, peptides2):
         # Split peptides into individual AAs if necessary.
+        # FIXME: This should use the tokenizer (i.e. be ProForma compliant).
         if isinstance(peptide1, str):
             peptide1 = re.split(r"(?<=.)(?=[A-Z])", peptide1)
 
