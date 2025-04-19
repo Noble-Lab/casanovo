@@ -1218,6 +1218,11 @@ class DbSpec2Pep(Spec2Pep):
         This method ensures that the batches provided to the model
         are of a consistent size.
 
+        FIXME: Move this logic to a subclassed DataLoader.
+         This would also allow correctly setting the batch size (now the
+         final batch will be (much) smaller depending on how many
+         spectra remain).
+
         TODO: The batch creation and generation could potentially be
          improved using a producer-consumer pattern.
 
