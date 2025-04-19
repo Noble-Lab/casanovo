@@ -1822,6 +1822,7 @@ def test_spectrum_id_mgf(mgf_small, tmp_path):
         train_paths=[mgf_small, mgf_small2],
         valid_paths=[mgf_small, mgf_small2],
         test_paths=[mgf_small, mgf_small2],
+        min_peaks=0,
         shuffle=False,
     )
     data_module.setup()
@@ -1831,9 +1832,6 @@ def test_spectrum_id_mgf(mgf_small, tmp_path):
         data_module.valid_dataset,
         data_module.test_dataset,
     ]:
-        for batch in dataset:
-            print(batch)
-
         for i, (filename, scan_id) in enumerate(
             [
                 (mgf_small, "0"),
@@ -1853,6 +1851,7 @@ def test_spectrum_id_mzml(mzml_small, tmp_path):
     data_module = DeNovoDataModule(
         lance_dir=tmp_path.name,
         test_paths=[mzml_small, mzml_small2],
+        min_peaks=0,
         shuffle=False,
     )
     data_module.setup(stage="test", annotated=False)
