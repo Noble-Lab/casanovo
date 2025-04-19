@@ -93,6 +93,8 @@ lance_dir:
 val_check_interval: 50_000
 
 # SPECTRUM PROCESSING OPTIONS
+# Minimum number of peaks for a spectrum to be considered valid.
+min_peaks: 20
 # Maximum number of the most intense peaks to retain, any remaining peaks are
 # discarded.
 max_peaks: 150
