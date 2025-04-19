@@ -1,6 +1,5 @@
 """Fixtures used for testing."""
 
-import depthcharge
 import numpy as np
 import psims
 import pytest
@@ -31,8 +30,8 @@ def tiny_fasta_file(tmp_path):
 
 @pytest.fixture
 def mgf_medium(tmp_path):
-    """An MGF file with 7 spectra and scan numbers,
-    C+57.021 mass modification considered"""
+    """An MGF file with 7 spectra and scan numbers, C+57.021 mass
+    modification considered."""
     peptides = [
         "ATSIPAR",
         "VTLSCR",
@@ -81,9 +80,13 @@ def _create_mgf(
     rng = np.random.default_rng(random_state)
     entries = [
         _create_mgf_entry(
-            p, rng.choice([2, 3]), mod_aa_mass=mod_aa_mass, annotate=annotate
+            p,
+            i,
+            rng.choice([2, 3]),
+            mod_aa_mass=mod_aa_mass,
+            annotate=annotate,
         )
-        for p in peptides
+        for i, p in enumerate(peptides)
     ]
     with mgf_file.open("w+") as mgf_ref:
         mgf_ref.write("\n".join(entries))
@@ -91,7 +94,9 @@ def _create_mgf(
     return mgf_file
 
 
-def _create_mgf_entry(peptide, charge=2, mod_aa_mass=None, annotate=True):
+def _create_mgf_entry(
+    peptide, title, charge=2, mod_aa_mass=None, annotate=True
+):
     """
     Create a MassIVE-KB style MGF entry for a single PSM.
 
@@ -122,6 +127,7 @@ def _create_mgf_entry(peptide, charge=2, mod_aa_mass=None, annotate=True):
 
     mgf = [
         "BEGIN IONS",
+        f"TITLE={title}",
         f"PEPMASS={precursor_mz}",
         f"CHARGE={charge}+",
         f"{frags}",
@@ -247,50 +253,65 @@ def _create_mzml(peptides, mzml_file, random_state=42):
     return mzml_file
 
 
-@pytest.fixture
-def tiny_config(tmp_path):
-    """A config file for a tiny model."""
+def _get_config_file(file_path, file_name, additional_cfg=None):
+    """A standard config for a tiny model."""
     cfg = {
-        "n_head": 2,
-        "dim_feedforward": 10,
-        "n_layers": 1,
-        "train_label_smoothing": 0.01,
-        "warmup_iters": 1,
-        "cosine_schedule_period_iters": 1,
-        "max_epochs": 20,
-        "val_check_interval": 1,
-        "accelerator": "cpu",
-        "precursor_mass_tol": 5,
+        "precursor_mass_tol": 50,
         "isotope_error_range": [0, 1],
         "min_peptide_len": 6,
         "max_peptide_len": 100,
+        "predict_batch_size": 1024,
+        "top_match": 1,
+        "accelerator": "cpu",
+        "devices": None,
+        "n_beams": 1,
         "enzyme": "trypsin",
         "digestion": "full",
         "missed_cleavages": 0,
         "max_mods": None,
-        "predict_batch_size": 1024,
-        "n_beams": 1,
-        "top_match": 1,
-        "devices": None,
+        "allowed_fixed_mods": "C:C[Carbamidomethyl]",
+        "allowed_var_mods": (
+            "M:M[Oxidation],N:N[Deamidated],Q:Q[Deamidated], nterm:[Acetyl]-,"
+            "nterm:[Carbamyl]-,nterm:[Ammonia-loss]-,"
+            "nterm:[+25.980265]-"
+        ),
         "random_seed": 454,
         "n_log": 1,
         "tb_summarywriter": False,
         "log_metrics": False,
         "log_every_n_steps": 50,
+        "lance_dir": None,
+        "val_check_interval": 1,
         "n_peaks": 150,
         "min_mz": 50.0,
         "max_mz": 2500.0,
         "min_intensity": 0.01,
         "remove_precursor_tol": 2.0,
-        "max_charge": 10,
+        "max_charge": 4,
         "dim_model": 512,
+        "n_head": 2,
+        "dim_feedforward": 10,
+        "n_layers": 1,
         "dropout": 0.0,
         "dim_intensity": None,
+        "warmup_iters": 1,
+        "cosine_schedule_period_iters": 1,
         "learning_rate": 5e-4,
         "weight_decay": 1e-5,
+        "train_label_smoothing": 0.01,
         "train_batch_size": 32,
+        "max_epochs": 20,
+        "shuffle": False,
+        "shuffle_buffer_size": 64,
         "num_sanity_val_steps": 0,
         "calculate_precision": False,
+        "accumulate_grad_batches": 1,
+        "gradient_clip_val": None,
+        "gradient_clip_algorithm": None,
+        "precision": "32-true",
+        "replace_isoleucine_with_leucine": True,
+        "reverse_peptides": False,
+        "massivekb_tokenizer": True,
         "residues": {
             "G": 57.021464,
             "A": 71.037114,
@@ -298,7 +319,7 @@ def tiny_config(tmp_path):
             "P": 97.052764,
             "V": 99.068414,
             "T": 101.047670,
-            "C+57.021": 160.030649,
+            "C[Carbamidomethyl]": 160.030649,
             "L": 113.084064,
             "I": 113.084064,
             "N": 114.042927,
@@ -312,22 +333,22 @@ def tiny_config(tmp_path):
             "R": 156.101111,
             "Y": 163.063329,
             "W": 186.079313,
-            "M+15.995": 147.035400,
-            "N+0.984": 115.026943,
-            "Q+0.984": 129.042594,
-            "+42.011": 42.010565,
-            "+43.006": 43.005814,
-            "-17.027": -17.026549,
-            "+43.006-17.027": 25.980265,
+            # Amino acid modifications.
+            "M[Oxidation]": 147.035400,
+            "N[Deamidated]": 115.026943,
+            "Q[Deamidated]": 129.042594,
+            # N-terminal modifications.
+            "[Acetyl]-": 42.010565,
+            "[Carbamyl]-": 43.005814,
+            "[Ammonia-loss]-": -17.026549,
+            "[+25.980265]-": 25.980265,
         },
-        "allowed_fixed_mods": "C:C+57.021",
-        "allowed_var_mods": (
-            "M:M+15.995,N:N+0.984,Q:Q+0.984,"
-            "nterm:+42.011,nterm:+43.006,nterm:-17.027,nterm:+43.006-17.027"
-        ),
     }
 
-    cfg_file = tmp_path / "config.yml"
+    if additional_cfg is not None:
+        cfg.update(additional_cfg)
+
+    cfg_file = file_path / file_name
     with cfg_file.open("w+") as out_file:
         yaml.dump(cfg, out_file)
 
@@ -335,5 +356,19 @@ def tiny_config(tmp_path):
 
 
 @pytest.fixture
-def residues_dict():
-    return depthcharge.masses.PeptideMass("massivekb").masses
+def tiny_config(tmp_path):
+    """A config file for a tiny model."""
+    return _get_config_file(tmp_path, "config.yml")
+
+
+@pytest.fixture
+def tiny_config_db(tmp_path):
+    """A config file for a db search."""
+    return _get_config_file(
+        tmp_path,
+        "config_db.yml",
+        additional_cfg={
+            "precursor_mass_tol": 5,
+            "replace_isoleucine_with_leucine": False,
+        },
+    )
