@@ -318,6 +318,7 @@ def _discard_low_quality(
         raise ValueError("Insufficient number of peaks")
     return spectrum
 
+
 def _scale_to_unit_norm(spectrum: sus.MsmsSpectrum) -> sus.MsmsSpectrum:
     """
     Scale fragment ion intensities to unit norm.
