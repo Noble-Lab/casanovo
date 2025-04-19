@@ -369,6 +369,6 @@ def tiny_config_db(tmp_path):
         "config_db.yml",
         additional_cfg={
             "precursor_mass_tol": 5,
-            "replace_isoleucine_with_leucine": False
+            "replace_isoleucine_with_leucine": False,
         },
     )
