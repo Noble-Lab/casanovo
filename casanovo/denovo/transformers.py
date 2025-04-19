@@ -167,9 +167,9 @@ class SpectrumEncoder(SpectrumTransformerEncoder):
 
         Parameters
         ----------
-        mz_array : torch.Tensor of shape (n_spectra, n_peaks)
+        mz_array : torch.Tensor of shape (n_spectra, max_peaks)
             The zero-padded m/z dimension for a batch of mass spectra.
-        intensity_array : torch.Tensor of shape (n_spectra, n_peaks)
+        intensity_array : torch.Tensor of shape (n_spectra, max_peaks)
             The zero-padded intensity dimension for a batch of mass
             spectra.
         *args : torch.Tensor

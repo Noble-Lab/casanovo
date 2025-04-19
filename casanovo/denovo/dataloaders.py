@@ -42,7 +42,7 @@ class DeNovoDataModule(pl.LightningDataModule):
         The batch size to use for training.
     eval_batch_size : int
         The batch size to use for inference.
-    n_peaks : Optional[int]
+    max_peaks : Optional[int]
         The number of top-n most intense peaks to keep in each spectrum.
         `None` retains all peaks.
     min_mz : float
@@ -79,7 +79,7 @@ class DeNovoDataModule(pl.LightningDataModule):
         test_paths: Optional[Sequence[str]] = None,
         train_batch_size: int = 128,
         eval_batch_size: int = 1028,
-        n_peaks: Optional[int] = 150,
+        max_peaks: Optional[int] = 150,
         min_mz: float = 50.0,
         max_mz: float = 2500.0,
         min_intensity: float = 0.01,
@@ -105,7 +105,7 @@ class DeNovoDataModule(pl.LightningDataModule):
         self.preprocessing_fn = [
             preprocessing.set_mz_range(min_mz=min_mz, max_mz=max_mz),
             preprocessing.remove_precursor_peak(remove_precursor_tol, "Da"),
-            preprocessing.filter_intensity(min_intensity, n_peaks),
+            preprocessing.filter_intensity(min_intensity, max_peaks),
             preprocessing.scale_intensity("root", 1),
             _scale_to_unit_norm,
         ]

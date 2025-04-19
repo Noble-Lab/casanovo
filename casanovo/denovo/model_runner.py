@@ -579,7 +579,7 @@ class ModelRunner:
             test_paths=test_paths,
             train_batch_size=train_batch_size,
             eval_batch_size=eval_batch_size,
-            n_peaks=self.config.n_peaks,
+            max_peaks=self.config.max_peaks,
             min_mz=self.config.min_mz,
             max_mz=self.config.max_mz,
             min_intensity=self.config.min_intensity,

@@ -93,8 +93,9 @@ lance_dir:
 val_check_interval: 50_000
 
 # SPECTRUM PROCESSING OPTIONS
-# Number of the most intense peaks to retain, any remaining peaks are discarded.
-n_peaks: 150
+# Maximum number of the most intense peaks to retain, any remaining peaks are
+# discarded.
+max_peaks: 150
 # Min peak m/z allowed, peaks with smaller m/z are discarded.
 min_mz: 50.0
 # Max peak m/z allowed, peaks with larger m/z are discarded.
