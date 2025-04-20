@@ -121,9 +121,9 @@ def _get_report_dict(
     return {
         "num_spectra": len(results_table),
         "score_bins": binned_scores,
-        "max_sequence_length": min_pep_len,
-        "min_sequence_length": med_pep_len,
-        "median_sequence_length": max_pep_len,
+        "max_sequence_length": max_pep_len,
+        "min_sequence_length": min_pep_len,
+        "median_sequence_length": med_pep_len,
     }
 
 
