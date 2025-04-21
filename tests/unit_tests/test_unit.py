@@ -437,17 +437,17 @@ def test_aa_pep_score():
     aa_scores_raw = np.asarray([0.0, 0.5, 1.0])
 
     aa_scores, peptide_score = _aa_pep_score(aa_scores_raw, True)
-    np.testing.assert_array_equal(aa_scores, np.asarray([0.0, 0.25, 0.5]))
+    np.testing.assert_array_equal(aa_scores, aa_scores_raw)
     assert peptide_score == pytest.approx(0.0)
 
     aa_scores, peptide_score = _aa_pep_score(aa_scores_raw, False)
-    np.testing.assert_array_equal(aa_scores, np.asarray([0.0, 0.25, 0.5]))
+    np.testing.assert_array_equal(aa_scores, aa_scores_raw)
     assert peptide_score == pytest.approx(-1.0)
 
     aa_scores_raw = np.asarray([1.0, 0.25])
     aa_scores, peptide_score = _aa_pep_score(aa_scores_raw, True)
-    np.testing.assert_array_equal(aa_scores, np.asarray([0.75, 0.375]))
-    assert peptide_score == pytest.approx(0.5)
+    np.testing.assert_array_equal(aa_scores, aa_scores_raw)
+    assert peptide_score == pytest.approx(0.25)
 
 
 def test_peptide_generator_errors(tiny_fasta_file):
@@ -549,27 +549,17 @@ def test_calc_match_score():
 
     assert all_scores[0] == np.exp(0)
     assert all_scores[1] == np.exp(0)
-    assert all_scores[2] == pytest.approx(
-        np.exp(np.log(0.5 * 0.5 * 1 * 1) / 4)
-    )
-    assert all_scores[3] == pytest.approx(
-        np.exp(np.log(1e-10 * 1 * 1 * 1) / 4)
-    )
+    assert all_scores[2] == pytest.approx(0.25)
+    assert all_scores[3] == pytest.approx(1e-10)
 
     aa_scores = np.array([1, 1, 1, 1])
-    assert np.allclose(masked_per_aa_scores[0], (aa_scores + 1) / 2)
+    assert np.allclose(masked_per_aa_scores[0], aa_scores)
     aa_scores = np.array([1, 1, 1])
-    assert np.allclose(masked_per_aa_scores[1], (aa_scores + 1) / 2)
+    assert np.allclose(masked_per_aa_scores[1], aa_scores)
     aa_scores = np.array([0.5, 0.5, 1, 1])
-    assert np.allclose(
-        masked_per_aa_scores[2],
-        (aa_scores + np.exp(np.log(0.5 * 0.5 * 1 * 1) / 4)) / 2,
-    )
+    assert np.allclose(masked_per_aa_scores[2], aa_scores)
     aa_scores = np.array([1e-10, 1, 1, 1])
-    assert np.allclose(
-        masked_per_aa_scores[3],
-        (aa_scores + np.exp(np.log(1e-10 * 1 * 1 * 1) / 4)) / 2,
-    )
+    assert np.allclose(masked_per_aa_scores[3], aa_scores)
 
 
 def test_digest_fasta_cleave(tiny_fasta_file):
