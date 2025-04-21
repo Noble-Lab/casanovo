@@ -1738,7 +1738,7 @@ def test_n_term_scores(tiny_config):
     matches = [
         psm.PepSpecMatch(
             sequence="[Acetyl]-P",
-            aa_scores=np.array([0.5, 1.0]),
+            aa_scores=np.array([0.5, 0.8]),
             spectrum_id="",
             peptide_score=float("NaN"),
             charge=1,
@@ -1747,7 +1747,7 @@ def test_n_term_scores(tiny_config):
         ),
         psm.PepSpecMatch(
             sequence="PP",
-            aa_scores=np.array([0.5, 1.0]),
+            aa_scores=np.array([0.5, 0.8]),
             spectrum_id="",
             peptide_score=float("NaN"),
             charge=1,
@@ -1758,8 +1758,8 @@ def test_n_term_scores(tiny_config):
     model.on_predict_batch_end(matches)
 
     assert len(out_writer.psms) == 2
-    assert np.allclose(out_writer.psms[0].aa_scores, np.array([0.75]))
-    assert np.allclose(out_writer.psms[1].aa_scores, np.array([0.5, 1.0]))
+    assert np.allclose(out_writer.psms[0].aa_scores, np.array([0.4]))
+    assert np.allclose(out_writer.psms[1].aa_scores, np.array([0.5, 0.8]))
 
 
 def test_eval_metrics():

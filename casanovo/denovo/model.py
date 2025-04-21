@@ -1024,7 +1024,7 @@ class Spec2Pep(pl.LightningModule):
                 spec_match.sequence.startswith(mod) for mod in self.n_term
             ):
                 combined_scores = spec_match.aa_scores[1:]
-                combined_scores[0] = np.average(spec_match.aa_scores[0:2])
+                combined_scores[0] = np.prod(spec_match.aa_scores[0:2])
                 spec_match.aa_scores = combined_scores
 
             # Compute the precursor m/z of the predicted peptide.
