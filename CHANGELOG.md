@@ -27,6 +27,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - DepthCharge is upgraded to the latest version 0.4.8.
 - Amino acid scores are no longer averaged with the peptide score.
 - N-terminal modification amino acid level scores are now combined with the leading N-terminal amino acid score.
+- The amino acid-level score of stand-alone N-terminal modifications is combined with that of the leading N-terminal residue.
 
 ### Fixed
 
