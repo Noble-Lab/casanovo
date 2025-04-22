@@ -1023,9 +1023,8 @@ class Spec2Pep(pl.LightningModule):
             if len(spec_match.aa_scores) >= 2 and any(
                 spec_match.sequence.startswith(mod) for mod in self.n_term
             ):
-                combined_scores = spec_match.aa_scores[1:]
-                combined_scores[0] = np.prod(spec_match.aa_scores[0:2])
-                spec_match.aa_scores = combined_scores
+                spec_match.aa_scores[1] *= spec_match.aa_scores[0]
+                spec_match.aa_scores = spec_match.aa_scores[1:]
 
             # Compute the precursor m/z of the predicted peptide.
             spec_match.calc_mz = self.tokenizer.calculate_precursor_ions(
