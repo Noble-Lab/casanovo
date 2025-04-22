@@ -1,7 +1,7 @@
 """Peptide spectrum match dataclass."""
 
 import dataclasses
-from typing import Iterable, Tuple
+from typing import Iterable, Optional, Tuple
 
 
 @dataclasses.dataclass
@@ -12,7 +12,7 @@ class PepSpecMatch:
     Parameters
     ----------
     sequence : str
-        The amino acid sequence of the peptide.
+        The predicted amino acid sequence of the peptide.
     spectrum_id : Tuple[str, str]
         A tuple containing the spectrum identifier in the form
         (spectrum file name, spectrum file idx).
@@ -43,3 +43,23 @@ class PepSpecMatch:
     exp_mz: float
     aa_scores: Iterable[float]
     protein: str = "null"
+
+
+@dataclasses.dataclass
+class AnnotatedPepSpecMatch(PepSpecMatch):
+    """
+    Annotated Spectrum Match (PSM) dataclass
+
+    Parameters
+    ----------
+        sequence_true : str
+            Ground truth amino acid sequence
+        peptide_correct : bool
+            Whether the peptide sequence was correct
+        amino_acids_correct: Iterable[bool]
+            Whether each amino acid is correct
+    """
+
+    sequence_true: Optional[str] = None
+    peptide_correct: Optional[bool] = None
+    amino_acids_correct: Optional[Iterable[bool]] = None

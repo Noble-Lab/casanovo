@@ -1,6 +1,7 @@
 """Training and testing functionality for the de novo peptide sequencing
 model."""
 
+import dataclasses
 import glob
 import logging
 import os
@@ -21,7 +22,7 @@ from torch.utils.data import DataLoader
 
 from .. import utils
 from ..config import Config
-from ..data import db_utils, ms_io
+from ..data import db_utils, ms_io, psm
 from ..denovo.dataloaders import DeNovoDataModule
 from ..denovo.evaluate import aa_match_batch, aa_match_metrics
 from ..denovo.model import DbSpec2Pep, Spec2Pep
@@ -214,31 +215,61 @@ class ModelRunner:
             Index containing the annotated spectra used to generate
             model predictions.
         """
-        pred_seqs, true_seqs, pred_i = [], [], 0
+        pred_seqs, true_seqs, annotated_psms, pred_i = [], [], [], 0
 
         for batch in test_dataloader:
-            for peak_file, scan_id, true_seq in zip(
-                batch["peak_file"], batch["scan_id"], batch["seq"]
+            for peak_file, scan_id, true_seq, charge, exp_mz in zip(
+                batch["peak_file"],
+                batch["scan_id"],
+                batch["seq"],
+                batch["precursor_charge"],
+                batch["precursor_mz"],
             ):
-                true_seqs.append(true_seq.cpu().detach().numpy())
+                true_seq = true_seq.cpu().detach().numpy()
+                true_seqs.append(true_seq)
+                true_seq = self.model.tokenizer.detokenize(
+                    torch.unsqueeze(true_seq, 0)
+                )[0]
+
+                curr_psm = psm.AnnotatedPepSpecMatch(
+                    sequence="null",
+                    spectrum_id=(peak_file, scan_id),
+                    peptide_score="null",
+                    charge=charge,
+                    calc_mz="null",
+                    exp_mz=exp_mz,
+                    aa_scores="null",
+                )
+
                 if pred_i < len(self.writer.psms) and self.writer.psms[
                     pred_i
                 ].spectrum_id == (peak_file, scan_id):
+                    curr_psm = self.writer.psms[pred_i]
                     pred_tokens = self.model.tokenizer.tokenize(
-                        self.writer.psms[pred_i].sequence
+                        curr_psm.sequence
                     ).squeeze(0)
                     pred_seqs.append(pred_tokens.cpu().detach().numpy())
                     pred_i += 1
                 else:
                     pred_seqs.append(None)
 
+                annotated_psms.append(
+                    psm.AnnotatedPepSpecMatch(
+                        **dataclasses.asdict(curr_psm),
+                        sequence_true=true_seq,
+                    )
+                )
+
         aa_masses = {
             aa_token: self.model.tokenizer.residues[aa]
             for aa, aa_token in self.model.tokenizer.index.items()
             if aa in self.model.tokenizer.residues
         }
+        aa_matches_batch, n_aa_pred, n_aa_true = aa_match_batch(
+            true_seqs, pred_seqs, aa_masses
+        )
         aa_precision, aa_recall, pep_precision = aa_match_metrics(
-            *aa_match_batch(true_seqs, pred_seqs, aa_masses)
+            aa_matches_batch, n_aa_pred, n_aa_true
         )
 
         if self.config["top_match"] > 1:
@@ -251,6 +282,14 @@ class ModelRunner:
         logger.info("Peptide Precision: %.2f%%", 100 * pep_precision)
         logger.info("Amino Acid Precision: %.2f%%", 100 * aa_precision)
         logger.info("Amino Acid Recall: %.2f%%", 100 * aa_recall)
+
+        for curr_psm, (aas_correct, peptide_correct) in zip(
+            annotated_psms, aa_matches_batch, strict=True
+        ):
+            curr_psm.peptide_correct = peptide_correct
+            curr_psm.aas_correct = aas_correct
+
+        self.writer.psms = annotated_psms
 
     def predict(
         self,
