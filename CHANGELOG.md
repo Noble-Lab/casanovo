@@ -25,6 +25,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Input peak files can now be specified as both individual file(s) and a directory.
 - Peptidoforms are specified using ProForma 2.0 notation by default.
 - DepthCharge is upgraded to the latest version 0.4.8.
+- Amino acid scores are no longer averaged with the peptide score.
 
 ### Fixed
 
