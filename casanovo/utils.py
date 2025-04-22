@@ -10,11 +10,13 @@ import sys
 from datetime import datetime
 from typing import Dict, Iterable, List, Optional, Tuple
 
+import depthcharge
 import numpy as np
 import pandas as pd
 import psutil
 import torch
 
+from . import __version__
 from .data.psm import PepSpecMatch
 
 SCORE_BINS = (0.0, 0.5, 0.9, 0.95, 0.99)
@@ -81,54 +83,7 @@ def split_version(version: str) -> Tuple[str, str, str]:
     return tuple(g for g in version_regex.match(version).groups())
 
 
-def get_score_bins(
-    scores: pd.Series, score_bins: Iterable[float]
-) -> Dict[float, int]:
-    """
-    Get binned confidence scores
-
-    From a list of confidence scores, return a dictionary mapping each
-    confidence score to the number of spectra with a confidence greater
-    than or equal to it.
-
-    Parameters
-    ----------
-    scores: pd.Series
-        Series of assigned peptide scores.
-    score_bins: Iterable[float]
-        Confidence scores to map.
-
-    Returns
-    -------
-    score_bin_dict: Dict[float, int]
-        Dictionary mapping each confidence score to the number of
-        spectra with a confidence greater than or equal to it.
-    """
-    return {score: (scores >= score).sum() for score in score_bins}
-
-
-def get_peptide_lengths(sequences: pd.Series) -> np.ndarray:
-    """
-    Get a numpy array containing the length of each peptide sequence
-
-    Parameters
-    ----------
-    sequences: pd.Series
-        Series of peptide sequences.
-
-    Returns
-    -------
-    sequence_lengths: np.ndarray
-        Numpy array containing the length of each sequence, listed in
-        the same order that the sequences are provided in.
-    """
-    # Mass modifications do not contribute to sequence length
-    # FIXME: If PTMs are represented in ProForma notation this filtering
-    #  operation needs to be reimplemented
-    return sequences.str.replace(r"[^a-zA-Z]", "", regex=True).apply(len)
-
-
-def get_report_dict(
+def _get_report_dict(
     results_table: pd.DataFrame, score_bins: Iterable[float] = SCORE_BINS
 ) -> Optional[Dict]:
     """
@@ -139,8 +94,7 @@ def get_report_dict(
     results_table: pd.DataFrame
         Parsed spectrum match table.
     score_bins: Iterable[float], Optional
-        Confidence scores for creating confidence CMF, see
-        `get_score_bins`.
+        Confidence scores for creating confidence score distribution.
 
     Returns
     -------
@@ -151,24 +105,54 @@ def get_report_dict(
     if results_table.empty:
         return None
 
-    peptide_lengths = get_peptide_lengths(results_table["sequence"])
-    min_length, med_length, max_length = np.quantile(
-        peptide_lengths, [0, 0.5, 1]
+    # Mass modifications do not contribute to sequence length.
+    # FIXME: If PTMs are represented in ProForma notation this filtering
+    #  operation needs to be reimplemented.
+    pep_lens = (
+        results_table["sequence"]
+        .str.replace(r"[^a-zA-Z]", "", regex=True)
+        .apply(len)
     )
+    min_pep_len, med_pep_len, max_pep_len = np.quantile(pep_lens, [0, 0.5, 1])
+    # Get binned confidence scores.
+    binned_scores = {
+        score: (results_table["score"] >= score).sum() for score in score_bins
+    }
     return {
         "num_spectra": len(results_table),
-        "score_bins": get_score_bins(results_table["score"], score_bins),
-        "max_sequence_length": max_length,
-        "min_sequence_length": min_length,
-        "median_sequence_length": med_length,
+        "score_bins": binned_scores,
+        "max_sequence_length": max_pep_len,
+        "min_sequence_length": min_pep_len,
+        "median_sequence_length": med_pep_len,
     }
+
+
+def log_system_info() -> None:
+    """
+    Log system information.
+
+    This includes the executed command, OS, Python version, and PyTorch
+    version.
+    """
+    logger.info("======= System Information =======")
+    logger.info("Executed Command: %s", " ".join(sys.argv))
+    logger.info("Host Machine: %s", socket.gethostname())
+    logger.info("OS: %s", platform.system())
+    logger.info("OS Version: %s", platform.version())
+    logger.info("Python Version: %s", platform.python_version())
+    logger.info("Casanovo Version: %s", __version__)
+    logger.info("Depthcharge Version: %s", depthcharge.__version__)
+    logger.info("PyTorch Version: %s", torch.__version__)
+    if torch.cuda.is_available():
+        logger.info("CUDA Version: %s", torch.version.cuda)
+        logger.info("cuDNN Version: %s", torch.backends.cudnn.version())
 
 
 def log_run_report(
     start_time: Optional[float] = None, end_time: Optional[float] = None
 ) -> None:
     """
-    Log general run report
+    Log general run report.
 
     Parameters
     ----------
@@ -190,9 +174,6 @@ def log_run_report(
             "Run End Time: %s", end_datetime.strftime("%y/%m/%d %H:%M:%S")
         )
         logger.info("Time Elapsed: %s", delta_datetime)
-
-    logger.info("Executed Command: %s", " ".join(sys.argv))
-    logger.info("Executed on Host Machine: %s", socket.gethostname())
 
     if torch.cuda.is_available():
         gpu_util = torch.cuda.max_memory_allocated()
@@ -217,11 +198,10 @@ def log_annotate_report(
     end_time : Optional[float], default=None
         The end time of the sequencing run in seconds since the epoch.
     score_bins: Iterable[float], Optional
-        Confidence scores for creating confidence score distribution,
-        see `get_score_bins`.
+        Confidence scores for creating confidence score distribution.
     """
     log_run_report(start_time=start_time, end_time=end_time)
-    run_report = get_report_dict(
+    run_report = _get_report_dict(
         pd.DataFrame(
             {
                 "sequence": [psm.sequence for psm in predictions],
@@ -282,6 +262,6 @@ def check_dir_file_exists(
     for pattern in file_patterns:
         if next(dir.glob(pattern), None) is not None:
             raise FileExistsError(
-                f"File matching wildcard pattern {pattern} already exist in"
+                f"File matching wildcard pattern {pattern} already exist in "
                 f"{dir} and can not be overwritten."
             )
