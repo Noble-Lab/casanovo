@@ -6,7 +6,7 @@ Once Casanovo has inferred peptide sequences, several tools are available to ana
 
 [Limelight](https://limelight-ms.org/) is a web application for visualizing and sharing DDA proteomics data and results. It provides tools for viewing the whole data stack, including raw spectra; extracted ion chromatograms (XICs); peptide, protein, and modification views; quality control (QC) views; and more. For more information, see the [Limelight publication in JPR](https://pubmed.ncbi.nlm.nih.gov/40036265/).
 
-To upload results to Limelight, results must be converted to Limelight XML. A converter for generating Limelight XML from Casanovo results is available, see the [converter documentation](https://github.com/yeastrc/limelight-import-casanovo). The Limelight XML may be easily uploaded to Limelight using its web interface, see [the Limelight documentation](https://limelight-ms.readthedocs.io/en/latest/using-limelight/data-upload-guide.html) for more information about uploading data.
+To upload results to Limelight, Casanovo mzTab results files must first be converted to Limelight XML. A converter for generating Limelight XML from Casanovo results is available, see the [converter documentation](https://github.com/yeastrc/limelight-import-casanovo). The Limelight XML may be easily uploaded to Limelight using its web interface. See [the Limelight documentation](https://limelight-ms.readthedocs.io/en/latest/using-limelight/data-upload-guide.html) for more information about uploading data.
 
 ## Nextflow Workflow
 
