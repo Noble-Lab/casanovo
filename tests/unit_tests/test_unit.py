@@ -34,7 +34,7 @@ from casanovo.denovo.evaluate import aa_match, aa_match_batch, aa_match_metrics
 from casanovo.denovo.model import (
     DbSpec2Pep,
     Spec2Pep,
-    _aa_pep_score,
+    _peptide_score,
     _calc_match_score,
 )
 
@@ -429,24 +429,21 @@ def test_is_valid_url():
     assert not casanovo._is_valid_url("foobar")
 
 
-def test_aa_pep_score():
+def test_peptide_score():
     """
     Test the calculation of amino acid and peptide scores from the raw amino
     acid scores.
     """
     aa_scores_raw = np.asarray([0.0, 0.5, 1.0])
 
-    aa_scores, peptide_score = _aa_pep_score(aa_scores_raw, True)
-    np.testing.assert_array_equal(aa_scores, aa_scores_raw)
+    peptide_score = _peptide_score(aa_scores_raw, True)
     assert peptide_score == pytest.approx(0.0)
 
-    aa_scores, peptide_score = _aa_pep_score(aa_scores_raw, False)
-    np.testing.assert_array_equal(aa_scores, aa_scores_raw)
+    peptide_score = _peptide_score(aa_scores_raw, False)
     assert peptide_score == pytest.approx(-1.0)
 
     aa_scores_raw = np.asarray([1.0, 0.25])
-    aa_scores, peptide_score = _aa_pep_score(aa_scores_raw, True)
-    np.testing.assert_array_equal(aa_scores, aa_scores_raw)
+    peptide_score = _peptide_score(aa_scores_raw, True)
     assert peptide_score == pytest.approx(0.25)
 
 

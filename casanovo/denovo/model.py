@@ -588,9 +588,7 @@ class Spec2Pep(pl.LightningModule):
             aa_scores = np.asarray(aa_scores)
             # Calculate the updated amino acid-level and the peptide
             # scores.
-            aa_scores, peptide_score = _aa_pep_score(
-                aa_scores, beam_fits_precursor[i]
-            )
+            peptide_score = _peptide_score(aa_scores, beam_fits_precursor[i])
             # Omit the stop token from the amino acid-level scores.
             aa_scores = aa_scores[:-1]
             # Add the prediction to the cache (minimum priority queue,
@@ -1335,9 +1333,8 @@ def _calc_match_score(
     score_mask = (truth_aa_indices != 0).cpu().detach().numpy()
     peptide_scores, aa_scores = [], []
     for psm_score, psm_mask in zip(per_aa_scores, score_mask):
-        psm_aa_scores, psm_peptide_score = _aa_pep_score(
-            psm_score[psm_mask], True
-        )
+        psm_aa_scores = psm_score[psm_mask]
+        psm_peptide_score = _peptide_score(psm_aa_scores, True)
         peptide_scores.append(psm_peptide_score)
         aa_scores.append(psm_aa_scores)
 
@@ -1410,15 +1407,12 @@ def _calc_mass_error(
     return (calc_mz - (obs_mz - isotope * 1.00335 / charge)) / obs_mz * 10**6
 
 
-def _aa_pep_score(
-    aa_scores: np.ndarray, fits_precursor_mz: bool
-) -> Tuple[np.ndarray, float]:
+def _peptide_score(aa_scores: np.ndarray, fits_precursor_mz: bool) -> float:
     """
-    Calculate amino acid and peptide-level confidence score from the raw
+    Calculate the peptide-level confidence score from the raw
     amino acid scores.
 
-    The peptide score is the product of the raw amino acid scores. The
-    amino acid scores are unadjusted and returned as is.
+    The peptide score is the product of the raw amino acid scores.
 
     Parameters
     ----------
@@ -1432,10 +1426,8 @@ def _aa_pep_score(
     -------
     aa_scores : np.ndarray
         The amino acid scores.
-    peptide_score : float
-        The peptide score.
     """
     peptide_score = np.prod(aa_scores)
     if not fits_precursor_mz:
         peptide_score -= 1
-    return aa_scores, peptide_score
+    return peptide_score
