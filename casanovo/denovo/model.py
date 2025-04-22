@@ -179,6 +179,13 @@ class Spec2Pep(pl.LightningModule):
         # Output writer during predicting.
         self.out_writer = out_writer
 
+        # Get n-term mod tokens
+        self.n_term = [
+            aa
+            for aa in self.tokenizer.index
+            if aa.startswith("[") and aa.endswith("]-")
+        ]
+
     @property
     def device(self) -> torch.device:
         """
@@ -379,11 +386,7 @@ class Spec2Pep(pl.LightningModule):
 
         # Find N-terminal residues.
         n_term = torch.Tensor(
-            [
-                self.tokenizer.index[aa]
-                for aa in self.tokenizer.index
-                if aa.startswith("[") and aa.endswith("]-")
-            ]
+            [self.tokenizer.index[aa] for aa in self.n_term]
         ).to(self.decoder.device)
 
         beam_fits_precursor = torch.zeros(
@@ -1015,6 +1018,13 @@ class Spec2Pep(pl.LightningModule):
         for spec_match in outputs:
             if not spec_match.sequence:
                 continue
+
+            # N terminal scores should be combined with first token
+            if len(spec_match.aa_scores) >= 2 and any(
+                spec_match.sequence.startswith(mod) for mod in self.n_term
+            ):
+                spec_match.aa_scores[1] *= spec_match.aa_scores[0]
+                spec_match.aa_scores = spec_match.aa_scores[1:]
 
             # Compute the precursor m/z of the predicted peptide.
             spec_match.calc_mz = self.tokenizer.calculate_precursor_ions(

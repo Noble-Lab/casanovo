@@ -28,7 +28,7 @@ import torch
 
 from casanovo import casanovo, utils
 from casanovo.config import Config
-from casanovo.data import db_utils, ms_io
+from casanovo.data import db_utils, ms_io, psm
 from casanovo.denovo.dataloaders import DeNovoDataModule
 from casanovo.denovo.evaluate import aa_match, aa_match_batch, aa_match_metrics
 from casanovo.denovo.model import (
@@ -1723,6 +1723,43 @@ def test_beam_search_decode(tiny_config):
         assert len(preds) == beam
         peptide_scores = [pep[0] for pep in preds]
         assert np.allclose(peptide_scores, peptide_scores[0])
+
+
+def test_n_term_scores(tiny_config):
+    out_writer = unittest.mock.MagicMock()
+    out_writer.psms = list()
+    model = Spec2Pep(
+        out_writer=out_writer,
+        tokenizer=depthcharge.tokenizers.peptides.PeptideTokenizer(
+            residues=Config(tiny_config).residues
+        ),
+    )
+
+    matches = [
+        psm.PepSpecMatch(
+            sequence="[Acetyl]-P",
+            aa_scores=np.array([0.5, 0.8]),
+            spectrum_id="",
+            peptide_score=float("NaN"),
+            charge=1,
+            calc_mz=float("NaN"),
+            exp_mz=float("NaN"),
+        ),
+        psm.PepSpecMatch(
+            sequence="PP",
+            aa_scores=np.array([0.5, 0.8]),
+            spectrum_id="",
+            peptide_score=float("NaN"),
+            charge=1,
+            calc_mz=float("NaN"),
+            exp_mz=float("NaN"),
+        ),
+    ]
+    model.on_predict_batch_end(matches)
+
+    assert len(out_writer.psms) == 2
+    assert np.allclose(out_writer.psms[0].aa_scores, np.array([0.4]))
+    assert np.allclose(out_writer.psms[1].aa_scores, np.array([0.5, 0.8]))
 
 
 def test_eval_metrics():
