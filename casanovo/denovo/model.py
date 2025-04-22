@@ -1033,9 +1033,13 @@ class Spec2Pep(pl.LightningModule):
                 spec_match.aa_scores = spec_match.aa_scores[1:]
 
             # Compute the precursor m/z of the predicted peptide.
-            spec_match.calc_mz = self.tokenizer.calculate_precursor_ions(
-                spec_match.sequence, torch.tensor(spec_match.charge)
-            ).item()
+            try:
+                spec_match.calc_mz = self.tokenizer.calculate_precursor_ions(
+                    spec_match.sequence, torch.tensor(spec_match.charge)
+                ).item()
+            except Exception as e:
+                print(f"BAD SEQUENCE: {spec_match.sequence}")
+                raise e
 
             self.out_writer.psms.append(spec_match)
 
