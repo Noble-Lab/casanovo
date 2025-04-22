@@ -70,6 +70,7 @@ class Config:
         log_every_n_steps=int,
         lance_dir=str,
         val_check_interval=int,
+        val_patience_interval=int,
         n_peaks=int,
         min_mz=float,
         max_mz=float,

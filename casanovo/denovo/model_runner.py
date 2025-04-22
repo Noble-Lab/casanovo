@@ -16,7 +16,11 @@ import torch
 import torch.utils.data
 from depthcharge.tokenizers import PeptideTokenizer
 from depthcharge.tokenizers.peptides import MskbPeptideTokenizer
-from lightning.pytorch.callbacks import LearningRateMonitor, ModelCheckpoint
+from lightning.pytorch.callbacks import (
+    EarlyStopping,
+    LearningRateMonitor,
+    ModelCheckpoint,
+)
 from lightning.pytorch.strategies import DDPStrategy
 from torch.utils.data import DataLoader
 
@@ -110,6 +114,14 @@ class ModelRunner:
                 enable_version_counter=False,
             ),
         ]
+
+        if config.val_patience_interval != -1:
+            self.callbacks.append(
+                EarlyStopping(
+                    monitor="valid_CELoss",
+                    patience=config.val_patience_interval,
+                )
+            )
 
     def __enter__(self):
         """Enter the context manager."""

@@ -91,6 +91,8 @@ log_every_n_steps: 50
 lance_dir:
 # Model validation and checkpointing frequency in training steps.
 val_check_interval: 50_000
+# Patience interval in validation epochs (set to -1 for no early stop)
+val_patience_interval: -1
 
 # SPECTRUM PROCESSING OPTIONS
 # Number of the most intense peaks to retain, any remaining peaks are discarded.

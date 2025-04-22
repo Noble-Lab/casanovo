@@ -282,6 +282,7 @@ def _get_config_file(file_path, file_name, additional_cfg=None):
         "log_every_n_steps": 50,
         "lance_dir": None,
         "val_check_interval": 1,
+        "val_patience_interval": -1,
         "n_peaks": 150,
         "min_mz": 50.0,
         "max_mz": 2500.0,
