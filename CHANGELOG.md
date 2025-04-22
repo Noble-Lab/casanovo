@@ -21,10 +21,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - The path suffix (extension) of `--output_root` will no longer be removed as it was with the old `--output` option.
 - The `--validation_peak_path` is now optional when training; if `--validation_peak_path` is not set then the `train_peak_path` will also be used for validation.
 - The `tb_summarywriter` config option is now a boolean config option, and if set to true the TensorBoard summary will be written to a sub-directory of the output directory named `tensorboard`.
-- The geoemtric mean of the raw amino acid scores is used as the peptide score, rather then the arithmetic mean.
+- The product of the raw amino acid scores is used as the peptide score, rather then the arithmetic mean.
 - Input peak files can now be specified as both individual file(s) and a directory.
 - Peptidoforms are specified using ProForma 2.0 notation by default.
 - DepthCharge is upgraded to the latest version 0.4.8.
+- Amino acid scores are no longer averaged with the peptide score.
 
 ### Fixed
 
