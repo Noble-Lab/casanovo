@@ -225,11 +225,14 @@ class ModelRunner:
                 batch["precursor_charge"],
                 batch["precursor_mz"],
             ):
-                true_seq = true_seq.cpu().detach().numpy()
+                true_seq = true_seq.cpu().detach()
                 true_seqs.append(true_seq)
-                true_seq = self.model.tokenizer.detokenize(
-                    torch.unsqueeze(true_seq, 0)
-                )[0]
+                true_seq = "".join(
+                    self.model.tokenizer.detokenize(
+                        torch.unsqueeze(true_seq, 0),
+                        join=False,
+                    )[0]
+                )
 
                 curr_psm = psm.AnnotatedPepSpecMatch(
                     sequence="null",
@@ -287,7 +290,7 @@ class ModelRunner:
             annotated_psms, aa_matches_batch, strict=True
         ):
             curr_psm.peptide_correct = peptide_correct
-            curr_psm.aas_correct = aas_correct
+            curr_psm.amino_acids_correct = aas_correct
 
         self.writer.psms = annotated_psms
 
