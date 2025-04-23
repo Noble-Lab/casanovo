@@ -741,9 +741,12 @@ class Spec2Pep(pl.LightningModule):
                             if self.tokenizer.reverse
                             else aa_scores
                         ),
-                        self.tokenizer.detokenize(
-                            torch.unsqueeze(pred_tokens, 0)
-                        )[0],
+                        "".join(
+                            self.tokenizer.detokenize(
+                                torch.unsqueeze(pred_tokens, 0),
+                                join=False,
+                            )[0]
+                        ),
                     )
                     for pep_score, _, aa_scores, pred_tokens in heapq.nlargest(
                         self.top_match, peptides
@@ -896,7 +899,10 @@ class Spec2Pep(pl.LightningModule):
 
         # Calculate and log amino acid and peptide match evaluation
         # metrics from the predicted peptides.
-        peptides_true = self.tokenizer.detokenize(batch["seq"])
+        peptides_true = [
+            "".join(pep)
+            for pep in self.tokenizer.detokenize(batch["seq"], join=False)
+        ]
         peptides_pred = [
             pred
             for spectrum_preds in self.forward(batch)
@@ -1027,9 +1033,13 @@ class Spec2Pep(pl.LightningModule):
                 spec_match.aa_scores = spec_match.aa_scores[1:]
 
             # Compute the precursor m/z of the predicted peptide.
-            spec_match.calc_mz = self.tokenizer.calculate_precursor_ions(
-                spec_match.sequence, torch.tensor(spec_match.charge)
-            ).item()
+            try:
+                spec_match.calc_mz = self.tokenizer.calculate_precursor_ions(
+                    spec_match.sequence, torch.tensor(spec_match.charge)
+                ).item()
+            except Exception as e:
+                print(f"BAD SEQUENCE: {spec_match.sequence}")
+                raise e
 
             self.out_writer.psms.append(spec_match)
 
@@ -1206,9 +1216,12 @@ class DbSpec2Pep(Spec2Pep):
         # Determine the peptide sequence and parent proteins only for
         # the retained PSMs.
         for pred in predictions:
-            pred.sequence = self.tokenizer.detokenize(
-                torch.unsqueeze(pred.sequence, 0)
-            )[0]
+            pred.sequence = "".join(
+                self.tokenizer.detokenize(
+                    torch.unsqueeze(pred.sequence, 0),
+                    join=False,
+                )[0]
+            )
             pred.protein = self.protein_database.get_associated_protein(
                 pred.sequence
             )
