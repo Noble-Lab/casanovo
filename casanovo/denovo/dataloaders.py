@@ -1,5 +1,6 @@
 """Data loaders for the de novo sequencing task."""
 
+import functools
 import logging
 import os
 import pathlib
@@ -42,7 +43,9 @@ class DeNovoDataModule(pl.LightningDataModule):
         The batch size to use for training.
     eval_batch_size : int
         The batch size to use for inference.
-    n_peaks : Optional[int]
+    min_peaks : Optional[int]
+        The number of peaks for a spectrum to be considered valid.
+    max_peaks : Optional[int]
         The number of top-n most intense peaks to keep in each spectrum.
         `None` retains all peaks.
     min_mz : float
@@ -79,7 +82,8 @@ class DeNovoDataModule(pl.LightningDataModule):
         test_paths: Optional[Sequence[str]] = None,
         train_batch_size: int = 128,
         eval_batch_size: int = 1028,
-        n_peaks: Optional[int] = 150,
+        min_peaks: Optional[int] = 20,
+        max_peaks: Optional[int] = 150,
         min_mz: float = 50.0,
         max_mz: float = 2500.0,
         min_intensity: float = 0.01,
@@ -105,8 +109,9 @@ class DeNovoDataModule(pl.LightningDataModule):
         self.preprocessing_fn = [
             preprocessing.set_mz_range(min_mz=min_mz, max_mz=max_mz),
             preprocessing.remove_precursor_peak(remove_precursor_tol, "Da"),
-            preprocessing.filter_intensity(min_intensity, n_peaks),
             preprocessing.scale_intensity("root", 1),
+            preprocessing.filter_intensity(min_intensity, max_peaks),
+            functools.partial(_discard_low_quality, min_peaks=min_peaks),
             _scale_to_unit_norm,
         ]
         self.valid_charge = np.arange(1, max_charge + 1)
@@ -280,6 +285,38 @@ class DeNovoDataModule(pl.LightningDataModule):
     def db_dataloader(self) -> torch.utils.data.DataLoader:
         """Get a special dataloader for DB search."""
         return self._make_loader(self.test_dataset)
+
+
+def _discard_low_quality(
+    spectrum: sus.MsmsSpectrum, min_peaks: int
+) -> sus.MsmsSpectrum:
+    """
+    Discard low quality spectra.
+
+    Spectra are considered low quality if:
+    - They have fewer than 20 peaks.
+
+    Parameters
+    ----------
+    spectrum : sus.MsmsSpectrum
+        The spectrum to check for low quality.
+    min_peaks : int
+        The minimum number of peaks required for a spectrum to be
+        considered high quality.
+
+    Returns
+    -------
+    sus.MsmsSpectrum
+        The spectrum if it is of high quality, otherwise None.
+
+    Raises
+    ------
+    ValueError
+        If the spectrum is of low quality.
+    """
+    if len(spectrum.mz) < min_peaks:
+        raise ValueError("Insufficient number of peaks")
+    return spectrum
 
 
 def _scale_to_unit_norm(spectrum: sus.MsmsSpectrum) -> sus.MsmsSpectrum:

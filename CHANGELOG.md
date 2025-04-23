@@ -13,6 +13,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Besides as a local file, model weights can be specified from a URL. Upon initial download, the weights file is cached for future re-use.
 - Training and optimizer metrics can be logged to a CSV file by setting the `log_metrics` config file option to true. The CSV file will be written to under a sub-directory of the output directory named `csv_logs`.
 - New configuration options for detailed control of the gradients during training (gradient accumulation, clipping).
+- New configuration option `min_peaks` to discard low-quality spectra with too few peaks.
 
 ### Changed
 
@@ -21,13 +22,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - The path suffix (extension) of `--output_root` will no longer be removed as it was with the old `--output` option.
 - The `--validation_peak_path` is now optional when training; if `--validation_peak_path` is not set then the `train_peak_path` will also be used for validation.
 - The `tb_summarywriter` config option is now a boolean config option, and if set to true the TensorBoard summary will be written to a sub-directory of the output directory named `tensorboard`.
-- The geometric mean of the raw amino acid scores is used as the peptide score, rather then the arithmetic mean.
 - Input peak files can now be specified as both individual file(s) and a directory.
 - Peptidoforms are specified using ProForma 2.0 notation by default.
 - DepthCharge is upgraded to the latest version 0.4.8.
-- Amino acid scores are no longer averaged with the peptide score.
-- N-terminal modification amino acid level scores are now combined with the leading N-terminal amino acid score.
+- The product of the raw amino acid scores is used as the peptide score, rather then the arithmetic mean.
+- Amino acid scores are directly reported, rather than averaged with the peptide score.
 - The amino acid-level score of stand-alone N-terminal modifications is combined with that of the leading N-terminal residue.
+- Renamed the `n_peaks` configuration option of the maximum number of peaks to retain in a spectrum to `max_peaks`.
 
 ### Fixed
 

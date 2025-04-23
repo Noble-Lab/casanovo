@@ -235,13 +235,13 @@ class Spec2Pep(pl.LightningModule):
 
         Parameters
         ----------
-        mzs : torch.Tensor of shape (n_spectra, n_peaks)
+        mzs : torch.Tensor of shape (n_spectra, max_peaks)
             The m/z values of spectra for which to predict peptide
             sequences. Axis 0 represents an MS/MS spectrum, axis 1
             contains the m/z values for each peak. These should be
             zero-padded, such that all the spectra in the batch are the
             same length.
-        intensities: torch.Tensor of shape (n_spectra, n_peaks)
+        intensities: torch.Tensor of shape (n_spectra, max_peaks)
             The intensity values of spectra for which to predict peptide
             sequences. Axis 0 represents an MS/MS spectrum, axis 1
             contains the intensity values for each peak. These should
@@ -769,9 +769,9 @@ class Spec2Pep(pl.LightningModule):
 
         Returns
         -------
-        mzs : torch.Tensor of shape (batch_size, n_peaks)
+        mzs : torch.Tensor of shape (batch_size, max_peaks)
             The m/z values for each spectrum.
-        intensities : torch.Tensor of shape (batch_size, n_peaks)
+        intensities : torch.Tensor of shape (batch_size, max_peaks)
             The intensity values for each spectrum.
         precursors : torch.Tensor of shape (batch_size, 3)
             A tensor with the precursor neutral mass, precursor charge,

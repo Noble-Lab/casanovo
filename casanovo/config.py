@@ -17,6 +17,7 @@ logger = logging.getLogger("casanovo")
 # FIXME: This contains deprecated config options to be removed in the next
 #  major version update.
 _config_deprecated = dict(
+    n_peaks="max_peaks",
     every_n_train_steps="val_check_interval",
     max_iters="cosine_schedule_period_iters",
     max_length="max_peptide_len",
@@ -41,8 +42,8 @@ class Config:
     --------
     ```
     config = Config("casanovo.yaml")
-    config.n_peaks    # the n_peaks parameter
-    config["n_peaks"] # also the n_peaks parameter
+    config.max_peaks    # the max_peaks parameter
+    config["max_peaks"] # also the max_peaks parameter
     ```
     """
 
@@ -70,7 +71,8 @@ class Config:
         log_every_n_steps=int,
         lance_dir=str,
         val_check_interval=int,
-        n_peaks=int,
+        min_peaks=int,
+        max_peaks=int,
         min_mz=float,
         max_mz=float,
         min_intensity=float,

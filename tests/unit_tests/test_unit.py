@@ -89,34 +89,18 @@ def test_split_version():
     assert version == ("3", "0", "1")
 
 
-class MockResponseGet:
-    file_content = b"fake model weights content"
-
-    class MockRaw(io.BytesIO):
-        def read(self, *args, **kwargs):
-            return super().read(*args)
-
-    def __init__(self):
-        self.request_counter = 0
-        self.is_ok = True
-
-    def raise_for_status(self):
-        if not self.is_ok:
-            raise requests.HTTPError
-
-    def __call__(self, url, stream=True, allow_redirects=True):
-        self.request_counter += 1
-        response = unittest.mock.MagicMock()
-        response.raise_for_status = self.raise_for_status
-        response.headers = {"Content-Length": str(len(self.file_content))}
-        response.raw = MockResponseGet.MockRaw(self.file_content)
-        return response
-
-
 class MockAsset:
     def __init__(self, file_name):
         self.name = file_name
         self.browser_download_url = f"http://example.com/{file_name}"
+
+
+class MockGithub:
+    def __init__(self, releases):
+        self.releases = releases
+
+    def get_repo(self, repo_name):
+        return MockRepo()
 
 
 class MockRelease:
@@ -158,12 +142,47 @@ class MockRepo:
         return self.releases
 
 
-class MockGithub:
-    def __init__(self, releases):
-        self.releases = releases
+class MockResponseGet:
+    file_content = b"fake model weights content"
 
-    def get_repo(self, repo_name):
-        return MockRepo()
+    class MockRaw(io.BytesIO):
+        def read(self, *args, **kwargs):
+            return super().read(*args)
+
+    def __init__(self):
+        self.request_counter = 0
+        self.is_ok = True
+
+    def raise_for_status(self):
+        if not self.is_ok:
+            raise requests.HTTPError
+
+    def __call__(self, url, stream=True, allow_redirects=True):
+        self.request_counter += 1
+        response = unittest.mock.MagicMock()
+        response.raise_for_status = self.raise_for_status
+        response.headers = {"Content-Length": str(len(self.file_content))}
+        response.raw = MockResponseGet.MockRaw(self.file_content)
+        return response
+
+
+class MockResponseHead:
+    def __init__(self):
+        self.last_modified = None
+        self.is_ok = True
+        self.fail = False
+
+    def __call__(self, url):
+        if self.fail:
+            raise requests.ConnectionError
+
+        response = unittest.mock.MagicMock()
+        response.headers = dict()
+        response.ok = self.is_ok
+        if self.last_modified is not None:
+            response.headers["Last-Modified"] = self.last_modified
+
+        return response
 
 
 def test_setup_model(monkeypatch):
@@ -317,25 +336,6 @@ def test_get_model_weights(monkeypatch):
             casanovo._get_model_weights(pathlib.Path(tmp_dir))
 
         assert mock_get.request_counter == 0
-
-
-class MockResponseHead:
-    def __init__(self):
-        self.last_modified = None
-        self.is_ok = True
-        self.fail = False
-
-    def __call__(self, url):
-        if self.fail:
-            raise requests.ConnectionError
-
-        response = unittest.mock.MagicMock()
-        response.headers = dict()
-        response.ok = self.is_ok
-        if self.last_modified is not None:
-            response.headers["Last-Modified"] = self.last_modified
-
-        return response
 
 
 def test_get_weights_from_url(monkeypatch):
@@ -1822,6 +1822,7 @@ def test_spectrum_id_mgf(mgf_small, tmp_path):
         train_paths=[mgf_small, mgf_small2],
         valid_paths=[mgf_small, mgf_small2],
         test_paths=[mgf_small, mgf_small2],
+        min_peaks=0,
         shuffle=False,
     )
     data_module.setup()
@@ -1831,9 +1832,6 @@ def test_spectrum_id_mgf(mgf_small, tmp_path):
         data_module.valid_dataset,
         data_module.test_dataset,
     ]:
-        for batch in dataset:
-            print(batch)
-
         for i, (filename, scan_id) in enumerate(
             [
                 (mgf_small, "0"),
@@ -1853,6 +1851,7 @@ def test_spectrum_id_mzml(mzml_small, tmp_path):
     data_module = DeNovoDataModule(
         lance_dir=tmp_path.name,
         test_paths=[mzml_small, mzml_small2],
+        min_peaks=0,
         shuffle=False,
     )
     data_module.setup(stage="test", annotated=False)
@@ -1943,3 +1942,80 @@ def test_setup_output(tmp_path, monkeypatch):
 
         assert output_path.resolve() == target_path.resolve()
         assert output_root == "bar"
+
+
+def test_spectrum_preprocessing(tmp_path, mgf_small):
+    """
+    Test the spectrum preprocessing function.
+    """
+    min_peaks, max_peaks = 0, 100
+    min_mz, max_mz = 0, 2000
+    min_intensity = 0
+    remove_precursor_tol = 0
+    max_charge = 4
+
+    # Test number of peaks filtering.
+    min_peaks, max_peaks = 20, 50
+    # One spectrum removed with too few peaks.
+    total_spectra = 1
+    dataloader = DeNovoDataModule(
+        tmp_path.name,
+        test_paths=str(mgf_small),
+        min_peaks=min_peaks,
+        max_peaks=max_peaks,
+        min_mz=min_mz,
+        max_mz=max_mz,
+        min_intensity=min_intensity,
+        remove_precursor_tol=remove_precursor_tol,
+        max_charge=max_charge,
+    )
+    dataloader.setup("test", annotated=False)
+    assert dataloader.test_dataset.n_spectra == total_spectra
+    for spec in dataloader.test_dataset:
+        mz = (mz := spec["mz_array"][0])[torch.nonzero(mz)]
+        assert min_peaks <= mz.shape[0] <= max_peaks
+    min_peaks, max_peaks = 0, 100
+
+    # Test m/z range filtering.
+    min_mz, max_mz = 200, 600
+    # All spectra retained.
+    total_spectra = 2
+    dataloader = DeNovoDataModule(
+        tmp_path.name,
+        test_paths=str(mgf_small),
+        min_peaks=min_peaks,
+        max_peaks=max_peaks,
+        min_mz=min_mz,
+        max_mz=max_mz,
+        min_intensity=min_intensity,
+        remove_precursor_tol=remove_precursor_tol,
+        max_charge=max_charge,
+    )
+    dataloader.setup("test", annotated=False)
+    assert dataloader.test_dataset.n_spectra == total_spectra
+    for spec in dataloader.test_dataset:
+        mz = (mz := spec["mz_array"][0])[torch.nonzero(mz)]
+        assert mz.min() >= min_mz
+        assert mz.max() <= max_mz
+    min_mz, max_mz = 0, 2000
+
+    # Test charge filtering.
+    max_charge = 2
+    # One spectrum removed with too high charge.
+    total_spectra = 1
+    dataloader = DeNovoDataModule(
+        tmp_path.name,
+        test_paths=str(mgf_small),
+        min_peaks=min_peaks,
+        max_peaks=max_peaks,
+        min_mz=min_mz,
+        max_mz=max_mz,
+        min_intensity=min_intensity,
+        remove_precursor_tol=remove_precursor_tol,
+        max_charge=max_charge,
+    )
+    dataloader.setup("test", annotated=False)
+    assert dataloader.test_dataset.n_spectra == total_spectra
+    for spec in dataloader.test_dataset:
+        assert spec["precursor_charge"] <= max_charge
+    max_charge = 4
