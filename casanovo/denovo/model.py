@@ -741,6 +741,11 @@ class Spec2Pep(pl.LightningModule):
                             if self.tokenizer.reverse
                             else aa_scores
                         ),
+                        # FIXME: Remove work around when depthcharge reverse
+                        # detokenization bug is fixed.
+                        # self.tokenizer.detokenize(
+                        #     torch.unsqueeze(pred_tokens, 0)
+                        # )[0],
                         "".join(
                             self.tokenizer.detokenize(
                                 torch.unsqueeze(pred_tokens, 0),
@@ -899,6 +904,9 @@ class Spec2Pep(pl.LightningModule):
 
         # Calculate and log amino acid and peptide match evaluation
         # metrics from the predicted peptides.
+        # FIXME: Remove work around when depthcharge reverse detokenization
+        # bug is fixed.
+        # peptides_true = self.tokenizer.detokenize(batch["seq"])
         peptides_true = [
             "".join(pep)
             for pep in self.tokenizer.detokenize(batch["seq"], join=False)
@@ -1212,6 +1220,11 @@ class DbSpec2Pep(Spec2Pep):
         # Determine the peptide sequence and parent proteins only for
         # the retained PSMs.
         for pred in predictions:
+            # FIXME: Remove work around when depthcharge reverse detokinzation
+            # bug is fixed.
+            # pred.sequence = self.tokenizer.detokenize(
+            #     torch.unsqueeze(pred.sequence, 0)
+            # )[0]
             pred.sequence = "".join(
                 self.tokenizer.detokenize(
                     torch.unsqueeze(pred.sequence, 0),
