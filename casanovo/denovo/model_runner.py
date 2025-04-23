@@ -226,7 +226,7 @@ class ModelRunner:
                 batch["precursor_mz"],
             ):
                 true_seq = true_seq.cpu().detach()
-                true_seqs.append(true_seq)
+                true_seqs.append(true_seq.numpy())
                 true_seq = "".join(
                     self.model.tokenizer.detokenize(
                         torch.unsqueeze(true_seq, 0),
@@ -234,14 +234,14 @@ class ModelRunner:
                     )[0]
                 )
 
-                curr_psm = psm.AnnotatedPepSpecMatch(
+                curr_psm = psm.PepSpecMatch(
                     sequence="null",
                     spectrum_id=(peak_file, scan_id),
                     peptide_score="null",
                     charge=charge,
                     calc_mz="null",
                     exp_mz=exp_mz,
-                    aa_scores="null",
+                    aa_scores=[-1.0],
                 )
 
                 if pred_i < len(self.writer.psms) and self.writer.psms[
@@ -251,6 +251,7 @@ class ModelRunner:
                     pred_tokens = self.model.tokenizer.tokenize(
                         curr_psm.sequence
                     ).squeeze(0)
+
                     pred_seqs.append(pred_tokens.cpu().detach().numpy())
                     pred_i += 1
                 else:
