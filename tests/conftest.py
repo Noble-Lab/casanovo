@@ -230,7 +230,13 @@ def _create_mzml(peptides, mzml_file, random_state=42):
         )
         with writer.run(id=1, instrument_configuration="ic"):
             with writer.spectrum_list(len(peptides)):
-                for scan_nr, peptide in zip([17, 111], peptides):
+                for scan_id, peptide in zip(
+                    [
+                        "scan=17",
+                        "merged=11 frame=12 scanStart=763 scanEnd=787",
+                    ],
+                    peptides,
+                ):
                     charge = rng.choice([2, 3])
 
                     precursor = writer.precursor_builder()
@@ -244,7 +250,7 @@ def _create_mzml(peptides, mzml_file, random_state=42):
                     writer.write_spectrum(
                         mzs,
                         intensities,
-                        id=f"scan={scan_nr}",
+                        id=scan_id,
                         centroided=True,
                         params=[{"ms level": 2}],
                         precursor_information=precursor,
