@@ -305,7 +305,7 @@ class Spec2Pep(pl.LightningModule):
                 ]
 
         # The following is the standard processing logic
-        # Optimized: Ensure all tensors are on the correct device
+        # Ensure all tensors are on the correct device
         device = self.device
 
         # First time called, convert lists to tensors and move to correct device
@@ -959,7 +959,7 @@ class Spec2Pep(pl.LightningModule):
     ) -> Iterable[List[Tuple[float, np.ndarray, str]]]:
         """
         Return the peptide with the highest confidence score for each spectrum.
-        Optimized version only performs detokenize in the final output.
+
 
         Parameters
         ----------
