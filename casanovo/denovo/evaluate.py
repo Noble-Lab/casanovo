@@ -8,9 +8,9 @@ from spectrum_utils.utils import mass_diff
 
 
 def aa_match_prefix(
-    peptide1: List[str],
-    peptide2: List[str],
-    aa_dict: Dict[str, float],
+    peptide1: List[List[int]],
+    peptide2: List[List[int]],
+    aa_dict: Dict[int, float],
     cum_mass_threshold: float = 0.5,
     ind_mass_threshold: float = 0.1,
 ) -> Tuple[np.ndarray, bool]:
@@ -21,11 +21,11 @@ def aa_match_prefix(
 
     Parameters
     ----------
-    peptide1 : List[str]
+    peptide1 : List[List[int]]
         The first tokenized peptide sequence to be compared.
-    peptide2 : List[str]
+    peptide2 : List[List[int]]
         The second tokenized peptide sequence to be compared.
-    aa_dict : Dict[str, float]
+    aa_dict : Dict[int, float]
         Mapping of amino acid tokens to their mass values.
     cum_mass_threshold : float
         Mass threshold in Dalton to accept cumulative mass-matching amino acid
@@ -64,9 +64,9 @@ def aa_match_prefix(
 
 
 def aa_match_prefix_suffix(
-    peptide1: List[str],
-    peptide2: List[str],
-    aa_dict: Dict[str, float],
+    peptide1: List[List[int]],
+    peptide2: List[List[int]],
+    aa_dict: Dict[int, float],
     cum_mass_threshold: float = 0.5,
     ind_mass_threshold: float = 0.1,
 ) -> Tuple[np.ndarray, bool]:
@@ -76,11 +76,11 @@ def aa_match_prefix_suffix(
 
     Parameters
     ----------
-    peptide1 : List[str]
+    peptide1 : List[List[int]]
         The first tokenized peptide sequence to be compared.
-    peptide2 : List[str]
+    peptide2 : List[List[int]]
         The second tokenized peptide sequence to be compared.
-    aa_dict : Dict[str, float]
+    aa_dict : Dict[int, float]
         Mapping of amino acid tokens to their mass values.
     cum_mass_threshold : float
         Mass threshold in Dalton to accept cumulative mass-matching amino acid
@@ -127,9 +127,9 @@ def aa_match_prefix_suffix(
 
 
 def aa_match(
-    peptide1: List[str] | None,
-    peptide2: List[str] | None,
-    aa_dict: Dict[str, float],
+    peptide1: List[List[int]] | None,
+    peptide2: List[List[int]] | None,
+    aa_dict: Dict[int, float],
     cum_mass_threshold: float = 0.5,
     ind_mass_threshold: float = 0.1,
     mode: str = "best",
@@ -139,11 +139,11 @@ def aa_match(
 
     Parameters
     ----------
-    peptide1 : List[str] | None,
+    peptide1 : List[List[int]] | None,
         The first tokenized peptide sequence to be compared.
-    peptide2 : List[str] | None
+    peptide2 : List[List[int]] | None
         The second tokenized peptide sequence to be compared.
-    aa_dict : Dict[str, float]
+    aa_dict : Dict[int, float]
         Mapping of amino acid tokens to their mass values.
     cum_mass_threshold : float
         Mass threshold in Dalton to accept cumulative mass-matching amino acid
@@ -228,6 +228,7 @@ def aa_match_batch(
     aa_matches_batch, n_aa1, n_aa2 = [], 0, 0
     for peptide1, peptide2 in zip(peptides1, peptides2):
         # Split peptides into individual AAs if necessary.
+        # FIXME: This should use the tokenizer (i.e. be ProForma compliant).
         if isinstance(peptide1, str):
             peptide1 = re.split(r"(?<=.)(?=[A-Z])", peptide1)
 

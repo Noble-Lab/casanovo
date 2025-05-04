@@ -32,12 +32,9 @@ warnings.filterwarnings(
 )
 
 import appdirs
-import depthcharge
 import github
-import lightning
 import requests
 import rich_click as click
-import torch
 import tqdm
 from lightning.pytorch import seed_everything
 
@@ -144,7 +141,7 @@ def main() -> None:
     "peak_path",
     required=True,
     nargs=-1,
-    type=click.Path(exists=True, dir_okay=False),
+    type=click.Path(exists=True, dir_okay=True),
 )
 @click.option(
     "--evaluate",
@@ -177,11 +174,15 @@ def sequence(
     output_path, output_root_name = _setup_output(
         output_dir, output_root, force_overwrite, verbosity
     )
+
+    start_time = time.time()
+    utils.log_system_info()
+
     utils.check_dir_file_exists(output_path, f"{output_root}.mztab")
     config, model = setup_model(
         model, config, output_path, output_root_name, False
     )
-    start_time = time.time()
+
     with ModelRunner(
         config,
         model,
@@ -197,11 +198,7 @@ def sequence(
             logger.info("  %s", peak_file)
 
         results_path = output_path / f"{output_root_name}.mztab"
-        runner.predict(
-            peak_path,
-            str(results_path),
-            evaluate=evaluate,
-        )
+        runner.predict(peak_path, str(results_path), evaluate=evaluate)
         utils.log_annotate_report(
             runner.writer.psms, start_time=start_time, end_time=time.time()
         )
@@ -212,7 +209,7 @@ def sequence(
     "peak_path",
     required=True,
     nargs=-1,
-    type=click.Path(exists=True, dir_okay=False),
+    type=click.Path(exists=True, dir_okay=True),
 )
 @click.argument(
     "fasta_path",
@@ -238,11 +235,15 @@ def db_search(
     output_path, output_root_name = _setup_output(
         output_dir, output_root, force_overwrite, verbosity
     )
+
+    start_time = time.time()
+    utils.log_system_info()
+
     utils.check_dir_file_exists(output_path, f"{output_root}.mztab")
     config, model = setup_model(
         model, config, output_path, output_root_name, False
     )
-    start_time = time.time()
+
     with ModelRunner(
         config,
         model,
@@ -258,11 +259,7 @@ def db_search(
         logger.info("  %s", fasta_path)
 
         results_path = output_path / f"{output_root_name}.mztab"
-        runner.db_search(
-            peak_path,
-            fasta_path,
-            str(results_path),
-        )
+        runner.db_search(peak_path, fasta_path, str(results_path))
         utils.log_annotate_report(
             runner.writer.psms, start_time=start_time, end_time=time.time()
         )
@@ -273,7 +270,7 @@ def db_search(
     "train_peak_path",
     required=True,
     nargs=-1,
-    type=click.Path(exists=True, dir_okay=False),
+    type=click.Path(exists=True, dir_okay=True),
 )
 @click.option(
     "-p",
@@ -284,7 +281,7 @@ def db_search(
     """,
     required=False,
     multiple=True,
-    type=click.Path(exists=True, dir_okay=False),
+    type=click.Path(exists=True, dir_okay=True),
 )
 def train(
     train_peak_path: Tuple[str],
@@ -305,10 +302,14 @@ def train(
     output_path, output_root_name = _setup_output(
         output_dir, output_root, force_overwrite, verbosity
     )
+
+    start_time = time.time()
+    utils.log_system_info()
+
     config, model = setup_model(
         model, config, output_path, output_root_name, True
     )
-    start_time = time.time()
+
     with ModelRunner(
         config,
         model,
@@ -334,23 +335,20 @@ def train(
 @main.command()
 def version() -> None:
     """Get the Casanovo version information."""
-    versions = [
-        f"Casanovo: {__version__}",
-        f"Depthcharge: {depthcharge.__version__}",
-        f"Lightning: {lightning.__version__}",
-        f"PyTorch: {torch.__version__}",
-    ]
-    sys.stdout.write("\n".join(versions) + "\n")
+    _setup_output(None, None, True, "info")
+    utils.log_system_info()
 
 
 @main.command(cls=_SharedFileIOParams)
 def configure(
     output_dir: str, output_root: str, verbosity: str, force_overwrite: bool
 ) -> None:
-    """Generate a Casanovo configuration file to customize.
-
-    The casanovo configuration file is in the YAML format.
     """
+    Generate a Casanovo configuration file to customize.
+
+    The Casanovo configuration file is in the YAML format.
+    """
+    utils.log_system_info()
     output_path, _ = _setup_output(
         output_dir, output_root, force_overwrite, verbosity
     )
@@ -368,7 +366,8 @@ def setup_logging(
     log_file_path: Path,
     verbosity: str,
 ) -> None:
-    """Set up the logger.
+    """
+    Set up the logger.
 
     Logging occurs to the command-line and to the given log file.
 
@@ -430,7 +429,8 @@ def setup_model(
     output_root_name: str,
     is_train: bool,
 ) -> Tuple[Config, Path | None]:
-    """Setup Casanovo config and resolve model weights (.ckpt) path
+    """
+    Set up Casanovo config and resolve model weights (.ckpt) path.
 
     Parameters
     ----------
@@ -732,7 +732,7 @@ def _get_weights_from_url(
 
 def _download_weights(file_url: str, download_path: Path) -> None:
     """
-    Download weights file from URL
+    Download weights file from URL.
 
     Download the model weights file from the specified URL and save it
     to the given path. Ensures the download directory exists, and uses a

@@ -1,39 +1,42 @@
 import collections
+import copy
 import datetime
 import functools
 import hashlib
 import heapq
 import io
+import math
 import os
 import pathlib
 import platform
 import re
-import requests
 import shutil
 import tempfile
 import unittest
 import unittest.mock
-import contextlib
-import depthcharge.masses
+
+import depthcharge
+import depthcharge.data
+import depthcharge.tokenizers.peptides
 import einops
 import github
 import numpy as np
 import pandas as pd
 import pytest
+import requests
 import torch
 
-from casanovo import casanovo
-from casanovo import utils
-from casanovo.data import db_utils, ms_io
-from casanovo.data.datasets import SpectrumDataset, AnnotatedSpectrumDataset
+from casanovo import casanovo, utils
+from casanovo.config import Config
+from casanovo.data import db_utils, ms_io, psm
+from casanovo.denovo.dataloaders import DeNovoDataModule
 from casanovo.denovo.evaluate import aa_match, aa_match_batch, aa_match_metrics
 from casanovo.denovo.model import (
+    DbSpec2Pep,
     Spec2Pep,
-    _aa_pep_score,
+    _peptide_score,
     _calc_match_score,
-    PeptideDecoder,
 )
-from depthcharge.data import SpectrumIndex, AnnotatedSpectrumIndex
 
 
 def test_version():
@@ -41,6 +44,7 @@ def test_version():
     assert casanovo.__version__ is not None
 
 
+@pytest.mark.skip(reason="Skipping due to Linux deadlock issue")
 def test_n_workers(monkeypatch):
     """Check that n_workers is correct without a GPU."""
     monkeypatch.setattr("torch.cuda.is_available", lambda: False)
@@ -85,34 +89,18 @@ def test_split_version():
     assert version == ("3", "0", "1")
 
 
-class MockResponseGet:
-    file_content = b"fake model weights content"
-
-    class MockRaw(io.BytesIO):
-        def read(self, *args, **kwargs):
-            return super().read(*args)
-
-    def __init__(self):
-        self.request_counter = 0
-        self.is_ok = True
-
-    def raise_for_status(self):
-        if not self.is_ok:
-            raise requests.HTTPError
-
-    def __call__(self, url, stream=True, allow_redirects=True):
-        self.request_counter += 1
-        response = unittest.mock.MagicMock()
-        response.raise_for_status = self.raise_for_status
-        response.headers = {"Content-Length": str(len(self.file_content))}
-        response.raw = MockResponseGet.MockRaw(self.file_content)
-        return response
-
-
 class MockAsset:
     def __init__(self, file_name):
         self.name = file_name
         self.browser_download_url = f"http://example.com/{file_name}"
+
+
+class MockGithub:
+    def __init__(self, releases):
+        self.releases = releases
+
+    def get_repo(self, repo_name):
+        return MockRepo()
 
 
 class MockRelease:
@@ -154,12 +142,47 @@ class MockRepo:
         return self.releases
 
 
-class MockGithub:
-    def __init__(self, releases):
-        self.releases = releases
+class MockResponseGet:
+    file_content = b"fake model weights content"
 
-    def get_repo(self, repo_name):
-        return MockRepo()
+    class MockRaw(io.BytesIO):
+        def read(self, *args, **kwargs):
+            return super().read(*args)
+
+    def __init__(self):
+        self.request_counter = 0
+        self.is_ok = True
+
+    def raise_for_status(self):
+        if not self.is_ok:
+            raise requests.HTTPError
+
+    def __call__(self, url, stream=True, allow_redirects=True):
+        self.request_counter += 1
+        response = unittest.mock.MagicMock()
+        response.raise_for_status = self.raise_for_status
+        response.headers = {"Content-Length": str(len(self.file_content))}
+        response.raw = MockResponseGet.MockRaw(self.file_content)
+        return response
+
+
+class MockResponseHead:
+    def __init__(self):
+        self.last_modified = None
+        self.is_ok = True
+        self.fail = False
+
+    def __call__(self, url):
+        if self.fail:
+            raise requests.ConnectionError
+
+        response = unittest.mock.MagicMock()
+        response.headers = dict()
+        response.ok = self.is_ok
+        if self.last_modified is not None:
+            response.headers["Last-Modified"] = self.last_modified
+
+        return response
 
 
 def test_setup_model(monkeypatch):
@@ -315,25 +338,6 @@ def test_get_model_weights(monkeypatch):
         assert mock_get.request_counter == 0
 
 
-class MockResponseHead:
-    def __init__(self):
-        self.last_modified = None
-        self.is_ok = True
-        self.fail = False
-
-    def __call__(self, url):
-        if self.fail:
-            raise requests.ConnectionError
-
-        response = unittest.mock.MagicMock()
-        response.headers = dict()
-        response.ok = self.is_ok
-        if self.last_modified is not None:
-            response.headers["Last-Modified"] = self.last_modified
-
-        return response
-
-
 def test_get_weights_from_url(monkeypatch):
     file_url = "http://example.com/model_weights.ckpt"
 
@@ -425,40 +429,28 @@ def test_is_valid_url():
     assert not casanovo._is_valid_url("foobar")
 
 
-def test_tensorboard():
-    """
-    Test that the tensorboard.SummaryWriter object is only created when a folder
-    path is passed.
-    """
-    model = Spec2Pep(tb_summarywriter="test_path")
-    assert model.tb_summarywriter is not None
-
-    model = Spec2Pep()
-    assert model.tb_summarywriter is None
-
-
-def test_aa_pep_score():
+def test_peptide_score():
     """
     Test the calculation of amino acid and peptide scores from the raw amino
     acid scores.
     """
     aa_scores_raw = np.asarray([0.0, 0.5, 1.0])
 
-    aa_scores, peptide_score = _aa_pep_score(aa_scores_raw, True)
-    np.testing.assert_array_equal(aa_scores, np.asarray([0.0, 0.25, 0.5]))
+    peptide_score = _peptide_score(aa_scores_raw, True)
     assert peptide_score == pytest.approx(0.0)
 
-    aa_scores, peptide_score = _aa_pep_score(aa_scores_raw, False)
-    np.testing.assert_array_equal(aa_scores, np.asarray([0.0, 0.25, 0.5]))
+    peptide_score = _peptide_score(aa_scores_raw, False)
     assert peptide_score == pytest.approx(-1.0)
 
     aa_scores_raw = np.asarray([1.0, 0.25])
-    aa_scores, peptide_score = _aa_pep_score(aa_scores_raw, True)
-    np.testing.assert_array_equal(aa_scores, np.asarray([0.75, 0.375]))
-    assert peptide_score == pytest.approx(0.5)
+    peptide_score = _peptide_score(aa_scores_raw, True)
+    assert peptide_score == pytest.approx(0.25)
 
 
-def test_peptide_generator_errors(residues_dict, tiny_fasta_file):
+def test_peptide_generator_errors(tiny_fasta_file):
+    residues_dict = (
+        depthcharge.tokenizers.PeptideTokenizer.from_massivekb().residues
+    )
     with pytest.raises(FileNotFoundError):
         [
             (a, b)
@@ -554,30 +546,20 @@ def test_calc_match_score():
 
     assert all_scores[0] == np.exp(0)
     assert all_scores[1] == np.exp(0)
-    assert all_scores[2] == pytest.approx(
-        np.exp(np.log(0.5 * 0.5 * 1 * 1) / 4)
-    )
-    assert all_scores[3] == pytest.approx(
-        np.exp(np.log(1e-10 * 1 * 1 * 1) / 4)
-    )
+    assert all_scores[2] == pytest.approx(0.25)
+    assert all_scores[3] == pytest.approx(1e-10)
 
     aa_scores = np.array([1, 1, 1, 1])
-    assert np.allclose(masked_per_aa_scores[0], (aa_scores + 1) / 2)
+    assert np.allclose(masked_per_aa_scores[0], aa_scores)
     aa_scores = np.array([1, 1, 1])
-    assert np.allclose(masked_per_aa_scores[1], (aa_scores + 1) / 2)
+    assert np.allclose(masked_per_aa_scores[1], aa_scores)
     aa_scores = np.array([0.5, 0.5, 1, 1])
-    assert np.allclose(
-        masked_per_aa_scores[2],
-        (aa_scores + np.exp(np.log(0.5 * 0.5 * 1 * 1) / 4)) / 2,
-    )
+    assert np.allclose(masked_per_aa_scores[2], aa_scores)
     aa_scores = np.array([1e-10, 1, 1, 1])
-    assert np.allclose(
-        masked_per_aa_scores[3],
-        (aa_scores + np.exp(np.log(1e-10 * 1 * 1 * 1) / 4)) / 2,
-    )
+    assert np.allclose(masked_per_aa_scores[3], aa_scores)
 
 
-def test_digest_fasta_cleave(tiny_fasta_file, residues_dict):
+def test_digest_fasta_cleave(tiny_fasta_file):
     # No missed cleavages
     expected_normal = [
         "ATSIPAR",
@@ -647,12 +629,12 @@ def test_digest_fasta_cleave(tiny_fasta_file, residues_dict):
                 "M:M+15.995,N:N+0.984,Q:Q+0.984,"
                 "nterm:+42.011,nterm:+43.006,nterm:-17.027,nterm:+43.006-17.027"
             ),
-            residues=residues_dict,
+            tokenizer=depthcharge.tokenizers.PeptideTokenizer.from_massivekb(),
         )
         assert pdb.db_peptides.index.to_list() == expected
 
 
-def test_digest_fasta_mods(tiny_fasta_file, residues_dict):
+def test_digest_fasta_mods(tiny_fasta_file):
     # 1 modification allowed
     # fixed: C+57.02146
     # variable: 1M+15.994915,1N+0.984016,1Q+0.984016
@@ -681,21 +663,21 @@ def test_digest_fasta_mods(tiny_fasta_file, residues_dict):
         "+42.011EIVMTQSPPTLSLSPGER",
         "+43.006EIVMTQSPPTLSLSPGER",
         "-17.027MEAPAQLLFLLLLWLPDTTR",
-        "-17.027M+15.995EAPAQLLFLLLLWLPDTTR",  #
+        "-17.027M+15.995EAPAQLLFLLLLWLPDTTR",
         "MEAPAQLLFLLLLWLPDTTR",
         "MEAPAQ+0.984LLFLLLLWLPDTTR",
         "M+15.995EAPAQLLFLLLLWLPDTTR",
         "+43.006-17.027MEAPAQLLFLLLLWLPDTTR",
-        "+43.006-17.027M+15.995EAPAQLLFLLLLWLPDTTR",  #
+        "+43.006-17.027M+15.995EAPAQLLFLLLLWLPDTTR",
         "+42.011MEAPAQLLFLLLLWLPDTTR",
         "+43.006MEAPAQLLFLLLLWLPDTTR",
-        "+42.011M+15.995EAPAQLLFLLLLWLPDTTR",  #
-        "+43.006M+15.995EAPAQLLFLLLLWLPDTTR",  #
+        "+42.011M+15.995EAPAQLLFLLLLWLPDTTR",
+        "+43.006M+15.995EAPAQLLFLLLLWLPDTTR",
         "-17.027ASQSVSSSYLTWYQQKPGQAPR",
         "ASQSVSSSYLTWYQQKPGQAPR",
-        "ASQ+0.984SVSSSYLTWYQQKPGQAPR",
         "ASQSVSSSYLTWYQ+0.984QKPGQAPR",
         "ASQSVSSSYLTWYQQ+0.984KPGQAPR",
+        "ASQ+0.984SVSSSYLTWYQQKPGQAPR",
         "ASQSVSSSYLTWYQQKPGQ+0.984APR",
         "+43.006-17.027ASQSVSSSYLTWYQQKPGQAPR",
         "+42.011ASQSVSSSYLTWYQQKPGQAPR",
@@ -703,9 +685,9 @@ def test_digest_fasta_mods(tiny_fasta_file, residues_dict):
         "-17.027FSGSGSGTDFTLTISSLQPEDFAVYYC+57.021QQDYNLP",
         "FSGSGSGTDFTLTISSLQPEDFAVYYC+57.021QQDYNLP",
         "FSGSGSGTDFTLTISSLQ+0.984PEDFAVYYC+57.021QQDYNLP",
+        "FSGSGSGTDFTLTISSLQPEDFAVYYC+57.021QQDYN+0.984LP",
         "FSGSGSGTDFTLTISSLQPEDFAVYYC+57.021Q+0.984QDYNLP",
         "FSGSGSGTDFTLTISSLQPEDFAVYYC+57.021QQ+0.984DYNLP",
-        "FSGSGSGTDFTLTISSLQPEDFAVYYC+57.021QQDYN+0.984LP",
         "+43.006-17.027FSGSGSGTDFTLTISSLQPEDFAVYYC+57.021QQDYNLP",
         "+42.011FSGSGSGTDFTLTISSLQPEDFAVYYC+57.021QQDYNLP",
         "+43.006FSGSGSGTDFTLTISSLQPEDFAVYYC+57.021QQDYNLP",
@@ -725,12 +707,12 @@ def test_digest_fasta_mods(tiny_fasta_file, residues_dict):
             "M:M+15.995,N:N+0.984,Q:Q+0.984,"
             "nterm:+42.011,nterm:+43.006,nterm:-17.027,nterm:+43.006-17.027"
         ),
-        residues=residues_dict,
+        tokenizer=depthcharge.tokenizers.PeptideTokenizer.from_massivekb(),
     )
     assert pdb.db_peptides.index.to_list() == expected_1mod
 
 
-def test_length_restrictions(tiny_fasta_file, residues_dict):
+def test_length_restrictions(tiny_fasta_file):
     # length between 20 and 50
     expected_long = [
         "MEAPAQLLFLLLLWLPDTTR",
@@ -756,7 +738,7 @@ def test_length_restrictions(tiny_fasta_file, residues_dict):
             "M:M+15.995,N:N+0.984,Q:Q+0.984,"
             "nterm:+42.011,nterm:+43.006,nterm:-17.027,nterm:+43.006-17.027"
         ),
-        residues=residues_dict,
+        tokenizer=depthcharge.tokenizers.PeptideTokenizer.from_massivekb(),
     )
     assert pdb.db_peptides.index.to_list() == expected_long
 
@@ -775,12 +757,12 @@ def test_length_restrictions(tiny_fasta_file, residues_dict):
             "M:M+15.995,N:N+0.984,Q:Q+0.984,"
             "nterm:+42.011,nterm:+43.006,nterm:-17.027,nterm:+43.006-17.027"
         ),
-        residues=residues_dict,
+        tokenizer=depthcharge.tokenizers.PeptideTokenizer.from_massivekb(),
     )
     assert pdb.db_peptides.index.to_list() == expected_short
 
 
-def test_digest_fasta_enzyme(tiny_fasta_file, residues_dict):
+def test_digest_fasta_enzyme(tiny_fasta_file):
     # arg-c enzyme
     expected_argc = [
         "ATSIPAR",
@@ -849,8 +831,8 @@ def test_digest_fasta_enzyme(tiny_fasta_file, residues_dict):
         "QSPPTL",
         "SPGERV",
         "ISSLQP",
-        "RATSIP",
         "TSIPAR",
+        "RATSIP",
         "MEAPAQ",
         "RASQSV",
         "TISSLQ",
@@ -883,8 +865,8 @@ def test_digest_fasta_enzyme(tiny_fasta_file, residues_dict):
         "AQLLFL",
         "QPEDFA",
         "TLSC+57.021RA",
-        "C+57.021RASQS",
         "SC+57.021RASQ",
+        "C+57.021RASQS",
         "DFTLTI",
         "PDTTRE",
         "TTREIV",
@@ -901,8 +883,8 @@ def test_digest_fasta_enzyme(tiny_fasta_file, residues_dict):
         "LWLPDT",
         "QLLFLL",
         "LQPEDF",
-        "REIVMT",
         "TREIVM",
+        "REIVMT",
         "QDYNLP",
         "LLLWLP",
         "SSYLTW",
@@ -921,8 +903,8 @@ def test_digest_fasta_enzyme(tiny_fasta_file, residues_dict):
         "TWYQQK",
         "VYYC+57.021QQ",
         "YLTWYQ",
-        "YC+57.021QQDY",
         "YYC+57.021QQD",
+        "YC+57.021QQDY",
     ]
 
     pdb = db_utils.ProteinDatabase(
@@ -940,7 +922,7 @@ def test_digest_fasta_enzyme(tiny_fasta_file, residues_dict):
             "M:M+15.995,N:N+0.984,Q:Q+0.984,"
             "nterm:+42.011,nterm:+43.006,nterm:-17.027,nterm:+43.006-17.027"
         ),
-        residues=residues_dict,
+        tokenizer=depthcharge.tokenizers.PeptideTokenizer.from_massivekb(),
     )
     assert pdb.db_peptides.index.to_list() == expected_argc
 
@@ -959,7 +941,7 @@ def test_digest_fasta_enzyme(tiny_fasta_file, residues_dict):
             "M:M+15.995,N:N+0.984,Q:Q+0.984,"
             "nterm:+42.011,nterm:+43.006,nterm:-17.027,nterm:+43.006-17.027"
         ),
-        residues=residues_dict,
+        tokenizer=depthcharge.tokenizers.PeptideTokenizer.from_massivekb(),
     )
     assert pdb.db_peptides.index.to_list() == expected_aspn
 
@@ -979,7 +961,7 @@ def test_digest_fasta_enzyme(tiny_fasta_file, residues_dict):
             "M:M+15.995,N:N+0.984,Q:Q+0.984,"
             "nterm:+42.011,nterm:+43.006,nterm:-17.027,nterm:+43.006-17.027"
         ),
-        residues=residues_dict,
+        tokenizer=depthcharge.tokenizers.PeptideTokenizer.from_massivekb(),
     )
     assert pdb.db_peptides.index.to_list() == expected_argc
 
@@ -999,7 +981,7 @@ def test_digest_fasta_enzyme(tiny_fasta_file, residues_dict):
             "M:M+15.995,N:N+0.984,Q:Q+0.984,"
             "nterm:+42.011,nterm:+43.006,nterm:-17.027,nterm:+43.006-17.027"
         ),
-        residues=residues_dict,
+        tokenizer=depthcharge.tokenizers.PeptideTokenizer.from_massivekb(),
     )
     assert pdb.db_peptides.index.to_list() == expected_semispecific
 
@@ -1019,12 +1001,102 @@ def test_digest_fasta_enzyme(tiny_fasta_file, residues_dict):
             "M:M+15.995,N:N+0.984,Q:Q+0.984,"
             "nterm:+42.011,nterm:+43.006,nterm:-17.027,nterm:+43.006-17.027"
         ),
-        residues=residues_dict,
+        tokenizer=depthcharge.tokenizers.PeptideTokenizer.from_massivekb(),
     )
     assert pdb.db_peptides.index.to_list() == expected_nonspecific
 
 
-def test_get_candidates(tiny_fasta_file, residues_dict):
+def test_psm_batches(tiny_config):
+    peptides_one = [
+        "SGSGSG",
+        "GSGSGT",
+        "SGSGTD",
+        "FSGSGS",
+        "ATSIPA",
+        "GASTRA",
+        "LSLSPG",
+        "ASQSVS",
+        "GSGTDF",
+        "SLSPGE",
+        "AQLLFL",
+        "QPEDFA",
+    ]
+
+    peptides_two = [
+        "SQSVSS",
+        "KPGQAP",
+        "SPPTLS",
+        "ASTRAT",
+        "RFSGSG",
+        "IYGAST",
+        "APAQLL",
+        "PTLSLS",
+        "TLSLSP",
+        "TLTISS",
+        "WYQQKP",
+        "TWYQQK",
+    ]
+
+    def mock_get_candidates(precursor_mz, precorsor_charge):
+        if precorsor_charge == 1:
+            return pd.Series(peptides_one)
+        elif precorsor_charge == 2:
+            return pd.Series(peptides_two)
+        else:
+            return pd.Series()
+
+    tokenizer = depthcharge.tokenizers.peptides.PeptideTokenizer(
+        residues=Config(tiny_config).residues
+    )
+    db_model = DbSpec2Pep(tokenizer=tokenizer)
+    db_model.protein_database = unittest.mock.MagicMock()
+    db_model.protein_database.get_candidates = mock_get_candidates
+
+    mock_batch = {
+        "precursor_mz": torch.Tensor([42.0, 84.0, 126.0]),
+        "precursor_charge": torch.Tensor([1, 2, 3]),
+        "peak_file": ["one.mgf", "two.mgf", "three.mgf"],
+        "scan_id": [1, 2, 3],
+    }
+
+    expected_batch_all = {
+        "precursor_mz": torch.Tensor([42.0] * 12 + [84.0] * 12),
+        "precursor_charge": torch.Tensor([1] * 12 + [2] * 12),
+        "seq": tokenizer.tokenize(peptides_one + peptides_two),
+        "peak_file": ["one.mgf"] * 12 + ["two.mgf"] * 12,
+        "scan_id": [1] * 12 + [2] * 12,
+    }
+
+    num_spectra = 0
+    for psm_batch in db_model._psm_batches(mock_batch):
+        batch_size = len(psm_batch["peak_file"])
+        end_idx = min(
+            num_spectra + batch_size, len(expected_batch_all["peak_file"])
+        )
+        assert torch.allclose(
+            psm_batch["precursor_mz"],
+            expected_batch_all["precursor_mz"][num_spectra:end_idx],
+        )
+        assert torch.equal(
+            psm_batch["precursor_charge"],
+            expected_batch_all["precursor_charge"][num_spectra:end_idx],
+        )
+        assert torch.equal(
+            psm_batch["seq"], expected_batch_all["seq"][num_spectra:end_idx]
+        )
+        assert (
+            psm_batch["peak_file"]
+            == expected_batch_all["peak_file"][num_spectra:end_idx]
+        )
+        assert (
+            psm_batch["scan_id"]
+            == expected_batch_all["scan_id"][num_spectra:end_idx]
+        )
+        num_spectra += batch_size
+    assert num_spectra == 24
+
+
+def test_get_candidates(tiny_fasta_file):
     # precursor_window is 10000
     expected_smallwindow = ["LLIYGASTR"]
 
@@ -1049,7 +1121,7 @@ def test_get_candidates(tiny_fasta_file, residues_dict):
             "M:M+15.995,N:N+0.984,Q:Q+0.984,"
             "nterm:+42.011,nterm:+43.006,nterm:-17.027,nterm:+43.006-17.027"
         ),
-        residues=residues_dict,
+        tokenizer=depthcharge.tokenizers.PeptideTokenizer.from_massivekb(),
     )
     candidates = pdb.get_candidates(precursor_mz=496.2, charge=2)
     assert expected_smallwindow == list(candidates)
@@ -1069,7 +1141,7 @@ def test_get_candidates(tiny_fasta_file, residues_dict):
             "M:M+15.995,N:N+0.984,Q:Q+0.984,"
             "nterm:+42.011,nterm:+43.006,nterm:-17.027,nterm:+43.006-17.027"
         ),
-        residues=residues_dict,
+        tokenizer=depthcharge.tokenizers.PeptideTokenizer.from_massivekb(),
     )
     candidates = pdb.get_candidates(precursor_mz=496.2, charge=2)
     assert expected_midwindow == list(candidates)
@@ -1089,13 +1161,13 @@ def test_get_candidates(tiny_fasta_file, residues_dict):
             "M:M+15.995,N:N+0.984,Q:Q+0.984,"
             "nterm:+42.011,nterm:+43.006,nterm:-17.027,nterm:+43.006-17.027"
         ),
-        residues=residues_dict,
+        tokenizer=depthcharge.tokenizers.PeptideTokenizer.from_massivekb(),
     )
     candidates = pdb.get_candidates(precursor_mz=496.2, charge=2)
     assert expected_widewindow == list(candidates)
 
 
-def test_get_candidates_isotope_error(tiny_fasta_file, residues_dict):
+def test_get_candidates_isotope_error(tiny_fasta_file):
     # Tide isotope error windows for 496.2, 2+:
     # 0: [980.481617, 1000.289326]
     # 1: [979.491114, 999.278813]
@@ -1156,7 +1228,7 @@ def test_get_candidates_isotope_error(tiny_fasta_file, residues_dict):
             "M:M+15.995,N:N+0.984,Q:Q+0.984,"
             "nterm:+42.011,nterm:+43.006,nterm:-17.027,nterm:+43.006-17.027"
         ),
-        residues=residues_dict,
+        tokenizer=depthcharge.tokenizers.PeptideTokenizer.from_massivekb(),
     )
     pdb.db_peptides = peptide_list
     candidates = pdb.get_candidates(precursor_mz=496.2, charge=2)
@@ -1177,7 +1249,7 @@ def test_get_candidates_isotope_error(tiny_fasta_file, residues_dict):
             "M:M+15.995,N:N+0.984,Q:Q+0.984,"
             "nterm:+42.011,nterm:+43.006,nterm:-17.027,nterm:+43.006-17.027"
         ),
-        residues=residues_dict,
+        tokenizer=depthcharge.tokenizers.PeptideTokenizer.from_massivekb(),
     )
     pdb.db_peptides = peptide_list
     candidates = pdb.get_candidates(precursor_mz=496.2, charge=2)
@@ -1198,7 +1270,7 @@ def test_get_candidates_isotope_error(tiny_fasta_file, residues_dict):
             "M:M+15.995,N:N+0.984,Q:Q+0.984,"
             "nterm:+42.011,nterm:+43.006,nterm:-17.027,nterm:+43.006-17.027"
         ),
-        residues=residues_dict,
+        tokenizer=depthcharge.tokenizers.PeptideTokenizer.from_massivekb(),
     )
     pdb.db_peptides = peptide_list
     candidates = pdb.get_candidates(precursor_mz=496.2, charge=2)
@@ -1219,25 +1291,32 @@ def test_get_candidates_isotope_error(tiny_fasta_file, residues_dict):
             "M:M+15.995,N:N+0.984,Q:Q+0.984,"
             "nterm:+42.011,nterm:+43.006,nterm:-17.027,nterm:+43.006-17.027"
         ),
-        residues=residues_dict,
+        tokenizer=depthcharge.tokenizers.PeptideTokenizer.from_massivekb(),
     )
     pdb.db_peptides = peptide_list
     candidates = pdb.get_candidates(precursor_mz=496.2, charge=2)
     assert expected_isotope0123 == list(candidates)
 
 
-def test_beam_search_decode():
+def test_beam_search_decode(tiny_config):
     """
     Test beam search decoding and its sub-functions.
     """
-    model = Spec2Pep(n_beams=4, residues="massivekb", min_peptide_len=4)
+    config = casanovo.Config(tiny_config)
+    model = Spec2Pep(
+        n_beams=4,
+        residues="massivekb",
+        min_peptide_len=4,
+        tokenizer=depthcharge.tokenizers.peptides.PeptideTokenizer(
+            residues=config.residues
+        ),
+    )
     model.decoder.reverse = False  # For simplicity.
-    aa2idx = model.decoder._aa2idx
 
     # Sizes.
     batch = 1  # B
     length = model.max_peptide_len + 1  # L
-    vocab = model.decoder.vocab_size + 1  # V
+    vocab = len(model.tokenizer) + 1  # V
     beam = model.n_beams  # S
     step = 3
 
@@ -1257,8 +1336,12 @@ def test_beam_search_decode():
     )
     # Fill scores and tokens with relevant predictions.
     scores[:, : step + 1, :] = 0
-    for i, peptide in enumerate(["PEPK", "PEPR", "PEPG", "PEP$"]):
-        tokens[i, : step + 1] = torch.tensor([aa2idx[aa] for aa in peptide])
+    for i, (peptide, add_stop) in enumerate(
+        [("PEPK", False), ("PEPR", False), ("PEPG", False), ("PEP", True)]
+    ):
+        tokens[i, : step + 1] = model.tokenizer.tokenize(
+            peptide, add_stop=add_stop
+        )[0]
         for j in range(step + 1):
             scores[i, j, tokens[1, j]] = 1
 
@@ -1266,9 +1349,9 @@ def test_beam_search_decode():
     finished_beams, beam_fits_precursor, discarded_beams = model._finish_beams(
         tokens, precursors, step
     )
-    # Second beam finished due to the precursor m/z filter, final beam finished
-    # due to predicted stop token, first and third beam unfinished. Final beam
-    # discarded due to length.
+    # Second beam finished due to the precursor m/z filter, final beam
+    # finished due to predicted stop token, first and third beam
+    # unfinished. Final beam discarded due to length.
     assert torch.equal(
         finished_beams, torch.tensor([False, True, False, True])
     )
@@ -1288,14 +1371,15 @@ def test_beam_search_decode():
         beam_fits_precursor,
         pred_cache,
     )
+
     # Verify that the correct peptides have been cached.
     correct_cached = 0
     for _, _, _, pep in pred_cache[0]:
-        if torch.equal(pep, torch.tensor([4, 14, 4, 13])):
+        if torch.equal(pep, model.tokenizer.tokenize("PEPK")[0]):
             correct_cached += 1
-        elif torch.equal(pep, torch.tensor([4, 14, 4, 18])):
+        elif torch.equal(pep, model.tokenizer.tokenize("PEPR")[0]):
             correct_cached += 1
-        elif torch.equal(pep, torch.tensor([4, 14, 4])):
+        elif torch.equal(pep, model.tokenizer.tokenize("PEP")[0]):
             correct_cached += 1
         else:
             pytest.fail(
@@ -1304,42 +1388,53 @@ def test_beam_search_decode():
     assert correct_cached == 1
 
     # Test _get_top_peptide().
-    # Return the candidate peptide with the highest score
+    # Return the candidate peptide with the highest score.
     test_cache = collections.OrderedDict((i, []) for i in range(batch))
     heapq.heappush(
-        test_cache[0], (0.93, 0.1, 4 * [0.93], torch.tensor([4, 14, 4, 19]))
+        test_cache[0],
+        (0.93, 0.1, 4 * [0.93], model.tokenizer.tokenize("PEPY")[0]),
     )
     heapq.heappush(
-        test_cache[0], (0.95, 0.2, 4 * [0.95], torch.tensor([4, 14, 4, 13]))
+        test_cache[0],
+        (0.95, 0.2, 4 * [0.95], model.tokenizer.tokenize("PEPK")[0]),
     )
     heapq.heappush(
-        test_cache[0], (0.94, 0.3, 4 * [0.94], torch.tensor([4, 14, 4, 4]))
+        test_cache[0],
+        (0.94, 0.3, 4 * [0.94], model.tokenizer.tokenize("PEPP")[0]),
     )
 
-    assert list(model._get_top_peptide(test_cache))[0][0][-1] == "PEPK"
+    assert next(model._get_top_peptide(test_cache))[0][-1] == "PEPK"
     # Test that an empty predictions is returned when no beams have been
     # finished.
     empty_cache = collections.OrderedDict((i, []) for i in range(batch))
     assert len(list(model._get_top_peptide(empty_cache))[0]) == 0
-    # Test multiple PSM per spectrum and if it's highest scoring peptides
+    # Test multiple PSMs per spectrum and that these are the highest
+    # scoring peptides.
     model.top_match = 2
     assert set(
-        [pep[-1] for pep in list(model._get_top_peptide(test_cache))[0]]
+        [pep[-1] for pep in next(model._get_top_peptide(test_cache))]
     ) == {"PEPK", "PEPP"}
 
-    # Test reverse aa scores when decoder is reversed
+    # Test reverse AA scores when decoder is reversed.
     pred_cache = {
-        0: [(1.0, 0.42, np.array([1.0, 0.0]), torch.Tensor([4, 14]))]
+        0: [
+            (
+                1.0,
+                0.42,
+                np.array([1.0, 0.0]),
+                model.tokenizer.tokenize("PE")[0],
+            )
+        ]
     }
 
-    model.decoder.reverse = True
+    model.tokenizer.reverse = True
     top_peptides = list(model._get_top_peptide(pred_cache))
     assert len(top_peptides) == 1
     assert len(top_peptides[0]) == 1
     assert np.allclose(top_peptides[0][0][1], np.array([0.0, 1.0]))
     assert top_peptides[0][0][2] == "EP"
 
-    model.decoder.reverse = False
+    model.tokenizer.reverse = False
     top_peptides = list(model._get_top_peptide(pred_cache))
     assert len(top_peptides) == 1
     assert len(top_peptides[0]) == 1
@@ -1350,23 +1445,20 @@ def test_beam_search_decode():
     # Set scores to proceed generating the unfinished beam.
     step = 4
     scores[2, step, :] = 0
-    scores[2, step, range(1, 5)] = torch.tensor([1.0, 2.0, 3.0, 4.0])
+    next_tokens = model.tokenizer.tokenize(["P", "S", "A", "G"]).flatten()
+    scores[2, step, next_tokens] = torch.tensor([4.0, 3.0, 2.0, 1.0])
     # Modify finished beams array to allow decoding from only one beam
     test_finished_beams = torch.tensor([True, True, False, True])
     new_tokens, new_scores = model._get_topk_beams(
         tokens, scores, test_finished_beams, batch, step
     )
-    expected_tokens = torch.tensor(
-        [
-            [4, 14, 4, 1, 4],
-            [4, 14, 4, 1, 3],
-            [4, 14, 4, 1, 2],
-            [4, 14, 4, 1, 1],
-        ]
+    expected_tokens = model.tokenizer.tokenize(
+        ["PEPGP", "PEPGS", "PEPGA", "PEPGG"]
     )
+
     # Only the expected scores of the final step.
     expected_scores = torch.zeros(beam, vocab)
-    expected_scores[:, range(1, 5)] = torch.tensor([1.0, 2.0, 3.0, 4.0])
+    expected_scores[:, next_tokens] = torch.tensor([4.0, 3.0, 2.0, 1.0])
 
     assert torch.equal(new_tokens[:, : step + 1], expected_tokens)
     assert torch.equal(new_scores[:, step, :], expected_scores)
@@ -1374,9 +1466,9 @@ def test_beam_search_decode():
     # Test output if decoding loop isn't stopped with termination of all beams.
     model.max_peptide_len = 0
     # 1 spectrum with 5 peaks (2 values: m/z and intensity).
-    spectra = torch.zeros(1, 5, 2)
+    mzs = ints = torch.zeros(1, 5)
     precursors = torch.tensor([[469.25364, 2.0, 235.63410]])
-    assert len(list(model.beam_search_decode(spectra, precursors))[0]) == 0
+    assert len(list(model.beam_search_decode(mzs, ints, precursors))[0]) == 0
     model.max_peptide_len = 100
 
     # Re-initialize scores and tokens to further test caching functionality.
@@ -1387,8 +1479,9 @@ def test_beam_search_decode():
     tokens = torch.zeros(batch * beam, length, dtype=torch.int64)
 
     scores[:, : step + 1, :] = 0
-    for i, peptide in enumerate(["PKKP$", "EPPK$", "PEPK$", "PMKP$"]):
-        tokens[i, : step + 1] = torch.tensor([aa2idx[aa] for aa in peptide])
+    tokens[:, : step + 1] = model.tokenizer.tokenize(
+        ["PKKP", "EPPK", "PEPK", "PMKP"], add_stop=True
+    )
     i, j, s = np.arange(step), np.arange(4), torch.Tensor([4, 0.5, 3, 0.4])
     scores[:, i, :] = 1
     scores[j, i, tokens[j, i]] = s
@@ -1409,10 +1502,16 @@ def test_beam_search_decode():
     assert negative_score == 2
 
     # Test using a single beam only.
-    model = Spec2Pep(n_beams=1, residues="massivekb", min_peptide_len=2)
+    model = Spec2Pep(
+        n_beams=1,
+        min_peptide_len=2,
+        tokenizer=depthcharge.tokenizers.peptides.MskbPeptideTokenizer(
+            residues=config.residues
+        ),
+    )
+    vocab = len(model.tokenizer) + 1
     beam = model.n_beams  # S
     model.decoder.reverse = False  # For simplicity.
-    aa2idx = model.decoder._aa2idx
     step = 4
 
     # Initialize scores and tokens.
@@ -1425,12 +1524,14 @@ def test_beam_search_decode():
     pred_cache = collections.OrderedDict((i, []) for i in range(batch))
 
     # Ground truth peptide is "PEPK".
-    true_peptide = "PEPK$"
+    true_peptide = "PEPK"
     precursors = torch.tensor([469.25364, 2.0, 235.63410]).repeat(
         beam * batch, 1
     )
     scores[:, range(step), :] = 1
-    tokens[0, : step + 1] = torch.tensor([aa2idx[aa] for aa in true_peptide])
+    tokens[0, : step + 1] = model.tokenizer.tokenize(
+        true_peptide, add_stop=True
+    )[0]
 
     # Test _finish_beams().
     finished_beams, beam_fits_precursor, discarded_beams = model._finish_beams(
@@ -1446,7 +1547,9 @@ def test_beam_search_decode():
         tokens, scores, step, finished_beams, beam_fits_precursor, pred_cache
     )
 
-    assert torch.equal(pred_cache[0][0][-1], torch.tensor([4, 14, 4, 13]))
+    assert torch.equal(
+        pred_cache[0][0][-1], model.tokenizer.tokenize(true_peptide)[0]
+    )
 
     # Test _get_topk_beams().
     step = 1
@@ -1477,9 +1580,13 @@ def test_beam_search_decode():
     assert torch.equal(new_tokens[:, : step + 1], expected_tokens)
 
     # Test _finish_beams() for tokens with a negative mass.
-    model = Spec2Pep(n_beams=2, residues="massivekb")
+    model = Spec2Pep(
+        n_beams=2,
+        tokenizer=depthcharge.tokenizers.peptides.MskbPeptideTokenizer(
+            residues=config.residues
+        ),
+    )
     beam = model.n_beams  # S
-    aa2idx = model.decoder._aa2idx
     step = 1
 
     # Ground truth peptide is "-17.027GK".
@@ -1487,8 +1594,7 @@ def test_beam_search_decode():
         beam * batch, 1
     )
     tokens = torch.zeros(batch * beam, length, dtype=torch.int64)
-    for i, peptide in enumerate(["GK", "AK"]):
-        tokens[i, : step + 1] = torch.tensor([aa2idx[aa] for aa in peptide])
+    tokens[:, : step + 1] = model.tokenizer.tokenize(["GK", "AK"])
 
     # Test _finish_beams().
     finished_beams, beam_fits_precursor, discarded_beams = model._finish_beams(
@@ -1499,26 +1605,34 @@ def test_beam_search_decode():
     assert torch.equal(discarded_beams, torch.tensor([False, False]))
 
     # Test _finish_beams() for multiple/internal N-mods and dummy predictions.
-    model = Spec2Pep(n_beams=3, residues="massivekb", min_peptide_len=3)
+    model = Spec2Pep(
+        n_beams=3,
+        min_peptide_len=3,
+        tokenizer=depthcharge.tokenizers.peptides.PeptideTokenizer(
+            residues=config.residues
+        ),
+    )
     beam = model.n_beams  # S
-    model.decoder.reverse = True
-    aa2idx = model.decoder._aa2idx
     step = 4
 
     # Ground truth peptide is irrelevant for this test.
     precursors = torch.tensor([1861.0044, 2.0, 940.5750]).repeat(
         beam * batch, 1
     )
+
+    # sequences with invalid mass modifications will raise an exception if
+    # tokenized using tokenizer.tokenize
     tokens = torch.zeros(batch * beam, length, dtype=torch.int64)
-    # Reverse decoding
-    for i, peptide in enumerate(
-        [
-            ["K", "A", "A", "A", "+43.006-17.027"],
-            ["K", "A", "A", "+42.011", "A"],
-            ["K", "A", "A", "+43.006", "+42.011"],
-        ]
-    ):
-        tokens[i, : step + 1] = torch.tensor([aa2idx[aa] for aa in peptide])
+    sequences = [
+        ["K", "A", "A", "A", "[+25.980265]-"],
+        ["K", "A", "A", "[Acetyl]-", "A"],
+        ["K", "A", "A", "[Carbamyl]-", "[Ammonia-loss]-"],
+    ]
+
+    for i, seq in enumerate(sequences):
+        tokens[i, : step + 1] = torch.tensor(
+            [model.tokenizer.index[aa] for aa in seq]
+        )
 
     # Test _finish_beams(). All should be discarded
     finished_beams, beam_fits_precursor, discarded_beams = model._finish_beams(
@@ -1531,14 +1645,19 @@ def test_beam_search_decode():
     assert torch.equal(discarded_beams, torch.tensor([False, True, True]))
 
     # Test _get_topk_beams() with finished beams in the batch.
-    model = Spec2Pep(n_beams=1, residues="massivekb", min_peptide_len=3)
+    model = Spec2Pep(
+        n_beams=1,
+        min_peptide_len=3,
+        tokenizer=depthcharge.tokenizers.peptides.PeptideTokenizer(
+            residues=config.residues
+        ),
+    )
 
     # Sizes and other variables.
     batch = 2  # B
     beam = model.n_beams  # S
-    model.decoder.reverse = True
     length = model.max_peptide_len + 1  # L
-    vocab = model.decoder.vocab_size + 1  # V
+    vocab = len(model.tokenizer) + 1  # V
     step = 4
 
     # Initialize dummy scores and tokens.
@@ -1553,8 +1672,8 @@ def test_beam_search_decode():
     scores[:, step, range(1, 4)] = torch.tensor([1.0, 2.0, 3.0])
 
     # Simulate one finished and one unfinished beam in the same batch.
-    tokens[0, :step] = torch.tensor([4, 14, 4, 28])
-    tokens[1, :step] = torch.tensor([4, 14, 4, 1])
+    tokens[0, :step] = model.tokenizer.tokenize("PEP", add_stop=True)[0]
+    tokens[1, :step] = model.tokenizer.tokenize("PEPG")[0]
 
     # Set finished beams array to allow decoding from only one beam.
     test_finished_beams = torch.tensor([True, False])
@@ -1564,22 +1683,23 @@ def test_beam_search_decode():
     )
 
     # Only the second peptide should have a new token predicted.
-    expected_tokens = torch.tensor(
-        [
-            [4, 14, 4, 28, 0],
-            [4, 14, 4, 1, 3],
-        ]
-    )
+    expected_tokens = tokens.clone()
+    expected_tokens[1, len("PEPG")] = 3
 
-    assert torch.equal(new_tokens[:, : step + 1], expected_tokens)
+    assert torch.equal(new_tokens, expected_tokens)
 
     # Test that duplicate peptide scores don't lead to a conflict in the cache.
-    model = Spec2Pep(n_beams=5, residues="massivekb", min_peptide_len=3)
+    model = Spec2Pep(
+        n_beams=1,
+        min_peptide_len=3,
+        tokenizer=depthcharge.tokenizers.peptides.PeptideTokenizer(
+            residues=config.residues
+        ),
+    )
     batch = 2  # B
     beam = model.n_beams  # S
-    model.decoder.reverse = True
     length = model.max_peptide_len + 1  # L
-    vocab = model.decoder.vocab_size + 1  # V
+    vocab = len(model.tokenizer) + 1  # V
     step = 4
 
     # Simulate beams with identical amino acid scores but different tokens.
@@ -1605,6 +1725,43 @@ def test_beam_search_decode():
         assert np.allclose(peptide_scores, peptide_scores[0])
 
 
+def test_n_term_scores(tiny_config):
+    out_writer = unittest.mock.MagicMock()
+    out_writer.psms = list()
+    model = Spec2Pep(
+        out_writer=out_writer,
+        tokenizer=depthcharge.tokenizers.peptides.PeptideTokenizer(
+            residues=Config(tiny_config).residues
+        ),
+    )
+
+    matches = [
+        psm.PepSpecMatch(
+            sequence="[Acetyl]-P",
+            aa_scores=np.array([0.5, 0.8]),
+            spectrum_id="",
+            peptide_score=float("NaN"),
+            charge=1,
+            calc_mz=float("NaN"),
+            exp_mz=float("NaN"),
+        ),
+        psm.PepSpecMatch(
+            sequence="PP",
+            aa_scores=np.array([0.5, 0.8]),
+            spectrum_id="",
+            peptide_score=float("NaN"),
+            charge=1,
+            calc_mz=float("NaN"),
+            exp_mz=float("NaN"),
+        ),
+    ]
+    model.on_predict_batch_end(matches)
+
+    assert len(out_writer.psms) == 2
+    assert np.allclose(out_writer.psms[0].aa_scores, np.array([0.4]))
+    assert np.allclose(out_writer.psms[1].aa_scores, np.array([0.5, 0.8]))
+
+
 def test_eval_metrics():
     """
     Test peptide and amino acid-level evaluation metrics.
@@ -1613,7 +1770,7 @@ def test_eval_metrics():
     the ground truth. A peptide prediction is correct if all its AA are correct
     matches.
     """
-    model = Spec2Pep()
+    tokenizer = depthcharge.tokenizers.peptides.MskbPeptideTokenizer()
 
     preds = [
         "SPEIK",
@@ -1630,7 +1787,7 @@ def test_eval_metrics():
     aa_matches, n_pred_aa, n_gt_aa = aa_match_batch(
         peptides1=preds,
         peptides2=gt,
-        aa_dict=model.decoder._peptide_mass.masses,
+        aa_dict=tokenizer.residues,
         mode="best",
     )
 
@@ -1645,16 +1802,12 @@ def test_eval_metrics():
     assert 26 / 40 == pytest.approx(aa_recall)
     assert 26 / 41 == pytest.approx(aa_precision)
 
-    aa_matches, pep_match = aa_match(
-        None, None, depthcharge.masses.PeptideMass().masses
-    )
+    aa_matches, pep_match = aa_match(None, None, tokenizer.residues)
 
     assert aa_matches.shape == (0,)
     assert not pep_match
 
-    aa_matches, pep_match = aa_match(
-        "PEPTIDE", None, depthcharge.masses.PeptideMass().masses
-    )
+    aa_matches, pep_match = aa_match("PEPTIDE", None, tokenizer.residues)
 
     assert np.array_equal(aa_matches, np.zeros(len("PEPTIDE"), dtype=bool))
     assert not pep_match
@@ -1664,63 +1817,80 @@ def test_spectrum_id_mgf(mgf_small, tmp_path):
     """Test that spectra from MGF files are specified by their index."""
     mgf_small2 = tmp_path / "mgf_small2.mgf"
     shutil.copy(mgf_small, mgf_small2)
+    data_module = DeNovoDataModule(
+        lance_dir=tmp_path.name,
+        train_paths=[mgf_small, mgf_small2],
+        valid_paths=[mgf_small, mgf_small2],
+        test_paths=[mgf_small, mgf_small2],
+        min_peaks=0,
+        shuffle=False,
+    )
+    data_module.setup()
 
-    for index_func, dataset_func in [
-        (SpectrumIndex, SpectrumDataset),
-        (AnnotatedSpectrumIndex, AnnotatedSpectrumDataset),
+    for dataset in [
+        data_module.train_dataset,
+        data_module.valid_dataset,
+        data_module.test_dataset,
     ]:
-        index = index_func(
-            tmp_path / "index.hdf5", [mgf_small, mgf_small2], overwrite=True
-        )
-        dataset = dataset_func(index)
-        for i, (filename, mgf_i) in enumerate(
+        for i, (filename, scan_id) in enumerate(
             [
-                (mgf_small, 0),
-                (mgf_small, 1),
-                (mgf_small2, 0),
-                (mgf_small2, 1),
+                (mgf_small, "0"),
+                (mgf_small, "1"),
+                (mgf_small2, "0"),
+                (mgf_small2, "1"),
             ]
         ):
-            spectrum_id = str(filename), f"index={mgf_i}"
-            assert dataset.get_spectrum_id(i) == spectrum_id
+            assert dataset[i]["peak_file"][0] == filename.name
+            assert dataset[i]["scan_id"][0] == scan_id
 
 
 def test_spectrum_id_mzml(mzml_small, tmp_path):
-    """Test that spectra from mzML files are specified by their scan number."""
+    """Test that spectra from mzML files are specified by their scan id."""
     mzml_small2 = tmp_path / "mzml_small2.mzml"
     shutil.copy(mzml_small, mzml_small2)
-
-    index = SpectrumIndex(
-        tmp_path / "index.hdf5", [mzml_small, mzml_small2], overwrite=True
+    data_module = DeNovoDataModule(
+        lance_dir=tmp_path.name,
+        test_paths=[mzml_small, mzml_small2],
+        min_peaks=0,
+        shuffle=False,
     )
-    dataset = SpectrumDataset(index)
-    for i, (filename, scan_nr) in enumerate(
+    data_module.setup(stage="test", annotated=False)
+
+    dataset = data_module.test_dataset
+    for i, (filename, scan_id) in enumerate(
         [
-            (mzml_small, 17),
-            (mzml_small, 111),
-            (mzml_small2, 17),
-            (mzml_small2, 111),
+            (mzml_small, "scan=17"),
+            (mzml_small, "merged=11 frame=12 scanStart=763 scanEnd=787"),
+            (mzml_small2, "scan=17"),
+            (mzml_small2, "merged=11 frame=12 scanStart=763 scanEnd=787"),
         ]
     ):
-        spectrum_id = str(filename), f"scan={scan_nr}"
-        assert dataset.get_spectrum_id(i) == spectrum_id
+        assert dataset[i]["peak_file"][0] == filename.name
+        assert dataset[i]["scan_id"][0] == scan_id
 
 
 def test_train_val_step_functions():
     """Test train and validation step functions operating on batches."""
+    tokenizer = depthcharge.tokenizers.peptides.MskbPeptideTokenizer()
     model = Spec2Pep(
         n_beams=1,
         residues="massivekb",
         min_peptide_len=4,
         train_label_smoothing=0.1,
+        tokenizer=tokenizer,
     )
-    spectra = torch.zeros(1, 5, 2)
-    precursors = torch.tensor([[469.25364, 2.0, 235.63410]])
-    peptides = ["PEPK"]
-    batch = (spectra, precursors, peptides)
 
-    train_step_loss = model.training_step(batch)
-    val_step_loss = model.validation_step(batch)
+    train_batch = {
+        "mz_array": torch.zeros(1, 5),
+        "intensity_array": torch.zeros(1, 5),
+        "precursor_mz": torch.tensor(235.63410),
+        "precursor_charge": torch.tensor(2),
+        "seq": tokenizer.tokenize(["PEPK"]),
+    }
+    val_batch = copy.deepcopy(train_batch)
+
+    train_step_loss = model.training_step(train_batch)
+    val_step_loss = model.validation_step(val_batch)
 
     # Check if valid loss value returned
     assert train_step_loss > 0
@@ -1736,12 +1906,8 @@ def test_run_map(mgf_small):
     out_writer = ms_io.MztabWriter("dummy.mztab")
     # Set peak file by base file name only.
     out_writer.set_ms_run([os.path.basename(mgf_small.name)])
-    assert os.path.basename(mgf_small.name) not in out_writer._run_map
-    assert os.path.abspath(mgf_small.name) in out_writer._run_map
-    # Set peak file by full path.
-    out_writer.set_ms_run([os.path.abspath(mgf_small.name)])
-    assert os.path.basename(mgf_small.name) not in out_writer._run_map
-    assert os.path.abspath(mgf_small.name) in out_writer._run_map
+    assert mgf_small.name in out_writer._run_map
+    assert os.path.abspath(mgf_small.name) not in out_writer._run_map
 
 
 def test_check_dir(tmp_path):
@@ -1778,216 +1944,78 @@ def test_setup_output(tmp_path, monkeypatch):
         assert output_root == "bar"
 
 
-@contextlib.contextmanager
-def fake_decoder_init_context():
+def test_spectrum_preprocessing(tmp_path, mgf_small):
     """
-    Temporarily replace PeptideDecoder.__init__ so that after initialization,
-    the key "FAKEAA" is deliberately removed from _aa2idx to simulate an unknown residue.
+    Test the spectrum preprocessing function.
     """
-    original_decoder_init = PeptideDecoder.__init__
+    min_peaks, max_peaks = 0, 100
+    min_mz, max_mz = 0, 2000
+    min_intensity = 0
+    remove_precursor_tol = 0
+    max_charge = 4
 
-    def fake_decoder_init(self, *args, **kwargs):
-
-        original_decoder_init(self, *args, **kwargs)
-        # Deliberately remove "FAKEAA" from _aa2idx if it exists
-        if "FAKEAA" in self._aa2idx:
-            del self._aa2idx["FAKEAA"]
-
-    # Replace the __init__ with our fake version
-    PeptideDecoder.__init__ = fake_decoder_init
-    try:
-        yield
-    finally:
-        PeptideDecoder.__init__ = original_decoder_init
-
-
-def test_unknown_residue_trigger_keyerror():
-    with fake_decoder_init_context():
-
-        custom_residues = {
-            "A": 71.03711,  # Normal residue
-            "FAKEAA": 999.999,  # (will be removed in the decoder)
-        }
-
-        model = Spec2Pep(residues=custom_residues)
-        assert "FAKEAA" not in model.decoder._aa2idx
-        idx_A = model.decoder._aa2idx["A"]
-        expected_mass = 71.03711
-        assert torch.isclose(
-            model.token_masses[idx_A], torch.tensor(expected_mass)
-        )
-        mass_sum = model.token_masses.sum().item()
-        assert mass_sum < expected_mass * 2
-
-
-def test_cache_finished_beams_branches():
-    # Create a model for a single spectrum with 4 beams.
-    model = Spec2Pep(n_beams=4, top_match=2)
-    stop_idx = model.decoder._aa2idx["$"]  # Get the index for the stop token
-
-    # Construct tokens with shape (4, 3) representing 4 beams, each of length 3 (using tokens[:, :3] at step=2)
-    tokens = torch.tensor(
-        [
-            [
-                4,
-                14,
-                4,
-            ],  # Beam 0: Last token is not the stop token => extra 0 score should be appended.
-            [
-                4,
-                14,
-                4,
-            ],  # Beam 1: Identical to beam 0 => considered duplicate and skipped.
-            [
-                4,
-                14,
-                stop_idx,
-            ],  # Beam 2: Last token is the stop token => no extra 0 score appended.
-            [
-                4,
-                14,
-                5,
-            ],  # Beam 3: New beam; when pred_cache is full, heapq.heappushpop is triggered.
-        ]
+    # Test number of peaks filtering.
+    min_peaks, max_peaks = 20, 50
+    # One spectrum removed with too few peaks.
+    total_spectra = 1
+    dataloader = DeNovoDataModule(
+        tmp_path.name,
+        test_paths=str(mgf_small),
+        min_peaks=min_peaks,
+        max_peaks=max_peaks,
+        min_mz=min_mz,
+        max_mz=max_mz,
+        min_intensity=min_intensity,
+        remove_precursor_tol=remove_precursor_tol,
+        max_charge=max_charge,
     )
+    dataloader.setup("test", annotated=False)
+    assert dataloader.test_dataset.n_spectra == total_spectra
+    for spec in dataloader.test_dataset:
+        mz = (mz := spec["mz_array"][0])[torch.nonzero(mz)]
+        assert min_peaks <= mz.shape[0] <= max_peaks
+    min_peaks, max_peaks = 0, 100
 
-    # All beams are eligible for caching.
-    beams_to_cache = torch.tensor([True, True, True, True])
-    # Simulate that all beams meet the precursor m/z condition.
-    beam_fits_precursor = torch.tensor([True, True, True, True])
-    step = 2
-
-    vocab_size = model.decoder.vocab_size + 1
-    scores = torch.zeros((4, step + 1, vocab_size), dtype=torch.float)
-    for i in range(4):
-        for j in range(step + 1):
-            idx = tokens[i, j].item()
-            scores[i, j, idx] = 0.8
-
-    pred_cache = {0: []}
-    model._cache_finished_beams(
-        tokens=tokens,
-        scores=scores,
-        step=step,
-        beams_to_cache=beams_to_cache,
-        beam_fits_precursor=beam_fits_precursor,
-        pred_cache=pred_cache,
+    # Test m/z range filtering.
+    min_mz, max_mz = 200, 600
+    # All spectra retained.
+    total_spectra = 2
+    dataloader = DeNovoDataModule(
+        tmp_path.name,
+        test_paths=str(mgf_small),
+        min_peaks=min_peaks,
+        max_peaks=max_peaks,
+        min_mz=min_mz,
+        max_mz=max_mz,
+        min_intensity=min_intensity,
+        remove_precursor_tol=remove_precursor_tol,
+        max_charge=max_charge,
     )
+    dataloader.setup("test", annotated=False)
+    assert dataloader.test_dataset.n_spectra == total_spectra
+    for spec in dataloader.test_dataset:
+        mz = (mz := spec["mz_array"][0])[torch.nonzero(mz)]
+        assert mz.min() >= min_mz
+        assert mz.max() <= max_mz
+    min_mz, max_mz = 0, 2000
 
-    assert len(pred_cache[0]) <= 4
-
-
-def test_get_topk_beams_cumulative_masses():
-    """
-    We cover both branches:
-      - step == 0: cumulative_masses_new[b, s] = token_masses[new_token_idx]
-      - step > 0: cumulative_masses_new[b, s] = cumulative_masses[b, prev_beam_idx] + token_masses[new_token_idx]
-    """
-    model = Spec2Pep(n_beams=2)
-    vocab_size = model.decoder.vocab_size + 1
-    model._cumulative_masses = torch.tensor([0.0, 0.0], dtype=torch.float)
-    tokens = torch.zeros((2, 5), dtype=torch.long)
-    scores = torch.zeros((2, 5, vocab_size), dtype=torch.float)
-
-    finished_beams = torch.tensor([False, False], dtype=torch.bool)
-
-    batch = 1
-    step = 0
-    tokens[0, 0] = 4
-    tokens[1, 0] = 6
-    scores[0, 0, 4] = 1.0
-    scores[1, 0, 6] = 2.0
-
-    tokens_out, scores_out = model._get_topk_beams(
-        tokens, scores, finished_beams, batch, step
+    # Test charge filtering.
+    max_charge = 2
+    # One spectrum removed with too high charge.
+    total_spectra = 1
+    dataloader = DeNovoDataModule(
+        tmp_path.name,
+        test_paths=str(mgf_small),
+        min_peaks=min_peaks,
+        max_peaks=max_peaks,
+        min_mz=min_mz,
+        max_mz=max_mz,
+        min_intensity=min_intensity,
+        remove_precursor_tol=remove_precursor_tol,
+        max_charge=max_charge,
     )
-    cm_after_step0 = model._cumulative_masses.clone()
-    assert (
-        cm_after_step0 > 0
-    ).all(), "step=0 should set cumulative masses to the new token's mass"
-
-    step = 1
-    tokens[0, 1] = 10
-    tokens[1, 1] = 12
-    scores[0, 1, 10] = 3.0
-    scores[1, 1, 12] = 4.0
-
-    tokens_out, scores_out = model._get_topk_beams(
-        tokens, scores, finished_beams, batch, step
-    )
-    cm_after_step1 = model._cumulative_masses
-    assert (
-        cm_after_step1 > cm_after_step0
-    ).all(), "step=1 should add new token mass to the previous beam mass"
-
-
-def test_finish_beams_scenarios():
-    model = Spec2Pep(
-        n_beams=2,
-        min_peptide_len=3,
-        residues="canonical",
-        precursor_mass_tol=50,
-        isotope_error_range=(0, 1),
-    )
-
-    tokens = torch.zeros((2, 5), dtype=torch.long)
-    tokens[0, 0] = model.stop_token
-    tokens[1, 0] = 4
-    precursors = torch.tensor(
-        [
-            [500.0, 2.0, 250.0],  # For beam0
-            [600.0, 2.0, 300.0],  # For beam1
-        ],
-        dtype=torch.float,
-    )
-
-    finished, fits_precursor, discarded = model._finish_beams(
-        tokens, precursors, step=0
-    )
-
-    assert (
-        discarded[0].item() is True
-    ), "Beam0 should be discarded for short peptide"
-    assert finished[1].item() is False, "Beam1 should not be finished"
-    assert discarded[1].item() is False, "Beam1 should not be discarded"
-
-    model2 = Spec2Pep(
-        n_beams=2,
-        min_peptide_len=3,
-        residues="canonical",
-        precursor_mass_tol=50,
-        isotope_error_range=(0, 1),
-    )
-    model2._cumulative_masses = torch.tensor([50.0, 50.0], dtype=torch.float)
-    step = 2
-
-    tokens2 = torch.zeros((2, 5), dtype=torch.long)
-    if model2.nterm_idx.numel() > 0:
-        nterm_token = model2.nterm_idx[0].item()
-    else:
-        nterm_token = 12
-    tokens2[0, 0] = 4
-    tokens2[0, 1] = nterm_token
-    tokens2[0, 2] = nterm_token
-
-    tokens2[1, 0] = 4
-    tokens2[1, 1] = 4
-    tokens2[1, 2] = 0
-
-    precursors2 = torch.tensor(
-        [
-            [1000.0, 2.0, 500.0],
-            [1000.0, 2.0, 500.0],
-        ],
-        dtype=torch.float,
-    )
-
-    finished2, fits_precursor2, discarded2 = model2._finish_beams(
-        tokens2, precursors2, step=step
-    )
-    assert (
-        discarded2[0].item() is True
-    ), "Beam0 should be discarded due to multiple N-terminal modifications"
-    assert (
-        discarded2[1].item() is True
-    ), "Beam1 should be discarded because current token is 0"
+    dataloader.setup("test", annotated=False)
+    assert dataloader.test_dataset.n_spectra == total_spectra
+    for spec in dataloader.test_dataset:
+        assert spec["precursor_charge"] <= max_charge
+    max_charge = 4
