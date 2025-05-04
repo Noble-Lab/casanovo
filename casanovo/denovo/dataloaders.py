@@ -10,19 +10,81 @@ import lightning.pytorch as pl
 import numpy as np
 import pyarrow as pa
 import spectrum_utils.spectrum as sus
-import torch.utils.data._utils.collate
 from depthcharge.data import (
-    AnnotatedSpectrumDataset,
+    AnnotatedSpectrumDataset as OriginalAnnotatedSpectrumDataset,
     CustomField,
-    SpectrumDataset,
+    SpectrumDataset as OriginalSpectrumDataset,
     preprocessing,
 )
 from depthcharge.tokenizers import PeptideTokenizer
+import torch.utils.data._utils.collate
 from torch.utils.data import DataLoader
 from torch.utils.data.datapipes.iter.combinatorics import ShufflerIterDataPipe
 
 
 logger = logging.getLogger("casanovo")
+
+
+class AnnotatedSpectrumDataset(OriginalAnnotatedSpectrumDataset):
+    """
+    Wrapper for AnnotatedSpectrumDataset to handle potential
+    interface changes, specifically ignoring extra keyword
+    arguments passed during tensor conversion.
+
+    This ensures compatibility with potentially newer versions
+    of underlying libraries like Lance.
+    """
+
+    def _to_tensor(self, batch, **kwargs):
+        """
+        Converts a batch of data to tensors, ignoring any extra kwargs.
+
+        Parameters
+        ----------
+        batch : object
+            The batch of data to convert.
+        **kwargs : dict
+            Additional keyword arguments passed by the caller (ignored).
+
+        Returns
+        -------
+        object
+            The batch converted to tensors by the parent class method.
+        """
+        # Ignore any newly added keyword arguments,
+        # keeping only what the original method accepts.
+        return super()._to_tensor(batch)
+
+
+class SpectrumDataset(OriginalSpectrumDataset):
+    """
+    Wrapper for SpectrumDataset to handle potential
+    interface changes, specifically ignoring extra keyword
+    arguments passed during tensor conversion.
+
+    This ensures compatibility with potentially newer versions
+    of underlying libraries like Lance.
+    """
+
+    def _to_tensor(self, batch, **kwargs):
+        """
+        Converts a batch of data to tensors, ignoring any extra kwargs.
+
+        Parameters
+        ----------
+        batch : object
+            The batch of data to convert.
+        **kwargs : dict
+            Additional keyword arguments passed by the caller (ignored).
+
+        Returns
+        -------
+        object
+            The batch converted to tensors by the parent class method.
+        """
+        # Ignore any newly added keyword arguments,
+        # keeping only what the original method accepts.
+        return super()._to_tensor(batch)
 
 
 class DeNovoDataModule(pl.LightningDataModule):
