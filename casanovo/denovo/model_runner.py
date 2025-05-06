@@ -90,7 +90,7 @@ class ModelRunner:
         prefix = f"{output_rootname}." if output_rootname is not None else ""
         curr_filename = prefix + "{epoch}-{step}"
         best_filename = prefix + "best"
-        if overwrite_ckpt_check:
+        if overwrite_ckpt_check and utils.get_local_rank() == 0:
             utils.check_dir_file_exists(
                 output_dir,
                 [
@@ -406,7 +406,10 @@ class ModelRunner:
                     tb_log_dir = "tensorboard"
 
                     if self.config.log_metrics:
-                        if self.overwrite_ckpt_check:
+                        if (
+                            self.overwrite_ckpt_check
+                            and utils.get_local_rank() == 0
+                        ):
                             utils.check_dir_file_exists(
                                 self.output_dir, csv_log_dir
                             )
@@ -417,7 +420,10 @@ class ModelRunner:
                             )
                         )
 
-                    if self.config.tb_summarywriter:
+                    if (
+                        self.config.tb_summarywriter
+                        and utils.get_local_rank() == 0
+                    ):
                         if self.overwrite_ckpt_check:
                             utils.check_dir_file_exists(
                                 self.output_dir, tb_log_dir
