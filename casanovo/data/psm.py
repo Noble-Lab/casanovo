@@ -33,6 +33,12 @@ class PepSpecMatch:
         sequence, where len(aa_scores) == len(sequence).
     protein : str
         Protein associated with the peptide sequence (for db mode).
+    sequence_true : str
+            Ground truth amino acid sequence
+    peptide_correct : Optional[bool]
+        Whether the peptide sequence was correct
+    amino_acids_correct: Optional[Iterable[bool]]
+        Whether each amino acid is correct
     """
 
     sequence: str
@@ -43,23 +49,6 @@ class PepSpecMatch:
     exp_mz: float
     aa_scores: Iterable[float]
     protein: str = "null"
-
-
-@dataclasses.dataclass
-class AnnotatedPepSpecMatch(PepSpecMatch):
-    """
-    Annotated Spectrum Match (PSM) dataclass
-
-    Parameters
-    ----------
-        sequence_true : str
-            Ground truth amino acid sequence
-        peptide_correct : bool
-            Whether the peptide sequence was correct
-        amino_acids_correct: Iterable[bool]
-            Whether each amino acid is correct
-    """
-
-    sequence_true: Optional[str] = None
-    peptide_correct: Optional[bool] = None
-    amino_acids_correct: Optional[Iterable[bool]] = None
+    sequence_true: str = "null"
+    peptide_correct: bool | str = "null"
+    amino_acids_correct: Iterable[bool] | Iterable[str] = ("null",)

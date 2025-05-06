@@ -257,12 +257,7 @@ class ModelRunner:
                 else:
                     pred_seqs.append(None)
 
-                annotated_psms.append(
-                    psm.AnnotatedPepSpecMatch(
-                        **dataclasses.asdict(curr_psm),
-                        sequence_true=true_seq,
-                    )
-                )
+                curr_psm.sequence_true = true_seq
 
         aa_masses = {
             aa_token: self.model.tokenizer.residues[aa]
@@ -320,7 +315,7 @@ class ModelRunner:
             running model evaluation. Files that are not an annotated
             peak file format will be ignored if evaluate is set to true.
         """
-        self.writer = ms_io.MztabWriter(results_path)
+        self.writer = ms_io.MztabWriter(results_path, annotated=evaluate)
         self.writer.set_metadata(
             self.config,
             model=str(self.model_filename),

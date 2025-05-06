@@ -12,7 +12,7 @@ import natsort
 
 from .. import __version__
 from ..config import Config
-from .psm import AnnotatedPepSpecMatch, PepSpecMatch
+from .psm import PepSpecMatch
 
 
 class MztabWriter:
@@ -25,7 +25,7 @@ class MztabWriter:
         The name of the mzTab file.
     """
 
-    def __init__(self, filename: str):
+    def __init__(self, filename: str, annotated: bool = False):
         self.filename = filename
         self.metadata = [
             ("mzTab-version", "1.0.0"),
@@ -44,6 +44,7 @@ class MztabWriter:
         ]
         self._run_map = {}
         self.psms: List[PepSpecMatch] | List[AnnotatedPepSpecMatch] = []
+        self.annotated = annotated
 
     def set_metadata(self, config: Config, **kwargs) -> None:
         """
@@ -154,9 +155,6 @@ class MztabWriter:
             for row in self.metadata:
                 writer.writerow(["MTD", *row])
 
-            annotated = len(self.psms) > 0 and isinstance(
-                self.psms[0], AnnotatedPepSpecMatch
-            )
             header = [
                 "PSH",
                 "sequence",
@@ -180,7 +178,7 @@ class MztabWriter:
                 "opt_ms_run[1]_aa_scores",
             ]
 
-            if annotated:
+            if self.annotated:
                 header += [
                     "ground_truth_sequence",
                     "peptide_correct",
@@ -226,7 +224,7 @@ class MztabWriter:
                     ",".join(list(map("{:.5f}".format, psm.aa_scores))),
                 ]
 
-                if annotated:
+                if self.annotated:
                     next_row += [
                         psm.sequence_true,  # Ground truth sequence
                         psm.peptide_correct,  # Peptide correct call
