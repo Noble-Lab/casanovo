@@ -85,7 +85,7 @@ class ModelRunner:
         prefix = f"{output_rootname}." if output_rootname is not None else ""
         curr_filename = prefix + "{epoch}-{step}"
         best_filename = prefix + "best"
-        if overwrite_ckpt_check:
+        if overwrite_ckpt_check and utils.get_local_rank() == 0:
             utils.check_dir_file_exists(
                 output_dir,
                 [
@@ -351,7 +351,10 @@ class ModelRunner:
                     tb_log_dir = "tensorboard"
 
                     if self.config.log_metrics:
-                        if self.overwrite_ckpt_check:
+                        if (
+                            self.overwrite_ckpt_check
+                            and utils.get_local_rank() == 0
+                        ):
                             utils.check_dir_file_exists(
                                 self.output_dir, csv_log_dir
                             )
@@ -362,7 +365,10 @@ class ModelRunner:
                             )
                         )
 
-                    if self.config.tb_summarywriter:
+                    if (
+                        self.config.tb_summarywriter
+                        and utils.get_local_rank() == 0
+                    ):
                         if self.overwrite_ckpt_check:
                             utils.check_dir_file_exists(
                                 self.output_dir, tb_log_dir
@@ -653,7 +659,17 @@ class ModelRunner:
         elif self.config.devices == 1:
             return "auto"
         elif torch.cuda.device_count() > 1:
-            return DDPStrategy(find_unused_parameters=False, static_graph=True)
+            distributed_strategy_args = {
+                "find_unused_parameters": False,
+                "static_graph": True,
+            }
+
+            if self.config.force_ipv4:
+                distributed_strategy_args.update(
+                    {"init_method": "tcp://127.0.0.1:29500"}
+                )
+
+            return DDPStrategy(**distributed_strategy_args)
         else:
             return "auto"
 
