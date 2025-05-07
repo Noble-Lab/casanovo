@@ -43,7 +43,7 @@ class MztabWriter:
             ),
         ]
         self._run_map = {}
-        self.psms: List[PepSpecMatch] | List[AnnotatedPepSpecMatch] = []
+        self.psms: List[PepSpecMatch] = []
         self.annotated = annotated
 
     def set_metadata(self, config: Config, **kwargs) -> None:
