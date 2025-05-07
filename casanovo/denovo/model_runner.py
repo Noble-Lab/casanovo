@@ -713,7 +713,12 @@ class ModelRunner:
         elif self.config.devices == 1:
             return "auto"
         elif torch.cuda.device_count() > 1:
-            return DDPStrategy(find_unused_parameters=False, static_graph=True)
+            return DDPStrategy(
+                find_unused_parameters=False,
+                static_graph=True,
+                init_method="tcp://127.0.0.1:29500",
+                process_group_backend="nccl",
+            )
         else:
             return "auto"
 
