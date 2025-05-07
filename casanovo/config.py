@@ -56,6 +56,7 @@ class Config:
         predict_batch_size=int,
         top_match=int,
         accelerator=str,
+        force_ipv4=bool,
         devices=int,
         n_beams=int,
         enzyme=str,
