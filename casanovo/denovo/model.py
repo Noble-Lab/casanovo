@@ -223,8 +223,8 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
             score, the amino acid scores, and the predicted peptide
             sequence.
         """
-        return self.decoder(
-            None, spectra.to(self.encoder.device),
+        return self.beam_search_decode(
+            spectra.to(self.encoder.device),
             precursors.to(self.decoder.device),
         )
 
@@ -839,54 +839,36 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         if not self.calculate_precision:
             return loss
         
-        pred, _ = self._forward_step(*batch)
-        sequences = batch[2]
-
-        # Tokenize the ground-truth sequences
-        truth = [self.decoder.tokenize(s) for s in sequences]
-        truth = torch.nn.utils.rnn.pad_sequence(truth, batch_first=True)
-
-        # Apply softmax to get probabilities
-        pred = self.softmax(pred)
-
-        # Get the most likely amino acid at each position
-        predicted_tokens = torch.argmax(pred, dim=-1)  # shape: (batch_size, sequence_length)
-        print(predicted_tokens)
-
-        # Detokenize the predicted tokens to get amino acid sequences
-        aa_sequences = self.decoder.detokenize(predicted_tokens)
-        print(aa_sequences)
 
         # Calculate and log amino acid and peptide match evaluation metrics from
         # the predicted peptides.
-        # peptides_pred, peptides_true = [], batch[2]
-        # for spectrum_preds in self.forward(batch[0], batch[1]):
-        #    for _, _, pred in spectrum_preds:
-        #         peptides_pred.append(pred)
+        peptides_pred, peptides_true = [], batch[2]
+        for spectrum_preds in self.forward(batch[0], batch[1]):
+            for _, _, pred in spectrum_preds:
+                peptides_pred.append(pred)
 
-        #a_precision, _, pep_precision = evaluate.aa_match_metrics(
-        # *evaluate.aa_match_batch(
-        #      peptides_true,
-        #       peptides_pred,
-        #       self.decoder._peptide_mass.masses,
-        #    )
-        #)
-        #log_args = dict(on_step=False, on_epoch=True, sync_dist=True)
-        #self.log(
-           # "Peptide precision at coverage=1",
-          #  pep_precision,
-         #   **log_args,
-        #)
-        #self.log(
-          #  "AA precision at coverage=1",
-         #   aa_precision,
-        #    **log_args,
-        #) 
+        aa_precision, _, pep_precision = evaluate.aa_match_metrics(
+            *evaluate.aa_match_batch(
+                peptides_true,
+                peptides_pred,
+                self.decoder._peptide_mass.masses,
+            )
+        )
+        log_args = dict(on_step=False, on_epoch=True, sync_dist=True)
+        self.log(
+            "Peptide precision at coverage=1",
+            pep_precision,
+            **log_args,
+        )
+        self.log(
+            "AA precision at coverage=1",
+            aa_precision,
+            **log_args,
+        )
         return loss
 
-
     def predict_step(
-        self, batch: Tuple[torch.Tensor, torch.Tensor, List[str]], *args
+        self, batch: Tuple[torch.Tensor, torch.Tensor, torch.Tensor], *args
     ) -> List[str]:
         """
         A single prediction step.
@@ -902,59 +884,43 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         predictions: List[ms_io.PepSpecMatch]
             Predicted PSMs for the given batch of spectra.
         """
-        predictions = []
 
-        pred, _ = self._forward_step(batch[0], *self.encoder(batch[1]), batch[2])
-        sequences = batch[2]
-
-        # Tokenize the ground-truth sequences
-        truth = [self.decoder.tokenize(s) for s in sequences]
-        truth = torch.nn.utils.rnn.pad_sequence(truth, batch_first=True)
-
-        # Apply softmax to get probabilities
+        pred, __ = self.forward(batch[0], batch[1])
         pred = self.softmax(pred)
-        print(pred)
-
-        # Get the most likely amino acid at each position
-        predicted_tokens = torch.argmax(pred, dim=-1)  # shape: (batch_size, sequence_length)
+        predicted_tokens = torch.argmax(pred, dim=-1) 
         print(predicted_tokens)
 
-        # Detokenize the predicted tokens to get amino acid sequences
         aa_sequences = self.decoder.detokenize(predicted_tokens)
+        print(aa_sequences)
+
+
+        # predictions = []
+        # for (
+        #     precursor_charge,
+        #     precursor_mz,
+        #     spectrum_i,
+        #     spectrum_preds,
+        # ) in zip(
+        #     batch[1][:, 1].cpu().detach().numpy(),
+        #     batch[1][:, 2].cpu().detach().numpy(),
+        #     batch[2],
+        #     self.forward(batch[0], batch[1]),
+        # ):
+        #     for peptide_score, aa_scores, peptide in spectrum_preds:
+        #         predictions.append(
+        #             (
+        #                 spectrum_i,
+        #                 precursor_charge,
+        #                 precursor_mz,
+        #                 peptide,
+        #                 peptide_score,
+        #                 aa_scores,
+        #             )
+        #         )
+
+        # return predictions
         
-        sequences = [''.join(seq) for seq in aa_sequences]
-
-        # Return the list of amino acid strings
-        return sequences
-
-        
-       # for (
-       #     precursor_charge,
-       #     precursor_mz,
-       #     spectrum_i,
-       #     spectrum_preds,
-       # ) in zip(
-       #     batch[1][:, 1].cpu().detach().numpy(),
-       #     batch[1][:, 2].cpu().detach().numpy(),
-       #     batch[2],
-       #     self._forward(*batch),
-       # ):
-       #     for peptide_score, aa_scores, peptide in spectrum_preds:
-       #         predictions.append(
-       #             ms_io.PepSpecMatch(
-       #                 sequence=peptide,
-       #                 spectrum_id=tuple(spectrum_i),
-       #                 peptide_score=peptide_score,
-       #                 charge=int(precursor_charge),
-       #                 calc_mz=self.peptide_mass_calculator.mass(
-       #                     peptide, precursor_charge
-       #                 ),
-       #                 exp_mz=precursor_mz,
-       #                 aa_scores=aa_scores,
-       #             )
-       #         )
-
-        return predictions
+    
 
     def on_train_epoch_end(self) -> None:
         """
