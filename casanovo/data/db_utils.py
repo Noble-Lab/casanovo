@@ -180,12 +180,15 @@ class ProteinDatabase:
         float
             The neutral mass of the peptide.
         """
-        return (
-            self.tokenizer.masses[self.tokenizer.tokenize(pep)]
-            .sum(dim=1)
-            .item()
-            + depthcharge.constants.H2O
-        )
+        try:
+            return (
+                self.tokenizer.masses[self.tokenizer.tokenize(pep)]
+                .sum(dim=1)
+                .item()
+                + depthcharge.constants.H2O
+            )
+        except Exception as e:
+            raise ValueError(f"Can not parse peptide sequence: {pep}.") from e
 
     def get_candidates(
         self,
