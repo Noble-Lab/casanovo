@@ -753,18 +753,20 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         tokens : torch.Tensor of shape (n_spectra, length)
             The input padded tokens.
         """
-        if sequences: 
+        if sequences is not None: 
             padded_sequences = []
             pattern = r'([A-Z](?:[+-]\d+\.\d+)?|[+-]\d+\.\d+)'  # handles modifications
 
-            padded_sequences = []
             for seq in sequences:
                 parsed = re.findall(pattern, seq)
                 padded_tensor = torch.tensor([0] * len(parsed), dtype=torch.long)
                 padded_sequences.append(padded_tensor)
+
             return self.decoder(padded_sequences, precursors, *self.encoder(spectra))
         else:
-            return self.decoder(None, precursors, *self.encoder(spectra))
+            batch_size = spectra.shape[0]  
+            padded_sequences = torch.zeros((batch_size, self.max_peptide_len), dtype=torch.long)
+            return self.decoder(padded_sequences, precursors, *self.encoder(spectra))
     
     def training_step(
         self,
@@ -885,13 +887,15 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
             Predicted PSMs for the given batch of spectra.
         """
 
-        pred, __ = self.forward(batch[0], batch[1])
+        pred, __ = self._forward_step(batch[0], batch[1], None)
         pred = self.softmax(pred)
-        predicted_tokens = torch.argmax(pred, dim=-1) 
+        predicted_tokens = torch.argmax(pred, dim=-1)  
         print(predicted_tokens)
 
-        aa_sequences = self.decoder.detokenize(predicted_tokens)
+        aa_sequences = [self.decoder.detokenize(seq) for seq in predicted_tokens]
         print(aa_sequences)
+
+        return aa_sequences  
 
 
         # predictions = []
