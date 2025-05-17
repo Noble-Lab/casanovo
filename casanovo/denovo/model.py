@@ -13,7 +13,6 @@ import numpy as np
 import torch
 from depthcharge.tokenizers import PeptideTokenizer
 
-
 from .. import config
 from ..data import ms_io, psm
 from ..denovo.transformers import PeptideDecoder, SpectrumEncoder
@@ -194,7 +193,7 @@ class Spec2Pep(pl.LightningModule):
                     for aa, mass in self.tokenizer.residues.items()
                     if mass < 0
                 ],
-                dtype=torch.long,
+                dtype=torch.int,
             ),
         )
 
@@ -202,7 +201,7 @@ class Spec2Pep(pl.LightningModule):
             "nterm_idx",
             torch.tensor(
                 [self.tokenizer.index[aa] for aa in self.n_term],
-                dtype=torch.long,
+                dtype=torch.int,
             ),
         )
 
@@ -323,12 +322,13 @@ class Spec2Pep(pl.LightningModule):
         scores[:, :1, :, :] = einops.repeat(pred, "B L V -> B L V S", S=beam)
 
         # Initialize cumulative masses to track peptide masses
-        token_masses = self.token_masses
+        token_masses = self.token_masses.to(device)
         cumulative_masses = torch.zeros(batch, beam, device=device)
         for b in range(batch):
             for s in range(beam):
-                token_idx = tokens[b, 0, s]
-                cumulative_masses[b, s] = token_masses[token_idx]
+                token_idx = tokens[b, 0, s].item()
+                if token_idx < len(token_masses):  # ensure index is valid
+                    cumulative_masses[b, s] = token_masses[token_idx]
 
         # Make all tensors the right shape for decoding.
         precursors = einops.repeat(precursors, "B L -> (B S) L", S=beam)
@@ -338,7 +338,7 @@ class Spec2Pep(pl.LightningModule):
         scores = einops.rearrange(scores, "B L V S -> (B S) L V")
         cumulative_masses = einops.rearrange(cumulative_masses, "B S -> (B S)")
 
-        # Store cumulative masses as temporary attribute for use in other methods
+        # Store temporary attributes for use by other methods
         self._cumulative_masses = cumulative_masses
         self._batch_size = batch
         self._beam_size = beam
@@ -398,13 +398,11 @@ class Spec2Pep(pl.LightningModule):
                     tokens, scores, finished_beams, batch, step + 1
                 )
         finally:
-            # Clean up temporary attributes to avoid memory leaks
-            if hasattr(self, "_cumulative_masses"):
-                delattr(self, "_cumulative_masses")
-            if hasattr(self, "_batch_size"):
-                delattr(self, "_batch_size")
-            if hasattr(self, "_beam_size"):
-                delattr(self, "_beam_size")
+            # Ensure temporary attributes are cleaned up in all cases to prevent memory leaks
+            temp_attrs = ["_cumulative_masses", "_batch_size", "_beam_size"]
+            for attr in temp_attrs:
+                if hasattr(self, attr):
+                    delattr(self, attr)
 
         # Return the peptide with the highest confidence score, within
         # the precursor m/z tolerance if possible.
@@ -426,10 +424,9 @@ class Spec2Pep(pl.LightningModule):
         ----------
         tokens : torch.Tensor of shape (n_spectra * n_beams, max_length)
             Predicted amino acid tokens for all beams and all spectra.
-         scores : torch.Tensor of shape
-         (n_spectra *  n_beams, max_length, n_amino_acids)
-            Scores for the predicted amino acid tokens for all beams and
-            all spectra.
+        precursors : torch.Tensor of shape (n_spectra * n_beams, 3)
+            The measured precursor mass (axis 0), precursor charge
+            (axis 1), and precursor m/z (axis 2) of each MS/MS spectrum.
         step : int
             Index of the current decoding step.
 
@@ -473,7 +470,9 @@ class Spec2Pep(pl.LightningModule):
         )
         discarded_beams[current_tokens == 0] = True
 
-        # Discard beams with invalid modification combinations
+        # Discard beams with invalid modification combinations (i.e.
+        # N-terminal modifications occur multiple times or in internal
+        # positions).
         if step > 1:
             dim0 = torch.arange(batch_size, device=device)
             final_pos = torch.full((batch_size,), step, device=device)
@@ -496,9 +495,6 @@ class Spec2Pep(pl.LightningModule):
 
             discarded_beams = discarded_beams | multiple_mods | internal_mods
 
-        # Check if we have cumulative masses from parent method
-        use_cumulative_masses = hasattr(self, "_cumulative_masses")
-
         # Check which beams should be terminated or discarded based on
         # the predicted peptide.
         for i in range(batch_size):
@@ -506,33 +502,15 @@ class Spec2Pep(pl.LightningModule):
             if discarded_beams[i]:
                 continue
 
-            # Use different approaches based on availability of cumulative masses
-            if use_cumulative_masses:
-                # Fast path: use precomputed cumulative masses
-                peptide_len = step + 1
-                if self.tokenizer.reverse and tokens[i, 0] == self.stop_token:
-                    peptide_len -= 1
-                elif (
-                    not self.tokenizer.reverse
-                    and tokens[i, step] == self.stop_token
-                ):
-                    peptide_len -= 1
-            else:
-                # Original path: extract peptide and length
-                pred_tokens = tokens[i, : step + 1].cpu()
-                peptide_len = len(pred_tokens)
-
-                # Omit stop token.
-                if (
-                    self.tokenizer.reverse
-                    and pred_tokens[0] == self.stop_token
-                ):
-                    peptide_len -= 1
-                elif (
-                    not self.tokenizer.reverse
-                    and pred_tokens[-1] == self.stop_token
-                ):
-                    peptide_len -= 1
+            # Use precomputed cumulative masses
+            peptide_len = step + 1
+            if (
+                self.tokenizer.reverse and tokens[i, 0] == self.stop_token
+            ) or (
+                not self.tokenizer.reverse
+                and tokens[i, step] == self.stop_token
+            ):
+                peptide_len -= 1
 
             # Discard beams that were predicted to end but don't fit the
             # minimum peptide length.
@@ -540,38 +518,55 @@ class Spec2Pep(pl.LightningModule):
                 discarded_beams[i] = True
                 continue
 
-            # Get precursor information
+            # Terminate the beam if it has not been finished by the
+            # model but the peptide mass exceeds the precursor m/z to an
+            # extent that it cannot be corrected anymore by a
+            # subsequently predicted AA with negative mass.
             precursor_charge = precursors[i, 1].item()
             precursor_mz = precursors[i, 2].item()
 
-            if use_cumulative_masses:
-                # Fast path: use precomputed cumulative masses
-                current_mass = self._cumulative_masses[i]
-                matches_precursor_mz = False
-                exceeds_precursor_mz = False
+            # Use precomputed cumulative masses
+            current_mass = self._cumulative_masses[i]
+            matches_precursor_mz = False
+            exceeds_precursor_mz = False
 
-                # Calculate current m/z including proton mass
-                current_mz = (
-                    current_mass / precursor_charge + 1.007276
-                )  # Add proton mass
+            # Calculate current m/z including proton mass
+            current_mz = current_mass / precursor_charge + 1.007276
 
-                # Check for isotope matches
+            # Check isotope matches
+            for isotope in range(
+                self.isotope_error_range[0], self.isotope_error_range[1] + 1
+            ):
+                delta_ppm = _calc_mass_error(
+                    current_mz, precursor_mz, precursor_charge, isotope
+                )
+                if abs(delta_ppm) < self.precursor_mass_tol:
+                    matches_precursor_mz = True
+                    break
+
+            # If no match, determine whether it exceeds the mass window
+            if not matches_precursor_mz and not finished_beams[i]:
+                any_fits = False
+                all_exceed = True
+
+                # First check if current peptide exceeds mass window, corresponding to aa_idx is None case
+                current_exceeds = True
                 for isotope in range(
                     self.isotope_error_range[0],
                     self.isotope_error_range[1] + 1,
                 ):
-                    delta_ppm = _calc_mass_error(
+                    delta = _calc_mass_error(
                         current_mz, precursor_mz, precursor_charge, isotope
                     )
-                    if abs(delta_ppm) < self.precursor_mass_tol:
-                        matches_precursor_mz = True
+                    if delta <= self.precursor_mass_tol:
+                        current_exceeds = False
                         break
 
-                # If not matching, check if any negative mass AA could correct it
-                if not matches_precursor_mz and not finished_beams[i]:
-                    any_fits = False
-                    all_exceed = True
-
+                # If current peptide exceeds mass window, terminate beam directly
+                if current_exceeds:
+                    exceeds_precursor_mz = True
+                else:
+                    # Only execute when checking negative mass amino acids is needed
                     for neg_idx in neg_mass_idx:
                         neg_mass = token_masses[neg_idx]
                         potential_mz = (
@@ -600,78 +595,6 @@ class Spec2Pep(pl.LightningModule):
                             break
 
                     exceeds_precursor_mz = all_exceed
-            else:
-                # Original approach: using detokenize and calculate_precursor_ions
-                pred_tokens = tokens[i, : step + 1]
-
-                # Get precursor_mz as tensor instead of float
-                precursor_mz_tensor = precursors[i, 2]
-
-                # Send tokenizer masses to correct device
-                self.tokenizer.masses = self.tokenizer.masses
-
-                matches_precursor_mz = exceeds_precursor_mz = False
-
-                # Check for precursor matches with and without negative mass AAs
-                for aa_idx in (
-                    [None]
-                    if finished_beams[i]
-                    else [None] + neg_mass_idx.tolist()
-                ):
-                    if aa_idx is None:
-                        calc_peptide = pred_tokens
-                    else:
-                        calc_peptide = torch.cat(
-                            [
-                                pred_tokens,
-                                torch.tensor([aa_idx], device=device),
-                            ]
-                        )
-
-                    try:
-                        calc_mz = self.tokenizer.calculate_precursor_ions(
-                            calc_peptide.unsqueeze(0),
-                            torch.tensor([precursor_charge], device=device),
-                        )[0]
-
-                        # Calculate isotope errors
-                        delta_mass_ppm = [
-                            _calc_mass_error(
-                                calc_mz,
-                                precursor_mz,
-                                precursor_charge,
-                                isotope,
-                            )
-                            for isotope in range(
-                                self.isotope_error_range[0],
-                                self.isotope_error_range[1] + 1,
-                            )
-                        ]
-
-                        # Check if current peptide matches precursor
-                        if aa_idx is None:
-                            matches_precursor_mz = any(
-                                abs(d) < self.precursor_mass_tol
-                                for d in delta_mass_ppm
-                            )
-
-                        # Determine if we need to terminate due to exceeding mass
-                        if matches_precursor_mz:
-                            exceeds_precursor_mz = False
-                        else:
-                            exceeds_precursor_mz = all(
-                                d > self.precursor_mass_tol
-                                for d in delta_mass_ppm
-                            )
-                            exceeds_precursor_mz = (
-                                finished_beams[i] or aa_idx is not None
-                            ) and exceeds_precursor_mz
-
-                        if matches_precursor_mz or exceeds_precursor_mz:
-                            break
-
-                    except (KeyError, RuntimeError):
-                        matches_precursor_mz = exceeds_precursor_mz = False
 
             # Update beam status
             if finished_beams[i]:
@@ -741,9 +664,11 @@ class Spec2Pep(pl.LightningModule):
             pred_peptide = pred_tokens[:-1] if has_stop_token else pred_tokens
 
             # Don't cache this peptide if it was already predicted previously.
+            pred_peptide_cpu = pred_peptide.cpu()
             duplicate = False
             for pred_cached in pred_cache[spec_idx]:
-                if torch.equal(pred_cached[-1], pred_peptide.cpu()):
+                # TODO: Add duplicate predictions with their highest score.
+                if torch.equal(pred_cached[-1], pred_peptide_cpu):
                     duplicate = True
                     break
 
@@ -768,8 +693,8 @@ class Spec2Pep(pl.LightningModule):
 
             # Omit the stop token from the amino acid-level scores.
             aa_scores = aa_scores[:-1]
-
-            # Add the prediction to the cache using the appropriate heap operation
+            # Add the prediction to the cache (minimum priority queue,
+            # maximum the number of beams elements).
             if len(pred_cache[spec_idx]) < self.n_beams:
                 heapadd = heapq.heappush
             else:
@@ -782,7 +707,7 @@ class Spec2Pep(pl.LightningModule):
                     np.random.random_sample(),
                     aa_scores,
                     torch.clone(
-                        pred_peptide.cpu()
+                        pred_peptide_cpu
                     ),  # Ensure tensor is on CPU for storage
                 ),
             )
@@ -830,22 +755,16 @@ class Spec2Pep(pl.LightningModule):
         vocab = self.vocab_size  # V
         device = self.device  # Get device from input tensor
 
-        # Check if cumulative masses are being tracked
-        use_cumulative_masses = hasattr(self, "_cumulative_masses")
-
-        if use_cumulative_masses:
-            token_masses = self.token_masses
+        token_masses = self.token_masses
 
         # Reshape to group by spectrum (B for "batch").
         tokens = einops.rearrange(tokens, "(B S) L -> B L S", S=beam)
         scores = einops.rearrange(scores, "(B S) L V -> B L V S", S=beam)
-        if use_cumulative_masses:
-            cumulative_masses = einops.rearrange(
-                self._cumulative_masses, "(B S) -> B S", S=beam
-            )
+        cumulative_masses = einops.rearrange(
+            self._cumulative_masses, "(B S) -> B S", S=beam
+        )
 
         # Get the previous tokens and scores.
-        # Use the exact same approach as original code to ensure consistent ordering
         prev_tokens = einops.repeat(
             tokens[:, :step, :], "B L S -> B L V S", V=vocab
         )
@@ -881,10 +800,10 @@ class Spec2Pep(pl.LightningModule):
 
         # Use CPU for unraveling to match original implementation exactly
         # Convert indices to vocab and beam indices
-        v_idx, s_idx = np.unravel_index(top_idx.cpu().numpy(), (vocab, beam))
-        v_idx = torch.tensor(v_idx, device=device)
+        indices = torch.unravel_index(top_idx.flatten(), (vocab, beam))
+        v_idx = indices[0].reshape(top_idx.shape).to(device)
         s_idx = einops.rearrange(
-            torch.tensor(s_idx, device=device), "B S -> (B S)"
+            indices[1].reshape(top_idx.shape).to(device), "B S -> (B S)"
         )
         b_idx = einops.repeat(
             torch.arange(batch, device=device), "B -> (B S)", S=beam
@@ -902,29 +821,26 @@ class Spec2Pep(pl.LightningModule):
             scores[b_idx, : step + 1, :, s_idx], "(B S) L V -> B L V S", S=beam
         )
 
-        # Update cumulative masses if tracking them
-        if use_cumulative_masses:
-            cumulative_masses_new = torch.zeros_like(cumulative_masses)
-            for b in range(batch):
-                for s in range(beam):
-                    prev_beam_idx = s_idx[b * beam + s].item()
-                    new_token_idx = v_idx[b, s].item()
+        # Update cumulative masses
+        cumulative_masses_new = torch.zeros_like(cumulative_masses)
+        for b in range(batch):
+            for s in range(beam):
+                prev_beam_idx = s_idx[b * beam + s].item()
+                new_token_idx = v_idx[b, s].item()
 
-                    # Copy mass from previous beam and add new token's mass
-                    if step == 0:
-                        cumulative_masses_new[b, s] = token_masses[
-                            new_token_idx
-                        ]
-                    else:
-                        cumulative_masses_new[b, s] = (
-                            cumulative_masses[b, prev_beam_idx]
-                            + token_masses[new_token_idx]
-                        )
+                # Copy mass from previous beam and add new token's mass
+                if step == 0:
+                    cumulative_masses_new[b, s] = token_masses[new_token_idx]
+                else:
+                    cumulative_masses_new[b, s] = (
+                        cumulative_masses[b, prev_beam_idx]
+                        + token_masses[new_token_idx]
+                    )
 
-            # Update class attribute with new cumulative masses
-            self._cumulative_masses = einops.rearrange(
-                cumulative_masses_new, "B S -> (B S)"
-            )
+        # Update class attribute with new cumulative masses
+        self._cumulative_masses = einops.rearrange(
+            cumulative_masses_new, "B S -> (B S)"
+        )
 
         # Reshape for return
         tokens_out = einops.rearrange(tokens_new, "B L S -> (B S) L")
