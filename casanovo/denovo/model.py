@@ -195,6 +195,7 @@ class Spec2Pep(pl.LightningModule):
                 ],
                 dtype=torch.int,
             ),
+            persistent=False
         )
 
         self.register_buffer(
@@ -203,9 +204,10 @@ class Spec2Pep(pl.LightningModule):
                 [self.tokenizer.index[aa] for aa in self.n_term],
                 dtype=torch.int,
             ),
+            persistent=False
         )
 
-        self.register_buffer("token_masses", torch.zeros(self.vocab_size))
+        self.register_buffer("token_masses", torch.zeros(self.vocab_size), persistent=False)
         for aa, mass in self.tokenizer.residues.items():
             idx = self.tokenizer.index.get(aa)
             if idx is not None:
@@ -798,7 +800,6 @@ class Spec2Pep(pl.LightningModule):
         # Apply mask and get top-k indices
         _, top_idx = torch.topk(mean_scores * active_mask, beam, dim=1)
 
-        # Use CPU for unraveling to match original implementation exactly
         # Convert indices to vocab and beam indices
         indices = torch.unravel_index(top_idx.flatten(), (vocab, beam))
         v_idx = indices[0].reshape(top_idx.shape).to(device)
