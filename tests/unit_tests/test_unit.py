@@ -1021,7 +1021,7 @@ def test_digest_fasta_enzyme(tiny_fasta_file):
             "M:M+15.995,N:N+0.984,Q:Q+0.984,"
             "nterm:+42.011,nterm:+43.006,nterm:-17.027,nterm:+43.006-17.027"
         ),
-        tokenizer=depthcharge.tokenizers.peptides.MskbPeptideTokenizer(
+        tokenizer=depthcharge.tokenizers.PeptideTokenizer.from_massivekb(
             replace_isoleucine_with_leucine=True
         ),
     )
