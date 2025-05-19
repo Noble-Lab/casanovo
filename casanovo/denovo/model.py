@@ -195,7 +195,7 @@ class Spec2Pep(pl.LightningModule):
                 ],
                 dtype=torch.int,
             ),
-            persistent=False
+            persistent=False,
         )
 
         self.register_buffer(
@@ -204,10 +204,12 @@ class Spec2Pep(pl.LightningModule):
                 [self.tokenizer.index[aa] for aa in self.n_term],
                 dtype=torch.int,
             ),
-            persistent=False
+            persistent=False,
         )
 
-        self.register_buffer("token_masses", torch.zeros(self.vocab_size), persistent=False)
+        self.register_buffer(
+            "token_masses", torch.zeros(self.vocab_size), persistent=False
+        )
         for aa, mass in self.tokenizer.residues.items():
             idx = self.tokenizer.index.get(aa)
             if idx is not None:
