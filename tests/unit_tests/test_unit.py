@@ -1005,6 +1005,28 @@ def test_digest_fasta_enzyme(tiny_fasta_file):
     )
     assert pdb.db_peptides.index.to_list() == expected_nonspecific
 
+    # Test replace_isoleucine_with_leucine == True
+    pdb = db_utils.ProteinDatabase(
+        fasta_path=str(tiny_fasta_file),
+        enzyme="trypsin",
+        digestion="non-specific",
+        missed_cleavages=0,
+        min_peptide_len=6,
+        max_peptide_len=6,
+        max_mods=0,
+        precursor_tolerance=10000,
+        isotope_error=[0, 0],
+        allowed_fixed_mods="C:C+57.021",
+        allowed_var_mods=(
+            "M:M+15.995,N:N+0.984,Q:Q+0.984,"
+            "nterm:+42.011,nterm:+43.006,nterm:-17.027,nterm:+43.006-17.027"
+        ),
+        tokenizer=depthcharge.tokenizers.peptides.MskbPeptideTokenizer(
+            replace_isoleucine_with_leucine=True
+        ),
+    )
+    assert pdb.db_peptides.index.to_list() == expected_nonspecific
+
 
 def test_psm_batches(tiny_config):
     peptides_one = [
