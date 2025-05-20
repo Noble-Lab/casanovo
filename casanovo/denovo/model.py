@@ -1184,7 +1184,7 @@ class DbSpec2Pep(Spec2Pep):
                 psm_batch["scan_id"],
                 psm_batch["precursor_charge"],
                 psm_batch["precursor_mz"],
-                psm_batch["seq"],
+                psm_batch["original_seq_str"],
                 peptide_scores,
                 aa_scores,
             ):
@@ -1220,17 +1220,6 @@ class DbSpec2Pep(Spec2Pep):
         # Determine the peptide sequence and parent proteins only for
         # the retained PSMs.
         for pred in predictions:
-            # FIXME: Remove work around when depthcharge reverse detokinzation
-            # bug is fixed.
-            # pred.sequence = self.tokenizer.detokenize(
-            #     torch.unsqueeze(pred.sequence, 0)
-            # )[0]
-            pred.sequence = "".join(
-                self.tokenizer.detokenize(
-                    torch.unsqueeze(pred.sequence, 0),
-                    join=False,
-                )[0]
-            )
             pred.protein = self.protein_database.get_associated_protein(
                 pred.sequence
             )
@@ -1305,6 +1294,9 @@ class DbSpec2Pep(Spec2Pep):
                     if isinstance(psm_batch[key][0], torch.Tensor):
                         psm_batch[key] = torch.stack(psm_batch[key])
                         psm_batch[key] = psm_batch[key].to(self.decoder.device)
+                # We need to keep the original sequence for the database
+                # lookup in case of there is an isoleucine -> leucine swap
+                psm_batch["original_seq_str"] = psm_batch["seq"]
                 psm_batch["seq"] = self.tokenizer.tokenize(psm_batch["seq"])
                 psm_batch["seq"] = psm_batch["seq"].to(self.decoder.device)
 
