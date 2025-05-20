@@ -1306,6 +1306,7 @@ class DbSpec2Pep(Spec2Pep):
                         psm_batch[key] = torch.stack(psm_batch[key])
                         psm_batch[key] = psm_batch[key].to(self.decoder.device)
                 psm_batch["seq"] = self.tokenizer.tokenize(psm_batch["seq"])
+                psm_batch["seq"] = psm_batch["seq"].to(self.decoder.device)
 
                 # Yield the PSM batch for processing.
                 yield psm_batch
