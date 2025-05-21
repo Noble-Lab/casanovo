@@ -1118,6 +1118,35 @@ def test_psm_batches(tiny_config):
     assert num_spectra == 24
 
 
+def test_isoleucine_match(tiny_config):
+    tokenizer = depthcharge.tokenizers.peptides.PeptideTokenizer(
+        residues=Config(tiny_config).residues,
+        replace_isoleucine_with_leucine=True,
+    )
+    db_model = DbSpec2Pep(tokenizer=tokenizer)
+    peptides = [["PEPTLDEK"], ["PEPTIDEK"]]
+    mock_get_candidates = lambda _, precursor_charge: pd.Series(
+        peptides[precursor_charge - 1]
+    )
+
+    db_model = DbSpec2Pep(tokenizer=tokenizer)
+    db_model.protein_database = unittest.mock.MagicMock()
+    db_model.protein_database.get_candidates = mock_get_candidates
+
+    batch = {
+        "precursor_charge": torch.tensor([1, 2]),
+        "precursor_mz": torch.tensor([42.0, 42.0]),
+        "mz_array": torch.zeros((2, 10)),
+        "intensity_array": torch.zeros((2, 10)),
+        "peak_file": ["one.mgf", "two.mgf"],
+        "scan_id": [1, 2],
+    }
+
+    matches = db_model.predict_step(batch)
+    assert matches[0].sequence == "PEPTLDEK"
+    assert matches[1].sequence == "PEPTIDEK"
+
+
 def test_get_candidates(tiny_fasta_file):
     # precursor_window is 10000
     expected_smallwindow = ["LLIYGASTR"]
