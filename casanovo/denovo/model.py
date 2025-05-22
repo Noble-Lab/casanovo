@@ -171,6 +171,11 @@ class Spec2Pep(pl.LightningModule):
         self.top_match = top_match
         self.stop_token = self.tokenizer.stop_int
 
+        # Check if config PTM and AAs are present in model alphabet
+        for aa in config.Config().residues:
+            if aa not in residues:
+                warnings.warn(f"Warning: {aa} is not in model alphabet.")
+
         # Logging.
         self.calculate_precision = calculate_precision
         self.n_log = n_log
