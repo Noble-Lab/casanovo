@@ -265,3 +265,15 @@ def check_dir_file_exists(
                 f"File matching wildcard pattern {pattern} already exist in "
                 f"{dir} and can not be overwritten."
             )
+
+
+def get_local_rank() -> int:
+    """
+    Get the local rank of the current process.
+
+    Returns
+    -------
+    local_rank: int
+        The local rank
+    """
+    return int(os.environ.get("LOCAL_RANK", 0))
