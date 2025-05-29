@@ -211,6 +211,8 @@ class Spec2Pep(pl.LightningModule):
             "token_masses", torch.zeros(self.vocab_size), persistent=False
         )
         for aa, mass in self.tokenizer.residues.items():
+            if mass < 0:
+                print(f"AA: {aa}, Mass: {mass}, Token ID: {self.tokenizer.index[aa]}")
             idx = self.tokenizer.index.get(aa)
             if idx is not None:
                 self.token_masses[idx] = mass
@@ -413,10 +415,10 @@ class Spec2Pep(pl.LightningModule):
         return list(self._get_top_peptide(pred_cache))
 
     def _finish_beams(
-        self,
-        tokens: torch.Tensor,
-        precursors: torch.Tensor,
-        step: int,
+            self,
+            tokens: torch.Tensor,
+            precursors: torch.Tensor,
+            step: int,
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """
         Track all beams that have been finished.
@@ -453,8 +455,8 @@ class Spec2Pep(pl.LightningModule):
 
         # Use precomputed indices and ensure they're on the correct device
         nterm_idx = self.nterm_idx
-        neg_mass_idx = self.neg_mass_idx
-        token_masses = self.token_masses
+        # neg_mass_idx is self.neg_mass_idx, already a buffer on the device
+        token_masses = self.token_masses  # already a buffer on the device
 
         # Check the tokens at the current step
         current_tokens = tokens[:, step]
@@ -463,11 +465,11 @@ class Spec2Pep(pl.LightningModule):
         beam_fits_precursor = torch.zeros(
             batch_size, dtype=torch.bool, device=device
         )
-        finished_beams = torch.zeros(
+        finished_beams_flags = torch.zeros(  # Renamed to avoid conflict with loop variable
             batch_size, dtype=torch.bool, device=device
         )
         ends_stop_token = current_tokens == self.stop_token
-        finished_beams[ends_stop_token] = True
+        finished_beams_flags[ends_stop_token] = True
 
         discarded_beams = torch.zeros(
             batch_size, dtype=torch.bool, device=device
@@ -506,108 +508,114 @@ class Spec2Pep(pl.LightningModule):
             if discarded_beams[i]:
                 continue
 
-            # Use precomputed cumulative masses
             peptide_len = step + 1
             if (
-                self.tokenizer.reverse and tokens[i, 0] == self.stop_token
+                    self.tokenizer.reverse and tokens[i, 0] == self.stop_token
             ) or (
-                not self.tokenizer.reverse
-                and tokens[i, step] == self.stop_token
+                    not self.tokenizer.reverse
+                    and tokens[i, step] == self.stop_token
             ):
                 peptide_len -= 1
 
             # Discard beams that were predicted to end but don't fit the
             # minimum peptide length.
-            if finished_beams[i] and peptide_len < self.min_peptide_len:
+            if finished_beams_flags[i] and peptide_len < self.min_peptide_len:
                 discarded_beams[i] = True
                 continue
 
-            # Terminate the beam if it has not been finished by the
-            # model but the peptide mass exceeds the precursor m/z to an
-            # extent that it cannot be corrected anymore by a
-            # subsequently predicted AA with negative mass.
             precursor_charge = precursors[i, 1].item()
-            precursor_mz = precursors[i, 2].item()
+            precursor_mz_val = precursors[i, 2].item()  # Renamed to avoid conflict
 
-            # Use precomputed cumulative masses
             current_mass = self._cumulative_masses[i]
             matches_precursor_mz = False
             exceeds_precursor_mz = False
 
             # Calculate current m/z including proton mass
-            current_mz = current_mass / precursor_charge + 1.007276
+            current_mz_val = (current_mass + 18.010564684) / precursor_charge + 1.007276  # Renamed
 
-            # Check isotope matches
+            # Check isotope matches for the current peptide (without negative mass AAs)
             for isotope in range(
-                self.isotope_error_range[0], self.isotope_error_range[1] + 1
+                    self.isotope_error_range[0], self.isotope_error_range[1] + 1
             ):
                 delta_ppm = _calc_mass_error(
-                    current_mz, precursor_mz, precursor_charge, isotope
+                    current_mz_val, precursor_mz_val, precursor_charge, isotope
                 )
                 if abs(delta_ppm) < self.precursor_mass_tol:
                     matches_precursor_mz = True
                     break
 
-            # If no match, determine whether it exceeds the mass window
-            if not matches_precursor_mz and not finished_beams[i]:
-                any_fits = False
-                all_exceed = True
-
-                # First check if current peptide exceeds mass window, corresponding to aa_idx is None case
-                current_exceeds = True
+            # If no match with current peptide, determine if it exceeds the mass window,
+            # potentially after trying negative mass AAs.
+            if not matches_precursor_mz and not finished_beams_flags[i]:
+                # Determine if the current peptide (without any negative mass AA) strictly exceeds the tolerance.
+                # A peptide "strictly exceeds" if delta > precursor_mass_tol for ALL isotopes.
+                current_peptide_strictly_exceeds = True
                 for isotope in range(
-                    self.isotope_error_range[0],
-                    self.isotope_error_range[1] + 1,
+                        self.isotope_error_range[0], self.isotope_error_range[1] + 1
                 ):
                     delta = _calc_mass_error(
-                        current_mz, precursor_mz, precursor_charge, isotope
+                        current_mz_val, precursor_mz_val, precursor_charge, isotope
                     )
-                    if delta <= self.precursor_mass_tol:
-                        current_exceeds = False
+                    if delta <= self.precursor_mass_tol:  # current_mz is NOT strictly greater than precursor_mz + tol
+                        current_peptide_strictly_exceeds = False
                         break
 
-                # If current peptide exceeds mass window, terminate beam directly
-                if current_exceeds:
-                    exceeds_precursor_mz = True
+                if not current_peptide_strictly_exceeds:
+                    # If the current peptide itself is not strictly exceeding,
+                    # then the beam does not definitively exceed the precursor m/z.
+                    exceeds_precursor_mz = False
                 else:
-                    # Only execute when checking negative mass amino acids is needed
-                    for neg_idx in neg_mass_idx:
-                        neg_mass = token_masses[neg_idx]
-                        potential_mz = (
-                            current_mass + neg_mass
-                        ) / precursor_charge + 1.007276
+                    beam_can_be_saved_by_neg_aa = False
 
-                        for isotope in range(
-                            self.isotope_error_range[0],
-                            self.isotope_error_range[1] + 1,
-                        ):
-                            delta_ppm = _calc_mass_error(
-                                potential_mz,
-                                precursor_mz,
-                                precursor_charge,
-                                isotope,
-                            )
-                            if abs(delta_ppm) < self.precursor_mass_tol:
-                                any_fits = True
-                                all_exceed = False
+                    if self.neg_mass_idx.numel() > 0:
+                        for neg_idx_tensor in self.neg_mass_idx:
+                            neg_idx = neg_idx_tensor.item()
+                            neg_mass = token_masses[neg_idx]
+                            potential_mz = (
+                                                   current_mass + neg_mass + 18.010564684
+                                           ) / precursor_charge + 1.007276
+
+                            an_isotope_matched_for_this_neg_aa = False
+                            an_isotope_was_not_strictly_exceeding_for_this_neg_aa = False
+                            for isotope in range(
+                                    self.isotope_error_range[0],
+                                    self.isotope_error_range[1] + 1,
+                            ):
+                                delta_ppm_neg = _calc_mass_error(
+                                    potential_mz,
+                                    precursor_mz_val,
+                                    precursor_charge,
+                                    isotope,
+                                )
+                                if abs(delta_ppm_neg) < self.precursor_mass_tol:
+                                    an_isotope_matched_for_this_neg_aa = True
+                                    an_isotope_was_not_strictly_exceeding_for_this_neg_aa = True
+                                    break
+
+                                if delta_ppm_neg <= self.precursor_mass_tol:  # Not strictly exceeding
+                                    an_isotope_was_not_strictly_exceeding_for_this_neg_aa = True
+
+
+                            if an_isotope_matched_for_this_neg_aa:
+                                beam_can_be_saved_by_neg_aa = True
                                 break
 
-                            if delta_ppm <= self.precursor_mass_tol:
-                                all_exceed = False
+                            if an_isotope_was_not_strictly_exceeding_for_this_neg_aa:
+                                beam_can_be_saved_by_neg_aa = True
 
-                        if any_fits:
-                            break
+                    if beam_can_be_saved_by_neg_aa:
+                        exceeds_precursor_mz = False
+                    else:
+                        exceeds_precursor_mz = True
 
-                    exceeds_precursor_mz = all_exceed
-
-            # Update beam status
-            if finished_beams[i]:
+            # Update beam status based on precursor m/z check
+            if finished_beams_flags[i]:
                 beam_fits_precursor[i] = matches_precursor_mz
-            elif exceeds_precursor_mz:
-                finished_beams[i] = True
-                beam_fits_precursor[i] = matches_precursor_mz
+            elif exceeds_precursor_mz:  # If not finished by stop token, but determined to exceed m/z
+                finished_beams_flags[i] = True  # Terminate the beam
+                beam_fits_precursor[i] = False
 
-        return finished_beams, beam_fits_precursor, discarded_beams
+        return finished_beams_flags, beam_fits_precursor, discarded_beams
 
     def _cache_finished_beams(
         self,
