@@ -185,6 +185,7 @@ class Spec2Pep(pl.LightningModule):
             for aa in self.tokenizer.index
             if aa.startswith("[") and aa.endswith("]-")
         ]
+        # Register tensor buffers for negative mass amino acid indices
         self.register_buffer(
             "neg_mass_idx",
             torch.tensor(
@@ -198,6 +199,7 @@ class Spec2Pep(pl.LightningModule):
             persistent=False,
         )
 
+        # Register tensor buffer for N-terminal modification indices
         self.register_buffer(
             "nterm_idx",
             torch.tensor(
@@ -207,12 +209,12 @@ class Spec2Pep(pl.LightningModule):
             persistent=False,
         )
 
+        # Register tensor buffer for amino acid token masses
         self.register_buffer(
             "token_masses", torch.zeros(self.vocab_size), persistent=False
         )
+        # Populate token masses from tokenizer residues
         for aa, mass in self.tokenizer.residues.items():
-            if mass < 0:
-                print(f"AA: {aa}, Mass: {mass}, Token ID: {self.tokenizer.index[aa]}")
             idx = self.tokenizer.index.get(aa)
             if idx is not None:
                 self.token_masses[idx] = mass
@@ -455,8 +457,8 @@ class Spec2Pep(pl.LightningModule):
 
         # Use precomputed indices and ensure they're on the correct device
         nterm_idx = self.nterm_idx
-        # neg_mass_idx is self.neg_mass_idx, already a buffer on the device
-        token_masses = self.token_masses  # already a buffer on the device
+        neg_mass_idx = self.neg_mass_idx
+        token_masses = self.token_masses
 
         # Check the tokens at the current step
         current_tokens = tokens[:, step]
@@ -465,20 +467,18 @@ class Spec2Pep(pl.LightningModule):
         beam_fits_precursor = torch.zeros(
             batch_size, dtype=torch.bool, device=device
         )
-        finished_beams_flags = torch.zeros(  # Renamed to avoid conflict with loop variable
+        finished_beams = torch.zeros(
             batch_size, dtype=torch.bool, device=device
         )
         ends_stop_token = current_tokens == self.stop_token
-        finished_beams_flags[ends_stop_token] = True
+        finished_beams[ends_stop_token] = True
 
         discarded_beams = torch.zeros(
             batch_size, dtype=torch.bool, device=device
         )
         discarded_beams[current_tokens == 0] = True
 
-        # Discard beams with invalid modification combinations (i.e.
-        # N-terminal modifications occur multiple times or in internal
-        # positions).
+        # Discard beams with invalid modification combinations
         if step > 1:
             dim0 = torch.arange(batch_size, device=device)
             final_pos = torch.full((batch_size,), step, device=device)
@@ -501,121 +501,107 @@ class Spec2Pep(pl.LightningModule):
 
             discarded_beams = discarded_beams | multiple_mods | internal_mods
 
-        # Check which beams should be terminated or discarded based on
-        # the predicted peptide.
-        for i in range(batch_size):
-            # Skip already discarded beams.
-            if discarded_beams[i]:
-                continue
+        # Get precursor information
+        precursor_charges = precursors[:, 1]
+        precursor_mzs = precursors[:, 2]
 
-            peptide_len = step + 1
-            if (
-                    self.tokenizer.reverse and tokens[i, 0] == self.stop_token
-            ) or (
-                    not self.tokenizer.reverse
-                    and tokens[i, step] == self.stop_token
-            ):
-                peptide_len -= 1
+        # Calculate peptide lengths
+        peptide_lens = torch.full((batch_size,), step + 1, device=device)
+        # Adjust for stop tokens
+        if self.tokenizer.reverse:
+            has_stop_at_start = tokens[:, 0] == self.stop_token
+            peptide_lens[has_stop_at_start] -= 1
+        else:
+            has_stop_at_end = ends_stop_token
+            peptide_lens[has_stop_at_end] -= 1
 
-            # Discard beams that were predicted to end but don't fit the
-            # minimum peptide length.
-            if finished_beams_flags[i] and peptide_len < self.min_peptide_len:
-                discarded_beams[i] = True
-                continue
+        # Discard beams that don't meet minimum peptide length
+        too_short = finished_beams & (peptide_lens < self.min_peptide_len)
+        discarded_beams[too_short] = True
 
-            precursor_charge = precursors[i, 1].item()
-            precursor_mz_val = precursors[i, 2].item()  # Renamed to avoid conflict
+        # Mask for beams we need to check mass tolerance
+        beams_to_check = ~discarded_beams
 
-            current_mass = self._cumulative_masses[i]
-            matches_precursor_mz = False
-            exceeds_precursor_mz = False
+        if torch.any(beams_to_check):
+            # Calculate current peptide masses from cumulative masses
+            current_masses = self._cumulative_masses[beams_to_check]
+            current_mzs = (current_masses + 18.010564684) / precursor_charges[beams_to_check] + 1.007276
+            precursor_mzs_to_check = precursor_mzs[beams_to_check]
 
-            # Calculate current m/z including proton mass
-            current_mz_val = (current_mass + 18.010564684) / precursor_charge + 1.007276  # Renamed
+            # Prepare isotope error calculations
+            isotope_range = torch.arange(
+                self.isotope_error_range[0],
+                self.isotope_error_range[1] + 1,
+                device=device
+            )
 
-            # Check isotope matches for the current peptide (without negative mass AAs)
-            for isotope in range(
-                    self.isotope_error_range[0], self.isotope_error_range[1] + 1
-            ):
-                delta_ppm = _calc_mass_error(
-                    current_mz_val, precursor_mz_val, precursor_charge, isotope
-                )
-                if abs(delta_ppm) < self.precursor_mass_tol:
-                    matches_precursor_mz = True
-                    break
+            # Calculate delta_ppm for all isotopes at once
+            # Shape: (n_beams_to_check, n_isotopes)
+            isotope_corrections = isotope_range.unsqueeze(0) * 1.00335 / precursor_charges[beams_to_check].unsqueeze(1)
+            theoretical_mzs = current_mzs.unsqueeze(1).expand(-1, len(isotope_range))
+            observed_mzs = precursor_mzs_to_check.unsqueeze(1) - isotope_corrections
 
-            # If no match with current peptide, determine if it exceeds the mass window,
-            # potentially after trying negative mass AAs.
-            if not matches_precursor_mz and not finished_beams_flags[i]:
-                # Determine if the current peptide (without any negative mass AA) strictly exceeds the tolerance.
-                # A peptide "strictly exceeds" if delta > precursor_mass_tol for ALL isotopes.
-                current_peptide_strictly_exceeds = True
-                for isotope in range(
-                        self.isotope_error_range[0], self.isotope_error_range[1] + 1
-                ):
-                    delta = _calc_mass_error(
-                        current_mz_val, precursor_mz_val, precursor_charge, isotope
-                    )
-                    if delta <= self.precursor_mass_tol:  # current_mz is NOT strictly greater than precursor_mz + tol
-                        current_peptide_strictly_exceeds = False
-                        break
+            delta_ppms = (theoretical_mzs - observed_mzs) / precursor_mzs_to_check.unsqueeze(1) * 1e6
 
-                if not current_peptide_strictly_exceeds:
-                    # If the current peptide itself is not strictly exceeding,
-                    # then the beam does not definitively exceed the precursor m/z.
-                    exceeds_precursor_mz = False
-                else:
-                    beam_can_be_saved_by_neg_aa = False
+            # Check if any isotope matches within tolerance
+            matches_any_isotope = torch.any(torch.abs(delta_ppms) < self.precursor_mass_tol, dim=1)
 
-                    if self.neg_mass_idx.numel() > 0:
-                        for neg_idx_tensor in self.neg_mass_idx:
-                            neg_idx = neg_idx_tensor.item()
-                            neg_mass = token_masses[neg_idx]
-                            potential_mz = (
-                                                   current_mass + neg_mass + 18.010564684
-                                           ) / precursor_charge + 1.007276
+            # For non-finished beams, check if ALL isotopes exceed tolerance
+            all_isotopes_exceed = torch.all(delta_ppms > self.precursor_mass_tol, dim=1)
 
-                            an_isotope_matched_for_this_neg_aa = False
-                            an_isotope_was_not_strictly_exceeding_for_this_neg_aa = False
-                            for isotope in range(
-                                    self.isotope_error_range[0],
-                                    self.isotope_error_range[1] + 1,
-                            ):
-                                delta_ppm_neg = _calc_mass_error(
-                                    potential_mz,
-                                    precursor_mz_val,
-                                    precursor_charge,
-                                    isotope,
-                                )
-                                if abs(delta_ppm_neg) < self.precursor_mass_tol:
-                                    an_isotope_matched_for_this_neg_aa = True
-                                    an_isotope_was_not_strictly_exceeding_for_this_neg_aa = True
-                                    break
+            # Now check with negative mass AAs for non-finished beams that exceed
+            finished_mask = finished_beams[beams_to_check]
+            non_finished_exceeding = ~finished_mask & all_isotopes_exceed
 
-                                if delta_ppm_neg <= self.precursor_mass_tol:  # Not strictly exceeding
-                                    an_isotope_was_not_strictly_exceeding_for_this_neg_aa = True
+            if torch.any(non_finished_exceeding) and self.neg_mass_idx.numel() > 0:
+                # Get indices of non-finished exceeding beams
+                exceeding_indices = torch.where(non_finished_exceeding)[0]
 
+                # Prepare negative mass combinations
+                neg_masses = token_masses[self.neg_mass_idx]
 
-                            if an_isotope_matched_for_this_neg_aa:
-                                beam_can_be_saved_by_neg_aa = True
-                                break
+                # For each exceeding beam, check all negative mass AAs
+                # Shape: (n_exceeding_beams, n_neg_masses, n_isotopes)
+                exceeding_masses = current_masses[exceeding_indices]
+                exceeding_charges = precursor_charges[beams_to_check][exceeding_indices]
+                exceeding_precursor_mzs = precursor_mzs_to_check[exceeding_indices]
 
-                            if an_isotope_was_not_strictly_exceeding_for_this_neg_aa:
-                                beam_can_be_saved_by_neg_aa = True
+                # Calculate potential m/z with each negative mass AA
+                potential_masses = exceeding_masses.unsqueeze(1) + neg_masses.unsqueeze(0)
+                potential_mzs = (potential_masses + 18.010564684).unsqueeze(2) / exceeding_charges.unsqueeze(
+                    1).unsqueeze(2) + 1.007276
 
-                    if beam_can_be_saved_by_neg_aa:
-                        exceeds_precursor_mz = False
-                    else:
-                        exceeds_precursor_mz = True
+                # Calculate delta_ppm for all combinations
+                isotope_corr_expanded = isotope_range.unsqueeze(0).unsqueeze(0) * 1.00335 / exceeding_charges.unsqueeze(
+                    1).unsqueeze(2)
+                observed_mzs_expanded = exceeding_precursor_mzs.unsqueeze(1).unsqueeze(2) - isotope_corr_expanded
+                delta_ppms_neg = (potential_mzs - observed_mzs_expanded) / exceeding_precursor_mzs.unsqueeze(
+                    1).unsqueeze(2) * 1e6
 
-            # Update beam status based on precursor m/z check
-            if finished_beams_flags[i]:
-                beam_fits_precursor[i] = matches_precursor_mz
-            elif exceeds_precursor_mz:  # If not finished by stop token, but determined to exceed m/z
-                finished_beams_flags[i] = True  # Terminate the beam
-                beam_fits_precursor[i] = False
+                # Check if any negative mass AA + isotope combination works
+                any_neg_aa_works = torch.any(torch.abs(delta_ppms_neg) < self.precursor_mass_tol, dim=(1, 2))
+                # Also check if any combination is not strictly exceeding
+                any_not_strictly_exceeding = torch.any(delta_ppms_neg <= self.precursor_mass_tol, dim=(1, 2))
 
-        return finished_beams_flags, beam_fits_precursor, discarded_beams
+                # Update matches_any_isotope for beams that can be saved by negative mass AAs
+                matches_any_isotope[exceeding_indices] |= (any_neg_aa_works | any_not_strictly_exceeding)
+
+                # Update the non_finished_exceeding mask
+                non_finished_exceeding[exceeding_indices] = ~(any_neg_aa_works | any_not_strictly_exceeding)
+
+            # First, update matches for beams we checked
+            temp_matches = torch.zeros(batch_size, dtype=torch.bool, device=device)
+            temp_matches[beams_to_check] = matches_any_isotope
+
+            # Terminate non-finished beams that exceed tolerance
+            beams_to_terminate = beams_to_check.clone()
+            beams_to_terminate[beams_to_check] = non_finished_exceeding
+            finished_beams[beams_to_terminate] = True
+
+            # Now finished_beams is complete, update beam_fits_precursor
+            beam_fits_precursor[finished_beams] = temp_matches[finished_beams]
+
+        return finished_beams, beam_fits_precursor, discarded_beams
 
     def _cache_finished_beams(
         self,
@@ -725,12 +711,12 @@ class Spec2Pep(pl.LightningModule):
             )
 
     def _get_topk_beams(
-        self,
-        tokens: torch.tensor,
-        scores: torch.tensor,
-        finished_beams: torch.tensor,
-        batch: int,
-        step: int,
+            self,
+            tokens: torch.tensor,
+            scores: torch.tensor,
+            finished_beams: torch.tensor,
+            batch: int,
+            step: int,
     ) -> Tuple[torch.tensor, torch.tensor]:
         """
         Find the top-k beams with the highest scores and continue
@@ -810,43 +796,35 @@ class Spec2Pep(pl.LightningModule):
         # Apply mask and get top-k indices
         _, top_idx = torch.topk(mean_scores * active_mask, beam, dim=1)
 
-        # Convert indices to vocab and beam indices
+        # OPTIMIZED SECTION: Vectorized index conversion without loops
+        # Use torch.unravel_index for exact compatibility with numpy.unravel_index
         indices = torch.unravel_index(top_idx.flatten(), (vocab, beam))
         v_idx = indices[0].reshape(top_idx.shape).to(device)
-        s_idx = einops.rearrange(
-            indices[1].reshape(top_idx.shape).to(device), "B S -> (B S)"
-        )
-        b_idx = einops.repeat(
-            torch.arange(batch, device=device), "B -> (B S)", S=beam
-        )
+        s_idx = indices[1].reshape(top_idx.shape).to(device)
+
+        # Create batch indices for gathering - flatten s_idx for indexing
+        s_idx_flat = einops.rearrange(s_idx, "B S -> (B S)")
+        b_idx = einops.repeat(torch.arange(batch, device=device), "B -> (B S)", S=beam)
 
         # Record the top K decodings.
         tokens_new = tokens.clone()
         tokens_new[:, :step, :] = einops.rearrange(
-            prev_tokens[b_idx, :, 0, s_idx], "(B S) L -> B L S", S=beam
+            prev_tokens[b_idx, :, 0, s_idx_flat], "(B S) L -> B L S", S=beam
         )
         tokens_new[:, step, :] = v_idx
 
         scores_new = scores.clone()
         scores_new[:, : step + 1, :, :] = einops.rearrange(
-            scores[b_idx, : step + 1, :, s_idx], "(B S) L V -> B L V S", S=beam
+            scores[b_idx, : step + 1, :, s_idx_flat], "(B S) L V -> B L V S", S=beam
         )
 
-        # Update cumulative masses
-        cumulative_masses_new = torch.zeros_like(cumulative_masses)
-        for b in range(batch):
-            for s in range(beam):
-                prev_beam_idx = s_idx[b * beam + s].item()
-                new_token_idx = v_idx[b, s].item()
+        # OPTIMIZED: Vectorized cumulative mass update
+        # Gather parent beam masses
+        parent_masses = torch.gather(cumulative_masses, dim=1, index=s_idx)
 
-                # Copy mass from previous beam and add new token's mass
-                if step == 0:
-                    cumulative_masses_new[b, s] = token_masses[new_token_idx]
-                else:
-                    cumulative_masses_new[b, s] = (
-                        cumulative_masses[b, prev_beam_idx]
-                        + token_masses[new_token_idx]
-                    )
+        # Get new token masses and update
+        new_token_masses = token_masses[v_idx]
+        cumulative_masses_new = parent_masses + new_token_masses
 
         # Update class attribute with new cumulative masses
         self._cumulative_masses = einops.rearrange(
