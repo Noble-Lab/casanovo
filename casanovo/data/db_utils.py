@@ -79,6 +79,9 @@ class ProteinDatabase:
         self.swap_regex = re.compile(
             "(%s)" % "|".join(map(re.escape, self.swap_map.keys()))
         )
+        aas = {r[0] for r in tokenizer.residues.keys() if r[0].isalpha()}
+        if tokenizer.replace_isoleucine_with_leucine:
+            aas.add("I")
         peptide_generator = _peptide_generator(
             fasta_path,
             enzyme,
@@ -86,7 +89,7 @@ class ProteinDatabase:
             missed_cleavages,
             min_peptide_len,
             max_peptide_len,
-            set([r[0] for r in tokenizer.residues.keys() if r[0].isalpha()]),
+            aas,
         )
         logger.info(
             "Digesting FASTA file (enzyme = %s, digestion = %s, missed "

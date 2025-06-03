@@ -67,7 +67,7 @@ max_mods: 1
 # the "residues" dictionary.
 # Example: "M:M[Oxidation],nterm:[Carbamyl]-"
 allowed_fixed_mods: "C:C[Carbamidomethyl]"
-allowed_var_mods: "M:M[Oxidation],N:N[Deamidated],Q:Q[Deamidated],nterm:[Acetyl]-,nterm:[Carbamyl]-,nterm:[Ammonia-loss]-,nterm:[Carbamyl][Ammonia-loss]-"
+allowed_var_mods: "M:M[Oxidation],N:N[Deamidated],Q:Q[Deamidated],nterm:[Acetyl]-,nterm:[Carbamyl]-,nterm:[Ammonia-loss]-,nterm:[+25.980265]-"
 
 
 ###
