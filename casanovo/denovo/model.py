@@ -417,10 +417,10 @@ class Spec2Pep(pl.LightningModule):
         return list(self._get_top_peptide(pred_cache))
 
     def _finish_beams(
-            self,
-            tokens: torch.Tensor,
-            precursors: torch.Tensor,
-            step: int,
+        self,
+        tokens: torch.Tensor,
+        precursors: torch.Tensor,
+        step: int,
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """
         Track all beams that have been finished.
@@ -525,35 +525,56 @@ class Spec2Pep(pl.LightningModule):
         if torch.any(beams_to_check):
             # Calculate current peptide masses from cumulative masses
             current_masses = self._cumulative_masses[beams_to_check]
-            current_mzs = (current_masses + 18.010564684) / precursor_charges[beams_to_check] + 1.007276
+            current_mzs = (current_masses + 18.010564684) / precursor_charges[
+                beams_to_check
+            ] + 1.007276
             precursor_mzs_to_check = precursor_mzs[beams_to_check]
 
             # Prepare isotope error calculations
             isotope_range = torch.arange(
                 self.isotope_error_range[0],
                 self.isotope_error_range[1] + 1,
-                device=device
+                device=device,
             )
 
             # Calculate delta_ppm for all isotopes at once
             # Shape: (n_beams_to_check, n_isotopes)
-            isotope_corrections = isotope_range.unsqueeze(0) * 1.00335 / precursor_charges[beams_to_check].unsqueeze(1)
-            theoretical_mzs = current_mzs.unsqueeze(1).expand(-1, len(isotope_range))
-            observed_mzs = precursor_mzs_to_check.unsqueeze(1) - isotope_corrections
+            isotope_corrections = (
+                isotope_range.unsqueeze(0)
+                * 1.00335
+                / precursor_charges[beams_to_check].unsqueeze(1)
+            )
+            theoretical_mzs = current_mzs.unsqueeze(1).expand(
+                -1, len(isotope_range)
+            )
+            observed_mzs = (
+                precursor_mzs_to_check.unsqueeze(1) - isotope_corrections
+            )
 
-            delta_ppms = (theoretical_mzs - observed_mzs) / precursor_mzs_to_check.unsqueeze(1) * 1e6
+            delta_ppms = (
+                (theoretical_mzs - observed_mzs)
+                / precursor_mzs_to_check.unsqueeze(1)
+                * 1e6
+            )
 
             # Check if any isotope matches within tolerance
-            matches_any_isotope = torch.any(torch.abs(delta_ppms) < self.precursor_mass_tol, dim=1)
+            matches_any_isotope = torch.any(
+                torch.abs(delta_ppms) < self.precursor_mass_tol, dim=1
+            )
 
             # For non-finished beams, check if ALL isotopes exceed tolerance
-            all_isotopes_exceed = torch.all(delta_ppms > self.precursor_mass_tol, dim=1)
+            all_isotopes_exceed = torch.all(
+                delta_ppms > self.precursor_mass_tol, dim=1
+            )
 
             # Now check with negative mass AAs for non-finished beams that exceed
             finished_mask = finished_beams[beams_to_check]
             non_finished_exceeding = ~finished_mask & all_isotopes_exceed
 
-            if torch.any(non_finished_exceeding) and self.neg_mass_idx.numel() > 0:
+            if (
+                torch.any(non_finished_exceeding)
+                and self.neg_mass_idx.numel() > 0
+            ):
                 # Get indices of non-finished exceeding beams
                 exceeding_indices = torch.where(non_finished_exceeding)[0]
 
@@ -563,34 +584,61 @@ class Spec2Pep(pl.LightningModule):
                 # For each exceeding beam, check all negative mass AAs
                 # Shape: (n_exceeding_beams, n_neg_masses, n_isotopes)
                 exceeding_masses = current_masses[exceeding_indices]
-                exceeding_charges = precursor_charges[beams_to_check][exceeding_indices]
-                exceeding_precursor_mzs = precursor_mzs_to_check[exceeding_indices]
+                exceeding_charges = precursor_charges[beams_to_check][
+                    exceeding_indices
+                ]
+                exceeding_precursor_mzs = precursor_mzs_to_check[
+                    exceeding_indices
+                ]
 
                 # Calculate potential m/z with each negative mass AA
-                potential_masses = exceeding_masses.unsqueeze(1) + neg_masses.unsqueeze(0)
-                potential_mzs = (potential_masses + 18.010564684).unsqueeze(2) / exceeding_charges.unsqueeze(
-                    1).unsqueeze(2) + 1.007276
+                potential_masses = exceeding_masses.unsqueeze(
+                    1
+                ) + neg_masses.unsqueeze(0)
+                potential_mzs = (potential_masses + 18.010564684).unsqueeze(
+                    2
+                ) / exceeding_charges.unsqueeze(1).unsqueeze(2) + 1.007276
 
                 # Calculate delta_ppm for all combinations
-                isotope_corr_expanded = isotope_range.unsqueeze(0).unsqueeze(0) * 1.00335 / exceeding_charges.unsqueeze(
-                    1).unsqueeze(2)
-                observed_mzs_expanded = exceeding_precursor_mzs.unsqueeze(1).unsqueeze(2) - isotope_corr_expanded
-                delta_ppms_neg = (potential_mzs - observed_mzs_expanded) / exceeding_precursor_mzs.unsqueeze(
-                    1).unsqueeze(2) * 1e6
+                isotope_corr_expanded = (
+                    isotope_range.unsqueeze(0).unsqueeze(0)
+                    * 1.00335
+                    / exceeding_charges.unsqueeze(1).unsqueeze(2)
+                )
+                observed_mzs_expanded = (
+                    exceeding_precursor_mzs.unsqueeze(1).unsqueeze(2)
+                    - isotope_corr_expanded
+                )
+                delta_ppms_neg = (
+                    (potential_mzs - observed_mzs_expanded)
+                    / exceeding_precursor_mzs.unsqueeze(1).unsqueeze(2)
+                    * 1e6
+                )
 
                 # Check if any negative mass AA + isotope combination works
-                any_neg_aa_works = torch.any(torch.abs(delta_ppms_neg) < self.precursor_mass_tol, dim=(1, 2))
+                any_neg_aa_works = torch.any(
+                    torch.abs(delta_ppms_neg) < self.precursor_mass_tol,
+                    dim=(1, 2),
+                )
                 # Also check if any combination is not strictly exceeding
-                any_not_strictly_exceeding = torch.any(delta_ppms_neg <= self.precursor_mass_tol, dim=(1, 2))
+                any_not_strictly_exceeding = torch.any(
+                    delta_ppms_neg <= self.precursor_mass_tol, dim=(1, 2)
+                )
 
                 # Update matches_any_isotope for beams that can be saved by negative mass AAs
-                matches_any_isotope[exceeding_indices] |= (any_neg_aa_works | any_not_strictly_exceeding)
+                matches_any_isotope[exceeding_indices] |= (
+                    any_neg_aa_works | any_not_strictly_exceeding
+                )
 
                 # Update the non_finished_exceeding mask
-                non_finished_exceeding[exceeding_indices] = ~(any_neg_aa_works | any_not_strictly_exceeding)
+                non_finished_exceeding[exceeding_indices] = ~(
+                    any_neg_aa_works | any_not_strictly_exceeding
+                )
 
             # First, update matches for beams we checked
-            temp_matches = torch.zeros(batch_size, dtype=torch.bool, device=device)
+            temp_matches = torch.zeros(
+                batch_size, dtype=torch.bool, device=device
+            )
             temp_matches[beams_to_check] = matches_any_isotope
 
             # Terminate non-finished beams that exceed tolerance
@@ -711,12 +759,12 @@ class Spec2Pep(pl.LightningModule):
             )
 
     def _get_topk_beams(
-            self,
-            tokens: torch.tensor,
-            scores: torch.tensor,
-            finished_beams: torch.tensor,
-            batch: int,
-            step: int,
+        self,
+        tokens: torch.tensor,
+        scores: torch.tensor,
+        finished_beams: torch.tensor,
+        batch: int,
+        step: int,
     ) -> Tuple[torch.tensor, torch.tensor]:
         """
         Find the top-k beams with the highest scores and continue
@@ -804,7 +852,9 @@ class Spec2Pep(pl.LightningModule):
 
         # Create batch indices for gathering - flatten s_idx for indexing
         s_idx_flat = einops.rearrange(s_idx, "B S -> (B S)")
-        b_idx = einops.repeat(torch.arange(batch, device=device), "B -> (B S)", S=beam)
+        b_idx = einops.repeat(
+            torch.arange(batch, device=device), "B -> (B S)", S=beam
+        )
 
         # Record the top K decodings.
         tokens_new = tokens.clone()
@@ -815,7 +865,9 @@ class Spec2Pep(pl.LightningModule):
 
         scores_new = scores.clone()
         scores_new[:, : step + 1, :, :] = einops.rearrange(
-            scores[b_idx, : step + 1, :, s_idx_flat], "(B S) L V -> B L V S", S=beam
+            scores[b_idx, : step + 1, :, s_idx_flat],
+            "(B S) L V -> B L V S",
+            S=beam,
         )
 
         # OPTIMIZED: Vectorized cumulative mass update
