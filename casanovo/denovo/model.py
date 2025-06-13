@@ -1310,7 +1310,6 @@ class DbSpec2Pep(Spec2Pep):
 def _calc_match_score(
     batch_all_aa_scores: torch.Tensor,
     truth_aa_indices: torch.Tensor,
-    decoder_reverse: bool = False,
 ) -> Tuple[List[float], List[np.ndarray]]:
     """
     Calculate the score between the input spectra and associated
@@ -1329,8 +1328,6 @@ def _calc_match_score(
     truth_aa_indices : torch.Tensor
         Indices of the score for each actual amino acid in the peptide
         (for an entire batch).
-    decoder_reverse : bool
-        Whether the decoder is reversed.
 
     Returns
     -------
@@ -1339,32 +1336,24 @@ def _calc_match_score(
     aa_scores : List[np.ndarray]
         The amino acid scores for each PSM in the batch.
     """
-    # Remove trailing tokens from predictions based on decoder reversal.
-    if not decoder_reverse:
-        batch_all_aa_scores = batch_all_aa_scores[:, 1:]
-    else:
-        batch_all_aa_scores = batch_all_aa_scores[:, :-1]
+    # Remove trailing token
+    batch_all_aa_scores = batch_all_aa_scores[:, :-1]
 
-    # Vectorized scoring using efficient indexing.
-    rows = (
-        torch.arange(batch_all_aa_scores.shape[0])
-        .unsqueeze(-1)
-        .expand(-1, batch_all_aa_scores.shape[1])
-    )
-    cols = torch.arange(0, batch_all_aa_scores.shape[1]).expand_as(rows)
+    # Get aa scores corresponding with true aas
+    true_aa_scores = torch.gather(
+        batch_all_aa_scores, 2, truth_aa_indices.unsqueeze(-1)
+    ).squeeze(-1)
 
-    per_aa_scores = batch_all_aa_scores[rows, cols, truth_aa_indices]
-    per_aa_scores = per_aa_scores.cpu().detach().numpy()
-    per_aa_scores[per_aa_scores == 0] += 1e-10
-    score_mask = (truth_aa_indices != 0).cpu().detach().numpy()
-    peptide_scores, aa_scores = [], []
-    for psm_score, psm_mask in zip(per_aa_scores, score_mask):
-        psm_aa_scores = psm_score[psm_mask]
-        psm_peptide_score = _peptide_score(psm_aa_scores, True)
-        peptide_scores.append(psm_peptide_score)
-        aa_scores.append(psm_aa_scores)
+    # Calculate peptide scores and aa scores
+    pep_scores_all, aa_scores_all = [], []
+    aa_score_mask = truth_aa_indices != 0
+    for aa_scores, aa_score_mask in zip(true_aa_scores, aa_score_mask):
+        aa_scores = aa_scores[aa_score_mask].cpu().detach().numpy()
+        pep_score = _peptide_score(aa_scores, True)
+        aa_scores_all.append(aa_scores)
+        pep_scores_all.append(pep_score)
 
-    return peptide_scores, aa_scores
+    return pep_scores_all, aa_scores_all
 
 
 class CosineWarmupScheduler(torch.optim.lr_scheduler._LRScheduler):
