@@ -480,83 +480,76 @@ def test_to_neutral_mass():
 
 
 def test_calc_match_score():
-    """
-    Test the calculation of geometric scores using teacher-forced
-    decoder output probabilities and ground truth amino acid sequences.
-    """
-    first_slot_prob = torch.zeros(29)
-    first_slot_prob[1] = 1.0  # A
-    second_slot_prob = torch.zeros(29)
-    second_slot_prob[2] = 1.0  # B
-    third_slot_prob = torch.zeros(29)
-    third_slot_prob[3] = 1.0  # C
-    stop_slot_prob = torch.zeros(29)
-    stop_slot_prob[28] = 1.0  # $
-    blank_slot_prob = torch.zeros(29)
-    blank_slot_prob[0] = 0.42  # Should never come into play
-    fourth_slot_prob = torch.zeros(29)
-    fourth_slot_prob[4] = 0.5  # D
-    fifth_slot_prob = torch.zeros(29)
-    fifth_slot_prob[5] = 0.5  # E
+    score_A = [0.42, 1.0, 0.0, 0.0, 0.0]
+    score_B = [0.42, 0.0, 1.0, 0.0, 0.0]
+    score_C = [0.42, 0.0, 0.0, 1.0, 0.0]
+    score_padding = [0.00, 0.0, 0.0, 0.0, 0.0]
+    score_none = [0.42, 0.0, 0.0, 0.0, 0.0]
 
-    pep_1_aa = torch.stack(
+    pep1 = torch.tensor(
         [
-            first_slot_prob,
-            second_slot_prob,
-            third_slot_prob,
-            stop_slot_prob,
-            blank_slot_prob,
+            score_A,
+            score_B,
+            score_C,
+            score_padding,
         ]
     )
-    pep_2_aa = torch.stack(
+
+    pep2 = torch.tensor(
         [
-            third_slot_prob,
-            second_slot_prob,
-            stop_slot_prob,
-            blank_slot_prob,
-            blank_slot_prob,
+            score_B,
+            score_A,
+            score_C,
+            score_padding,
         ]
     )
-    pep_3_aa = torch.stack(
+
+    pep3 = torch.tensor(
         [
-            fourth_slot_prob,
-            fifth_slot_prob,
-            first_slot_prob,
-            stop_slot_prob,
-            blank_slot_prob,
+            score_C,
+            score_A,
+            score_B,
+            score_padding,
         ]
     )
-    pep_4_aa = torch.stack(
+
+    pep4 = torch.tensor(
         [
-            first_slot_prob,
-            second_slot_prob,
-            third_slot_prob,
-            stop_slot_prob,
-            blank_slot_prob,
+            score_C,
+            score_B,
+            score_A,
+            score_padding,
         ]
     )
-    batch_all_aa_scores = torch.stack([pep_1_aa, pep_2_aa, pep_3_aa, pep_4_aa])
-    truth_aa_indices = torch.tensor(
-        [[1, 2, 3, 28], [3, 2, 28, 0], [4, 5, 1, 28], [2, 2, 3, 28]]
+
+    pep5 = torch.tensor(
+        [
+            score_A,
+            score_none,
+            score_none,
+            score_padding,
+        ]
     )
 
-    all_scores, masked_per_aa_scores = _calc_match_score(
-        batch_all_aa_scores, truth_aa_indices, True
+    true_aas = torch.tensor(
+        [
+            [1, 2, 3],
+            [2, 1, 3],
+            [3, 1, 2],
+            [3, 2, 1],
+            [1, 0, 0],
+        ],
+        dtype=int,
     )
 
-    assert all_scores[0] == np.exp(0)
-    assert all_scores[1] == np.exp(0)
-    assert all_scores[2] == pytest.approx(0.25)
-    assert all_scores[3] == pytest.approx(1e-10)
+    batch_all_aa_scores = torch.stack([pep1, pep2, pep3, pep4, pep5])
+    pep_scores, aa_scores = _calc_match_score(batch_all_aa_scores, true_aas)
 
-    aa_scores = np.array([1, 1, 1, 1])
-    assert np.allclose(masked_per_aa_scores[0], aa_scores)
-    aa_scores = np.array([1, 1, 1])
-    assert np.allclose(masked_per_aa_scores[1], aa_scores)
-    aa_scores = np.array([0.5, 0.5, 1, 1])
-    assert np.allclose(masked_per_aa_scores[2], aa_scores)
-    aa_scores = np.array([1e-10, 1, 1, 1])
-    assert np.allclose(masked_per_aa_scores[3], aa_scores)
+    assert all([pytest.approx(1.0) == x for x in pep_scores])
+    assert all(
+        [np.allclose(np.array([1.0, 1.0, 1.0]), x) for x in aa_scores[:4]]
+    )
+    assert np.allclose(np.array([1.0]), aa_scores[4])
 
 
 def test_digest_fasta_cleave(tiny_fasta_file):
