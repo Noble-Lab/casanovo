@@ -153,7 +153,10 @@ class ProteinDatabase:
         )
         # Calculate the mass of each peptide.
         peptides["calc_mass"] = (
-            peptides["peptide"].apply(self._calc_pep_mass).round(5)
+            peptides["peptide"]
+            .apply(self._calc_pep_mass)
+            .astype(float)
+            .round(5)
         )
         # Sort by peptide mass and index by peptide sequence.
         peptides.sort_values(
