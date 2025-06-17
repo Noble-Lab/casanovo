@@ -59,9 +59,9 @@ class Spec2Pep(pl.LightningModule):
         collection of amino acids and masses.
     max_charge : int
         The maximum precursor charge to consider.
-    precursor_mass_tol : float
+    precursor_mass_tol : Optional[float]
         The maximum allowable precursor mass tolerance (in ppm) for
-        correct predictions.
+        correct predictions. Set to `None` for no (infinite) tolerance.
     isotope_error_range : Tuple[int, int]
         Take into account the error introduced by choosing a
         non-monoisotopic peak for fragmentation by not penalizing
@@ -105,7 +105,7 @@ class Spec2Pep(pl.LightningModule):
         max_peptide_len: int = 100,
         residues: str | Dict[str, float] = "canonical",
         max_charge: int = 5,
-        precursor_mass_tol: float = 50,
+        precursor_mass_tol: Optional[float] = 50,
         isotope_error_range: Tuple[int, int] = (0, 1),
         min_peptide_len: int = 6,
         n_beams: int = 1,
@@ -170,6 +170,9 @@ class Spec2Pep(pl.LightningModule):
         self.n_beams = n_beams
         self.top_match = top_match
         self.stop_token = self.tokenizer.stop_int
+
+        if self.precursor_mass_tol is None:
+            self.precursor_mass_tol = float("inf")
 
         # Logging.
         self.calculate_precision = calculate_precision

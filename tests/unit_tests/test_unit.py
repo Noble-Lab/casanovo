@@ -1552,6 +1552,67 @@ def test_beam_search_decode(tiny_config):
     assert positive_score == 2
     assert negative_score == 2
 
+    # Test no (infinite) precursor tolerance
+    model = Spec2Pep(
+        n_beams=4,
+        residues="massivekb",
+        min_peptide_len=4,
+        tokenizer=depthcharge.tokenizers.peptides.PeptideTokenizer(
+            residues=config.residues
+        ),
+        precursor_mass_tol=None,
+    )
+    model.decoder.reverse = False  # For simplicity.
+
+    # Sizes.
+    batch = 1  # B
+    length = model.max_peptide_len + 1  # L
+    vocab = len(model.tokenizer) + 1  # V
+    beam = model.n_beams  # S
+    step = 3
+
+    # Initialize scores and tokens.
+    scores = torch.full(
+        size=(batch, length, vocab, beam), fill_value=torch.nan
+    )
+    scores = einops.rearrange(scores, "B L V S -> (B S) L V")
+    tokens = torch.zeros(batch * beam, length, dtype=torch.int64)
+    # Create cache for decoded beams.
+    pred_cache = collections.OrderedDict((i, []) for i in range(batch))
+
+    # Ground truth peptide is "PEPK".
+    true_peptide = "PEPK"
+    precursors = torch.tensor([469.25364, 2.0, 235.63410]).repeat(
+        beam * batch, 1
+    )
+    # Fill scores and tokens with relevant predictions.
+    scores[:, : step + 1, :] = 0
+    for i, (peptide, add_stop) in enumerate(
+        [("PEPK", False), ("PEPR", False), ("PEPG", False), ("PEP", True)]
+    ):
+        tokens[i, : step + 1] = model.tokenizer.tokenize(
+            peptide, add_stop=add_stop
+        )[0]
+        for j in range(step + 1):
+            scores[i, j, tokens[1, j]] = 1
+
+    # Test _finish_beams().
+    finished_beams, beam_fits_precursor, discarded_beams = model._finish_beams(
+        tokens, precursors, step
+    )
+    # Second beam finished due to the precursor m/z filter, final beam
+    # finished due to predicted stop token, first and third beam
+    # unfinished. Final beam discarded due to length.
+    assert torch.equal(
+        finished_beams, torch.tensor([False, False, False, True])
+    )
+    assert torch.equal(
+        beam_fits_precursor, torch.tensor([False, False, False, False])
+    )
+    assert torch.equal(
+        discarded_beams, torch.tensor([False, False, False, True])
+    )
+
     # Test using a single beam only.
     model = Spec2Pep(
         n_beams=1,

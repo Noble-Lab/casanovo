@@ -10,6 +10,7 @@
 ###
 
 # Max absolute difference allowed with respect to observed precursor m/z.
+# Leave empty for no (infinite) precursor tolerance.
 # de novo: Predictions outside the tolerance range are assigned a negative
 # peptide score.
 # database search: Select candidate peptides within the specified precursor m/z
