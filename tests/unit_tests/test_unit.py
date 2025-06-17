@@ -1077,7 +1077,7 @@ def test_psm_batches(tiny_config):
     expected_batch_all = {
         "precursor_mz": torch.Tensor([42.0] * 12 + [84.0] * 12),
         "precursor_charge": torch.Tensor([1] * 12 + [2] * 12),
-        "seq": tokenizer.tokenize(peptides_one + peptides_two),
+        "seq": tokenizer.tokenize(peptides_one + peptides_two, add_stop=True),
         "peak_file": ["one.mgf"] * 12 + ["two.mgf"] * 12,
         "scan_id": [1] * 12 + [2] * 12,
     }
