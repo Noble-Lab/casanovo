@@ -1453,7 +1453,8 @@ def _peptide_score(aa_scores: np.ndarray, fits_precursor_mz: bool) -> float:
     peptide_score : float
         The peptide score.
     """
-    aa_scores += 10**-13
+    r_tol = 10**-13
+    aa_scores[aa_scores < r_tol] = r_tol
     peptide_score = np.exp(np.sum(np.log(aa_scores)))
     if not fits_precursor_mz:
         peptide_score -= 1
