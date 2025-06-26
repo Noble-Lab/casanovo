@@ -1077,7 +1077,7 @@ def test_psm_batches(tiny_config):
     expected_batch_all = {
         "precursor_mz": torch.Tensor([42.0] * 12 + [84.0] * 12),
         "precursor_charge": torch.Tensor([1] * 12 + [2] * 12),
-        "seq": tokenizer.tokenize(peptides_one + peptides_two),
+        "seq": tokenizer.tokenize(peptides_one + peptides_two, add_stop=True),
         "peak_file": ["one.mgf"] * 12 + ["two.mgf"] * 12,
         "scan_id": [1] * 12 + [2] * 12,
     }
@@ -1109,6 +1109,71 @@ def test_psm_batches(tiny_config):
         )
         num_spectra += batch_size
     assert num_spectra == 24
+
+
+def test_db_stop_token(tiny_config):
+    peptides_one = [
+        "SGSGSG",
+        "GSGSGT",
+        "SGSGTD",
+        "FSGSGS",
+        "ATSIPA",
+        "GASTRA",
+        "LSLSPG",
+        "ASQSVS",
+        "GSGTDF",
+        "SLSPGE",
+        "AQLLFL",
+        "QPEDFA",
+    ]
+
+    peptides_two = [
+        "SQSVSS",
+        "KPGQAP",
+        "SPPTLS",
+        "ASTRAT",
+        "RFSGSG",
+        "IYGAST",
+        "APAQLL",
+        "PTLSLS",
+        "TLSLSP",
+        "TLTISS",
+        "WYQQKP",
+        "TWYQQK",
+    ]
+
+    def mock_get_candidates(precursor_mz, precorsor_charge):
+        if precorsor_charge == 1:
+            return pd.Series(peptides_one)
+        else:
+            return pd.Series(peptides_two)
+
+    tokenizer = depthcharge.tokenizers.peptides.PeptideTokenizer(
+        residues=Config(tiny_config).residues
+    )
+    db_model = DbSpec2Pep(tokenizer=tokenizer)
+    db_model.protein_database = unittest.mock.MagicMock()
+    db_model.protein_database.get_candidates = mock_get_candidates
+
+    mock_batch = {
+        "precursor_mz": torch.Tensor([42.0, 84.0]),
+        "precursor_charge": torch.Tensor([1, 2]),
+        "peak_file": ["one.mgf", "two.mgf"],
+        "scan_id": [1, 2],
+        "mz_array": torch.zeros((2, 10)),
+        "intensity_array": torch.zeros((2, 10)),
+    }
+
+    for predction in db_model.predict_step(mock_batch):
+        # make sure stop token is included in aa scores, and is factored in
+        # to the peptide score
+        assert (
+            len(tokenizer.tokenize(predction.sequence)[0])
+            == len(predction.aa_scores) - 1
+        )
+        assert pytest.approx(predction.peptide_score) == _peptide_score(
+            predction.aa_scores, True
+        )
 
 
 def test_isoleucine_match(tiny_config):
