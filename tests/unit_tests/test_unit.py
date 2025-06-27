@@ -2155,3 +2155,103 @@ def test_beam_search_decode(tiny_config):
         for attr in ["_cumulative_masses", "_batch_size", "_beam_size"]:
             if hasattr(model, attr):
                 delattr(model, attr)
+
+
+class MiniTok:
+    residues = {"P": 97.05276, "NLoss1": -10.0, "NLoss2": -30.0}
+    index = {"<pad>": 0, "<stop>": 1, "P": 2, "NLoss1": 3, "NLoss2": 4}
+    padding_int, stop_int, start_int = 0, 1, -1
+
+    def __init__(self):
+        # Mass lookup table
+        self.masses = torch.zeros(len(self.index))
+        for k, m in self.residues.items():
+            self.masses[self.index[k]] = m
+
+        self.stop_token = self.index["<stop>"]
+        self.reverse = False
+        self.n_term = []
+
+    def __len__(self):
+        return len(self.index)
+
+    def tokenize(self, seq, add_stop: bool = False):
+        toks = [self.index[a] for a in seq]
+        if add_stop:
+            toks.append(self.stop_int)
+        return torch.tensor([toks])
+
+    def calculate_precursor_ions(self, toks, charges):
+        mass = self.masses[toks].sum(1) + 18.01056
+        return mass / charges + 1.007276
+
+
+def _build_model(tok, cls=Spec2Pep, ppm_tol=20):
+    model = cls(
+        tokenizer=tok,
+        precursor_mass_tol=ppm_tol,
+        isotope_error_range=(0, 0),
+        n_beams=1,
+        min_peptide_len=1,
+    )
+    model.register_buffer(
+        "neg_mass_idx",
+        torch.tensor(
+            [tok.index["NLoss1"], tok.index["NLoss2"]], dtype=torch.int
+        ),
+    )
+    model.register_buffer("token_masses", tok.masses.double())
+    model.register_buffer("nterm_idx", torch.tensor([], dtype=torch.int))
+    model._cumulative_masses = torch.tensor(
+        [tok.residues["P"]], dtype=torch.float64
+    )
+    return model
+
+
+def test_precursor_rescue():
+    """
+    Verifies that the current Spec2Pep keeps a rescuable beam alive,
+    while the legacy-style logic still terminates it.
+    """
+    tok = MiniTok()
+    charge = 2
+    target_mass = tok.residues["P"] + tok.residues["NLoss2"] + 18.01056
+    precursor_mz = target_mass / charge + 1.007276
+    # Sequence “P” + padding
+    TOKENS = torch.tensor([[tok.index["P"], 0, 0]])
+    PRECURSOR = torch.tensor(
+        [[target_mass, charge, precursor_mz]], dtype=torch.float64
+    )
+    STEP = 0
+
+    # New model should stay alive
+    new_model = _build_model(tok)
+    finished, _, _ = new_model._finish_beams(TOKENS, PRECURSOR, STEP)
+    assert (
+        not finished.item()
+    ), "New logic failed and beam terminated unexpectedly!"
+
+    # Old-logic sentinel should kill
+    class PrematureSpec2Pep(Spec2Pep):
+        """
+        Mimic the legacy behaviour, abort immediately if ppm > tol,
+        without trying negative-mass residues.
+        """
+
+        def _finish_beams(self, tokens, precursors, step):
+            theo = self.tokenizer.calculate_precursor_ions(
+                tokens[:, : step + 1], precursors[:, 1]
+            )
+            delta = (theo - precursors[:, 2]) / precursors[:, 2] * 1e6
+            over = delta.abs() > self.precursor_mass_tol
+            # Terminate all over-tol beams
+            finished = over.clone()
+            beam_fits = ~over
+            discarded = torch.zeros_like(over)
+            return finished, beam_fits, discarded
+
+    old_like = _build_model(tok, PrematureSpec2Pep)
+    finished_old, _, _ = old_like._finish_beams(TOKENS, PRECURSOR, STEP)
+    assert (
+        finished_old.item()
+    ), "Old logic was expected to terminate the beam but did not"

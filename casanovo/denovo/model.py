@@ -419,10 +419,10 @@ class Spec2Pep(pl.LightningModule):
         return list(self._get_top_peptide(pred_cache))
 
     def _finish_beams(
-            self,
-            tokens: torch.Tensor,
-            precursors: torch.Tensor,
-            step: int,
+        self,
+        tokens: torch.Tensor,
+        precursors: torch.Tensor,
+        step: int,
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """
         Track all beams that have been finished.
@@ -563,8 +563,8 @@ class Spec2Pep(pl.LightningModule):
 
                     # Convert to neutral mass.
                     recalc_neutral_masses = (
-                                                    recalc_mzs - 1.007276
-                                            ) * charges_to_check.double()
+                        recalc_mzs - 1.007276
+                    ) * charges_to_check.double()
 
                     # Update cumulative mass with the high-precision value.
                     self._cumulative_masses[idx] = recalc_neutral_masses.to(
@@ -595,24 +595,24 @@ class Spec2Pep(pl.LightningModule):
 
             # Calculate the m/z correction for each isotope based on charge.
             isotope_corr = (
-                    isotope_range.unsqueeze(0)
-                    * 1.00335
-                    / charges_to_check.double().unsqueeze(1)
+                isotope_range.unsqueeze(0)
+                * 1.00335
+                / charges_to_check.double().unsqueeze(1)
             )
 
             # Calculate the PPM difference between the current m/z and the observed m/z for all isotope corrections.
             delta_ppms = (
-                    (
-                            current_mzs.unsqueeze(1)
-                            - (precursor_mzs_obs.unsqueeze(1) - isotope_corr)
-                    )
-                    / precursor_mzs_obs.unsqueeze(1)
-                    * 1e6
+                (
+                    current_mzs.unsqueeze(1)
+                    - (precursor_mzs_obs.unsqueeze(1) - isotope_corr)
+                )
+                / precursor_mzs_obs.unsqueeze(1)
+                * 1e6
             )
 
             # For each beam, check if any isotope correction brings the PPM error within tolerance.
             matches_any = (
-                    torch.abs(delta_ppms) < self.precursor_mass_tol
+                torch.abs(delta_ppms) < self.precursor_mass_tol
             ).any(dim=1)
 
             # Store which beams match the precursor tolerance
@@ -639,24 +639,24 @@ class Spec2Pep(pl.LightningModule):
                     1
                 ) + neg_masses.double().unsqueeze(0)
                 potential_mzs = (
-                        potential_masses.unsqueeze(2)
-                        / exceeding_charges.unsqueeze(1).unsqueeze(2)
-                        + 1.007276
+                    potential_masses.unsqueeze(2)
+                    / exceeding_charges.unsqueeze(1).unsqueeze(2)
+                    + 1.007276
                 )
 
                 isotope_corr_expanded = (
-                        isotope_range.unsqueeze(0).unsqueeze(0)
-                        * 1.00335
-                        / exceeding_charges.unsqueeze(1).unsqueeze(2)
+                    isotope_range.unsqueeze(0).unsqueeze(0)
+                    * 1.00335
+                    / exceeding_charges.unsqueeze(1).unsqueeze(2)
                 )
                 observed_mzs_expanded = (
-                        exceeding_precursor_mzs.unsqueeze(1).unsqueeze(2)
-                        - isotope_corr_expanded
+                    exceeding_precursor_mzs.unsqueeze(1).unsqueeze(2)
+                    - isotope_corr_expanded
                 )
                 delta_ppms_neg = (
-                        (potential_mzs - observed_mzs_expanded)
-                        / exceeding_precursor_mzs.unsqueeze(1).unsqueeze(2)
-                        * 1e6
+                    (potential_mzs - observed_mzs_expanded)
+                    / exceeding_precursor_mzs.unsqueeze(1).unsqueeze(2)
+                    * 1e6
                 )
 
                 any_neg_aa_works = torch.any(
@@ -1384,7 +1384,7 @@ class DbSpec2Pep(Spec2Pep):
         predictions = collections.defaultdict(list)
         for psm_batch in self._psm_batches(batch):
             pred, truth = self.forward(psm_batch)
-            peptide_scores, aa_scores = _calc_match_score(pred, truth)
+            peptide_scores, aa_scores_all = _calc_match_score(pred, truth)
 
             for (
                 filename,
@@ -1393,7 +1393,7 @@ class DbSpec2Pep(Spec2Pep):
                 precursor_mz,
                 peptide,
                 peptide_score,
-                aa_scores,
+                curr_aa_scores,
             ) in zip(
                 psm_batch["peak_file"],
                 psm_batch["scan_id"],
@@ -1401,9 +1401,11 @@ class DbSpec2Pep(Spec2Pep):
                 psm_batch["precursor_mz"],
                 psm_batch["original_seq_str"],
                 peptide_scores,
-                aa_scores,
+                aa_scores_all,
             ):
                 spectrum_id = (filename, scan)
+                if self.tokenizer.reverse:
+                    curr_aa_scores = curr_aa_scores[::-1]
                 predictions[spectrum_id].append(
                     psm.PepSpecMatch(
                         sequence=peptide,
@@ -1412,7 +1414,7 @@ class DbSpec2Pep(Spec2Pep):
                         charge=int(precursor_charge),
                         calc_mz=np.nan,
                         exp_mz=precursor_mz.item(),
-                        aa_scores=aa_scores,
+                        aa_scores=curr_aa_scores,
                     )
                 )
 
@@ -1512,7 +1514,9 @@ class DbSpec2Pep(Spec2Pep):
                 # We need to keep the original sequence for the database
                 # lookup in case of there is an isoleucine -> leucine swap
                 psm_batch["original_seq_str"] = psm_batch["seq"]
-                psm_batch["seq"] = self.tokenizer.tokenize(psm_batch["seq"])
+                psm_batch["seq"] = self.tokenizer.tokenize(
+                    psm_batch["seq"], add_stop=True
+                )
                 psm_batch["seq"] = psm_batch["seq"].to(self.decoder.device)
 
                 # Yield the PSM batch for processing.
@@ -1525,7 +1529,6 @@ class DbSpec2Pep(Spec2Pep):
 def _calc_match_score(
     batch_all_aa_scores: torch.Tensor,
     truth_aa_indices: torch.Tensor,
-    decoder_reverse: bool = False,
 ) -> Tuple[List[float], List[np.ndarray]]:
     """
     Calculate the score between the input spectra and associated
@@ -1544,8 +1547,6 @@ def _calc_match_score(
     truth_aa_indices : torch.Tensor
         Indices of the score for each actual amino acid in the peptide
         (for an entire batch).
-    decoder_reverse : bool
-        Whether the decoder is reversed.
 
     Returns
     -------
@@ -1554,23 +1555,16 @@ def _calc_match_score(
     aa_scores : List[np.ndarray]
         The amino acid scores for each PSM in the batch.
     """
-    # Remove trailing tokens from predictions based on decoder reversal.
-    if not decoder_reverse:
-        batch_all_aa_scores = batch_all_aa_scores[:, 1:]
-    else:
-        batch_all_aa_scores = batch_all_aa_scores[:, :-1]
+    # Remove trailing token
+    batch_all_aa_scores = batch_all_aa_scores[:, :-1]
 
-    # Vectorized scoring using efficient indexing.
-    rows = (
-        torch.arange(batch_all_aa_scores.shape[0])
-        .unsqueeze(-1)
-        .expand(-1, batch_all_aa_scores.shape[1])
-    )
-    cols = torch.arange(0, batch_all_aa_scores.shape[1]).expand_as(rows)
+    # Get aa scores corresponding with true aas
+    per_aa_scores = torch.gather(
+        batch_all_aa_scores, 2, truth_aa_indices.unsqueeze(-1)
+    ).squeeze(-1)
 
-    per_aa_scores = batch_all_aa_scores[rows, cols, truth_aa_indices]
+    # Calculate peptide scores and aa scores
     per_aa_scores = per_aa_scores.cpu().detach().numpy()
-    per_aa_scores[per_aa_scores == 0] += 1e-10
     score_mask = (truth_aa_indices != 0).cpu().detach().numpy()
     peptide_scores, aa_scores = [], []
     for psm_score, psm_mask in zip(per_aa_scores, score_mask):
@@ -1668,7 +1662,8 @@ def _peptide_score(aa_scores: np.ndarray, fits_precursor_mz: bool) -> float:
     peptide_score : float
         The peptide score.
     """
-    peptide_score = np.prod(aa_scores)
+    aa_scores = np.clip(aa_scores, np.finfo(np.float64).eps, 1)
+    peptide_score = np.exp(np.sum(np.log(aa_scores)))
     if not fits_precursor_mz:
         peptide_score -= 1
     return peptide_score
