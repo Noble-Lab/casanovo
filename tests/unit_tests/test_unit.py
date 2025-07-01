@@ -1165,13 +1165,12 @@ def test_db_stop_token(tiny_config):
     }
 
     for predction in db_model.predict_step(mock_batch):
-        # make sure stop token is included in aa scores, and is factored in
-        # to the peptide score
-        assert (
-            len(tokenizer.tokenize(predction.sequence)[0])
-            == len(predction.aa_scores) - 1
+        # make sure the stop token score is not inlcuded in reported AA scores
+        # but is included in match score calculation
+        assert len(tokenizer.tokenize(predction.sequence)[0]) == len(
+            predction.aa_scores
         )
-        assert pytest.approx(predction.peptide_score) == _peptide_score(
+        assert pytest.approx(predction.peptide_score) != _peptide_score(
             predction.aa_scores, True
         )
 

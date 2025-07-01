@@ -1403,6 +1403,9 @@ class DbSpec2Pep(Spec2Pep):
                 peptide_scores,
                 aa_scores_all,
             ):
+                # Omit stop token from reported AA scores
+                curr_aa_scores = curr_aa_scores[:-1]
+
                 spectrum_id = (filename, scan)
                 if self.tokenizer.reverse:
                     curr_aa_scores = curr_aa_scores[::-1]
