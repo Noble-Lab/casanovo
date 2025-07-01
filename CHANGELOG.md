@@ -29,6 +29,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Amino acid scores are directly reported, rather than averaged with the peptide score.
 - The amino acid-level score of stand-alone N-terminal modifications is combined with that of the leading N-terminal residue.
 - Renamed the `n_peaks` configuration option of the maximum number of peaks to retain in a spectrum to `max_peaks`.
+- Beam search decoding has been optimized for computational efficiency, achieving increased prediction speed.
 
 ### Fixed
 
