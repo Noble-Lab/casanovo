@@ -1483,11 +1483,11 @@ def test_n_term_scores_db(tiny_config, monkeypatch):
             ]
 
         mnk.setattr(denovo.model, "_calc_match_score", _mock_calc_match_score)
-        predictions = model.predict_step(None)
+        model.on_predict_batch_end(model.predict_step(None))
 
-    assert len(predictions) == 2
-    assert np.allclose(predictions[0].aa_scores, np.array([0.4]))
-    assert np.allclose(predictions[1].aa_scores, np.array([0.5, 0.8]))
+    assert len(out_writer.psms) == 2
+    assert np.allclose(out_writer.psms[0].aa_scores, np.array([0.4]))
+    assert np.allclose(out_writer.psms[1].aa_scores, np.array([0.5, 0.8]))
 
 
 def test_eval_metrics():

@@ -1410,13 +1410,6 @@ class DbSpec2Pep(Spec2Pep):
                 if self.tokenizer.reverse:
                     curr_aa_scores = curr_aa_scores[::-1]
 
-                # Merge n-terminal mod score with leading AA if applicable
-                if len(curr_aa_scores) >= 2 and any(
-                    peptide.startswith(mod) for mod in self.n_term
-                ):
-                    curr_aa_scores[1] *= curr_aa_scores[0]
-                    curr_aa_scores = curr_aa_scores[1:]
-
                 predictions[spectrum_id].append(
                     psm.PepSpecMatch(
                         sequence=peptide,
