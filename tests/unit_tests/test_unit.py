@@ -26,7 +26,7 @@ import pytest
 import requests
 import torch
 
-from casanovo import casanovo, utils
+from casanovo import casanovo, utils, denovo
 from casanovo.config import Config
 from casanovo.data import db_utils, ms_io, psm
 from casanovo.denovo.dataloaders import DeNovoDataModule
@@ -1443,6 +1443,53 @@ def test_n_term_scores(tiny_config):
     assert np.allclose(out_writer.psms[1].aa_scores, np.array([0.5, 0.8]))
 
 
+def test_n_term_scores_db(tiny_config, monkeypatch):
+    out_writer = unittest.mock.MagicMock()
+    out_writer.psms = list()
+    model = DbSpec2Pep(
+        out_writer=out_writer,
+        tokenizer=depthcharge.tokenizers.peptides.PeptideTokenizer(
+            residues=Config(tiny_config).residues
+        ),
+    )
+
+    mock_psm_batchs = unittest.mock.MagicMock()
+    mock_psm_batchs.return_value = [
+        {
+            "peak_file": ["one.mgf", "two.mgf"],
+            "scan_id": [1, 2],
+            "precursor_charge": ["+1", "+1"],
+            "precursor_mz": torch.tensor([42.0, 42.0]),
+            "original_seq_str": ["[Acetyl]-P", "PP"],
+        }
+    ]
+
+    mock_forward = unittest.mock.MagicMock()
+    mock_forward.return_value = (None, None)
+
+    mock_protein_database = unittest.mock.MagicMock()
+    mock_protein_database.get_associated_protein.return_value = "UPI_FOOBAR"
+
+    model._psm_batches = mock_psm_batchs
+    model.forward = mock_forward
+    model.protein_database = mock_protein_database
+
+    with monkeypatch.context() as mnk:
+
+        def _mock_calc_match_score(pred, truth):
+            return np.array([0.4, 0.4]), [
+                np.array([0.5, 0.8, 0.0]),
+                np.array([0.5, 0.8, 0.0]),
+            ]
+
+        mnk.setattr(denovo.model, "_calc_match_score", _mock_calc_match_score)
+        model.on_predict_batch_end(model.predict_step(None))
+
+    assert len(out_writer.psms) == 2
+    assert np.allclose(out_writer.psms[0].aa_scores, np.array([0.4]))
+    assert np.allclose(out_writer.psms[1].aa_scores, np.array([0.5, 0.8]))
+
+
 def test_eval_metrics():
     """
     Test peptide and amino acid-level evaluation metrics.
@@ -1774,9 +1821,11 @@ def test_beam_search_decode(tiny_config):
 
     try:
         # Test _finish_beams()
-        finished_beams, beam_fits_precursor, discarded_beams = (
-            model._finish_beams(tokens, precursors, step)
-        )
+        (
+            finished_beams,
+            beam_fits_precursor,
+            discarded_beams,
+        ) = model._finish_beams(tokens, precursors, step)
 
         # Second beam finished due to the precursor m/z filter, final beam
         # finished due to predicted stop token, first and third beam
@@ -1937,9 +1986,11 @@ def test_beam_search_decode(tiny_config):
             model._cumulative_masses[i] = mass
 
         # Test _finish_beams
-        finished_beams, beam_fits_precursor, discarded_beams = (
-            model._finish_beams(tokens, precursors, step)
-        )
+        (
+            finished_beams,
+            beam_fits_precursor,
+            discarded_beams,
+        ) = model._finish_beams(tokens, precursors, step)
         assert torch.equal(
             finished_beams, torch.tensor([False, True], device=device)
         )
@@ -1997,9 +2048,11 @@ def test_beam_search_decode(tiny_config):
             model._cumulative_masses[i] = mass
 
         # Test _finish_beams - all should be discarded
-        finished_beams, beam_fits_precursor, discarded_beams = (
-            model._finish_beams(tokens, precursors, step)
-        )
+        (
+            finished_beams,
+            beam_fits_precursor,
+            discarded_beams,
+        ) = model._finish_beams(tokens, precursors, step)
         assert torch.equal(
             finished_beams, torch.tensor([False, False, False], device=device)
         )

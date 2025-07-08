@@ -1409,6 +1409,7 @@ class DbSpec2Pep(Spec2Pep):
                 spectrum_id = (filename, scan)
                 if self.tokenizer.reverse:
                     curr_aa_scores = curr_aa_scores[::-1]
+
                 predictions[spectrum_id].append(
                     psm.PepSpecMatch(
                         sequence=peptide,
