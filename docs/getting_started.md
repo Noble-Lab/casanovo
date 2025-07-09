@@ -2,7 +2,7 @@
 
 ## Installation
 
-We recommend to run Casanovo in a dedicated [conda environment](https://docs.conda.io/en/latest/).
+We recommend to run Casanovo in a dedicated [Conda environment](https://docs.conda.io/en/latest/).
 This helps keep your environment for Casanovo and its dependencies separate from your other Python environments.
 
 ```{Note}
@@ -12,19 +12,19 @@ We recommend installing the Anaconda Python distribution which includes conda.
 Check out the [Windows](https://docs.anaconda.com/anaconda/install/windows/#), [MacOS](https://docs.anaconda.com/anaconda/install/mac-os/), and [Linux](https://docs.anaconda.com/anaconda/install/linux/) installation instructions.
 ```
 
-Once you have conda installed, you can use this helpful [cheat sheet](https://docs.conda.io/projects/conda/en/4.6.0/_downloads/52a95608c49671267e40c689e0bc00ca/conda-cheatsheet.pdf) to see common commands and what they do.
+Once you have Conda installed, you can use this helpful [cheat sheet](https://docs.conda.io/projects/conda/en/4.6.0/_downloads/52a95608c49671267e40c689e0bc00ca/conda-cheatsheet.pdf) to see common commands and what they do.
 
-### Create a Conda Cnvironment
+### Create a Conda environment
 
 First, open the terminal (MacOS and Linux) or the Anaconda Prompt (Windows).
 All of the commands that follow should be entered into this terminal or Anaconda Prompt window---that is, your *shell*.
-To create a new conda environment for Casanovo, run the following:
+To create a new Conda environment for Casanovo, run the following:
 
 ```sh
-conda create --name casanovo_env python=3.10
+conda create --name casanovo_env python=3.13
 ```
 
-This will create an anaconda environment called `casanovo_env` that has Python 3.10 installed.
+This will create an Anaconda environment called `casanovo_env` that has Python 3.13 installed.
 
 Activate this environment by running:
 
@@ -33,10 +33,10 @@ conda activate casanovo_env
 ```
 
 Your shell should now say **(casanovo_env)** instead of **(base)**.
-If this is the case, then you have set up conda and the environment correctly.
+If this is the case, then you have set up Conda and the environment correctly.
 
 ```{note}
-Be sure to retype in the activation command into your terminal when you reopen anaconda and want to use Casanovo.
+Be sure to retype in the activation command into your terminal when you reopen Anaconda and want to use Casanovo.
 ```
 
 ### *Optional:* Install PyTorch Manually
@@ -94,12 +94,12 @@ Alternatively, model weigths for Casanovo version 4.x as described in [Yilmaz et
 We recommend a Linux system with a dedicated GPU to achieve optimal runtime performance.
 ```
 
-### Sequence New Mass Spectra
+### _De novo_ peptide sequencing
 
-To sequence your own mass spectra with Casanovo, use the `casanovo sequence` command:
+To *de novo* sequence your own mass spectra with Casanovo, use the `casanovo sequence` command:
 
 ```sh
-casanovo sequence -o results.mztab spectra.mgf
+casanovo sequence spectra.mgf
 ```
 ![`casanovo sequence --help`](images/sequence-help.svg)
 
@@ -108,18 +108,34 @@ This will write peptide predictions for the given MS/MS spectra to the specified
 
 ### Evaluate *De Novo* Sequencing Performance
 
-To evaluate _de novo_ sequencing performance based on known mass spectrum annotations, use the `casanovo evaluate` command:
+To evaluate _de novo_ sequencing performance based on known mass spectrum annotations, use the `casanovo sequence` command with the `--evaluate` option:
 
 ```sh
-casanovo evaluate annotated_spectra.mgf
+casanovo sequence annotated_spectra.mgf --evaluate
 ```
 ![`casanovo evaluate --help`](images/evaluate-help.svg)
-
 
 To evaluate the peptide predictions, ground truth peptide labels must to be provided as an annotated MGF file where the peptide sequence is denoted in the `SEQ` field. 
 Compatible MGF files are available from [MassIVE-KB](https://massive.ucsd.edu/ProteoSAFe/static/massive-kb-libraries.jsp).
 
-### Train a New Model
+### Database searching
+
+To perform database search using Casanovo as a score function, use the `casanovo db-search` command:
+
+```sh
+casanovo db-search spectra.mgf proteome.fasta
+```
+![`casanovo db-search --help`](images/db-search-help.svg)
+
+In this case, besides MS/MS spectra in mzML, mzXML, or MGF file(s), Casanovo needs as minimal input the protein database in the FASTA format.
+Additional settings that determine how peptides are derived from the protein sequences can be specified in the YAML configuration file (default: tryptic digestion).
+This will write PSM scores for the given MS/MS spectra and FASTA file to the specified output file in mzTab format.
+
+```{note}
+Database searching is an *experimental feature* that may run very slowly for large protein databases.
+```
+
+### Train a new model
 
 To train a model from scratch, run:
 
@@ -140,16 +156,35 @@ The example MGF file is available at [`sample_data/sample_preprocessed_spectra.m
 To obtain *de novo* sequencing predictions for these spectra:
 1. Download the example MGF above.
 2. [Install Casanovo](#installation).
-3. Ensure your Casanovo conda environment is activated by typing `conda activate casanovo_env`. (If you named your environment differently, type in that name instead.)
+3. Ensure your Casanovo Conda environment is activated by typing `conda activate casanovo_env`. (If you named your environment differently, type in that name instead.)
 4. Sequence the mass spectra with Casanovo, replacing `[PATH_TO]` with the path to the example MGF file that you downloaded:
 ```sh
 casanovo sequence [PATH_TO]/sample_preprocessed_spectra.mgf
 ```
 
 ```{note}
-If you want to store the output mzTab file in a different location than the current working directory, specify an alternative output location using the `--output` parameter.
+If you want to store the output mzTab file in a different location than the current working directory, specify an alternative output location using the `--output_dir` parameter.
 ```
 
 This job should complete in < 1 minute.
 
-Congratulations! Casanovo is installed and running.
+Congratulations! Casanovo is installed and running in *de novo* mode.
+
+## Try database searching on a small example
+
+We can also use Casanovo to perform database searching with the same MGF from above and a FASTA file.
+The example MGF file is available at [`sample_data/sample_preprocessed_spectra.mgf`](https://github.com/Noble-Lab/casanovo/blob/main/sample_data/sample_preprocessed_spectra.mgf).
+The example FASTA file is available at [`sample_data/preprocessed_mouse.fasta`](https://github.com/Noble-Lab/casanovo/blob/main/sample_data/preprocessed_mouse.fasta).
+
+To run Casanovo in database searching mode:
+1. Download the example MGF and FASTA files above.
+2. [Install Casanovo](#installation).
+3. Ensure your Casanovo Conda environment is activated by typing `conda activate casanovo_env`. (If you named your environment differently, type in that name instead.)
+4. Perform database search with Casanovo-DB, replacing `[PATH_TO_MGF]` with the path to the example MGF file and replacing `[PATH_TO_FASTA]` with the path to the example FASTA file that you downloaded:
+```sh
+casanovo db-search [PATH_TO_MGF]/sample_preprocessed_spectra.mgf [PATH_TO_FASTA]/preprocessed_mouse.fasta
+```
+
+This job should complete in < 1 minute.
+
+Congratulations! Casanovo is installed and running in database searching mode.

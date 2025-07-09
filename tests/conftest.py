@@ -4,7 +4,7 @@ import numpy as np
 import psims
 import pytest
 import yaml
-from pyteomics.mass import calculate_mass
+from pyteomics.mass import calculate_mass, fast_mass, std_aa_mass
 
 
 @pytest.fixture
@@ -15,7 +15,47 @@ def mgf_small(tmp_path):
     return _create_mgf(peptides, mgf_file)
 
 
-def _create_mgf(peptides, mgf_file, random_state=42):
+@pytest.fixture
+def tiny_fasta_file(tmp_path):
+    fasta_file = tmp_path / "tiny_fasta.fasta"
+    with fasta_file.open("w+") as fasta_ref:
+        fasta_ref.write(
+            (
+                ">foo\nMEAPAQLLFLLLLWLPDTTREIVMTQSPPTLSLSPGERVTLSCRASQSVSSSYLTWYQ"
+                "QKPGQAPRLLIYGASTRATSIPARFSGSGSGTDFTLTISSLQPEDFAVYYCQQDYNLP"
+            )
+        )
+    return fasta_file
+
+
+@pytest.fixture
+def mgf_medium(tmp_path):
+    """An MGF file with 7 spectra and scan numbers, C+57.021 mass
+    modification considered."""
+    peptides = [
+        "ATSIPAR",
+        "VTLSCR",
+        "LLIYGASTR",
+        "EIVMTQSPPTLSLSPGER",
+        "MEAPAQLLFLLLLWLPDTTR",
+        "ASQSVSSSYLTWYQQKPGQAPR",
+        "FSGSGSGTDFTLTISSLQPEDFAVYYCQQDYNLP",
+    ]
+    mgf_file = tmp_path / "db_search.mgf"
+    return _create_mgf(peptides, mgf_file, mod_aa_mass={"C": 160.030649})
+
+
+@pytest.fixture
+def mgf_small_unannotated(tmp_path):
+    """An MGF file with 2 unannotated spectra."""
+    peptides = ["LESLIEK", "PEPTIDEK"]
+    mgf_file = tmp_path / "small_unannotated.mgf"
+    return _create_mgf(peptides, mgf_file, annotate=False)
+
+
+def _create_mgf(
+    peptides, mgf_file, random_state=42, mod_aa_mass=None, annotate=True
+):
     """
     Create a fake MGF file from one or more peptides.
 
@@ -27,20 +67,36 @@ def _create_mgf(peptides, mgf_file, random_state=42):
         The MGF file to create.
     random_state : int or numpy.random.Generator, optional
         The random seed. The charge states are chosen to be 2 or 3 randomly.
+    mod_aa_mass : dict, optional
+        A dictionary that specifies the modified masses of amino acids.
+        e.g. {"C": 160.030649} for carbamidomethylated C.
+    annotate: bool, optional
+        Whether to add peptide annotations to mgf file
 
     Returns
     -------
     mgf_file : Path
     """
     rng = np.random.default_rng(random_state)
-    entries = [_create_mgf_entry(p, rng.choice([2, 3])) for p in peptides]
+    entries = [
+        _create_mgf_entry(
+            p,
+            i,
+            rng.choice([2, 3]),
+            mod_aa_mass=mod_aa_mass,
+            annotate=annotate,
+        )
+        for i, p in enumerate(peptides)
+    ]
     with mgf_file.open("w+") as mgf_ref:
         mgf_ref.write("\n".join(entries))
 
     return mgf_file
 
 
-def _create_mgf_entry(peptide, charge=2):
+def _create_mgf_entry(
+    peptide, title, charge=2, mod_aa_mass=None, annotate=True
+):
     """
     Create a MassIVE-KB style MGF entry for a single PSM.
 
@@ -50,24 +106,37 @@ def _create_mgf_entry(peptide, charge=2):
         A peptide sequence.
     charge : int, optional
         The peptide charge state.
+    mod_aa_mass : dict, optional
+        A dictionary that specifies the modified masses of amino acids.
+    annotate: bool, optional
+        Whether to add peptide annotation to entry
 
     Returns
     -------
     str
         The PSM entry in an MGF file format.
     """
-    precursor_mz = calculate_mass(peptide, charge=int(charge))
+    if mod_aa_mass is None:
+        precursor_mz = fast_mass(peptide, charge=int(charge))
+    else:
+        aa_mass = std_aa_mass.copy()
+        aa_mass.update(mod_aa_mass)
+        precursor_mz = fast_mass(peptide, charge=int(charge), aa_mass=aa_mass)
     mzs, intensities = _peptide_to_peaks(peptide, charge)
     frags = "\n".join([f"{m} {i}" for m, i in zip(mzs, intensities)])
 
     mgf = [
         "BEGIN IONS",
-        f"SEQ={peptide}",
+        f"TITLE={title}",
         f"PEPMASS={precursor_mz}",
         f"CHARGE={charge}+",
         f"{frags}",
         "END IONS",
     ]
+
+    if annotate:
+        mgf.insert(1, f"SEQ={peptide}")
+
     return "\n".join(mgf)
 
 
@@ -161,7 +230,13 @@ def _create_mzml(peptides, mzml_file, random_state=42):
         )
         with writer.run(id=1, instrument_configuration="ic"):
             with writer.spectrum_list(len(peptides)):
-                for scan_nr, peptide in zip([17, 111], peptides):
+                for scan_id, peptide in zip(
+                    [
+                        "scan=17",
+                        "merged=11 frame=12 scanStart=763 scanEnd=787",
+                    ],
+                    peptides,
+                ):
                     charge = rng.choice([2, 3])
 
                     precursor = writer.precursor_builder()
@@ -175,7 +250,7 @@ def _create_mzml(peptides, mzml_file, random_state=42):
                     writer.write_spectrum(
                         mzs,
                         intensities,
-                        id=f"scan={scan_nr}",
+                        id=scan_id,
                         centroided=True,
                         params=[{"ms level": 2}],
                         precursor_information=precursor,
@@ -184,46 +259,66 @@ def _create_mzml(peptides, mzml_file, random_state=42):
     return mzml_file
 
 
-@pytest.fixture
-def tiny_config(tmp_path):
-    """A config file for a tiny model."""
+def _get_config_file(file_path, file_name, additional_cfg=None):
+    """A standard config for a tiny model."""
     cfg = {
-        "n_head": 2,
-        "dim_feedforward": 10,
-        "n_layers": 1,
-        "train_label_smoothing": 0.01,
-        "warmup_iters": 1,
-        "cosine_schedule_period_iters": 1,
-        "max_epochs": 20,
-        "val_check_interval": 1,
-        "model_save_folder_path": str(tmp_path),
-        "accelerator": "cpu",
-        "precursor_mass_tol": 5,
+        "precursor_mass_tol": 50,
         "isotope_error_range": [0, 1],
         "min_peptide_len": 6,
+        "max_peptide_len": 100,
         "predict_batch_size": 1024,
-        "n_beams": 1,
         "top_match": 1,
+        "accelerator": "cpu",
         "devices": None,
+        "n_beams": 1,
+        "enzyme": "trypsin",
+        "digestion": "full",
+        "missed_cleavages": 0,
+        "max_mods": None,
+        "allowed_fixed_mods": "C:C[Carbamidomethyl]",
+        "allowed_var_mods": (
+            "M:M[Oxidation],N:N[Deamidated],Q:Q[Deamidated], nterm:[Acetyl]-,"
+            "nterm:[Carbamyl]-,nterm:[Ammonia-loss]-,"
+            "nterm:[+25.980265]-"
+        ),
         "random_seed": 454,
         "n_log": 1,
-        "tb_summarywriter": None,
-        "save_top_k": 5,
-        "n_peaks": 150,
+        "tb_summarywriter": False,
+        "log_metrics": False,
+        "log_every_n_steps": 50,
+        "lance_dir": None,
+        "val_check_interval": 1,
+        "min_peaks": 10,
+        "max_peaks": 150,
         "min_mz": 50.0,
         "max_mz": 2500.0,
         "min_intensity": 0.01,
         "remove_precursor_tol": 2.0,
-        "max_charge": 10,
+        "max_charge": 4,
         "dim_model": 512,
+        "n_head": 2,
+        "dim_feedforward": 10,
+        "n_layers": 1,
         "dropout": 0.0,
         "dim_intensity": None,
-        "max_length": 100,
+        "warmup_iters": 1,
+        "cosine_schedule_period_iters": 1,
         "learning_rate": 5e-4,
         "weight_decay": 1e-5,
+        "train_label_smoothing": 0.01,
         "train_batch_size": 32,
+        "max_epochs": 20,
+        "shuffle": False,
+        "shuffle_buffer_size": 64,
         "num_sanity_val_steps": 0,
         "calculate_precision": False,
+        "accumulate_grad_batches": 1,
+        "gradient_clip_val": None,
+        "gradient_clip_algorithm": None,
+        "precision": "32-true",
+        "replace_isoleucine_with_leucine": True,
+        "reverse_peptides": False,
+        "massivekb_tokenizer": True,
         "residues": {
             "G": 57.021464,
             "A": 71.037114,
@@ -231,7 +326,7 @@ def tiny_config(tmp_path):
             "P": 97.052764,
             "V": 99.068414,
             "T": 101.047670,
-            "C+57.021": 160.030649,
+            "C[Carbamidomethyl]": 160.030649,
             "L": 113.084064,
             "I": 113.084064,
             "N": 114.042927,
@@ -245,18 +340,42 @@ def tiny_config(tmp_path):
             "R": 156.101111,
             "Y": 163.063329,
             "W": 186.079313,
-            "M+15.995": 147.035400,
-            "N+0.984": 115.026943,
-            "Q+0.984": 129.042594,
-            "+42.011": 42.010565,
-            "+43.006": 43.005814,
-            "-17.027": -17.026549,
-            "+43.006-17.027": 25.980265,
+            # Amino acid modifications.
+            "M[Oxidation]": 147.035400,
+            "N[Deamidated]": 115.026943,
+            "Q[Deamidated]": 129.042594,
+            # N-terminal modifications.
+            "[Acetyl]-": 42.010565,
+            "[Carbamyl]-": 43.005814,
+            "[Ammonia-loss]-": -17.026549,
+            "[+25.980265]-": 25.980265,
         },
     }
 
-    cfg_file = tmp_path / "config.yml"
+    if additional_cfg is not None:
+        cfg.update(additional_cfg)
+
+    cfg_file = file_path / file_name
     with cfg_file.open("w+") as out_file:
         yaml.dump(cfg, out_file)
 
     return cfg_file
+
+
+@pytest.fixture
+def tiny_config(tmp_path):
+    """A config file for a tiny model."""
+    return _get_config_file(tmp_path, "config.yml")
+
+
+@pytest.fixture
+def tiny_config_db(tmp_path):
+    """A config file for a db search."""
+    return _get_config_file(
+        tmp_path,
+        "config_db.yml",
+        additional_cfg={
+            "precursor_mass_tol": 5,
+            "replace_isoleucine_with_leucine": False,
+        },
+    )

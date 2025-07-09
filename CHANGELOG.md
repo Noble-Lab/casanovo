@@ -6,6 +6,43 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+## [5.0.0] - 2025-07-09
+
+### Added
+
+- Casanovo-DB mode (`casanovo db_search`) to use Casanovo as a learned score function for sequence database searching (given a FASTA protein database).
+- During training, model checkpoints will be saved at the end of each training epoch in addition to the checkpoints saved at the end of every validation run.
+- Besides as a local file, model weights can be specified from a URL. Upon initial download, the weights file is cached for future re-use.
+- Training and optimizer metrics can be logged to a CSV file by setting the `log_metrics` config file option to true. The CSV file will be written to under a sub-directory of the output directory named `csv_logs`.
+- New configuration options for detailed control of the gradients during training (gradient accumulation, clipping).
+- New configuration option `min_peaks` to discard low-quality spectra with too few peaks.
+
+### Changed
+
+- Removed the `evaluate` sub-command, and all model evaluation functionality has been moved to the `sequence` command using the new `--evaluate` flag.
+- The `--output` option has been split into two options, `--output_dir` and `--output_root`.
+- The path suffix (extension) of `--output_root` will no longer be removed as it was with the old `--output` option.
+- The `--validation_peak_path` is now optional when training; if `--validation_peak_path` is not set then the `train_peak_path` will also be used for validation.
+- The `tb_summarywriter` config option is now a boolean config option, and if set to true the TensorBoard summary will be written to a sub-directory of the output directory named `tensorboard`.
+- Input peak files can now be specified as both individual file(s) and a directory.
+- Peptidoforms are specified using ProForma 2.0 notation by default.
+- DepthCharge is upgraded to the latest version 0.4.8.
+- The product of the raw amino acid scores is used as the peptide score, rather then the arithmetic mean.
+- Amino acid scores are directly reported, rather than averaged with the peptide score.
+- The amino acid-level score of stand-alone N-terminal modifications is combined with that of the leading N-terminal residue.
+- Renamed the `n_peaks` configuration option of the maximum number of peaks to retain in a spectrum to `max_peaks`.
+- Beam search decoding has been optimized for computational efficiency, achieving increased prediction speed.
+
+### Fixed
+
+- Precursor charges are exported as integers instead of floats in the mzTab output file, in compliance with the mzTab specification.
+- Fixed log entries written to the config file instead of the log file when running the `configure` command.
+
+### Removed
+
+- Removed the `save_top_k` option from the Casanovo config, the model with the lowest validation loss during training will now be saved to a fixed filename `<output_root>.best.ckpt`.
+- The `model_save_folder_path` config option has been removed; model checkpoints will now be saved to `--output_dir` during training.
+
 ## [4.3.0] - 2024-12-13
 
 ### Fixed
@@ -260,7 +297,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 - Initial Casanovo version.
 
-[Unreleased]: https://github.com/Noble-Lab/casanovo/compare/v4.3.0...HEAD
+[Unreleased]: https://github.com/Noble-Lab/casanovo/compare/v5.0.0...HEAD
+[5.0.0]: https://github.com/Noble-Lab/casanovo/compare/v4.3.0...v5.0.0
 [4.3.0]: https://github.com/Noble-Lab/casanovo/compare/v4.2.1...v4.3.0
 [4.2.1]: https://github.com/Noble-Lab/casanovo/compare/v4.2.0...v4.2.1
 [4.2.0]: https://github.com/Noble-Lab/casanovo/compare/v4.1.0...v4.2.0

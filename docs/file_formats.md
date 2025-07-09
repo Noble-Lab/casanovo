@@ -2,21 +2,51 @@
 
 ## Input File Formats For Casanovo
 
-When you're ready to use Casanovo for *de novo* peptide sequencing, you can input your MS/MS spectra in one of the following formats:
+### MS/MS spectra
+
+When you are ready to use Casanovo, you can input your MS/MS spectra in one of the following formats:
 
 - **[mzML](https://doi.org/10.1074/mcp.R110.000133)**: XML-based mass spectrometry community standard file format developed by the Proteomics Standards Initiative (PSI).
 - **[mzXML](https://doi.org/10.1038/nbt1031)**: XML-based predecessor of mzML. Although supported by Casanovo, mzML should typically be preferred instead.
 - **[MGF](https://www.matrixscience.com/help/data_file_help.html)**: A simple text-based peak file, though not as rich in detail as mzML.
 
-All three of the above file formats can be used as input to Casanovo for *de novo* peptide sequencing.
+All three of the above file formats can be used as input to Casanovo for *de novo* peptide sequencing and database searching.
 As the official PSI standard format containing the complete information from a mass spectrometry run, mzML should typically be preferred.
 
-## Output: Understanding the mzTab Format
+### FASTA (optional)
 
-After Casanovo processes your input file(s), it provides the sequencing results in an **[mzTab]((https://doi.org/10.1074/mcp.O113.036681))** file.
+When using Casanovo for database searching, you will additionally need to provide a relevant FASTA file.
+This is not necessary when using Casanovo for *de novo* peptide sequencing.
+
+- **[FASTA](https://www.ncbi.nlm.nih.gov/WebSub/html/help/protein.html)**: A simple text-based file format that stores genetic/proteomic sequence information.
+
+```{note}
+Remember to add decoy sequences and common contaminants to your FASTA file, as Casanovo will not do this automatically.
+```
+
+```{warning}
+In case the FASTA file contains amino acids that are not in Casanovo's vocabulary, peptides containing those residues will be ignored.
+```
+
+### Model weights
+
+In addition to MS/MS spectra, Casanovo also optionally accepts a model weights (.ckpt extension) input file when running in training, sequencing, or evaluating mode.
+These weights define the functionality of the Casanovo neural network.
+
+If no input weights file is provided, Casanovo will automatically use the most recent compatible weights from the [official Casanovo GitHub repository](https://github.com/Noble-Lab/casanovo), which will be downloaded and cached locally if they are not already.
+Model weights are retrieved by matching Casanovo release version, which is of the form (major, minor, patch).
+If no model weights for an identical release are available, alternative releases with matching (i) major and minor, or (ii) major versions will be used.
+
+Alternatively, you can input custom model weights in the form of a local file system path or a URL pointing to a compatible Casanovo model weights file.
+If a URL is provided, the upstream weights file will be downloaded and cached locally for later use.
+See the [command line interface documentation](cli.rst) for more details.
+
+## Output: Understanding the mzTab format
+
+After Casanovo processes your input file(s), it provides the results in an **[mzTab]((https://doi.org/10.1074/mcp.O113.036681))** file.
 This file is divided into two main sections:
 
-1. **Metadata section**: This part describes general information about the file and the Casanovo sequencing task.
+1. **Metadata section**: This part describes general information about the file and the Casanovo task.
 2. **Peptide–spectrum match (PSM) section**: Details of the peptide sequences that Casanovo predicted for the MS/MS spectra.
 
 mzTab files can contain additional sections to include protein identifications and quantification information as well.
@@ -80,42 +110,52 @@ MTD	software[1]-setting[2]	config_filename = default
 MTD	software[1]-setting[3]	precursor_mass_tol = 50.0
 MTD	software[1]-setting[4]	isotope_error_range = (0, 1)
 MTD	software[1]-setting[5]	min_peptide_len = 6
-MTD	software[1]-setting[6]	predict_batch_size = 1024
-MTD	software[1]-setting[7]	n_beams = 10
+MTD	software[1]-setting[6]	max_peptide_len = 100
+MTD	software[1]-setting[7]	predict_batch_size = 1024
 MTD	software[1]-setting[8]	top_match = 1
 MTD	software[1]-setting[9]	accelerator = auto
 MTD	software[1]-setting[10]	devices = None
-MTD	software[1]-setting[11]	random_seed = 454
-MTD	software[1]-setting[12]	n_log = 1
-MTD	software[1]-setting[13]	tb_summarywriter = None
-MTD	software[1]-setting[14]	save_top_k = 5
-MTD	software[1]-setting[15]	model_save_folder_path =
-MTD	software[1]-setting[16]	val_check_interval = 50000
-MTD	software[1]-setting[17]	n_peaks = 150
-MTD	software[1]-setting[18]	min_mz = 50.0
-MTD	software[1]-setting[19]	max_mz = 2500.0
-MTD	software[1]-setting[20]	min_intensity = 0.01
-MTD	software[1]-setting[21]	remove_precursor_tol = 2.0
-MTD	software[1]-setting[22]	max_charge = 10
-MTD	software[1]-setting[23]	dim_model = 512
-MTD	software[1]-setting[24]	n_head = 8
-MTD	software[1]-setting[25]	dim_feedforward = 1024
-MTD	software[1]-setting[26]	n_layers = 9
-MTD	software[1]-setting[27]	dropout = 0.0
-MTD	software[1]-setting[28]	dim_intensity = None
-MTD	software[1]-setting[29]	max_length = 100
-MTD	software[1]-setting[30]	warmup_iters = 100000
-MTD	software[1]-setting[31]	max_iters = 600000
-MTD	software[1]-setting[32]	learning_rate = 0.0005
-MTD	software[1]-setting[33]	weight_decay = 1e-05
-MTD	software[1]-setting[34]	train_label_smoothing = 0.01
-MTD	software[1]-setting[35]	train_batch_size = 32
-MTD	software[1]-setting[36]	max_epochs = 30
-MTD	software[1]-setting[37]	num_sanity_val_steps = 0
-MTD	software[1]-setting[38]	train_from_scratch = True
-MTD	software[1]-setting[39]	calculate_precision = False
-MTD	software[1]-setting[41]	n_workers = 20
+MTD	software[1]-setting[11]	n_beams = 10
+MTD	software[1]-setting[12]	enzyme = trypsin
+MTD	software[1]-setting[13]	digestion = full
+MTD	software[1]-setting[14]	missed_cleavages = 0
+MTD	software[1]-setting[15]	max_mods = 1
+MTD	software[1]-setting[16]	allowed_fixed_mods = C:C+57.021
+MTD	software[1]-setting[17]	allowed_var_mods = M:M+15.995,N:N+0.984,Q:Q+0.984,nterm:+42.011,nterm:+43.006,nterm:-17.027,nterm:+43.006-17.027
+MTD	software[1]-setting[18]	random_seed = 454
+MTD	software[1]-setting[19]	n_log = 1
+MTD	software[1]-setting[20]	tb_summarywriter = False
+MTD	software[1]-setting[21]	log_metrics = False
+MTD	software[1]-setting[22]	log_every_n_steps = 50
+MTD	software[1]-setting[23]	val_check_interval = 50000
+MTD	software[1]-setting[24]	n_peaks = 150
+MTD	software[1]-setting[25]	min_mz = 50.0
+MTD	software[1]-setting[26]	max_mz = 2500.0
+MTD	software[1]-setting[27]	min_intensity = 0.01
+MTD	software[1]-setting[28]	remove_precursor_tol = 2.0
+MTD	software[1]-setting[29]	max_charge = 10
+MTD	software[1]-setting[30]	dim_model = 512
+MTD	software[1]-setting[31]	n_head = 8
+MTD	software[1]-setting[32]	dim_feedforward = 1024
+MTD	software[1]-setting[33]	n_layers = 9
+MTD	software[1]-setting[34]	dropout = 0.0
+MTD	software[1]-setting[35]	dim_intensity = None
+MTD	software[1]-setting[36]	warmup_iters = 100000
+MTD	software[1]-setting[37]	cosine_schedule_period_iters = 600000
+MTD	software[1]-setting[38]	learning_rate = 0.0005
+MTD	software[1]-setting[39]	weight_decay = 1e-05
+MTD	software[1]-setting[40]	train_label_smoothing = 0.01
+MTD	software[1]-setting[41]	train_batch_size = 32
+MTD	software[1]-setting[42]	max_epochs = 30
+MTD	software[1]-setting[43]	num_sanity_val_steps = 0
+MTD	software[1]-setting[44]	calculate_precision = False
+MTD	software[1]-setting[46]	n_workers = 20
 MTD	ms_run[1]-location	file://[...]/my_example_input.mgf
+```
+
+```{info}
+Some of these configuration settings may only apply to specific modes of operation (`sequence`, `db-search`, `train`, etc.).
+Irrespective of the mode of operation used, all settings will be reported in the mzTab file.
 ```
 
 **PSM section**
@@ -139,6 +179,16 @@ Key information for each PSM is as follows:
 - `search_engine_score[1]`: The score of this PSM.
 - `spectra_ref`: Unique identifier linking the prediction back to the original spectrum in the input file(s).
 - `opt_ms_run[1]_aa_scores`: Casanovo predicts peptides in an autoregressive fashion, one amino acid at a time. This column contains comma-separated scores of the individual amino acid predictions.
+
+When running Casanovo in _database searching mode_ rather than *de novo* peptide sequencing mode, the PSM section will look slightly differently:
+
+```
+PSH	sequence	PSM_ID	accession	unique	database	database_version	search_engine	search_engine_score[1]	modifications	retention_time	charge	exp_mass_to_charge	calc_mass_to_charge	spectra_ref	pre	post	start	end	opt_ms_run[1]_aa_scores
+PSM	THM+15.995ELGGK	1	sp|A5A616|MGTS_ECOLI	null	null	null	[MS, MS:1003281, Casanovo, 4.1.1.dev8+g258edb4.d20240329]	0.6994086	null	null	2	444.71582381688	444.7159	ms_run[1]:index=0	null	null	null	null	0.84454,0.81027,0.83296,0.56239,0.40844,0.83554,0.82437,0.84730,0.84514
+...
+```
+
+In this case, each PSM contains additional information in the `accession` column referring to the identifier of the protein the matched peptide is derived from.
 
 ```{note}
 Scores in Casanovo range from -1 to 1, where 1 indicates high confidence in the prediction.
@@ -238,6 +288,6 @@ Similarly, in Casanovo evaluation mode only annotated MGF files are supported.
 <!-- TODO: when index files can be reused, document this here -->
 
 During training, Casanovo will save **checkpoint files** at every `val_check_interval` steps, specified in the configuration.
-Model checkpoints will be saved in the `model_save_folder_path` folder with filename format `epoch=EPOCH-step=STEP.ckpt`, with `EPOCH` the epoch and `STEP` the training step at which the checkpoint was taken, helping you track progress and select the best model based on validation performance.
+Model checkpoints will be saved to the folder specified by the `--output_dir` command line option with filename format `epoch=EPOCH-step=STEP.ckpt`, with `EPOCH` the epoch and `STEP` the training step at which the checkpoint was taken, helping you track progress and select the best model based on validation performance.
 
 <!-- TODO: when checkpointing is made more flexible, update this information -->
