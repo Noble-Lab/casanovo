@@ -956,7 +956,17 @@ class Spec2Pep(pl.LightningModule):
                             if self.tokenizer.reverse
                             else aa_scores
                         ),
-                        "".join(self.tokenizer.detokenize(pred_tokens)),
+                        # FIXME: Remove work around when depthcharge reverse
+                        #   detokenization bug is fixed.
+                        # self.tokenizer.detokenize(
+                        #     torch.unsqueeze(pred_tokens, 0)
+                        # )[0],
+                        "".join(
+                            self.tokenizer.detokenize(
+                                torch.unsqueeze(pred_tokens, 0),
+                                join=False,
+                            )[0]
+                        ),
                     )
                     for pep_score, _, aa_scores, pred_tokens in heapq.nlargest(
                         self.top_match, peptides
