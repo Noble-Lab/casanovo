@@ -1762,7 +1762,7 @@ def test_beam_search_decode(tiny_config):
             residues=config.residues
         ),
     )
-    model.decoder.reverse = False  # For simplicity
+    model.tokenizer.reverse = False  # For simplicity
 
     # Sizes
     batch = 1  # B

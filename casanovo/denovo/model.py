@@ -951,8 +951,8 @@ class Spec2Pep(pl.LightningModule):
                 yield [
                     (
                         pep_score,
-                        aa_scores[::-1] if self.decoder.reverse else aa_scores,
-                        "".join(self.decoder.detokenize(pred_tokens)),
+                        aa_scores[::-1] if self.tokenizer.reverse else aa_scores,
+                        "".join(self.tokenizer.detokenize(pred_tokens)),
                     )
                     for pep_score, _, aa_scores, pred_tokens in heapq.nlargest(
                         self.top_match, peptides
