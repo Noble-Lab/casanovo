@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+## [5.0.0] - 2025-07-09
+
 ### Added
 
 - Casanovo-DB mode (`casanovo db_search`) to use Casanovo as a learned score function for sequence database searching (given a FASTA protein database).
@@ -289,7 +291,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 - Initial Casanovo version.
 
-[Unreleased]: https://github.com/Noble-Lab/casanovo/compare/v4.2.1...HEAD
+[Unreleased]: https://github.com/Noble-Lab/casanovo/compare/v5.0.0...HEAD
+[5.0.0]: https://github.com/Noble-Lab/casanovo/compare/v4.2.1...v5.0.0
 [4.2.1]: https://github.com/Noble-Lab/casanovo/compare/v4.2.0...v4.2.1
 [4.2.0]: https://github.com/Noble-Lab/casanovo/compare/v4.1.0...v4.2.0
 [4.1.0]: https://github.com/Noble-Lab/casanovo/compare/v4.0.1...v4.1.0
