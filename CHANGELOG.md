@@ -43,6 +43,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Removed the `save_top_k` option from the Casanovo config, the model with the lowest validation loss during training will now be saved to a fixed filename `<output_root>.best.ckpt`.
 - The `model_save_folder_path` config option has been removed; model checkpoints will now be saved to `--output_dir` during training.
 
+## [4.3.0] - 2024-12-13
+
+### Fixed
+
+- Amino acid scores in the mzTab output were reported in reversed order.
+
 ## [4.2.1] - 2024-06-25
 
 ### Fixed
@@ -292,7 +298,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Initial Casanovo version.
 
 [Unreleased]: https://github.com/Noble-Lab/casanovo/compare/v5.0.0...HEAD
-[5.0.0]: https://github.com/Noble-Lab/casanovo/compare/v4.2.1...v5.0.0
+[5.0.0]: https://github.com/Noble-Lab/casanovo/compare/v4.3.0...v5.0.0
+[4.3.0]: https://github.com/Noble-Lab/casanovo/compare/v4.2.1...v4.3.0
 [4.2.1]: https://github.com/Noble-Lab/casanovo/compare/v4.2.0...v4.2.1
 [4.2.0]: https://github.com/Noble-Lab/casanovo/compare/v4.1.0...v4.2.0
 [4.1.0]: https://github.com/Noble-Lab/casanovo/compare/v4.0.1...v4.1.0

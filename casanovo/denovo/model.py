@@ -951,22 +951,8 @@ class Spec2Pep(pl.LightningModule):
                 yield [
                     (
                         pep_score,
-                        (
-                            aa_scores[::-1]
-                            if self.tokenizer.reverse
-                            else aa_scores
-                        ),
-                        # FIXME: Remove work around when depthcharge reverse
-                        # detokenization bug is fixed.
-                        # self.tokenizer.detokenize(
-                        #     torch.unsqueeze(pred_tokens, 0)
-                        # )[0],
-                        "".join(
-                            self.tokenizer.detokenize(
-                                torch.unsqueeze(pred_tokens, 0),
-                                join=False,
-                            )[0]
-                        ),
+                        aa_scores[::-1] if self.decoder.reverse else aa_scores,
+                        "".join(self.decoder.detokenize(pred_tokens)),
                     )
                     for pep_score, _, aa_scores, pred_tokens in heapq.nlargest(
                         self.top_match, peptides

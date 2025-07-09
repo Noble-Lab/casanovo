@@ -1,6 +1,6 @@
-# File formats
+# File Formats
 
-## Input file formats for Casanovo
+## Input File Formats For Casanovo
 
 ### MS/MS spectra
 
@@ -215,7 +215,7 @@ The PSM identifier in the `PSM_ID` column is not necessarily identical to the sp
 - If multiple predictions are included per spectrum (configuration option `top_match`), each PSM will have a different identifier, but spectrum references will overlap.
 ```
 
-## Casanovo configuration
+## Casanovo Configuration
 
 Casanovo operates based on settings defined in a [YAML configuration file](https://github.com/Noble-Lab/casanovo/blob/main/casanovo/config.yaml).
 This file contains several options that affect how Casanovo processes your data and predicts peptide sequences.
@@ -258,7 +258,7 @@ Tips for using log files:
 - Performance monitoring: Log files can be used to monitor the efficiency of Casanovo's operation over time, identifying potential bottlenecks.
 ```
 
-## For advanced users: Training Casanovo
+## For Advanced Users: Training Casanovo
 
 To train a new Casanovo model, the training and validation data must be provided as **annotated MGF files**.
 Annotated MGF files are similar to standard MGF files but include a `SEQ` key–value pair in the spectrum header, indicating the peptide sequence for the corresponding spectrum.

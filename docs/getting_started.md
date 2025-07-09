@@ -39,7 +39,7 @@ If this is the case, then you have set up Conda and the environment correctly.
 Be sure to retype in the activation command into your terminal when you reopen Anaconda and want to use Casanovo.
 ```
 
-### *Optional:* Install PyTorch manually
+### *Optional:* Install PyTorch Manually
 
 Casanovo employs the PyTorch machine learning framework, which by default will be installed automatically along with the other dependencies.
 However, if you have a graphics processing unit (GPU) that you want Casanovo to use, we recommend installing PyTorch manually.
@@ -71,7 +71,7 @@ casanovo configure
 When using Casanovo to sequence peptides from mass spectra or evaluate a previous model's performance, you can change some of the parameters in the first section of this file.
 Parameters in the second section will not have an effect unless you are training a new Casanovo model.
 
-### Download model weights
+### Download Model Weights
 
 Using Casanovo to sequence peptides from new mass spectra, Casanovo needs compatible pretrained model weights to make its predictions.
 By default, Casanovo will try to download the latest compatible model weights from GitHub when it is run. 
@@ -106,7 +106,7 @@ casanovo sequence spectra.mgf
 Casanovo can predict peptide sequences for MS/MS spectra in mzML, mzXML, and MGF files.
 This will write peptide predictions for the given MS/MS spectra to the specified output file in mzTab format.
 
-### Evaluate *de novo* sequencing performance
+### Evaluate *De Novo* Sequencing Performance
 
 To evaluate _de novo_ sequencing performance based on known mass spectrum annotations, use the `casanovo sequence` command with the `--evaluate` option:
 
@@ -148,7 +148,7 @@ Training and validation MS/MS data need to be provided as annotated MGF files, w
 
 If a training is continued for a previously trained model, specify the starting model weights using `--model`.
 
-## Try Casanovo on a small example
+## Try Casanovo On a Small Example
 
 Let's use Casanovo to sequence peptides from a small collection of mass spectra in an MGF file (~100 MS/MS spectra).
 The example MGF file is available at [`sample_data/sample_preprocessed_spectra.mgf`](https://github.com/Noble-Lab/casanovo/blob/main/sample_data/sample_preprocessed_spectra.mgf).
