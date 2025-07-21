@@ -32,9 +32,6 @@ accelerator: "auto"
 # indicate all available devices should be used. If left empty, the appropriate
 # number will be automatically selected for based on the chosen accelerator.
 devices:
-# Whether to force IPv4 for inter-process communication when using multiple
-# accelerators
-force_ipv4: False
 
 
 ###

@@ -269,7 +269,6 @@ def _get_config_file(file_path, file_name, additional_cfg=None):
         "predict_batch_size": 1024,
         "top_match": 1,
         "accelerator": "cpu",
-        "force_ipv4": False,
         "devices": None,
         "n_beams": 1,
         "enzyme": "trypsin",
