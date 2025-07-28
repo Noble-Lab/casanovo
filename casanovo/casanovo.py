@@ -638,7 +638,7 @@ def _setup_output(
         )
 
     if utils.get_local_rank() != 0:
-        output_root = f"{output_root}-subprocess:{utils.get_local_rank()}"
+        output_root = f"{output_root}-subprocess-{utils.get_local_rank()}"
 
     if output_dir is None:
         output_path = Path.cwd()
