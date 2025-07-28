@@ -10,13 +10,16 @@ Yilmaz, M., Fondrie, W. E., Bittremieux, W., Oh, S. & Noble, W. S. *De novo* mas
 In addition, you may wish to cite one or more of these additional publications, depending on relevance to your work.
 
 - For improved performance of Casanovo by training on the MassIVE-KB data and applications in immunopeptidomics, metaproteomics, and the dark human proteome (Casanovo v4.x):  
-Yilmaz, M., Fondrie, W. E., Bittremieux, W., Melendez, C.F., Nelson, R., Ananth, V., Oh, S. & Noble, W. S. Sequence-to-sequence translation from mass spectra to peptides with a transformer model. in *Nature Communications* **15**, 6427 (2024). [doi:10.1038/s41467-024-49731-x](https://doi.org/10.1038/s41467-024-49731-x)
+Yilmaz, M., _et al._ Sequence-to-sequence translation from mass spectra to peptides with a transformer model. in *Nature Communications* **15**, 6427 (2024). [doi:10.1038/s41467-024-49731-x](https://doi.org/10.1038/s41467-024-49731-x)
 
 - For work involving Casanovo's enhanced performance on tryptic and non-tryptic data (Casanovo v4.2.x):  
-Melendez, C., Sanders, J., Yilmaz, M., Bittremieux, W., Fondrie, W. E., Oh, S. & Noble, W. S. Accounting for digestion enzyme bias in Casanovo. in *Journal of Proteome Research* **23**, 4761–4769 (2024). [doi:10.1021/acs.jproteome.4c00422](https://doi.org/10.1021/acs.jproteome.4c00422)
+Melendez, C., _et al._ Accounting for digestion enzyme bias in Casanovo. in *Journal of Proteome Research* **23**, 4761–4769 (2024). [doi:10.1021/acs.jproteome.4c00422](https://doi.org/10.1021/acs.jproteome.4c00422)
 
 - For using Casanovo as a learned score function for sequence database searching (Casanovo-DB):  
-Ananth, V., Sanders, J., Yilmaz, M., Wen, B., Oh, S. & Noble, W. S. A learned score function improves the power of mass spectrometry database search. in *Bioinformatics* **40**, i410–i417 (2024). [doi:10.1093/bioinformatics/btae218](https://doi.org/10.1093/bioinformatics/btae218)
+Ananth, V., _et al._ A learned score function improves the power of mass spectrometry database search. in *Bioinformatics* **40**, i410–i417 (2024). [doi:10.1093/bioinformatics/btae218](https://doi.org/10.1093/bioinformatics/btae218)
+
+- For performance and usability improvements to Casanovo (Casanovo v5.x):
+Straub, G., _et al._ Improvements to Casanovo, a deep learning *de novo* peptide sequencer. in *bioRxiv* (2025). [doi:10.1101/2025.07.25.666826](https://doi.org/10.1101/2025.07.25.666826)
 
 ## Notes for Citation
 
