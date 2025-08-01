@@ -2,7 +2,7 @@
 
 **_De Novo_ Mass Spectrometry Peptide Sequencing with a Transformer Model**
 
-<img src="casanovo.svg" alt="Casanovo logo" style="max-width: 100px; width: 100%; height: auto;">
+<img src="casanovo.svg" alt="Casanovo logo" width="200">
 
 Casanovo is a state-of-the-art deep learning tool designed for _de novo_ peptide sequencing.
 Powered by a transformer neural network, Casanovo "translates" peaks in MS/MS spectra into amino acid sequences with remarkable precision.
