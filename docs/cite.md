@@ -18,7 +18,7 @@ Melendez, C., _et al._ Accounting for digestion enzyme bias in Casanovo. in *Jou
 - For using Casanovo as a learned score function for sequence database searching (Casanovo-DB):  
 Ananth, V., _et al._ A learned score function improves the power of mass spectrometry database search. in *Bioinformatics* **40**, i410–i417 (2024). [doi:10.1093/bioinformatics/btae218](https://doi.org/10.1093/bioinformatics/btae218)
 
-- For performance and usability improvements to Casanovo (Casanovo v5.x):
+- For performance and usability improvements to Casanovo (Casanovo v5.x):  
 Straub, G., _et al._ Improvements to Casanovo, a deep learning *de novo* peptide sequencer. in *bioRxiv* (2025). [doi:10.1101/2025.07.25.666826](https://doi.org/10.1101/2025.07.25.666826)
 
 ## Notes for Citation
