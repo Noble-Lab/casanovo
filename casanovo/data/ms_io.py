@@ -179,10 +179,7 @@ class MztabWriter:
                 ]
             )
             for i, psm in enumerate(
-                natsort.natsorted(
-                    self.psms, key=operator.attrgetter("spectrum_id")
-                ),
-                1,
+                natsort.natsorted(self.psms, key=operator.itemgetter(1)), 1
             ):
                 filename = os.path.abspath(psm.spectrum_id[0])
                 idx = psm.spectrum_id[1]
