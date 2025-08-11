@@ -455,17 +455,39 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         self._history.append(metrics)
         self._log_history()
 
-    def on_predict_batch_end(self, outputs: List[str], *args) -> None:
+    def on_predict_batch_end(
+        self,
+        outputs: List[Tuple[np.ndarray, List[str], torch.Tensor]],
+        *args,
+    ) -> None:
         """
-        Write the predicted peptide sequences and amino acid scores to
-        the output file.
+        Write the predicted peptide sequences and amino acid scores to the
+        output file.
         """
         if self.out_writer is None:
             return
-        for pred in outputs:
-            seq = pred["sequence"]
-            if len(seq) > 0:
-                self.out_writer.psms.append(pred)
+        # Triply nested lists: results -> batch -> step -> spectrum.
+        for (
+            spectrum_i,
+            charge,
+            precursor_mz,
+            peptide,
+            peptide_score,
+            aa_scores,
+        ) in outputs:
+            if len(peptide) == 0:
+                continue
+            self.out_writer.psms.append(
+                (
+                    peptide,
+                    tuple(spectrum_i),
+                    peptide_score,
+                    charge,
+                    precursor_mz,
+                    self.peptide_mass_calculator.mass(peptide, charge),
+                    ",".join(list(map("{:.5f}".format, aa_scores))),
+                ),
+            )
 
     def _log_history(self) -> None:
         """
