@@ -404,7 +404,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
             per_aa_conf,
         ):
             peptide = self.decoder.detokenize(pred_tokens[1:])
-            aa_scores = aa_scores[: len(peptide)].detach().to_numpy()
+            aa_scores = aa_scores[: len(peptide)].detach().numpy()
             peptide = "".join(peptide)
             peptide_score = _aa_pep_score(aa_scores, True)
 
