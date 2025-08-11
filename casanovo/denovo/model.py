@@ -8,7 +8,7 @@ import logging
 import warnings
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
-import re 
+import re
 
 import depthcharge.masses
 import einops
@@ -23,6 +23,7 @@ from .. import config
 from ..data import ms_io
 
 logger = logging.getLogger("casanovo")
+
 
 class FullAttentionDecoder(PeptideDecoder):
     def __init__(self, *args, **kwargs):
@@ -197,13 +198,11 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         # Output writer during predicting.
         self.out_writer: None
 
-    
     def _forward_step(
         self,
         spectra: torch.Tensor,
         precursors: torch.Tensor,
         sequences: List[str],
-
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         The forward learning step.
@@ -232,19 +231,31 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         """
         if sequences is not None:  # Training
             padded_sequences = []
-            pattern = r'([A-Z](?:[+-]\d+\.\d+)?|[+-]\d+\.\d+)'  # handles modifications
+            pattern = r"([A-Z](?:[+-]\d+\.\d+)?|[+-]\d+\.\d+)"  # handles modifications
 
             for seq in sequences:
                 parsed = re.findall(pattern, seq)
-                padded_tensor = torch.tensor([0] * len(parsed), dtype=torch.long, device=precursors.device)
+                padded_tensor = torch.tensor(
+                    [0] * len(parsed),
+                    dtype=torch.long,
+                    device=precursors.device,
+                )
                 padded_sequences.append(padded_tensor)
 
-            return self.decoder(padded_sequences, precursors, *self.encoder(spectra))
-        else: #Inference
-            batch_size = spectra.shape[0]  
-            padded_sequences = torch.zeros((batch_size, self.max_peptide_len), dtype=torch.long, device=precursors.device)
-            return self.decoder(padded_sequences, precursors, *self.encoder(spectra))
-    
+            return self.decoder(
+                padded_sequences, precursors, *self.encoder(spectra)
+            )
+        else:  # Inference
+            batch_size = spectra.shape[0]
+            padded_sequences = torch.zeros(
+                (batch_size, self.max_peptide_len),
+                dtype=torch.long,
+                device=precursors.device,
+            )
+            return self.decoder(
+                padded_sequences, precursors, *self.encoder(spectra)
+            )
+
     def training_step(
         self,
         batch: Tuple[torch.Tensor, torch.Tensor, List[str]],
@@ -252,7 +263,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         mode: str = "train",
     ) -> torch.Tensor:
         """
-        A single training step. 
+        A single training step.
 
         Parameters
         ----------
@@ -270,12 +281,12 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         pred, tokens = self._forward_step(*batch)
         sequences = batch[2]
         print(tokens)
-        
+
         truth = [self.decoder.tokenize(s) for s in sequences]
         truth = torch.nn.utils.rnn.pad_sequence(truth, batch_first=True)
 
         # Align pred shape and remove the last token for prediction
-        pred = pred.reshape(-1, self.decoder.vocab_size+1)
+        pred = pred.reshape(-1, self.decoder.vocab_size + 1)
 
         print(pred, truth)
         print(pred.shape, truth.shape)
@@ -294,7 +305,6 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         )
 
         return loss
-
 
     def validation_step(
         self, batch: Tuple[torch.Tensor, torch.Tensor, List[str]], *args
@@ -317,7 +327,6 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         loss = self.training_step(batch, mode="valid")
         if not self.calculate_precision:
             return loss
-        
 
         # Calculate and log amino acid and peptide match evaluation metrics from
         # the predicted peptides.
@@ -346,8 +355,6 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         )
         return loss
 
-
-
     def predict_step(
         self, batch: Tuple[torch.Tensor, torch.Tensor, torch.Tensor], *args
     ) -> List[dict]:
@@ -373,7 +380,9 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         predicted_tokens = torch.argmax(pred, dim=-1)
 
         # Per-AA confidence: the probability of each predicted token
-        per_aa_conf = torch.gather(pred, 2, predicted_tokens.unsqueeze(-1)).squeeze(-1)
+        per_aa_conf = torch.gather(
+            pred, 2, predicted_tokens.unsqueeze(-1)
+        ).squeeze(-1)
 
         # Metadata
         precursor_mz = precursor_info[:, 0].tolist()
@@ -385,21 +394,23 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
             peptide = self.decoder.detokenize(predicted_tokens[i])[1:]
 
             # trim confidence scores to peptide length (because of padding)
-            trimmed_conf = per_aa_conf[i][:len(peptide)].tolist()
+            trimmed_conf = per_aa_conf[i][: len(peptide)].tolist()
 
             # overall confidence is mean of trimmed per-AA confidences
             peptide_score = sum(trimmed_conf) / len(trimmed_conf)
 
-            predictions.append({
-                "sequence": peptide,
-                "per_aa_conf": trimmed_conf,
-                "overall_conf": peptide_score,
-                "spectrum_id": spectrum_ids[i],
-                "precursor_mz": precursor_mz[i],
-                "precursor_charge": precursor_charge[i],
-            })
+            predictions.append(
+                {
+                    "sequence": peptide,
+                    "per_aa_conf": trimmed_conf,
+                    "overall_conf": peptide_score,
+                    "spectrum_id": spectrum_ids[i],
+                    "precursor_mz": precursor_mz[i],
+                    "precursor_charge": precursor_charge[i],
+                }
+            )
 
-        #did not finish the ms.pep to spec match outwriter part, so using csv writer for now
+        # did not finish the ms.pep to spec match outwriter part, so using csv writer for now
         csv_path = "validation_predictions.csv"
         write_header = not os.path.exists(csv_path)
 
@@ -420,7 +431,9 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
 
             for row in predictions:
                 # convert per_aa_conf list to semicolon-separated string for CSV
-                row["per_aa_conf"] = ";".join(f"{x:.4f}" for x in row["per_aa_conf"])
+                row["per_aa_conf"] = ";".join(
+                    f"{x:.4f}" for x in row["per_aa_conf"]
+                )
                 writer.writerow(row)
 
         return predictions
@@ -450,8 +463,6 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         #         )
 
         # return predictions
-        
-    
 
     def on_train_epoch_end(self) -> None:
         """
@@ -487,9 +498,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         self._history.append(metrics)
         self._log_history()
 
-    def on_predict_batch_end(
-        self, outputs: List[str], *args
-    ) -> None:
+    def on_predict_batch_end(self, outputs: List[str], *args) -> None:
         """
         Write the predicted peptide sequences and amino acid scores to
         the output file.
@@ -497,8 +506,9 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         if self.out_writer is None:
             return
         for pred in outputs:
-            if len(pred.peptide) > 0:
-                self.out_writer.psms.append(pred)
+            seq = pred["sequence"]
+            if len(seq) > 0:
+                self.out_writer.psms.append(seq)
 
     def _log_history(self) -> None:
         """
@@ -822,5 +832,3 @@ def _aa_pep_score(
     if not fits_precursor_mz:
         peptide_score -= 1
     return aa_scores, peptide_score
-
-
