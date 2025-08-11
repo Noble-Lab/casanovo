@@ -390,79 +390,36 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         spectrum_ids = [sid for sid in spectrum_ids]  # adapt if needed
 
         predictions = []
-        for i in range(len(predicted_tokens)):
-            peptide = self.decoder.detokenize(predicted_tokens[i])[1:]
-
-            # trim confidence scores to peptide length (because of padding)
-            trimmed_conf = per_aa_conf[i][: len(peptide)].tolist()
-
-            # overall confidence is mean of trimmed per-AA confidences
-            peptide_score = sum(trimmed_conf) / len(trimmed_conf)
+        for (
+            precursor_charge,
+            precursor_mz,
+            spectrum_i,
+            pred_tokens,
+            aa_scores,
+        ) in zip(
+            batch[1][:, 1].cpu().detach().numpy(),
+            batch[1][:, 2].cpu().detach().numpy(),
+            batch[2],
+            predicted_tokens,
+            per_aa_conf,
+        ):
+            peptide = self.decoder.detokenize(pred_tokens[1:])
+            aa_scores = aa_scores[: len(peptide)].detach().to_numpy()
+            peptide = "".join(peptide)
+            peptide_score = _aa_pep_score(aa_scores, True)
 
             predictions.append(
-                {
-                    "sequence": peptide,
-                    "per_aa_conf": trimmed_conf,
-                    "overall_conf": peptide_score,
-                    "spectrum_id": spectrum_ids[i],
-                    "precursor_mz": precursor_mz[i],
-                    "precursor_charge": precursor_charge[i],
-                }
-            )
-
-        # did not finish the ms.pep to spec match outwriter part, so using csv writer for now
-        csv_path = "validation_predictions.csv"
-        write_header = not os.path.exists(csv_path)
-
-        with open(csv_path, mode="a", newline="") as f:
-            writer = csv.DictWriter(
-                f,
-                fieldnames=[
-                    "sequence",
-                    "per_aa_conf",
-                    "overall_conf",
-                    "spectrum_id",
-                    "precursor_mz",
-                    "precursor_charge",
-                ],
-            )
-            if write_header:
-                writer.writeheader()
-
-            for row in predictions:
-                # convert per_aa_conf list to semicolon-separated string for CSV
-                row["per_aa_conf"] = ";".join(
-                    f"{x:.4f}" for x in row["per_aa_conf"]
+                (
+                    spectrum_i,
+                    precursor_charge,
+                    precursor_mz,
+                    peptide,
+                    peptide_score,
+                    aa_scores,
                 )
-                writer.writerow(row)
+            )
 
         return predictions
-
-        # predictions = []
-        # for (
-        #     precursor_charge,
-        #     precursor_mz,
-        #     spectrum_i,
-        #     spectrum_preds,
-        # ) in zip(
-        #     batch[1][:, 1].cpu().detach().numpy(),
-        #     batch[1][:, 2].cpu().detach().numpy(),
-        #     batch[2],
-        #     self.forward(batch[0], batch[1]),
-        # ):
-        #     for peptide_score, aa_scores, peptide in spectrum_preds:
-        #         predictions.append(
-        #             (
-        #                 spectrum_i,
-        #                 precursor_charge,
-        #                 precursor_mz,
-        #                 peptide,
-        #                 peptide_score,
-        #                 aa_scores,
-        #             )
-        #         )
-
-        # return predictions
 
     def on_train_epoch_end(self) -> None:
         """
@@ -508,7 +465,7 @@ class Spec2Pep(pl.LightningModule, ModelMixin):
         for pred in outputs:
             seq = pred["sequence"]
             if len(seq) > 0:
-                self.out_writer.psms.append(seq)
+                self.out_writer.psms.append(pred)
 
     def _log_history(self) -> None:
         """
