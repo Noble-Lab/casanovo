@@ -2327,3 +2327,30 @@ def test_precursor_rescue():
     assert (
         finished_old.item()
     ), "Old logic was expected to terminate the beam but did not"
+
+
+def test_db_spec2pep_forward_no_cache(tiny_config):
+    """Test the DbSpec2Pep forward method without a cache."""
+    tokenizer = depthcharge.tokenizers.peptides.PeptideTokenizer(
+        residues=Config(tiny_config).residues
+    )
+    db_model = DbSpec2Pep(tokenizer=tokenizer)
+
+    # Mock the _forward_step method to confirm it's called
+    db_model._forward_step = unittest.mock.MagicMock(
+        return_value=(torch.zeros(1, 5, 25), torch.zeros(1, 4))
+    )
+
+    # Create a batch without pre-computed encoder outputs
+    mock_batch = {
+        "mz_array": torch.zeros((1, 10)),
+        "intensity_array": torch.zeros((1, 10)),
+        "precursor_mz": torch.tensor([42.0]),
+        "precursor_charge": torch.tensor([1]),
+        "seq": torch.randint(1, 20, (1, 8)),
+    }
+
+    db_model.forward(mock_batch)
+
+    # Assert that the non-cached path was taken
+    db_model._forward_step.assert_called_once()
