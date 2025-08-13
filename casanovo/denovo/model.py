@@ -5,7 +5,7 @@ import heapq
 import itertools
 import logging
 import warnings
-from typing import Any, Dict, Iterable, List, Optional, Tuple
+from typing import Any, Dict, Generator, Iterable, List, Optional, Tuple
 
 import einops
 import lightning.pytorch as pl
@@ -1406,25 +1406,14 @@ class DbSpec2Pep(Spec2Pep):
         Returns
         -------
         predictions: List[ms_io.PepSpecMatch]
-        The predicted PSMs for the processed batch.
+            The predicted PSMs for the processed batch.
         """
         predictions = collections.defaultdict(list)
 
         with torch.inference_mode():
             # Pre-compute encoder outputs for the entire batch.
-            memories, mem_masks = self.encoder(
-                batch["mz_array"], batch["intensity_array"]
-            )
-            precursor_mzs = batch["precursor_mz"].squeeze(0).to(self.device)
-            precursor_charges = (
-                batch["precursor_charge"].squeeze(0).to(self.device)
-            )
-            dtype = precursor_mzs.dtype
-            proton = torch.tensor(1.007276, dtype=dtype, device=self.device)
-            precursor_masses = (precursor_mzs - proton) * precursor_charges
-            precursors_all = torch.vstack(
-                [precursor_masses, precursor_charges.to(dtype), precursor_mzs]
-            ).T
+            mzs, intensities, precursors_all, _ = self._process_batch(batch)
+            memories, mem_masks = self.encoder(mzs, intensities)
             enc_cache = {
                 "memory": memories,
                 "mem_masks": mem_masks,
@@ -1467,7 +1456,7 @@ class DbSpec2Pep(Spec2Pep):
                             peptide_score=peptide_score,
                             charge=int(precursor_charge),
                             calc_mz=np.nan,
-                            exp_mz=precursor_mz,
+                            exp_mz=precursor_mz.item(),
                             aa_scores=curr_aa_scores,
                         )
                     )
@@ -1492,7 +1481,11 @@ class DbSpec2Pep(Spec2Pep):
 
         return predictions
 
-    def _psm_batches(self, batch, enc_cache=None):
+    def _psm_batches(
+        self,
+        batch: Dict[str, torch.Tensor],
+        enc_cache: Optional[Dict[str, torch.Tensor]] = None,
+    ) -> Generator[Dict[str, torch.Tensor], None, None]:
         """
         Generates batches of candidate database PSMs.
 
@@ -1536,17 +1529,8 @@ class DbSpec2Pep(Spec2Pep):
 
         # Use pre-computed encoder outputs if available; otherwise compute once here.
         if enc_cache is None:
-            memories, mem_masks = self.encoder(
-                batch["mz_array"], batch["intensity_array"]
-            )
-            precursor_mzs = batch["precursor_mz"].squeeze(0).to(device)
-            precursor_charges = batch["precursor_charge"].squeeze(0).to(device)
-            dtype = precursor_mzs.dtype
-            proton = torch.tensor(1.007276, dtype=dtype, device=device)
-            precursor_masses = (precursor_mzs - proton) * precursor_charges
-            precursors_all = torch.vstack(
-                [precursor_masses, precursor_charges.to(dtype), precursor_mzs]
-            ).T
+            mzs, ints, precursors_all, _ = self._process_batch(batch)
+            memories, mem_masks = self.encoder(mzs, ints)
         else:
             memories, mem_masks = enc_cache["memory"], enc_cache["mem_masks"]
             precursors_all = enc_cache["precursors_all"]
@@ -1656,7 +1640,7 @@ def _calc_match_score(
 
     # Unpack scores and lengths on the CPU
     per_aa_np = fused_np[:, :-1]
-    lengths_np = fused_np[:, -1].astype(np.int64, copy=False)
+    lengths_np = fused_np[:, -1].astype(np.int32, copy=False)
 
     # Calculate peptide scores and aa scores
     eps = np.finfo(np.float64).eps

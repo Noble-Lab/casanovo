@@ -1073,7 +1073,11 @@ def test_psm_batches(tiny_config):
         "peak_file": ["one.mgf", "two.mgf", "three.mgf"],
         "scan_id": [1, 2, 3],
     }
-
+    fake_cache = {
+        "memory": torch.zeros(3, 1, 1),
+        "mem_masks": torch.ones(3, 1, dtype=torch.bool),
+        "precursors_all": torch.zeros(3, 3),
+    }
     expected_batch_all = {
         "precursor_mz": torch.Tensor([42.0] * 12 + [84.0] * 12),
         "precursor_charge": torch.Tensor([1] * 12 + [2] * 12),
@@ -1083,7 +1087,7 @@ def test_psm_batches(tiny_config):
     }
 
     num_spectra = 0
-    for psm_batch in db_model._psm_batches(mock_batch):
+    for psm_batch in db_model._psm_batches(mock_batch, enc_cache=fake_cache):
         batch_size = len(psm_batch["peak_file"])
         end_idx = min(
             num_spectra + batch_size, len(expected_batch_all["peak_file"])
@@ -1483,7 +1487,24 @@ def test_n_term_scores_db(tiny_config, monkeypatch):
             ]
 
         mnk.setattr(denovo.model, "_calc_match_score", _mock_calc_match_score)
-        model.on_predict_batch_end(model.predict_step(None))
+        B = 2
+        P = 4
+        mnk.setattr(
+            type(model.encoder),
+            "forward",
+            lambda self, mz, it: (
+                torch.zeros(B, 1, 1),
+                torch.ones(B, 1, dtype=torch.bool),
+            ),
+        )
+
+        dummy_batch = {
+            "mz_array": torch.zeros(B, P),
+            "intensity_array": torch.zeros(B, P),
+            "precursor_mz": torch.tensor([42.0, 42.0]),
+            "precursor_charge": torch.tensor([1.0, 1.0]),
+        }
+        model.on_predict_batch_end(model.predict_step(dummy_batch))
 
     assert len(out_writer.psms) == 2
     assert np.allclose(out_writer.psms[0].aa_scores, np.array([0.4]))
@@ -1762,13 +1783,12 @@ def test_beam_search_decode(tiny_config):
             residues=config.residues
         ),
     )
-    model.tokenizer.reverse = False  # For simplicity
+    model.tokenizer.reverse = False
 
-    # Sizes
-    batch = 1  # B
-    length = model.max_peptide_len + 1  # L
-    vocab = len(model.tokenizer) + 1  # V
-    beam = model.n_beams  # S
+    batch = 1
+    length = model.max_peptide_len + 1
+    vocab = len(model.tokenizer) + 1
+    beam = model.n_beams
     step = 3
     device = model.device
 
@@ -2074,16 +2094,16 @@ def test_beam_search_decode(tiny_config):
         )
 
         # Sizes and other variables
-        batch = 2  # B
-        beam = model.n_beams  # S
+        batch = 2
+        beam = model.n_beams
 
         # Initialize attributes
         model._batch_size = batch
         model._beam_size = beam
         model._cumulative_masses = torch.zeros(batch * beam, device=device)
 
-        length = model.max_peptide_len + 1  # L
-        vocab = len(model.tokenizer) + 1  # V
+        length = model.max_peptide_len + 1
+        vocab = len(model.tokenizer) + 1
         step = 4
 
         # Initialize dummy scores and tokens
@@ -2163,8 +2183,8 @@ def test_beam_search_decode(tiny_config):
         model._cumulative_masses = torch.zeros(2 * 1, device=device)
 
         batch = 2  # B
-        beam = model.n_beams  # S
-        length = model.max_peptide_len + 1  # L
+        beam = model.n_beams
+        length = model.max_peptide_len + 1
         vocab = len(model.tokenizer) + 1  # V
         step = 4
 
