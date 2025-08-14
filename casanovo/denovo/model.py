@@ -5,7 +5,7 @@ import heapq
 import itertools
 import logging
 import warnings
-from typing import Any, Dict, Generator, Iterable, List, Optional, Tuple
+from typing import Any, Dict, Generator, Iterable, List, Optional, Tuple, Union
 
 import einops
 import lightning.pytorch as pl
@@ -1600,9 +1600,8 @@ def _calc_match_score(
     Calculate the score between the input spectra and associated
     peptide.
 
-    Take in teacher-forced scoring of amino acids of the peptides (in a
-    batch) and use the truth labels to calculate a score between the
-    input spectra and associated peptide.
+    This function now acts as a wrapper that prepares data for the unified
+    _peptide_score function.
 
     Parameters
     ----------
@@ -1621,37 +1620,33 @@ def _calc_match_score(
     aa_scores : List[np.ndarray]
         The amino acid scores for each PSM in the batch.
     """
-    # Remove trailing token
+    # Remove trailing token.
     batch_all_aa_scores = batch_all_aa_scores[:, :-1]
 
-    # Get aa scores corresponding with true aas
+    # Get aa scores corresponding with true aas.
     per_aa_scores = torch.gather(
         batch_all_aa_scores, 2, truth_aa_indices.unsqueeze(-1)
     ).squeeze(-1)
 
-    # Calculate peptide lengths (including stop token)
+    # Calculate peptide lengths.
     lengths = (truth_aa_indices != 0).sum(dim=1)
 
-    # Fuse scores and lengths for a single GPU->CPU transfer
+    # Fuse scores and lengths for a single GPU->CPU transfer.
     fused = torch.cat(
         [per_aa_scores, lengths.to(per_aa_scores.dtype).unsqueeze(1)], dim=1
     )
     fused_np = fused.detach().cpu().numpy()
 
-    # Unpack scores and lengths on the CPU
+    # Unpack scores and lengths on the CPU.
     per_aa_np = fused_np[:, :-1]
     lengths_np = fused_np[:, -1].astype(np.int32, copy=False)
 
-    # Calculate peptide scores and aa scores
-    eps = np.finfo(np.float64).eps
-    log_scores = np.log(np.maximum(per_aa_np, eps))
-    cumsum = np.cumsum(log_scores, axis=1)
-    B = per_aa_np.shape[0]
-    idx = np.arange(B)
-    peptide_log_scores = cumsum[idx, np.maximum(lengths_np - 1, 0)]
-    peptide_scores = np.exp(peptide_log_scores).tolist()
+    # Call the single, unified scoring function for batch calculation.
+    # In database search mode, fits_precursor_mz is implicitly True.
+    peptide_scores = _peptide_score(per_aa_np, lengths=lengths_np).tolist()
 
-    # Extract AA scores for each peptide based on its length
+    # Extract AA scores for each peptide based on its length.
+    B = per_aa_np.shape[0]
     aa_scores = [per_aa_np[i, : lengths_np[i]] for i in range(B)]
 
     return peptide_scores, aa_scores
@@ -1723,28 +1718,64 @@ def _calc_mass_error(
     return (calc_mz - (obs_mz - isotope * 1.00335 / charge)) / obs_mz * 10**6
 
 
-def _peptide_score(aa_scores: np.ndarray, fits_precursor_mz: bool) -> float:
+def _peptide_score(
+    aa_scores: np.ndarray,
+    fits_precursor_mz: Union[bool, np.ndarray] = True,
+    lengths: Optional[np.ndarray] = None,
+) -> Union[float, np.ndarray]:
     """
     Calculate the peptide-level confidence score from the raw
     amino acid scores.
 
     The peptide score is the product of the raw amino acid scores.
+    This function contains paths for both single peptide inputs
+    (de novo mode) and batched peptide inputs (database search mode).
 
     Parameters
     ----------
     aa_scores : np.ndarray
-        Amino acid level confidence scores.
-    fits_precursor_mz : bool
-        Flag indicating whether the prediction fits the precursor m/z
-        filter.
+        A 1D array of amino acid scores for a single peptide, or a 2D
+        padded array for a batch of peptides.
+    fits_precursor_mz : bool or np.ndarray
+        Flag or array of flags indicating whether predictions fit the
+        precursor m/z filter.
+    lengths : Optional[np.ndarray]
+        An array of peptide lengths, required when `aa_scores` is a 2D
+        (batched) array.
 
     Returns
     -------
-    peptide_score : float
-        The peptide score.
+    peptide_score : float or np.ndarray
+        The calculated peptide score or an array of scores for the batch.
     """
-    aa_scores = np.clip(aa_scores, np.finfo(np.float64).eps, 1)
-    peptide_score = np.exp(np.sum(np.log(aa_scores)))
-    if not fits_precursor_mz:
-        peptide_score -= 1
-    return peptide_score
+    eps = np.finfo(np.float64).eps
+
+    # FAST PATH: (de novo inference)
+    if aa_scores.ndim == 1:
+        log_scores = np.log(np.clip(aa_scores, eps, 1))
+        peptide_log_score = np.sum(log_scores)
+        peptide_score = np.exp(peptide_log_score)
+
+        if not fits_precursor_mz:
+            peptide_score -= 1
+        return peptide_score
+
+    # BATCH PATH: (database search)
+    else:
+        if lengths is None:
+            raise ValueError("`lengths` must be provided for batched input.")
+
+        log_scores = np.log(np.clip(aa_scores, eps, 1))
+        cumsum = np.cumsum(log_scores, axis=1)
+        batch_size = aa_scores.shape[0]
+        idx = np.arange(batch_size)
+        peptide_log_scores = cumsum[idx, np.maximum(lengths - 1, 0)]
+        peptide_scores = np.exp(peptide_log_scores)
+
+        if isinstance(fits_precursor_mz, (bool, np.bool_)):
+            if not fits_precursor_mz:
+                peptide_scores -= 1
+        else:
+            peptide_scores[~fits_precursor_mz] -= 1
+
+        return peptide_scores
