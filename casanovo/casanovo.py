@@ -637,6 +637,9 @@ def _setup_output(
             f"casanovo_{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}"
         )
 
+    if utils.get_local_rank() != 0:
+        output_root = f"{output_root}-subprocess-{utils.get_local_rank()}"
+
     if output_dir is None:
         output_path = Path.cwd()
     else:
