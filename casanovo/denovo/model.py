@@ -1750,7 +1750,7 @@ def _peptide_score(
     """
     eps = np.finfo(np.float64).eps
 
-    # FAST PATH: (de novo inference)
+    # FAST PATH: de novo inference
     if aa_scores.ndim == 1:
         log_scores = np.log(np.clip(aa_scores, eps, 1))
         peptide_log_score = np.sum(log_scores)
@@ -1760,7 +1760,7 @@ def _peptide_score(
             peptide_score -= 1
         return peptide_score
 
-    # BATCH PATH: (database search)
+    # BATCH PATH: database search
     else:
         if lengths is None:
             raise ValueError("`lengths` must be provided for batched input.")

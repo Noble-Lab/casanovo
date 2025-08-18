@@ -2321,14 +2321,12 @@ def test_precursor_rescue():
     )
     STEP = 0
 
-    # New model should stay alive
     new_model = _build_model(tok)
     finished, _, _ = new_model._finish_beams(TOKENS, PRECURSOR, STEP)
     assert (
         not finished.item()
     ), "New logic failed and beam terminated unexpectedly!"
 
-    # Old-logic sentinel should kill
     class PrematureSpec2Pep(Spec2Pep):
         """
         Mimic the legacy behaviour, abort immediately if ppm > tol,
