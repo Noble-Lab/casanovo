@@ -866,8 +866,7 @@ class Spec2Pep(pl.LightningModule):
         ).float()
         # Mask out the index '0', i.e. padding token, by default.
         active_mask[:, :beam] = 1e-8
-
-        # Ensure we use the exact same scoring and topk mechanism as original code
+        # Compute beam scores and select top-k candidates
         # Use nanmean to properly handle NaN values in scores
         mean_scores = torch.nanmean(step_scores, dim=1)
 
@@ -1340,25 +1339,53 @@ class DbSpec2Pep(Spec2Pep):
         """
         The forward step.
 
+        If the encoder output is already present in the batch, it is used
+        directly by the decoder. Otherwise, the full forward pass including
+        the encoder is performed.
+
         Parameters
         ----------
         batch : Dict[str, torch.Tensor]
-            A batch from the SpectrumDataset, which contains keys:
-            ``mz_array``, ``intensity_array``, ``precursor_mz``,
-            ``precursor_charge``, and ``seq``, each pointing to tensors
-            with the corresponding data.
+            A batch from the SpectrumDataset. It must contain ``seq``.
+            For a full forward pass, it also needs ``mz_array``,
+            ``intensity_array``, ``precursor_mz``, and ``precursor_charge``.
+            Alternatively, it can contain precomputed encoder outputs:
+            ``memory``, ``mem_masks``, and ``precursors``.
 
         Returns
         -------
-        scores : torch.Tensor of shape (n_spectra, length, n_amino_acids)
+        scores : torch.Tensor of shape (B, length, n_amino_acids)
             The individual amino acid scores for each prediction,
             converted to probabilities using a softmax.
-        tokens : torch.Tensor of shape (n_spectra, length)
-            The predicted tokens for each spectrum.
+        tokens : torch.Tensor of shape (B, length)
+            The ground truth tokens for each spectrum.
+
+        Notes
+        -----
+        Here ``B`` denotes the number of peptide–spectrum pairs in the
+        current candidate batch (or the number of spectra for a plain
+        forward pass).
         """
-        pred, truth = self._forward_step(batch)
-        pred = self.softmax(pred)
-        return pred, truth
+        if (
+            "memory" in batch
+            and "mem_masks" in batch
+            and "precursors" in batch
+        ):
+            memories, mem_masks = batch["memory"], batch["mem_masks"]
+            precursors = batch["precursors"]
+            tokens = batch["seq"]
+            logits = self.decoder(
+                tokens=tokens,
+                memory=memories,
+                memory_key_padding_mask=mem_masks,
+                precursors=precursors,
+            )
+            probs = self.softmax(logits)
+            return probs, tokens
+        else:
+            pred, truth = self._forward_step(batch)
+            pred = self.softmax(pred)
+            return pred, truth
 
     def predict_step(
         self,
@@ -1378,68 +1405,75 @@ class DbSpec2Pep(Spec2Pep):
 
         Returns
         -------
-        predictions: List[psm.PepSpecMatch]
+        predictions: List[ms_io.PepSpecMatch]
             The predicted PSMs for the processed batch.
         """
         predictions = collections.defaultdict(list)
-        for psm_batch in self._psm_batches(batch):
-            pred, truth = self.forward(psm_batch)
-            peptide_scores, aa_scores_all = _calc_match_score(pred, truth)
 
-            for (
-                filename,
-                scan,
-                precursor_charge,
-                precursor_mz,
-                peptide,
-                peptide_score,
-                curr_aa_scores,
-            ) in zip(
-                psm_batch["peak_file"],
-                psm_batch["scan_id"],
-                psm_batch["precursor_charge"],
-                psm_batch["precursor_mz"],
-                psm_batch["original_seq_str"],
-                peptide_scores,
-                aa_scores_all,
-            ):
-                # Omit stop token from reported AA scores
-                curr_aa_scores = curr_aa_scores[:-1]
+        with torch.inference_mode():
+            # Pre-compute encoder outputs for the entire batch.
+            mzs, intensities, precursors_all, _ = self._process_batch(batch)
+            memories, mem_masks = self.encoder(mzs, intensities)
+            enc_cache = {
+                "memory": memories,
+                "mem_masks": mem_masks,
+                "precursors_all": precursors_all,
+            }
 
-                spectrum_id = (filename, scan)
-                if self.tokenizer.reverse:
-                    curr_aa_scores = curr_aa_scores[::-1]
-
-                predictions[spectrum_id].append(
-                    psm.PepSpecMatch(
-                        sequence=peptide,
-                        spectrum_id=spectrum_id,
-                        peptide_score=peptide_score,
-                        charge=int(precursor_charge),
-                        calc_mz=np.nan,
-                        exp_mz=precursor_mz.item(),
-                        aa_scores=curr_aa_scores,
-                    )
+            for psm_batch in self._psm_batches(batch, enc_cache=enc_cache):
+                pred_logits, truth = self.forward(psm_batch)
+                peptide_scores, aa_scores_all = _calc_match_score(
+                    pred_logits, truth
                 )
 
-        # Filter the top-scoring prediction(s) for each spectrum.
+                for (
+                    filename,
+                    scan,
+                    precursor_charge,
+                    precursor_mz,
+                    peptide,
+                    peptide_score,
+                    curr_aa_scores,
+                ) in zip(
+                    psm_batch["peak_file"],
+                    psm_batch["scan_id"],
+                    psm_batch["precursor_charge"],
+                    psm_batch["precursor_mz"],
+                    psm_batch["original_seq_str"],
+                    peptide_scores,
+                    aa_scores_all,
+                ):
+                    # Omit stop token from reported AA scores.
+                    curr_aa_scores = curr_aa_scores[:-1]
+                    if self.tokenizer.reverse:
+                        curr_aa_scores = curr_aa_scores[::-1]
+
+                    spectrum_id = (filename, scan)
+                    predictions[spectrum_id].append(
+                        psm.PepSpecMatch(
+                            sequence=peptide,
+                            spectrum_id=spectrum_id,
+                            peptide_score=peptide_score,
+                            charge=int(precursor_charge),
+                            calc_mz=np.nan,
+                            exp_mz=precursor_mz.item(),
+                            aa_scores=curr_aa_scores,
+                        )
+                    )
+
+        # Filter the top-scoring prediction for each spectrum.
         predictions = list(
             itertools.chain.from_iterable(
-                [
-                    *(
-                        sorted(
-                            spectrum_predictions,
-                            key=lambda p: p.peptide_score,
-                            reverse=True,
-                        )[: self.top_match]
-                        for spectrum_predictions in predictions.values()
-                    )
-                ]
+                sorted(
+                    spectrum_predictions,
+                    key=lambda p: p.peptide_score,
+                    reverse=True,
+                )[: self.top_match]
+                for spectrum_predictions in predictions.values()
             )
         )
 
-        # Determine the peptide sequence and parent proteins only for
-        # the retained PSMs.
+        # Determine the parent proteins only for the retained PSMs.
         for pred in predictions:
             pred.protein = self.protein_database.get_associated_protein(
                 pred.sequence
@@ -1448,7 +1482,9 @@ class DbSpec2Pep(Spec2Pep):
         return predictions
 
     def _psm_batches(
-        self, batch: Dict[str, torch.Tensor]
+        self,
+        batch: Dict[str, torch.Tensor],
+        enc_cache: Optional[Dict[str, torch.Tensor]] = None,
     ) -> Generator[Dict[str, torch.Tensor], None, None]:
         """
         Generates batches of candidate database PSMs.
@@ -1473,60 +1509,86 @@ class DbSpec2Pep(Spec2Pep):
             ``mz_array``, ``intensity_array``, ``precursor_mz``, and
             ``precursor_charge``, each pointing to tensors with the
             corresponding data.
+        enc_cache : Optional[Dict[str, torch.Tensor]]
+            Optional cache of encoder outputs (``memory``, ``mem_masks``,
+            and ``precursors_all``) to avoid re-computation.
 
-        Returns
-        -------
-        psm_batch : Generator[Dict[str, torch.Tensor], None, None]
-            A generator that yields batches of candidate database PSMs
-            ready for scoring. Each batch contains repeated spectrum
-            information for each candidate peptide to be scored
-            against each spectrum.
+        Yields
+        ------
+        Dict[str, torch.Tensor]
+            Batches of candidate database PSMs ready for scoring. Each batch
+            contains repeated spectrum information for each candidate peptide
+            to be scored against each spectrum.
         """
+        device = self.decoder.device
         batch_size = batch["precursor_charge"].shape[0]
 
+        # Iterate precursor charges and m/z values per spectrum.
+        charge_iter = batch["precursor_charge"]  # tensor[B]
+        mz_iter = batch["precursor_mz"]  # tensor[B]
+
+        # Use pre-computed encoder outputs if available; otherwise compute once here.
+        if enc_cache is None:
+            mzs, ints, precursors_all, _ = self._process_batch(batch)
+            memories, mem_masks = self.encoder(mzs, ints)
+        else:
+            memories, mem_masks = enc_cache["memory"], enc_cache["mem_masks"]
+            precursors_all = enc_cache["precursors_all"]
+
         # Determine the candidates to score for each spectrum and
-        # compile into new batches with the same size as the original
-        # batch.
+        # compile them into new batches with the same size as the original batch.
         candidates = []
         for i, (precursor_charge, precursor_mz) in enumerate(
-            zip(batch["precursor_charge"], batch["precursor_mz"])
+            zip(charge_iter, mz_iter)
         ):
-            for candidate in self.protein_database.get_candidates(
+            for cand in self.protein_database.get_candidates(
                 precursor_mz, precursor_charge
             ):
-                candidates.append((i, candidate))
+                candidates.append((i, cand))
 
-            # Yield a batch if sufficient candidates are found or all
-            # spectra have been processed.
+            # Yield a batch if sufficient candidates are found or all spectra have been processed.
             while len(candidates) >= batch_size or (
                 i == batch_size - 1 and len(candidates) > 0
             ):
                 batch_candidates = candidates[:batch_size]
-                # Repeat the spectrum information for each candidate
-                # that should be matched to the spectrum.
+
+                # Repeat the spectrum information for each candidate to be matched.
                 psm_batch = {key: [] for key in [*batch.keys(), "seq"]}
-                for spec_i, candidate in batch_candidates:
+                for spec_i, cand in batch_candidates:
                     for key in batch.keys():
                         psm_batch[key].append(batch[key][spec_i])
-                    psm_batch["seq"].append(candidate)
+                    psm_batch["seq"].append(cand)
 
-                # Convert the batch elements to tensors.
+                # Convert tensor items to batched tensors on the correct device.
                 for key in psm_batch.keys():
                     if isinstance(psm_batch[key][0], torch.Tensor):
-                        psm_batch[key] = torch.stack(psm_batch[key])
-                        psm_batch[key] = psm_batch[key].to(self.decoder.device)
-                # We need to keep the original sequence for the database
-                # lookup in case of there is an isoleucine -> leucine swap
+                        psm_batch[key] = torch.stack(psm_batch[key]).to(
+                            self.decoder.device
+                        )
+
+                # Keep the original sequence string for downstream database lookup
+                # (e.g., isoleucine ↔ leucine handling) and tokenize for scoring.
                 psm_batch["original_seq_str"] = psm_batch["seq"]
                 psm_batch["seq"] = self.tokenizer.tokenize(
                     psm_batch["seq"], add_stop=True
+                ).to(self.decoder.device)
+
+                # Attach the corresponding (pre)computed encoder outputs for these spectra.
+                spec_idx = torch.tensor(
+                    [i for i, _ in batch_candidates],
+                    dtype=torch.long,
+                    device=device,
                 )
-                psm_batch["seq"] = psm_batch["seq"].to(self.decoder.device)
+                psm_batch["memory"] = memories.index_select(0, spec_idx)
+                psm_batch["mem_masks"] = mem_masks.index_select(0, spec_idx)
+                psm_batch["precursors"] = precursors_all.index_select(
+                    0, spec_idx
+                )
 
                 # Yield the PSM batch for processing.
                 yield psm_batch
 
-                # Remove the processed candidates from the list.
+                # Remove the processed candidates and continue.
                 candidates = candidates[batch_size:]
 
 
@@ -1538,9 +1600,8 @@ def _calc_match_score(
     Calculate the score between the input spectra and associated
     peptide.
 
-    Take in teacher-forced scoring of amino acids of the peptides (in a
-    batch) and use the truth labels to calculate a score between the
-    input spectra and associated peptide.
+    This function now acts as a wrapper that prepares data for the unified
+    _peptide_score function.
 
     Parameters
     ----------
@@ -1559,23 +1620,34 @@ def _calc_match_score(
     aa_scores : List[np.ndarray]
         The amino acid scores for each PSM in the batch.
     """
-    # Remove trailing token
+    # Remove trailing token.
     batch_all_aa_scores = batch_all_aa_scores[:, :-1]
 
-    # Get aa scores corresponding with true aas
+    # Get aa scores corresponding with true aas.
     per_aa_scores = torch.gather(
         batch_all_aa_scores, 2, truth_aa_indices.unsqueeze(-1)
     ).squeeze(-1)
 
-    # Calculate peptide scores and aa scores
-    per_aa_scores = per_aa_scores.cpu().detach().numpy()
-    score_mask = (truth_aa_indices != 0).cpu().detach().numpy()
-    peptide_scores, aa_scores = [], []
-    for psm_score, psm_mask in zip(per_aa_scores, score_mask):
-        psm_aa_scores = psm_score[psm_mask]
-        psm_peptide_score = _peptide_score(psm_aa_scores, True)
-        peptide_scores.append(psm_peptide_score)
-        aa_scores.append(psm_aa_scores)
+    # Calculate peptide lengths.
+    lengths = (truth_aa_indices != 0).sum(dim=1)
+
+    # Fuse scores and lengths for a single GPU->CPU transfer.
+    fused = torch.cat(
+        [per_aa_scores, lengths.to(per_aa_scores.dtype).unsqueeze(1)], dim=1
+    )
+    fused_np = fused.detach().cpu().numpy()
+
+    # Unpack scores and lengths on the CPU.
+    per_aa_np = fused_np[:, :-1]
+    lengths_np = fused_np[:, -1].astype(np.int32, copy=False)
+
+    # Call the single, unified scoring function for batch calculation.
+    # In database search mode, fits_precursor_mz is implicitly True.
+    peptide_scores = _peptide_score(per_aa_np, lengths=lengths_np).tolist()
+
+    # Extract AA scores for each peptide based on its length.
+    B = per_aa_np.shape[0]
+    aa_scores = [per_aa_np[i, : lengths_np[i]] for i in range(B)]
 
     return peptide_scores, aa_scores
 
@@ -1646,28 +1718,64 @@ def _calc_mass_error(
     return (calc_mz - (obs_mz - isotope * 1.00335 / charge)) / obs_mz * 10**6
 
 
-def _peptide_score(aa_scores: np.ndarray, fits_precursor_mz: bool) -> float:
+def _peptide_score(
+    aa_scores: np.ndarray,
+    fits_precursor_mz: Union[bool, np.ndarray] = True,
+    lengths: Optional[np.ndarray] = None,
+) -> Union[float, np.ndarray]:
     """
     Calculate the peptide-level confidence score from the raw
     amino acid scores.
 
     The peptide score is the product of the raw amino acid scores.
+    This function contains paths for both single peptide inputs
+    (de novo mode) and batched peptide inputs (database search mode).
 
     Parameters
     ----------
     aa_scores : np.ndarray
-        Amino acid level confidence scores.
-    fits_precursor_mz : bool
-        Flag indicating whether the prediction fits the precursor m/z
-        filter.
+        A 1D array of amino acid scores for a single peptide, or a 2D
+        padded array for a batch of peptides.
+    fits_precursor_mz : bool or np.ndarray
+        Flag or array of flags indicating whether predictions fit the
+        precursor m/z filter.
+    lengths : Optional[np.ndarray]
+        An array of peptide lengths, required when `aa_scores` is a 2D
+        (batched) array.
 
     Returns
     -------
-    peptide_score : float
-        The peptide score.
+    peptide_score : float or np.ndarray
+        The calculated peptide score or an array of scores for the batch.
     """
-    aa_scores = np.clip(aa_scores, np.finfo(np.float64).eps, 1)
-    peptide_score = np.exp(np.sum(np.log(aa_scores)))
-    if not fits_precursor_mz:
-        peptide_score -= 1
-    return peptide_score
+    eps = np.finfo(np.float64).eps
+
+    # FAST PATH: de novo inference
+    if aa_scores.ndim == 1:
+        log_scores = np.log(np.clip(aa_scores, eps, 1))
+        peptide_log_score = np.sum(log_scores)
+        peptide_score = np.exp(peptide_log_score)
+
+        if not fits_precursor_mz:
+            peptide_score -= 1
+        return peptide_score
+
+    # BATCH PATH: database search
+    else:
+        if lengths is None:
+            raise ValueError("`lengths` must be provided for batched input.")
+
+        log_scores = np.log(np.clip(aa_scores, eps, 1))
+        cumsum = np.cumsum(log_scores, axis=1)
+        batch_size = aa_scores.shape[0]
+        idx = np.arange(batch_size)
+        peptide_log_scores = cumsum[idx, np.maximum(lengths - 1, 0)]
+        peptide_scores = np.exp(peptide_log_scores)
+
+        if isinstance(fits_precursor_mz, (bool, np.bool_)):
+            if not fits_precursor_mz:
+                peptide_scores -= 1
+        else:
+            peptide_scores[~fits_precursor_mz] -= 1
+
+        return peptide_scores
