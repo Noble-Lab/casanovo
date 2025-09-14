@@ -38,6 +38,43 @@ from casanovo.denovo.model import (
     _calc_match_score,
 )
 
+import tempfile
+from pathlib import Path
+
+def test_output_db(tiny_fasta_file):
+    tmpdir = tempfile.TemporaryDirectory()
+    outfile = Path(tmpdir.name) / "test.txt"
+
+    pdb = db_utils.ProteinDatabase(
+        fasta_path=str(tiny_fasta_file),
+        enzyme="trypsin",
+        digestion="full",
+        missed_cleavages=1,
+        min_peptide_len=6,
+        max_peptide_len=50,
+        max_mods=0,
+        precursor_tolerance=20,
+        isotope_error=[0, 0],
+        allowed_fixed_mods="C:C+57.021",
+        allowed_var_mods=(
+            "M:M+15.995,N:N+0.984,Q:Q+0.984,"
+            "nterm:+42.011,nterm:+43.006,nterm:-17.027,nterm:+43.006-17.027"
+        ),
+        tokenizer=depthcharge.tokenizers.PeptideTokenizer.from_massivekb(),
+    )
+
+    pdb.output_db(str(outfile))
+
+    with open(outfile, "r", encoding="utf-8") as f:
+        lines = f.readlines()
+
+    assert len(lines) == len(pdb.db_peptides)
+
+    for line, (index, row) in zip(lines, pdb.db_peptides.iterrows()):
+        peptide, mass = line.strip().split("\t")
+        assert peptide.strip() == index.strip()
+        assert abs(float(mass) - row.calc_mass) < 1e-6
+
 
 def test_version():
     """Check that the version is not None."""

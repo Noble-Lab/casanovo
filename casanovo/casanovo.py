@@ -219,6 +219,13 @@ def sequence(
     nargs=1,
     type=click.Path(exists=True, dir_okay=False),
 )
+@click.option(
+    "--output-db",
+    "-b",
+    type=str,
+    default=None,
+    help="Saves digested protein database for debugging."
+)
 def db_search(
     peak_path: Tuple[str],
     fasta_path: str,
@@ -228,6 +235,7 @@ def db_search(
     output_root: Optional[str],
     verbosity: str,
     force_overwrite: bool,
+    output_db:Optional[str]
 ) -> None:
     """Perform a database search on MS/MS data using Casanovo-DB.
 
@@ -262,6 +270,9 @@ def db_search(
 
         results_path = output_path / f"{output_root_name}.mztab"
         runner.db_search(peak_path, fasta_path, str(results_path))
+        logger.info("Completed database search, moving onto dumping for debugging")
+        if output_db:
+            runner.model.protein_database.output_db(output_db)
         utils.log_annotate_report(
             runner.writer.psms, start_time=start_time, end_time=time.time()
         )
