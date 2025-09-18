@@ -1,6 +1,7 @@
 """Training and testing functionality for the de novo peptide sequencing
 model."""
 
+import datetime
 import glob
 import logging
 import os
@@ -659,7 +660,11 @@ class ModelRunner:
         elif self.config.devices == 1:
             return "auto"
         elif torch.cuda.device_count() > 1:
-            return DDPStrategy(find_unused_parameters=False, static_graph=True)
+            return DDPStrategy(
+                find_unused_parameters=False,
+                static_graph=True,
+                timeout=datetime.timedelta(minutes=120),
+            )
         else:
             return "auto"
 
