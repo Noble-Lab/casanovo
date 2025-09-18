@@ -114,6 +114,76 @@ class PeptideDecoder(AnalyteTransformerDecoder):
         return precursors
 
 
+class LinearEmbeder(torch.nn.Module):
+    def __init__(self, d_model: int):
+        super().__init__()
+        self.encoder = torch.nn.Linear(1, d_model, bias=False)
+
+    def forward(self, X: torch.Tensor) -> torch.Tensor:
+        """Encode m/z values.
+
+        Parameters
+        ----------
+        X : torch.Tensor of shape (batch_size, n_float)
+            The masses to embed.
+
+        Returns
+        -------
+        torch.Tensor of shape (batch_size, n_float, d_model)
+            The encoded features for the floating point numbers.
+
+        """
+        return self.encoder(X.unsqueeze(-1))
+
+
+class LinearIntensityPeakEncoder(PeakEncoder):
+    def __init__(
+        self,
+        d_model,
+        min_mz_wavelength: float = 0.001,
+        max_mz_wavelength: float = 10000,
+        min_intensity_wavelength: float = 0.000001,
+        max_intensity_wavelength: float = 1,
+        learnable_wavelengths: bool = False,
+    ):
+        super().__init__(
+            d_model,
+            min_mz_wavelength,
+            max_mz_wavelength,
+            min_intensity_wavelength,
+            max_intensity_wavelength,
+            learnable_wavelengths,
+        )
+
+        self.int_encoder = LinearEmbeder(d_model)
+        self.combiner = None
+
+    def forward(self, X: torch.Tensor) -> torch.Tensor:
+        """Encode m/z values and intensities.
+
+        Note that we expect intensities to fall within the interval [0, 1].
+
+        Parameters
+        ----------
+        X : torch.Tensor of shape (n_spectra, n_peaks, 2)
+            The spectra to embed. Axis 0 represents a mass spectrum, axis 1
+            contains the peaks in the mass spectrum, and axis 2 is essentially
+            a 2-tuple specifying the m/z-intensity pair for each peak. These
+            should be zero-padded, such that all of the spectra in the batch
+            are the same length.
+
+        Returns
+        -------
+        torch.Tensor of shape (n_spectra, n_peaks, d_model)
+            The encoded features for the mass spectra.
+
+        """
+        mz_embeddings = self.mz_encoder(X[:, :, 0])
+        int_embeddings = self.int_encoder(X[:, :, 1])
+
+        return mz_embeddings + int_embeddings
+
+
 class SpectrumEncoder(SpectrumTransformerEncoder):
     """
     A Transformer encoder for input mass spectra.
@@ -147,8 +217,12 @@ class SpectrumEncoder(SpectrumTransformerEncoder):
         n_layers: int = 1,
         dropout: float = 0,
         peak_encoder: PeakEncoder | Callable | bool = True,
+        use_linear_embeddings: bool = True,
     ):
         """Initialize a SpectrumEncoder."""
+        if peak_encoder and use_linear_embeddings:
+            peak_encoder = LinearIntensityPeakEncoder(d_model)
+
         super().__init__(
             d_model, n_head, dim_feedforward, n_layers, dropout, peak_encoder
         )
