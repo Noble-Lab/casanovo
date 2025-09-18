@@ -8,6 +8,7 @@ import depthcharge.tokenizers.peptides
 import numpy as np
 import pytest
 import torch
+import tempfile
 
 from casanovo.config import Config
 from casanovo.data.psm import PepSpecMatch
