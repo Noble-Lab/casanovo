@@ -169,6 +169,26 @@ class ProteinDatabase:
         )
         return peptides
 
+    def output_db(self, txt_file_name: str):
+        """
+        Dumps peptide database into a txt file of the user provided name
+
+
+        Parameters
+        ----------
+        txt_file_name : str
+            Name of the txt file that the database will be written into
+        """
+
+        seqs = self.db_peptides.index
+        ret = pd.DataFrame(
+            {"sequence": seqs, "mass": self.db_peptides["calc_mass"]}
+        )
+
+        with open(txt_file_name, "w", encoding="utf-8") as f:
+            for row in ret.itertuples(index=False):
+                f.write(f"{row.sequence} \t {row.mass} \n")
+
     def _calc_pep_mass(self, pep: str) -> float:
         """
         Calculates the neutral mass of a peptide sequence.
