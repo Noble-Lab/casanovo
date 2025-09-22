@@ -173,7 +173,6 @@ class ProteinDatabase:
         """
         Dumps peptide database into a txt file of the user provided name
 
-
         Parameters
         ----------
         txt_file_name : str

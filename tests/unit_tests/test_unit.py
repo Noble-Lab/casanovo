@@ -32,6 +32,8 @@ from casanovo.data.db_utils import _peptide_generator
 import pyteomics
 from casanovo.casanovo import _setup_output, setup_model
 from casanovo.denovo import ModelRunner
+from click.testing import CliRunner
+from casanovo.casanovo import db_search
 
 from casanovo import casanovo, utils, denovo
 from casanovo.config import Config
@@ -47,44 +49,9 @@ from casanovo.denovo.model import (
 from casanovo.casanovo import _setup_output
 from casanovo.casanovo import setup_model
 
-
-def test_output_db(tiny_fasta_file, mgf_small, tiny_config_db):
-    with tempfile.TemporaryDirectory() as tmpdir_name:
-        tmpdir_path = Path(tmpdir_name)
-        output_db = tmpdir_path / "test.txt"
-        output_path, output_root_name = _setup_output(
-            None, None, False, "debug"
-        )
-
-        config, model = setup_model(
-            None, str(tiny_config_db), output_path, output_root_name, False
-        )
-
-        runner = ModelRunner(
-            config,
-            model,
-            output_path,
-            output_root_name,
-        )
-
-        runner.tmp_dir = tmpdir_path
-        results_path = output_path / "test.mztab"
-
-        runner.db_search(
-            (str(mgf_small),), str(tiny_fasta_file), str(results_path)
-        )
-
-        runner.model.protein_database.output_db(output_db)
-        with open(output_db, "r", encoding="utf-8") as f:
-            lines = f.readlines()
-        assert len(lines) == len(runner.model.protein_database.db_peptides)
-
-        for line, (index, row) in zip(
-            lines, runner.model.protein_database.db_peptides.iterrows()
-        ):
-            peptide, mass = line.strip().split("\t")
-            assert peptide.strip() == index.strip()
-            assert abs(float(mass) - row.calc_mass) < 1e-6
+from click.testing import CliRunner
+import tempfile
+from pathlib import Path
 
 
 def test_forward_reverse():
@@ -175,6 +142,66 @@ def test_forward_reverse():
         ]
     )
     assert np.allclose(np.array([0.0]), aa_scores_reversed[4])
+
+
+def test_output_db(tiny_fasta_file, mgf_small, tiny_config_db):
+    with tempfile.TemporaryDirectory() as tmpdir_name:
+        tmpdir_path = Path(tmpdir_name)
+
+        output_path, output_root_name = _setup_output(
+            None, None, False, "debug"
+        )
+
+        config, model = setup_model(
+            None, str(tiny_config_db), output_path, output_root_name, False
+        )
+
+        runner = ModelRunner(
+            config,
+            model,
+            output_path,
+            output_root_name,
+        )
+
+        runner.tmp_dir = tmpdir_path
+        results_path = output_path / "test.mztab"
+
+        runner.db_search(
+            (str(mgf_small),), str(tiny_fasta_file), str(results_path)
+        )
+
+        output_db_path = tmpdir_path / "test.txt"
+        output_db_path.parent.mkdir(parents=True, exist_ok=True)
+
+        runner_cli = CliRunner()
+        result = runner_cli.invoke(
+            db_search,
+            [
+                str(mgf_small),
+                str(tiny_fasta_file),
+                "--config",
+                str(tiny_config_db),
+                "--output-db",
+                str(output_db_path),
+                "--verbosity",
+                "debug",
+                "--force_overwrite",
+            ],
+        )
+
+        assert result.exit_code == 0, f"CLI failed: {result.output}"
+        assert output_db_path.exists(), "Output DB file not created"
+
+        with open(output_db_path, "r", encoding="utf-8") as f:
+            lines = f.readlines()
+        assert len(lines) == len(runner.model.protein_database.db_peptides)
+
+        for line, (index, row) in zip(
+            lines, runner.model.protein_database.db_peptides.iterrows()
+        ):
+            peptide, mass = line.strip().split("\t")
+            assert peptide.strip() == index.strip()
+            assert abs(float(mass) - row.calc_mass) < 1e-6
 
 
 def test_digestion_with_unknown_amino_acids(tiny_fasta_file):
@@ -348,10 +375,6 @@ def test_no_model(tiny_config_db, mgf_small, tiny_fasta_file):
         if "PSM" in line:
             psm_lines += line + "\n"
     assert psm_lines is not None
-
-
-def test_output_db():
-    print("wassup girl")
 
 
 def test_version():
