@@ -183,12 +183,23 @@ def test_train_and_run(
     psms = mztab.spectrum_match_table
     assert list(psms.sequence) == [
         "ATSIPAR",
-        "VTLSC[Carbamidomethyl]R",
+        "VTLSCR",
         "LLIYGASTR",
         "EIVMTQSPPTLSLSPGER",
         "MEAPAQLLFLLLLWLPDTTR",
         "ASQSVSSSYLTWYQQKPGQAPR",
-        "FSGSGSGTDFTLTISSLQPEDFAVYYC[Carbamidomethyl]QQDYNLP",
+        "FSGSGSGTDFTLTISSLQPEDFAVYYCQQDYNLP",
+    ]
+
+    mods = psms["modifications"].to_list()
+    assert mods == [
+        None,
+        "5-Carbamidomethyl (C):UNIMOD:4",
+        None,
+        None,
+        None,
+        None,
+        "27-Carbamidomethyl (C):UNIMOD:4",
     ]
 
     # Validate the mzTab output file.

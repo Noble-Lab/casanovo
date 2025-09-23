@@ -6,9 +6,10 @@ import operator
 import os
 import re
 from pathlib import Path
-from typing import List
+from typing import List, Tuple
 
 import natsort
+import pyteomics.proforma
 
 from .. import __version__
 from ..config import Config
@@ -144,6 +145,89 @@ class MztabWriter:
             )
             self._run_map[Path(filename).name] = i
 
+    @staticmethod
+    def get_mod_string(
+        mod: pyteomics.proforma.TagBase,
+        residue: str = "N-term",
+        position: int = 0,
+    ) -> str:
+        """
+        Format a ProForma modification into an mzTab-style string.
+
+        Parameters
+        ----------
+        mod : pyteomics.proforma.TagBase
+            A modification tag object parsed from a ProForma sequence.
+            This can be a Unimod/PSI-MOD modification, a generic
+            modification, or a mass-only delta.
+        residue : str, default="N-term"
+            The residue associated with the modification. For
+            N-terminal modifications, use `"N-term"`.
+        position : int, default=0
+            Position of the modification in the peptide sequence.
+            Use `0` for N-terminal, `len(sequence)+1` for C-terminal,
+            and a 1-based index for internal residues.
+
+        Returns
+        -------
+        str
+            The mzTab-formatted modification string. Examples:
+        """
+        if hasattr(mod, "name"):
+            mod_str = f"{position}-{mod.name} ({residue})"
+            # If known unimod modification, add id
+            if hasattr(mod, "id") and mod.id is not None:
+                mod_str = f"{mod_str}:UNIMOD:{mod.id}"
+        elif hasattr(mod, "mass"):
+            mod_str = f"{position}-[{mod.mass:+.4f}]"
+        else:
+            mod_str = f"{position}-{str(mod)}"
+
+        return mod_str
+
+    @staticmethod
+    def parse_sequence(seq: str) -> Tuple[str, str]:
+        """
+        Parse a ProForma peptide sequence into a plain amino acid sequence and
+        an mzTab-formatted modifications string.
+
+        Parameters
+        ----------
+        seq : str
+            A peptide sequence in ProForma notation.
+
+        Returns
+        -------
+        aa_seq : str
+            The plain amino acid sequence with modifications stripped.
+        mod_string : str
+            A semicolon-delimited string of modifications in mzTab
+            format, suitable for reporting in the PSM section.
+        """
+        seq_mod, term = pyteomics.proforma.parse(seq)
+        aa_seq = "".join(res for res, _ in seq_mod)
+        n_term_mods = term["n_term"]
+
+        if n_term_mods is None:
+            mod_strings = []
+        else:
+            mod_strings = [
+                MztabWriter.get_mod_string(curr) for curr in n_term_mods
+            ]
+
+        for position, (res, mods) in enumerate(seq_mod, start=1):
+            if mods is None:
+                continue
+
+            for mod in mods:
+                mod = MztabWriter.get_mod_string(
+                    mod, residue=res, position=position
+                )
+                mod_strings.append(mod)
+
+        combined_mod_string = "; ".join(mod_strings)
+        return aa_seq, combined_mod_string
+
     def save(self) -> None:
         """
         Export the spectrum identifications to the mzTab file.
@@ -187,10 +271,12 @@ class MztabWriter:
                 if Path(filename).suffix.lower() == ".mgf" and idx.isnumeric():
                     idx = f"index={idx}"
 
+                seq, mods = self.parse_sequence(psm.sequence)
+
                 writer.writerow(
                     [
                         "PSM",
-                        psm.sequence,  # sequence
+                        seq,  # sequence
                         i,  # PSM_ID
                         psm.protein,  # accession
                         "null",  # unique
@@ -200,7 +286,7 @@ class MztabWriter:
                         psm.peptide_score,  # search_engine_score[1]
                         # FIXME: Modifications should be specified as
                         #  controlled vocabulary terms.
-                        "null",  # modifications
+                        mods if mods else "null",  # modifications
                         # FIXME: Can we get the retention time from the data
                         #  loader?
                         "null",  # retention_time

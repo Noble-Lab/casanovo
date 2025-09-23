@@ -12,6 +12,7 @@ import platform
 import re
 import shutil
 import tempfile
+import types
 import unittest
 import unittest.mock
 
@@ -1682,6 +1683,59 @@ def test_run_map(mgf_small):
     out_writer.set_ms_run([os.path.basename(mgf_small.name)])
     assert mgf_small.name in out_writer._run_map
     assert os.path.abspath(mgf_small.name) not in out_writer._run_map
+
+
+def test_get_mod_string():
+    mod = types.SimpleNamespace(name="Oxidation", id=35)
+    s = ms_io.MztabWriter.get_mod_string(mod, residue="M", position=4)
+    assert s == "4-Oxidation (M):UNIMOD:35"
+
+    mod = types.SimpleNamespace(name="Phospho")
+    s = ms_io.MztabWriter.get_mod_string(mod, residue="S", position=7)
+    assert s == "7-Phospho (S)"
+
+    mod = types.SimpleNamespace(mass=15.994915)
+    s = ms_io.MztabWriter.get_mod_string(mod, residue="M", position=4)
+    assert s == "4-[+15.9949]"
+
+    # Negative mass
+    mod = types.SimpleNamespace(mass=-17.026549)
+    s = ms_io.MztabWriter.get_mod_string(mod, residue="C-term", position=6)
+    assert s == "6-[-17.0265]"
+
+
+def test_parse_sequence():
+    # No mod
+    aa, mods = ms_io.MztabWriter.parse_sequence("ACDMK")
+    assert aa == "ACDMK"
+    assert mods == ""
+
+    # Single internal mod
+    aa, mods = ms_io.MztabWriter.parse_sequence("ACDM[Oxidation]K")
+    assert aa == "ACDMK"
+    assert mods == "4-Oxidation (M):UNIMOD:35"
+
+    # Multiple internal mods
+    aa, mods = ms_io.MztabWriter.parse_sequence(
+        "ACDM[Oxidation]KC[Carbamidomethyl]"
+    )
+    assert aa == "ACDMKC"
+    assert mods == "4-Oxidation (M):UNIMOD:35; 6-Carbamidomethyl (C):UNIMOD:4"
+
+    # N-terminal mod
+    aa, mods = ms_io.MztabWriter.parse_sequence("[Acetyl]-PEPTIDE")
+    assert aa == "PEPTIDE"
+    assert mods == "0-Acetyl (N-term):UNIMOD:1"
+
+    # N-terminal mod and multiple internal mods
+    aa, mods = ms_io.MztabWriter.parse_sequence(
+        "[Acetyl]-ACDM[Oxidation]KC[Carbamidomethyl]"
+    )
+    assert aa == "ACDMKC"
+    assert (
+        mods
+        == "0-Acetyl (N-term):UNIMOD:1; 4-Oxidation (M):UNIMOD:35; 6-Carbamidomethyl (C):UNIMOD:4"
+    )
 
 
 def test_check_dir(tmp_path):
