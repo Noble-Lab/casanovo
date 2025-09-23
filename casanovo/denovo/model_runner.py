@@ -400,6 +400,14 @@ class ModelRunner:
 
         self.trainer = pl.Trainer(**trainer_cfg)
 
+        # Reinitialize the trainer if it was loaded on to mps
+        if self.trainer.strategy.root_device.type == "mps":
+            logger.warning(
+                "Casanovo currently does not support MPS accelerators - using CPU"
+            )
+            trainer_cfg["accelerator"] = "cpu"
+            self.trainer = pl.Trainer(**trainer_cfg)
+
     def initialize_tokenizer(self) -> None:
         """Initialize the peptide tokenizer."""
         if self.config.massivekb_tokenizer:
