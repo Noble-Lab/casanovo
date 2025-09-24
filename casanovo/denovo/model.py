@@ -1,6 +1,7 @@
 """A de novo peptide sequencing model."""
 
 import collections
+import dataclasses
 import heapq
 import itertools
 import logging
@@ -1167,28 +1168,52 @@ class Spec2Pep(pl.LightningModule):
             Predicted PSMs for the given batch of spectra.
         """
         predictions = []
+        if "seq" in batch:
+            # FIXME: Remove work around when depthcharge reverse detokenization
+            # bug is fixed.
+            # peptides_true = self.tokenizer.detokenize(batch["seq"])
+            peptides_true = [
+                "".join(pep)
+                for pep in self.tokenizer.detokenize(batch["seq"], join=False)
+            ]
+        else:
+            peptides_true = itertools.repeat(None)
+
         for (
             filename,
             scan,
             precursor_charge,
             precursor_mz,
+            ground_truth,
             spectrum_preds,
         ) in zip(
             batch["peak_file"],
             batch["scan_id"],
             batch["precursor_charge"],
             batch["precursor_mz"],
+            peptides_true,
             self.forward(batch),
         ):
+            base_psm = psm.PepSpecMatch(
+                sequence=None,
+                spectrum_id=(filename, scan),
+                peptide_score=None,
+                charge=int(precursor_charge),
+                calc_mz=None,
+                exp_mz=precursor_mz.item(),
+                aa_scores=None,
+                ground_truth_sequence=ground_truth,
+            )
+
+            if len(spectrum_preds) == 0 and ground_truth is not None:
+                predictions.append(base_psm)
+
             for peptide_score, aa_scores, peptide in spectrum_preds:
                 predictions.append(
-                    psm.PepSpecMatch(
+                    dataclasses.replace(
+                        base_psm,
                         sequence=peptide,
-                        spectrum_id=(filename, scan),
                         peptide_score=peptide_score,
-                        charge=int(precursor_charge),
-                        calc_mz=np.nan,
-                        exp_mz=precursor_mz.item(),
                         aa_scores=aa_scores,
                     )
                 )

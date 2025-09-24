@@ -1,7 +1,7 @@
 """Peptide spectrum match dataclass."""
 
 import dataclasses
-from typing import Iterable, Tuple
+from typing import Iterable, Optional, Tuple
 
 
 @dataclasses.dataclass
@@ -33,13 +33,16 @@ class PepSpecMatch:
         sequence, where len(aa_scores) == len(sequence).
     protein : str
         Protein associated with the peptide sequence (for db mode).
+    ground_truth_sequence : Optional[str], default=None
+        Ground truth sequence annotation if available, None otherwise
     """
 
-    sequence: str
+    sequence: Optional[str]
     spectrum_id: Tuple[str, str]
-    peptide_score: float
+    peptide_score: Optional[float]
     charge: int
-    calc_mz: float
+    calc_mz: Optional[float]
     exp_mz: float
-    aa_scores: Iterable[float]
+    aa_scores: Optional[Iterable[float]]
     protein: str = "null"
+    ground_truth_sequence: Optional[str] = None
