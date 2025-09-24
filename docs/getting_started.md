@@ -27,7 +27,8 @@ conda create --name casanovo_env python=3.13
 This will create an Anaconda environment called `casanovo_env` that has Python 3.13 installed.
 
 ```{Note} 
-Currently, due to outstanding issues with support of Pytorch on Mac, you should install with python version 3.10, like this `conda create --name casanovo_env python=3.10`. Also, note that Apple Silicon is not yet supported by Pytorch, so Mac users will be restricted to CPU use only.
+Currently, due to outstanding issues with support of Pytorch on Mac, you should install with Python version 3.10, like this `conda create --name casanovo_env python=3.10`.
+Also, note that Apple Silicon is not yet supported by Pytorch, so Mac users will be restricted to CPU use only.
 ```
 
 Activate this environment by running:
