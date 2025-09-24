@@ -211,6 +211,125 @@ def sequence(
     "peak_path",
     required=True,
     nargs=-1,
+    type=click.Path(exists=True, dir_okay=False),
+)
+@click.option(
+    "--evaluate",
+    "-e",
+    is_flag=True,
+    default=False,
+    help="""
+    Run in evaluation mode. When this flag is set the peptide and amino acid  
+    precision will be calculated and logged at the end of the sequencing run. 
+    All input files must be annotated MGF files if running in evaluation 
+    mode.
+    """,
+)
+@click.option(
+    "--decoy_model",
+    "-dm",
+    required=True,
+    help="""
+    Path to the decoy model weights (.ckpt file) or a URL pointing to 
+    the decoy model weights file. Required for FDR control.
+    """,
+    type=str,
+)
+@click.option(
+    "--decoy_config",
+    "-dc",
+    required=True,
+    help="""
+    The YAML configuration file for the decoy model. Required for FDR control.
+    """,
+    type=click.Path(exists=True, dir_okay=False),
+)
+def fdr_control(
+    peak_path: Tuple[str],
+    model: Optional[str],
+    decoy_model: str,  # Now required
+    config: Optional[str],
+    decoy_config: str,  # Now required
+    output_dir: Optional[str],
+    output_root: Optional[str],
+    verbosity: str,
+    force_overwrite: bool,
+    evaluate: bool,
+) -> None:
+    """Perform de novo sequencing with FDR control using target-decoy approach.
+
+    PEAK_PATH must be one or more mzML, mzXML, or MGF files from which
+    to sequence peptides with FDR control. If evaluate is set to True,
+    PEAK_PATH must be one or more annotated MGF files.
+
+    This command uses both target and decoy models with their respective
+    configurations to estimate false discovery rates and provide confidence
+    scores for peptide identifications.
+    """
+    output_path, output_root_name = _setup_output(
+        output_dir, output_root, force_overwrite, verbosity
+    )
+    utils.check_dir_file_exists(output_path, f"{output_root}.mztab")
+
+    # Setup target model and config
+    target_config, target_model = setup_model(
+        model, config, output_path, output_root_name, False
+    )
+
+    # Setup decoy model and config - validate decoy model path
+    if _is_valid_url(decoy_model):
+        cache_dir = Path(
+            appdirs.user_cache_dir("casanovo", False, opinion=False)
+        )
+        decoy_model_path = _get_weights_from_url(decoy_model, cache_dir)
+    elif not Path(decoy_model).is_file():
+        error_msg = f"{decoy_model} is not a valid URL or checkpoint file path"
+        logger.error(error_msg)
+        raise ValueError(error_msg)
+    else:
+        decoy_model_path = decoy_model
+
+    decoy_config, _ = setup_model(
+        decoy_model_path, decoy_config, output_path, output_root_name, False
+    )
+
+    start_time = time.time()
+    with ModelRunner(
+        target_config,
+        target_model,
+        output_path,
+        output_root_name if output_root is not None else None,
+        False,
+        config_decoy=decoy_config,
+        model_filename_decoy=decoy_model_path,
+    ) as runner:
+        logger.info(
+            "Performing FDR-controlled sequencing %sof peptides from:",
+            "and evaluating " if evaluate else "",
+        )
+        for peak_file in peak_path:
+            logger.info("  %s", peak_file)
+
+        logger.info("Using target model: %s", target_model)
+        logger.info("Using target config: %s", target_config.file)
+        logger.info("Using decoy model: %s", decoy_model_path)
+        logger.info("Using decoy config: %s", decoy_config.file)
+
+        runner.predict_target_decoy(
+            peak_path,
+            str((output_path / output_root_name).with_suffix(".mztab")),
+            evaluate=evaluate,
+        )
+        utils.log_annotate_report(
+            runner.writer.psms, start_time=start_time, end_time=time.time()
+        )
+
+
+@main.command(cls=_SharedParams)
+@click.argument(
+    "peak_path",
+    required=True,
+    nargs=-1,
     type=click.Path(exists=True, dir_okay=True),
 )
 @click.argument(

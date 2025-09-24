@@ -13,7 +13,7 @@ import lightning.pytorch as pl
 import lightning.pytorch.loggers
 import torch
 import torch.utils.data
-from depthcharge.tokenizers import PeptideTokenizer
+from depthcharge.tokenizers import PeptideTokenizer, Tokenizer
 from depthcharge.tokenizers.peptides import MskbPeptideTokenizer
 from lightning.pytorch.callbacks import LearningRateMonitor, ModelCheckpoint
 from lightning.pytorch.strategies import DDPStrategy
@@ -24,7 +24,7 @@ from ..config import Config
 from ..data import db_utils, ms_io
 from ..denovo.dataloaders import DeNovoDataModule
 from ..denovo.evaluate import aa_match_batch, aa_match_metrics
-from ..denovo.model import DbSpec2Pep, Spec2Pep
+from ..denovo.model import DbSpec2Pep, Spec2Pep, Spec2PepTargetDecoy
 
 
 logger = logging.getLogger("casanovo")
@@ -50,6 +50,12 @@ class ModelRunner:
     overwrite_ckpt_check: bool, optional
         Whether to check output_dir (if not `None`) for conflicting
         checkpoint files.
+    config_decoy : Config object, optional
+        The casanovo configuration for the decoy model. Required for
+        target-decoy model.
+    model_filename_decoy : str, optional
+        The model filename for the decoy model. Required for
+        target-decoy mode.
     """
 
     def __init__(
@@ -59,13 +65,21 @@ class ModelRunner:
         output_dir: Optional[Path | None] = None,
         output_rootname: Optional[str | None] = None,
         overwrite_ckpt_check: Optional[bool] = True,
+        config_decoy: Optional[Config] = None,
+        model_filename_decoy: Optional[str] = None,
     ) -> None:
         """Initialize a ModelRunner."""
         self.config = config
+        self.config_decoy = config_decoy
         self.model_filename = model_filename
+        self.model_filename_decoy = model_filename_decoy
         self.output_dir = output_dir
         self.output_rootname = output_rootname
         self.overwrite_ckpt_check = overwrite_ckpt_check
+
+        # Validate config consistency if decoy config is provided
+        if config_decoy is not None:
+            self._validate_config_consistency(config, config_decoy)
 
         # Initialized later.
         self.tmp_dir = None
@@ -122,6 +136,36 @@ class ModelRunner:
         if self.writer is not None:
             self.writer.save()
 
+    def _validate_config_consistency(
+        self, target_config: Config, decoy_config: Config
+    ) -> None:
+        """Validate that target and decoy configurations are identical except for 'residues'"""
+        target_filtered = {
+            k: v for k, v in target_config.items() if k != "residues"
+        }
+        decoy_filtered = {
+            k: v for k, v in decoy_config.items() if k != "residues"
+        }
+
+        if target_filtered != decoy_filtered:
+            # Find the specific differences for error message
+            diffs = []
+            all_keys = set(target_filtered.keys()) | set(decoy_filtered.keys())
+            for key in all_keys:
+                if target_filtered.get(key) != decoy_filtered.get(key):
+                    diffs.append(
+                        f"  {key}: target={target_filtered.get(key)}, decoy={decoy_filtered.get(key)}"
+                    )
+
+            raise ValueError(
+                "Target and decoy configurations must be identical except for 'residues'. "
+                f"Found differences in:\n" + "\n".join(diffs)
+            )
+
+        logger.info(
+            "Target and decoy configuration consistency check passed (only 'residues' may differ)"
+        )
+
     def db_search(
         self,
         peak_path: Iterable[str],
@@ -147,8 +191,14 @@ class ModelRunner:
             config_filename=self.config.file,
         )
         self.initialize_trainer(train=True)
-        self.initialize_tokenizer()
-        self.initialize_model(train=False, db_search=True)
+        self.tokenizer = self.initialize_tokenizer(self.config)
+        self.model = self.initialize_model(
+            model_filename=self.model_filename,
+            config=self.config,
+            tokenizer=self.tokenizer,
+            train=False,
+            db_search=True,
+        )
         self.model.out_writer = self.writer
         self.model.protein_database = db_utils.ProteinDatabase(
             fasta_path,
@@ -187,8 +237,13 @@ class ModelRunner:
             The path to the MS data files for validation.
         """
         self.initialize_trainer(train=True)
-        self.initialize_tokenizer()
-        self.initialize_model(train=True)
+        self.tokenizer = self.initialize_tokenizer(self.config)
+        self.model = self.initialize_model(
+            model_filename=self.model_filename,
+            config=self.config,
+            tokenizer=self.tokenizer,
+            train=True,
+        )
 
         train_paths = self._get_input_paths(train_peak_path, True, "train")
         valid_paths = self._get_input_paths(valid_peak_path, True, "valid")
@@ -285,8 +340,69 @@ class ModelRunner:
         )
 
         self.initialize_trainer(train=False)
-        self.initialize_tokenizer()
-        self.initialize_model(train=False)
+        self.tokenizer = self.initialize_tokenizer(self.config)
+        self.model = self.initialize_model(
+            model_filename=self.model_filename,
+            config=self.config,
+            tokenizer=self.tokenizer,
+            train=False,
+        )
+        self.model.out_writer = self.writer
+
+        test_paths = self._get_input_paths(peak_path, False, "test")
+        self.writer.set_ms_run(test_paths)
+        self.initialize_data_module(test_paths=test_paths)
+
+        try:
+            self.loaders.setup(stage="test", annotated=evaluate)
+        except (KeyError, OSError) as e:
+            if evaluate:
+                error_message = (
+                    "Error creating annotated spectrum dataloaders. This may "
+                    "be the result of having an unannotated peak file present "
+                    "in the validation peak file path list."
+                )
+
+                logger.error(error_message)
+                raise TypeError(error_message) from e
+
+            raise
+
+        predict_dataloader = self.loaders.predict_dataloader()
+        self.trainer.predict(self.model, predict_dataloader)
+
+        if evaluate:
+            self.log_metrics(predict_dataloader)
+
+    def predict_target_decoy(
+        self,
+        peak_path: Iterable[str],
+        results_path: str,
+        evaluate: bool = False,
+    ) -> None:
+        self.writer = ms_io.MztabWriter(results_path)
+        self.writer.set_metadata(
+            self.config,
+            model=str(self.model_filename),
+            config_filename=self.config.file,
+        )
+
+        self.initialize_trainer(train=False)
+        self.tokenizer = self.initialize_tokenizer(self.config)
+        self.tokenizer_decoy = self.initialize_tokenizer(self.config_decoy)
+        model_t = self.initialize_model(
+            model_filename=self.model_filename,
+            config=self.config,
+            tokenizer=self.tokenizer,
+            train=False,
+        )
+        model_d = self.initialize_model(
+            model_filename=self.model_filename_decoy,
+            config=self.config_decoy,
+            tokenizer=self.tokenizer_decoy,
+            train=False,
+        )
+        self.model = Spec2PepTargetDecoy(model_t, model_d)
         self.model.out_writer = self.writer
 
         test_paths = self._get_input_paths(peak_path, False, "test")
@@ -400,9 +516,9 @@ class ModelRunner:
 
         self.trainer = pl.Trainer(**trainer_cfg)
 
-    def initialize_tokenizer(self) -> None:
+    def initialize_tokenizer(self, config) -> Tokenizer:
         """Initialize the peptide tokenizer."""
-        if self.config.massivekb_tokenizer:
+        if config.massivekb_tokenizer:
             tokenizer_clss = MskbPeptideTokenizer
         else:
             tokenizer_clss = PeptideTokenizer
@@ -424,43 +540,48 @@ class ModelRunner:
             stop_token="$",
         )
 
-    def initialize_model(self, train: bool, db_search: bool = False) -> None:
+    def initialize_model(
+        self,
+        model_filename: str | None,
+        config: Config,
+        tokenizer: Tokenizer,
+        train: bool,
+        db_search: bool = False,
+    ) -> Spec2Pep:
         """Initialize the Casanovo model.
 
         Parameters
         ----------
+        model_filename : str | None
+            The model filename to load.
+        config : Config
+            The casanovo configuration to use for this model.
         train : bool
             Determines whether to set the model up for model training or
             evaluation / inference.
         db_search : bool
             Determines whether to use the DB search model subclass.
         """
-        try:
-            tokenizer = self.tokenizer
-        except AttributeError:
-            raise RuntimeError(
-                "The tokenizer must be initialized prior to the model"
-            )
 
         model_params = dict(
-            precursor_mass_tol=self.config.precursor_mass_tol,
-            isotope_error_range=self.config.isotope_error_range,
-            min_peptide_len=self.config.min_peptide_len,
-            top_match=self.config.top_match,
-            n_beams=self.config.n_beams,
-            n_log=self.config.n_log,
-            max_charge=self.config.max_charge,
-            dim_model=self.config.dim_model,
-            n_head=self.config.n_head,
-            dim_feedforward=self.config.dim_feedforward,
-            n_layers=self.config.n_layers,
-            dropout=self.config.dropout,
-            warmup_iters=self.config.warmup_iters,
-            cosine_schedule_period_iters=self.config.cosine_schedule_period_iters,
-            lr=self.config.learning_rate,
-            weight_decay=self.config.weight_decay,
-            train_label_smoothing=self.config.train_label_smoothing,
-            calculate_precision=self.config.calculate_precision,
+            precursor_mass_tol=config.precursor_mass_tol,
+            isotope_error_range=config.isotope_error_range,
+            min_peptide_len=config.min_peptide_len,
+            top_match=config.top_match,
+            n_beams=config.n_beams,
+            n_log=config.n_log,
+            max_charge=config.max_charge,
+            dim_model=config.dim_model,
+            n_head=config.n_head,
+            dim_feedforward=config.dim_feedforward,
+            n_layers=config.n_layers,
+            dropout=config.dropout,
+            warmup_iters=config.warmup_iters,
+            cosine_schedule_period_iters=config.cosine_schedule_period_iters,
+            lr=config.learning_rate,
+            weight_decay=config.weight_decay,
+            train_label_smoothing=config.train_label_smoothing,
+            calculate_precision=config.calculate_precision,
             out_writer=self.writer,
             tokenizer=tokenizer,
         )
@@ -468,29 +589,29 @@ class ModelRunner:
         # Reconfigurable non-architecture related parameters for a
         # loaded model.
         loaded_model_params = dict(
-            precursor_mass_tol=self.config.precursor_mass_tol,
-            isotope_error_range=self.config.isotope_error_range,
-            min_peptide_len=self.config.min_peptide_len,
-            max_peptide_len=self.config.max_peptide_len,
-            top_match=self.config.top_match,
-            n_beams=self.config.n_beams,
-            n_log=self.config.n_log,
-            warmup_iters=self.config.warmup_iters,
-            cosine_schedule_period_iters=self.config.cosine_schedule_period_iters,
-            lr=self.config.learning_rate,
-            weight_decay=self.config.weight_decay,
-            train_label_smoothing=self.config.train_label_smoothing,
-            calculate_precision=self.config.calculate_precision,
+            precursor_mass_tol=config.precursor_mass_tol,
+            isotope_error_range=config.isotope_error_range,
+            min_peptide_len=config.min_peptide_len,
+            max_peptide_len=config.max_peptide_len,
+            top_match=config.top_match,
+            n_beams=config.n_beams,
+            n_log=config.n_log,
+            warmup_iters=config.warmup_iters,
+            cosine_schedule_period_iters=config.cosine_schedule_period_iters,
+            lr=config.learning_rate,
+            weight_decay=config.weight_decay,
+            train_label_smoothing=config.train_label_smoothing,
+            calculate_precision=config.calculate_precision,
             out_writer=self.writer,
         )
 
-        if self.model_filename is None:
+        if model_filename is None:
             if db_search:
                 logger.error("A model file must be provided for DB search")
                 raise ValueError("A model file must be provided for DB search")
             # Train a model from scratch if no model file is provided.
             if train:
-                self.model = Spec2Pep(**model_params)
+                model = Spec2Pep(**model_params)
                 return
             # Else we're not training, so a model file must be provided.
             else:
@@ -499,10 +620,10 @@ class ModelRunner:
         # Else a model file is provided (to continue training or for
         # inference).
 
-        if not Path(self.model_filename).exists():
+        if not Path(model_filename).exists():
             logger.error(
                 "Could not find the model weights at file %s",
-                self.model_filename,
+                model_filename,
             )
             raise FileNotFoundError("Could not find the model weights file")
 
@@ -511,20 +632,20 @@ class ModelRunner:
         device = torch.empty(1).device  # Use the default device.
         model_clss = DbSpec2Pep if db_search else Spec2Pep
         try:
-            self.model = model_clss.load_from_checkpoint(
-                self.model_filename, map_location=device, **loaded_model_params
+            model = model_clss.load_from_checkpoint(
+                model_filename, map_location=device, **loaded_model_params
             )
             # Use tokenizer initialized from config file instead of loaded
             # from checkpoint file.
-            self.model.tokenizer = tokenizer
+            model.tokenizer = tokenizer
             architecture_params = set(model_params.keys()) - set(
                 loaded_model_params.keys()
             )
             for param in architecture_params:
-                if model_params[param] != self.model.hparams[param]:
+                if model_params[param] != model.hparams[param]:
                     warnings.warn(
                         f"Mismatching {param} parameter in "
-                        f"model checkpoint ({self.model.hparams[param]}) "
+                        f"model checkpoint ({model.hparams[param]}) "
                         f"vs config file ({model_params[param]}); "
                         "using the checkpoint."
                     )
@@ -532,17 +653,19 @@ class ModelRunner:
             # This only doesn't work if the weights are from an older
             # version.
             try:
-                self.model = model_clss.load_from_checkpoint(
-                    self.model_filename,
+                model = model_clss.load_from_checkpoint(
+                    model_filename,
                     map_location=device,
                     **model_params,
                 )
-                self.model.tokenizer = tokenizer
+                model.tokenizer = tokenizer
             except RuntimeError:
                 raise RuntimeError(
                     "Weights file incompatible with the current version of "
                     "Casanovo."
                 )
+
+        return model
 
     def initialize_data_module(
         self,
