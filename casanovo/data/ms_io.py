@@ -6,7 +6,7 @@ import operator
 import os
 import re
 from pathlib import Path
-from typing import List
+from typing import List, Optional
 
 import natsort
 
@@ -177,6 +177,7 @@ class MztabWriter:
                     "end",
                     "opt_ms_run[1]_aa_scores",
                     "opt_ms_run[1]_proforma",
+                    "opt_ms_run[1]_ground_truth",
                 ]
             )
             by_id = operator.attrgetter("spectrum_id")
@@ -198,7 +199,7 @@ class MztabWriter:
                         "null",  # database
                         "null",  # database_version
                         f"[MS, MS:1003281, Casanovo, {__version__}]",
-                        psm.peptide_score,  # search_engine_score[1]
+                        psm.peptide_score or "null",  # search_engine_score[1]
                         # FIXME: Modifications should be specified as
                         #  controlled vocabulary terms.
                         psm.modifications,  # modifications
@@ -207,7 +208,7 @@ class MztabWriter:
                         "null",  # retention_time
                         psm.charge,  # charge
                         psm.exp_mz,  # exp_mass_to_charge
-                        psm.calc_mz,  # calc_mass_to_charge
+                        psm.calc_mz or "null",  # calc_mass_to_charge
                         f"ms_run[{self._run_map[filename]}]:{idx}",
                         "null",  # pre
                         "null",  # post
@@ -216,5 +217,7 @@ class MztabWriter:
                         # opt_ms_run[1]_aa_scores
                         ",".join(list(map("{:.5f}".format, psm.aa_scores))),
                         psm.sequence,  # op_ms_run[1]_proforma
+                        psm.ground_truth_sequence
+                        or "null",  # opt_sequence_ground_truth
                     ]
                 )
