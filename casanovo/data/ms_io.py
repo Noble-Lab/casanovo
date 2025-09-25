@@ -147,7 +147,7 @@ class MztabWriter:
 
     @staticmethod
     def get_mod_string(
-        mod: pyteomics.proforma.TagBase,
+        mod: pyteomics.proforma.ModificationBase,
         residue: str = "N-term",
         position: int = 0,
     ) -> str:
@@ -156,7 +156,7 @@ class MztabWriter:
 
         Parameters
         ----------
-        mod : pyteomics.proforma.TagBase
+        mod : pyteomics.proforma.ModificationBase
             A modification tag object parsed from a ProForma sequence.
             This can be a Unimod/PSI-MOD modification, a generic
             modification, or a mass-only delta.
@@ -178,10 +178,8 @@ class MztabWriter:
             # If known unimod modification, add id
             if hasattr(mod, "id") and mod.id is not None:
                 mod_str = f"{mod_str}:UNIMOD:{mod.id}"
-        elif hasattr(mod, "mass"):
-            mod_str = f"{position}-[{mod.mass:+.4f}]"
         else:
-            mod_str = f"{position}-{str(mod)}"
+            mod_str = f"{position}-[{mod.mass:+.4f}]"
 
         return mod_str
 
