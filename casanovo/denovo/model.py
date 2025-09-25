@@ -2241,20 +2241,9 @@ def _get_perturbed_fragments(
     perturbed_annotations = sfa.get_theoretical_fragments(
         peptide,
         ion_types="paby",
+        max_isotope=1,
         neutral_losses=sfa.NEUTRAL_LOSS,
         max_charge=max(1, charge),
     )
     sfa.AA_MASS = original_aa_masses
-
-    # Generate +1 peaks' annotation
-    iso_annotations = []
-    for base_annot, theo_mz in perturbed_annotations:
-        iso_mz = theo_mz + (1.00335 / base_annot.charge)
-        iso_annot = copy.deepcopy(base_annot)
-        iso_annot.isotope = 1
-        iso_annot.mz_delta = (
-            None  # will be set when matching experimental peaks
-        )
-        iso_annotations.append((iso_annot, iso_mz))
-    perturbed_annotations.extend(iso_annotations)
     return perturbed_annotations
