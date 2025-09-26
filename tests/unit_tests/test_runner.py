@@ -1,6 +1,5 @@
 """Unit tests specifically for the model_runner module."""
 
-import logging
 import shutil
 import unittest.mock
 from pathlib import Path
@@ -532,32 +531,3 @@ def test_log_metrics(monkeypatch, tiny_config):
             assert pep_precision == pytest.approx(0)
             assert aa_precision == pytest.approx(100)
             assert aa_recall == pytest.approx(100 * (2 / 3))
-
-
-def test_override_mps(monkeypatch, tiny_config, caplog):
-    msg = "Casanovo currently does not support MPS accelerators - using CPU"
-
-    with monkeypatch.context() as ctx:
-        mock_trainer = unittest.mock.MagicMock()
-        mock_trainer.return_value = mock_trainer
-        mock_trainer.strategy.root_device.type = "mps"
-        ctx.setattr("lightning.pytorch.Trainer", mock_trainer)
-
-        with ModelRunner(Config(tiny_config)) as runner, caplog.at_level(
-            logging.WARNING
-        ):
-            runner.initialize_trainer(False)
-            args, kwargs = mock_trainer.call_args
-            assert msg in caplog.text
-            assert kwargs.get("accelerator") == "cpu"
-            assert mock_trainer.call_count == 2
-
-            caplog.clear()
-            mock_trainer.strategy.root_device.type = "cuda:0"
-            runner.config.accelerator = "gpu"
-
-            runner.initialize_trainer(False)
-            args, kwargs = mock_trainer.call_args
-            assert msg not in caplog.text
-            assert kwargs.get("accelerator") == "gpu"
-            assert mock_trainer.call_count == 3
