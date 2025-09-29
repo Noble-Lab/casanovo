@@ -1,24 +1,27 @@
-name: 🧪 Debug Rich Codex Locally
+name: ❌ Replicate Checkout Error
 
 on:
   push:
     branches:
-      - "*"  # Run on any branch push
+      - "*"
     paths:
       - "docs/*.md"
       - "casanovo/casanovo.py"
-      - ".github/workflows/debug.yml"
-  workflow_dispatch:  # Allow manual runs from GitHub UI
+      - ".github/workflows/replicate-error.yml"
+  pull_request:
+    paths:
+      - "docs/*.md"
+      - "casanovo/casanovo.py"
+  workflow_dispatch:
 
 jobs:
   rich_codex:
     runs-on: ubuntu-latest
     steps:
-      - name: ✅ Check out the forked branch
+      - name: ❌ Check out the repo with ref (this will break in forks)
         uses: actions/checkout@v4
         with:
-          repository: ${{ github.repository }}
-          ref: ${{ github.ref_name }}
+          ref: ${{ github.head_ref }}
 
       - name: 🐍 Set up Python
         uses: actions/setup-python@v5
