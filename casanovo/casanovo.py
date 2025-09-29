@@ -220,7 +220,7 @@ def sequence(
     type=click.Path(exists=True, dir_okay=False),
 )
 @click.option(
-    "--output-db",
+    "--output_db",
     "-b",
     type=str,
     default=None,

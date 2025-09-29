@@ -21,7 +21,6 @@ from depthcharge.tokenizers import PeptideTokenizer
 from torch.utils.data import DataLoader
 from torch.utils.data.datapipes.iter.combinatorics import ShufflerIterDataPipe
 
-
 logger = logging.getLogger("casanovo")
 
 

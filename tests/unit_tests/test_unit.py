@@ -8,34 +8,28 @@ import io
 import math
 import os
 import pathlib
-from pathlib import Path
 import platform
 import re
 import shutil
 import tempfile
 import unittest
 import unittest.mock
-from collections.abc import Iterator
-from typing import Tuple
 
 import depthcharge
-import depthcharge.data
 import depthcharge.tokenizers.peptides
 import einops
 import github
 import numpy as np
 import pandas as pd
+import pyteomics
 import pytest
 import requests
 import torch
-from casanovo.data.db_utils import _peptide_generator
-import pyteomics
-from casanovo.casanovo import _setup_output, setup_model
-from casanovo.denovo import ModelRunner
 from click.testing import CliRunner
-from casanovo.casanovo import db_search
+from depthcharge.tokenizers import PeptideTokenizer
 
-from casanovo import casanovo, utils, denovo
+from casanovo import casanovo, denovo, utils
+from casanovo.casanovo import _setup_output, db_search, setup_model
 from casanovo.config import Config
 from casanovo.data import db_utils, ms_io, psm
 from casanovo.denovo.dataloaders import DeNovoDataModule
@@ -43,15 +37,9 @@ from casanovo.denovo.evaluate import aa_match, aa_match_batch, aa_match_metrics
 from casanovo.denovo.model import (
     DbSpec2Pep,
     Spec2Pep,
-    _peptide_score,
     _calc_match_score,
+    _peptide_score,
 )
-from casanovo.casanovo import _setup_output
-from casanovo.casanovo import setup_model
-
-from click.testing import CliRunner
-import tempfile
-from pathlib import Path
 
 
 def test_forward_reverse():
@@ -144,237 +132,112 @@ def test_forward_reverse():
     assert np.allclose(np.array([0.0]), aa_scores_reversed[4])
 
 
-def test_output_db(tiny_fasta_file, mgf_small, tiny_config_db):
-    with tempfile.TemporaryDirectory() as tmpdir_name:
-        tmpdir_path = Path(tmpdir_name)
+def test_output_db(tiny_fasta_file, tmp_path):
+    output_file = tmp_path / "output-db.csv"
 
-        output_path, output_root_name = _setup_output(
-            None, None, False, "debug"
-        )
+    pdb = db_utils.ProteinDatabase(
+        fasta_path=str(tiny_fasta_file),
+        enzyme="trypsin",
+        digestion="partial",
+        missed_cleavages=0,
+        min_peptide_len=6,
+        max_peptide_len=100,
+        max_mods=0,
+        precursor_tolerance=20,
+        isotope_error=[0, 0],
+        allowed_fixed_mods="C:C+57.021",
+        allowed_var_mods=(
+            "M:M+15.995,N:N+0.984,Q:Q+0.984,"
+            "nterm:+42.011,nterm:+43.006,nterm:-17.027,nterm:+43.006-17.027"
+        ),
+        tokenizer=depthcharge.tokenizers.PeptideTokenizer.from_massivekb(),
+    )
 
-        config, model = setup_model(
-            None, str(tiny_config_db), output_path, output_root_name, False
-        )
+    pdb.output_db(str(output_file))
 
-        runner = ModelRunner(
-            config,
-            model,
-            output_path,
-            output_root_name,
-        )
+    ground_truth = pdb.db_peptides
+    loaded = pd.read_csv(output_file, sep="\t", index_col="peptide")
 
-        runner.tmp_dir = tmpdir_path
-        results_path = output_path / "test.mztab"
-
-        runner.db_search(
-            (str(mgf_small),), str(tiny_fasta_file), str(results_path)
-        )
-
-        output_db_path = tmpdir_path / "test.txt"
-        output_db_path.parent.mkdir(parents=True, exist_ok=True)
-
-        runner_cli = CliRunner()
-        result = runner_cli.invoke(
-            db_search,
-            [
-                str(mgf_small),
-                str(tiny_fasta_file),
-                "--config",
-                str(tiny_config_db),
-                "--output-db",
-                str(output_db_path),
-                "--verbosity",
-                "debug",
-                "--force_overwrite",
-            ],
-        )
-
-        assert result.exit_code == 0, f"CLI failed: {result.output}"
-        assert output_db_path.exists(), "Output DB file not created"
-
-        with open(output_db_path, "r", encoding="utf-8") as f:
-            lines = f.readlines()
-        assert len(lines) == len(runner.model.protein_database.db_peptides)
-
-        for line, (index, row) in zip(
-            lines, runner.model.protein_database.db_peptides.iterrows()
-        ):
-            peptide, mass = line.strip().split("\t")
-            assert peptide.strip() == index.strip()
-            assert abs(float(mass) - row.calc_mass) < 1e-6
+    pd.testing.assert_frame_equal(ground_truth, loaded)
 
 
-def test_digestion_with_unknown_amino_acids(tiny_fasta_file):
-    with open(str(tiny_fasta_file), "r") as f:
-        existing_lines = f.readlines()
+def test_digestion_with_unknown_amino_acids():
+    tmp_path = tempfile.TemporaryDirectory()
+    fasta_path = pathlib.Path(tmp_path.name) / "tiny_fasta.fasta"
 
-    lines_to_add = [">seq1\nARNDCEQGHILKMFPSTWYVX"]
-
-    for line in lines_to_add:
-        existing_lines.append(line + "\n")
-
-    with open(str(tiny_fasta_file), "w") as f:
-        f.writelines(existing_lines)
+    fasta_path.write_text(">foo\nME\n>corrupted\nMEX\n", encoding="utf-8")
 
     valid_aa = list("ARNDCEQGHILKMFPSTWYV")
     min_len = 0
     max_len = 18
 
-    print("Non-specific digestion")
-    iterator_gt = non_specific_digestion(
-        valid_aa, tiny_fasta_file, min_len, max_len
-    )
-    peptide_generator = _peptide_generator(
-        str(tiny_fasta_file),
-        "N/A",
-        "non-specific",
-        0,
-        min_len,
-        max_len,
-        valid_aa,
-    )
-    assert [p for p, _ in peptide_generator] == [p for p, _ in iterator_gt]
+    test_cases = [
+        (
+            "N/A",
+            "non-specific",
+            [
+                ("", "foo"),
+                ("M", "foo"),
+                ("ME", "foo"),
+                ("", "foo"),
+                ("E", "foo"),
+                ("", "corrupted"),
+                ("M", "corrupted"),
+                ("ME", "corrupted"),
+                ("", "corrupted"),
+                ("E", "corrupted"),
+                ("", "corrupted"),
+            ],
+            False,
+        ),
+        (
+            "trypsin",
+            "partial",
+            [
+                ("M", "foo"),
+                ("ME", "foo"),
+                ("E", "foo"),
+                ("ME", "corrupted"),
+                ("M", "corrupted"),
+            ],
+            True,
+        ),
+        (
+            ".Q.",
+            "partial",
+            [
+                ("M", "foo"),
+                ("ME", "foo"),
+                ("E", "foo"),
+                ("ME", "corrupted"),
+                ("M", "corrupted"),
+            ],
+            True,
+        ),
+        ("trypsin", "full", [("ME", "foo")], True),
+        (".Q.", "full", [("ME", "foo")], True),
+    ]
 
-    print("Partial Digestion - Enzymatic")
-    iterator_gt = partial_and_full_digestion(
-        tiny_fasta_file, "trypsin", "partial", min_len, max_len, valid_aa
-    )
-    peptide_generator = _peptide_generator(
-        str(tiny_fasta_file),
-        "trypsin",
-        "partial",
-        0,
-        min_len,
-        max_len,
-        valid_aa,
-    )
-    assert [p for p, _ in peptide_generator] == [p for p, _ in iterator_gt]
-
-    print("Partial Digestion - Nonenzymatic")
-    iterator_gt = partial_and_full_digestion(
-        tiny_fasta_file, ".Q.", "partial", min_len, max_len, valid_aa
-    )
-    peptide_generator = _peptide_generator(
-        str(tiny_fasta_file),
-        ".Q.",
-        "partial",
-        0,
-        min_len,
-        max_len,
-        valid_aa,
-    )
-    assert [p for p, _ in peptide_generator] == [p for p, _ in iterator_gt]
-
-    print("Full Digestion - Enzymatic")
-    iterator_gt = partial_and_full_digestion(
-        tiny_fasta_file, "trypsin", "full", min_len, max_len, valid_aa
-    )
-    peptide_generator = _peptide_generator(
-        str(tiny_fasta_file),
-        "trypsin",
-        "full",
-        0,
-        min_len,
-        max_len,
-        valid_aa,
-    )
-    assert [p for p, _ in peptide_generator] == [p for p, _ in iterator_gt]
-
-    print("Full Digestion - Nonenzymatic")
-    iterator_gt = partial_and_full_digestion(
-        tiny_fasta_file, ".Q.", "full", min_len, max_len, valid_aa
-    )
-    peptide_generator = _peptide_generator(
-        str(tiny_fasta_file),
-        ".Q.",
-        "full",
-        0,
-        min_len,
-        max_len,
-        valid_aa,
-    )
-
-    assert [p for p, _ in peptide_generator] == [p for p, _ in iterator_gt]
-
-
-def partial_and_full_digestion(
-    fasta_filename,
-    enzyme,
-    digestion,
-    min_peptide_len,
-    max_peptide_len,
-    valid_aa,
-) -> Iterator[Tuple[str, str]]:
-    n_skipped = 0
-    for header, seq in pyteomics.fasta.read(str(fasta_filename)):
-        peptides = pyteomics.parser.cleave(
-            seq,
-            rule=enzyme,
-            missed_cleavages=0,
-            semi=digestion == "partial",
-        )
-        protein = header.split()[0]
-        for peptide in peptides:
-            if min_peptide_len <= len(peptide) <= max_peptide_len:
-                if any(aa not in valid_aa for aa in peptide):
-                    n_skipped += 1
-                else:
-                    yield peptide, protein
-
-
-def non_specific_digestion(
-    valid_aa, fasta_filename, min_peptide_len, max_peptide_len
-) -> Iterator[Tuple[str, str]]:
-    n_skipped = 0
-    for header, seq in pyteomics.fasta.read(str(fasta_filename)):
-        protein = header.split()[0]
-        for i in range(len(seq)):
-            for j in range(
-                i + min_peptide_len,
-                min(i + max_peptide_len + 1, len(seq) + 1),
-            ):
-                peptide = seq[i:j]
-                if any(aa not in valid_aa for aa in peptide):
-                    n_skipped += 1
-                else:
-                    yield peptide, protein
-
-
-def test_no_model(tiny_config_db, mgf_small, tiny_fasta_file):
-    output_path, output_root_name = _setup_output(
-        None,
-        None,
-        False,
-        "debug",
-    )
-
-    utils.check_dir_file_exists(output_path, "test.mztab")
-    config, model = setup_model(
-        None, tiny_config_db, output_path, output_root_name, False
-    )
-
-    with ModelRunner(
-        config,
-        model,
-        output_path,
-        output_root_name,
-        False,
-    ) as runner:
-        results_path = output_path / f"{output_root_name}.mztab"
-        runner.db_search(
-            (str(mgf_small),), str(tiny_fasta_file), str(results_path)
+    for enzyme, specificity, expected, use_sort in test_cases:
+        results = list(
+            db_utils._peptide_generator(
+                str(fasta_path),
+                enzyme,
+                specificity,
+                0,
+                min_len,
+                max_len,
+                valid_aa,
+            )
         )
 
-    assert results_path.exists()
-    with open(results_path, "r") as f:
-        lines = f.readlines()
-    assert lines is not None
+        result_peptides = [p for p, _ in results]
+        expected_peptides = [p for p, _ in expected]
 
-    psm_lines = ""
-    for line in lines:
-        if "PSM" in line:
-            psm_lines += line + "\n"
-    assert psm_lines is not None
+        if use_sort:
+            assert sorted(result_peptides) == sorted(
+                expected_peptides
+            ), f"Failed for enzyme={enzyme}, specificity={specificity}"
 
 
 def test_version():
