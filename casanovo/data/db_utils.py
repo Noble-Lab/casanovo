@@ -169,6 +169,18 @@ class ProteinDatabase:
         )
         return peptides
 
+    def output_db(self, txt_file_name: str):
+        """
+        Dumps peptide database into a txt file of the user provided name
+
+        Parameters
+        ----------
+        txt_file_name : str
+            Name of the txt file that the database will be written into
+        """
+        self.db_peptides["protein"] = self.db_peptides["protein"].str[0]
+        self.db_peptides.to_csv(txt_file_name, sep="\t")
+
     def _calc_pep_mass(self, pep: str) -> float:
         """
         Calculates the neutral mass of a peptide sequence.

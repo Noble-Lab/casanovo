@@ -219,6 +219,13 @@ def sequence(
     nargs=1,
     type=click.Path(exists=True, dir_okay=False),
 )
+@click.option(
+    "--output_db",
+    "-b",
+    type=str,
+    default=None,
+    help="Saves digested protein database for debugging.",
+)
 def db_search(
     peak_path: Tuple[str],
     fasta_path: str,
@@ -226,6 +233,7 @@ def db_search(
     config: Optional[str],
     output_dir: Optional[str],
     output_root: Optional[str],
+    output_db: Optional[str],
     verbosity: str,
     force_overwrite: bool,
 ) -> None:
@@ -262,6 +270,11 @@ def db_search(
 
         results_path = output_path / f"{output_root_name}.mztab"
         runner.db_search(peak_path, fasta_path, str(results_path))
+        if output_db:
+            logger.info(
+                "Completed database search, moving onto dumping for debugging"
+            )
+            runner.model.protein_database.output_db(output_db)
         utils.log_annotate_report(
             runner.writer.psms, start_time=start_time, end_time=time.time()
         )
