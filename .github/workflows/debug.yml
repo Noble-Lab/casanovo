@@ -2,10 +2,6 @@ name: ❌ Replicate Checkout Error with Debug
 
 on:
   pull_request_target:
-    paths:
-      - "docs/*.md"
-      - "casanovo/casanovo.py"
-      - ".github/workflows/debug.yml"
 
 jobs:
   rich_codex:
