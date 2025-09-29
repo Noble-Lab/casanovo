@@ -224,7 +224,8 @@ def sequence(
     "-b",
     type=str,
     default=None,
-    help="Saves digested protein database for debugging.",
+    help="""Saves digested protein database for debugging
+    Please provide a csv file to save data to.""",
 )
 def db_search(
     peak_path: Tuple[str],
