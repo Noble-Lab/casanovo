@@ -1,24 +1,25 @@
-name: ❌ Replicate Checkout Error
+name: ❌ Replicate Checkout Error with Debug
 
 on:
-  push:
-    branches:
-      - "*"
+  pull_request_target:
     paths:
       - "docs/*.md"
       - "casanovo/casanovo.py"
       - ".github/workflows/debug.yml"
-  pull_request:
-    paths:
-      - "docs/*.md"
-      - "casanovo/casanovo.py"
-  workflow_dispatch:
 
 jobs:
   rich_codex:
     runs-on: ubuntu-latest
     steps:
-      - name: ❌ Check out the repo with ref (this will break in forks)
+      - name: Debug GitHub Context
+        run: |
+          echo "github.head_ref: ${{ github.head_ref }}"
+          echo "github.ref: ${{ github.ref }}"
+          echo "github.event_name: ${{ github.event_name }}"
+          echo "PR head repo: ${{ github.event.pull_request.head.repo.full_name }}"
+          echo "PR head ref: ${{ github.event.pull_request.head.ref }}"
+
+      - name: ❌ Check out with broken ref (this should fail if branch not in base repo)
         uses: actions/checkout@v4
         with:
           ref: ${{ github.head_ref }}
