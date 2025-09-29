@@ -7,7 +7,7 @@ on:
     paths:
       - "docs/*.md"
       - "casanovo/casanovo.py"
-      - ".github/workflows/replicate-error.yml"
+      - ".github/workflows/debug.yml"
   pull_request:
     paths:
       - "docs/*.md"
