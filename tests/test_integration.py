@@ -219,6 +219,50 @@ def test_train_and_run(
         ]
     )
 
+    # Testing force overwrite
+    output_rootname = "force_overwrite_test"
+    output_filename_mztab = (tmp_path / output_rootname).with_suffix(".mztab")
+    output_filename_log = (tmp_path / output_rootname).with_suffix(".log")
+
+    predict_args = [
+        "sequence",
+        "--model",
+        str(model_file),
+        "--config",
+        tiny_config,
+        "--output_dir",
+        str(tmp_path),
+        "--output_root",
+        output_rootname,
+        str(mgf_small),
+        str(mzml_small),
+    ]
+
+    result = run(predict_args)
+    assert result.exit_code == 0
+    assert output_filename_mztab.exists()
+    assert output_filename_log.exists()
+
+    predict_args_overwrite = [
+        "sequence",
+        "--model",
+        str(model_file),
+        "--config",
+        tiny_config,
+        "--output_dir",
+        str(tmp_path),
+        "--output_root",
+        output_rootname,
+        "--force_overwrite",
+        str(mgf_small),
+        str(mzml_small),
+    ]
+
+    try:
+        _ = run(predict_args_overwrite)
+    except FileExistsError as e:
+        assert False, f"{e} raised"
+
 
 def test_auxilliary_cli(tmp_path, mgf_small, monkeypatch):
     """Test the secondary CLI commands."""
