@@ -153,6 +153,15 @@ class Config:
 
         self._params["n_workers"] = utils.n_workers()
 
+        if self._params["accelerator"] == "auto" and utils.is_apple_silicon():
+            self._params["accelerator"] = "cpu"
+            logger.warning(
+                "accelerator='auto' will be overwritten to 'cpu' on Apple Silicon"
+                " devices due to incompatibility with MPS accelerators.\n"
+                "Note: If you want to use a different accelerator (other than MPS),"
+                " please specify it explicitly in the config file."
+            )
+
     def __getitem__(self, param: str) -> Union[int, bool, str, Tuple, Dict]:
         """Retrieve a parameter."""
         return self._params[param]
