@@ -180,7 +180,6 @@ def sequence(
     start_time = time.time()
     utils.log_system_info()
 
-    utils.check_dir_file_exists(output_path, f"{output_root}.mztab")
     config, model = setup_model(
         model, config, output_path, output_root_name, False
     )
@@ -250,7 +249,6 @@ def db_search(
     start_time = time.time()
     utils.log_system_info()
 
-    utils.check_dir_file_exists(output_path, f"{output_root}.mztab")
     config, model = setup_model(
         model, config, output_path, output_root_name, False
     )
@@ -665,6 +663,7 @@ def _setup_output(
 
     if not overwrite:
         utils.check_dir_file_exists(output_path, f"{output_root}.log")
+        utils.check_dir_file_exists(output_path, f"{output_root}.mztab")
 
     log_file_path = output_path / f"{output_root}.log"
     setup_logging(log_file_path, verbosity)
