@@ -1443,7 +1443,7 @@ class Spec2PepTargetDecoy(pl.LightningModule):
         scores = torch.zeros(
             mzs.shape[0],
             self.model_t.max_peptide_len + 1,
-            self.model_t.vocab_size,  # QUESTION: do we need +1?
+            self.model_t.vocab_size,
         ).to(self.device)
         # Tokens for the best amino acid prediction at each position from
         # either the target or decoy model.
@@ -1477,7 +1477,7 @@ class Spec2PepTargetDecoy(pl.LightningModule):
                     if aa_idx > 0
                     else torch.zeros(
                         1, 0, dtype=torch.int64, device=self.device
-                    )  # QUESTION: does v5 use 0 for first prediction
+                    )
                 )
 
                 score_t = self.model_t.decoder(
@@ -2190,18 +2190,31 @@ def _perturb_spectrum(
     for peak_idx in range(len(spectrum.annotation)):
         annot = spectrum.annotation[peak_idx][0]
         if annot.ion_type != "?":
+            matches = []
             for perturbed_annot, perturbed_mz in perturbed_annotations:
                 if perturbed_annot.ion_type == annot.ion_type:
-                    print(
-                        spectrum.mz[peak_idx],
-                        perturbed_spectrum[0, peak_idx, :],
-                        perturbed_mz,
-                        perturbed_mz + annot._mz_delta[0],
+                    matches.append(
+                        (
+                            perturbed_annot,
+                            perturbed_mz,
+                            abs(annot._mz_delta[0]),
+                        )
                     )
-                    perturbed_spectrum[0, peak_idx, 0] = (
-                        perturbed_mz + annot._mz_delta[0]
-                    )
-                    break
+
+            # Find the best matching perturbed annotation.
+            if matches:
+                best_annot, best_perturbed_mz, _ = min(
+                    matches, key=lambda x: x[2]
+                )
+                print(
+                    spectrum.mz[peak_idx],
+                    perturbed_spectrum[0, peak_idx, :],
+                    best_perturbed_mz,
+                    best_perturbed_mz + best_annot._mz_delta[0],
+                )
+                perturbed_spectrum[0, peak_idx, 0] = (
+                    best_perturbed_mz + best_annot._mz_delta[0]
+                )
             else:
                 print(f"{annot} not found")
 
