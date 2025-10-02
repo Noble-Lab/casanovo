@@ -106,11 +106,9 @@ def _get_report_dict(
         return None
 
     # Mass modifications do not contribute to sequence length.
-    # FIXME: If PTMs are represented in ProForma notation this filtering
-    #  operation needs to be reimplemented.
     pep_lens = (
         results_table["sequence"]
-        .str.replace(r"[^a-zA-Z]", "", regex=True)
+        .str.replace(r"\[.*?\]-?", "", regex=True)
         .apply(len)
     )
     min_pep_len, med_pep_len, max_pep_len = np.quantile(pep_lens, [0, 0.5, 1])

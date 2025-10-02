@@ -251,7 +251,6 @@ class MztabWriter:
                     idx = f"index={idx}"
 
                 seq, mods = self.parse_sequence(psm.sequence)
-
                 writer.writerow(
                     [
                         "PSM",

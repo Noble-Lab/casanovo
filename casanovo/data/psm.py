@@ -1,7 +1,7 @@
 """Peptide spectrum match dataclass."""
 
 import dataclasses
-from typing import Iterable, Tuple
+from typing import Iterable, Optional, Tuple
 
 
 @dataclasses.dataclass
@@ -12,7 +12,7 @@ class PepSpecMatch:
     Parameters
     ----------
     sequence : str
-        The amino acid sequence of the peptide.
+        The proforma sequence of the peptide.
     spectrum_id : Tuple[str, str]
         A tuple containing the spectrum identifier in the form
         (spectrum file name, spectrum file idx).
