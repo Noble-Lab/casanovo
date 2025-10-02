@@ -12,7 +12,7 @@ class PepSpecMatch:
     Parameters
     ----------
     sequence : str
-        The proforma sequence of the peptide.
+        The amino acid sequence of the peptide.
     spectrum_id : Tuple[str, str]
         A tuple containing the spectrum identifier in the form
         (spectrum file name, spectrum file idx).
