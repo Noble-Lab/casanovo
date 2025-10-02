@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import List, Tuple
 
 import natsort
-import pyteomics.proforma
+import spectrum_utils.proforma
 
 from .. import __version__
 from ..config import Config
@@ -147,41 +147,36 @@ class MztabWriter:
 
     @staticmethod
     def get_mod_string(
-        mod: pyteomics.proforma.ModificationBase,
-        residue: str = "N-term",
-        position: int = 0,
+        mod: spectrum_utils.proforma.Modification,
+        aa_seq: str,
     ) -> str:
         """
         Format a ProForma modification into an mzTab-style string.
 
         Parameters
         ----------
-        mod : pyteomics.proforma.ModificationBase
-            A modification tag object parsed from a ProForma sequence.
-            This can be a Unimod/PSI-MOD modification, a generic
-            modification, or a mass-only delta.
-        residue : str, default="N-term"
-            The residue associated with the modification. For
-            N-terminal modifications, use `"N-term"`.
-        position : int, default=0
-            Position of the modification in the peptide sequence.
-            Use `0` for N-terminal, `len(sequence)+1` for C-terminal,
-            and a 1-based index for internal residues.
+        mod : spectrum_utils.proforma.Modification
+            A modification object from the parsed ProForma sequence.
+        aa_seq : str
+            The unmodified amino acid sequence with modifications stripped
 
         Returns
         -------
         str
-            The mzTab-formatted modification string. Examples:
+            The mzTab-formatted modification string.
         """
-        if hasattr(mod, "name"):
-            mod_str = f"{position}-{mod.name} ({residue})"
-            # If known unimod modification, add id
-            if hasattr(mod, "id") and mod.id is not None:
-                mod_str = f"{mod_str}:UNIMOD:{mod.id}"
+        if mod.position == "N-term":
+            pos = 0
+            residue = "N-term"
         else:
-            mod_str = f"{position}-[{mod.mass:+.4f}]"
+            pos = mod.position + 1
+            residue = aa_seq[mod.position]
 
-        return mod_str
+        for src in mod.source or []:
+            if hasattr(src, "accession"):
+                return f"{pos}-{src.name} ({residue}):{src.accession}"
+
+        return f"{pos}-[{mod.mass:+.4f}]"
 
     @staticmethod
     def parse_sequence(seq: str) -> Tuple[str, str]:
@@ -202,29 +197,14 @@ class MztabWriter:
             A semicolon-delimited string of modifications in mzTab
             format, suitable for reporting in the PSM section.
         """
-        seq_mod, term = pyteomics.proforma.parse(seq)
-        aa_seq = "".join(res for res, _ in seq_mod)
-        n_term_mods = term["n_term"]
+        proteoform = spectrum_utils.proforma.parse(seq)[0]
+        aa_seq = proteoform.sequence
+        mod_strings = [
+            MztabWriter.get_mod_string(mod, aa_seq)
+            for mod in proteoform.modifications or []
+        ]
 
-        if n_term_mods is None:
-            mod_strings = []
-        else:
-            mod_strings = [
-                MztabWriter.get_mod_string(curr) for curr in n_term_mods
-            ]
-
-        for position, (res, mods) in enumerate(seq_mod, start=1):
-            if mods is None:
-                continue
-
-            for mod in mods:
-                mod = MztabWriter.get_mod_string(
-                    mod, residue=res, position=position
-                )
-                mod_strings.append(mod)
-
-        combined_mod_string = "; ".join(mod_strings)
-        return aa_seq, combined_mod_string
+        return aa_seq, "; ".join(mod_strings)
 
     def save(self) -> None:
         """
@@ -258,6 +238,7 @@ class MztabWriter:
                     "start",
                     "end",
                     "opt_ms_run[1]_aa_scores",
+                    "opt_ms_run[1]_proforma",
                 ]
             )
             by_id = operator.attrgetter("spectrum_id")
@@ -298,5 +279,6 @@ class MztabWriter:
                         "null",  # end
                         # opt_ms_run[1]_aa_scores
                         ",".join(list(map("{:.5f}".format, psm.aa_scores))),
+                        psm.sequence,  # op_ms_run[1]_proforma
                     ]
                 )

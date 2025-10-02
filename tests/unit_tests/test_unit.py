@@ -1686,22 +1686,35 @@ def test_run_map(mgf_small):
 
 
 def test_get_mod_string():
-    mod = types.SimpleNamespace(name="Oxidation", id=35)
-    s = ms_io.MztabWriter.get_mod_string(mod, residue="M", position=4)
+    # UNIMOD Oxidation on M (pos=4)
+    mod = types.SimpleNamespace(
+        position=3,
+        source=[
+            types.SimpleNamespace(name="Oxidation", accession="UNIMOD:35")
+        ],
+        mass=None,
+    )
+    s = ms_io.MztabWriter.get_mod_string(mod, "ACDMK")
     assert s == "4-Oxidation (M):UNIMOD:35"
 
-    mod = types.SimpleNamespace(name="Phospho")
-    s = ms_io.MztabWriter.get_mod_string(mod, residue="S", position=7)
-    assert s == "7-Phospho (S)"
+    # Phospho on S (pos=7)
+    mod = types.SimpleNamespace(
+        position=6,
+        source=[types.SimpleNamespace(name="Phospho", accession="MOD:00696")],
+        mass=None,
+    )
+    s = ms_io.MztabWriter.get_mod_string(mod, "PEPTIDSX")
+    assert s == "7-Phospho (S):MOD:00696"
 
-    mod = types.SimpleNamespace(mass=15.994915)
-    s = ms_io.MztabWriter.get_mod_string(mod, residue="M", position=4)
+    # Mass-only positive
+    mod = types.SimpleNamespace(position=3, source=None, mass=15.994915)
+    s = ms_io.MztabWriter.get_mod_string(mod, "ACDMK")
     assert s == "4-[+15.9949]"
 
-    # Negative mass
-    mod = types.SimpleNamespace(mass=-17.026549)
-    s = ms_io.MztabWriter.get_mod_string(mod, residue="C-term", position=6)
-    assert s == "6-[-17.0265]"
+    # Mass-only negative
+    mod = types.SimpleNamespace(position=4, source=None, mass=-17.026549)
+    s = ms_io.MztabWriter.get_mod_string(mod, "PEPTI")
+    assert s == "5-[-17.0265]"
 
 
 def test_parse_sequence():
