@@ -93,6 +93,7 @@ class ModelRunner:
                     f"{best_filename}.ckpt",
                 ],
             )
+            utils.check_dir_file_exists(output_dir, f"{output_rootname}.mztab")
 
         # Configure checkpoints.
         self.callbacks = [
