@@ -180,6 +180,7 @@ def sequence(
     start_time = time.time()
     utils.log_system_info()
 
+    utils.check_dir_file_exists(output_path, f"{output_root}.mztab")
     config, model = setup_model(
         model, config, output_path, output_root_name, False
     )
@@ -249,6 +250,7 @@ def db_search(
     start_time = time.time()
     utils.log_system_info()
 
+    utils.check_dir_file_exists(output_path, f"{output_root}.mztab")
     config, model = setup_model(
         model, config, output_path, output_root_name, False
     )
@@ -270,9 +272,7 @@ def db_search(
         results_path = output_path / f"{output_root_name}.mztab"
         runner.db_search(peak_path, fasta_path, str(results_path))
         if output_db:
-            logger.info(
-                "Completed database search, moving onto dumping for debugging"
-            )
+            logger.info(f"Writing protein database to: {str(results_path)}")
             runner.model.protein_database.output_db(output_db)
         utils.log_annotate_report(
             runner.writer.psms, start_time=start_time, end_time=time.time()
@@ -368,6 +368,7 @@ def configure(
     )
     config_fname = output_root if output_root is not None else "casanovo"
     config_fname = Path(config_fname).with_suffix(".yaml")
+
     if not force_overwrite:
         utils.check_dir_file_exists(output_path, str(config_fname))
 
@@ -663,7 +664,6 @@ def _setup_output(
 
     if not overwrite:
         utils.check_dir_file_exists(output_path, f"{output_root}.log")
-        utils.check_dir_file_exists(output_path, f"{output_root}.mztab")
 
     log_file_path = output_path / f"{output_root}.log"
     setup_logging(log_file_path, verbosity)
