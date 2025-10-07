@@ -156,17 +156,9 @@ def test_output_db(tiny_fasta_file, tmp_path):
     pd.testing.assert_frame_equal(ground_truth, loaded)
 
 
-def test_digestion_with_unknown_amino_acids():
-    tmp_path = tempfile.TemporaryDirectory()
-    fasta_path = pathlib.Path(tmp_path.name) / "tiny_fasta.fasta"
-
-    fasta_path.write_text(">foo\nME\n>corrupted\nMEX\n", encoding="utf-8")
-
-    valid_aa = list("ARNDCEQGHILKMFPSTWYV")
-    min_len = 0
-    max_len = 18
-
-    test_cases = [
+@pytest.mark.parametrize(
+    "enzyme, specificity, expected, use_sort",
+    [
         (
             "N/A",
             "non-specific",
@@ -209,30 +201,54 @@ def test_digestion_with_unknown_amino_acids():
             ],
             True,
         ),
-        ("trypsin", "full", [("ME", "foo")], True),
-        (".Q.", "full", [("ME", "foo")], True),
-    ]
+        (
+            "trypsin",
+            "full",
+            [("ME", "foo")],
+            True,
+        ),
+        (
+            ".Q.",
+            "full",
+            [("ME", "foo")],
+            True,
+        ),
+    ],
+)
+def test_digestion_with_unknown_amino_acids(
+    enzyme, specificity, expected, use_sort
+):
+    tmp_path = tempfile.TemporaryDirectory()
+    fasta_path = pathlib.Path(tmp_path.name) / "tiny_fasta.fasta"
+    fasta_path.write_text(">foo\nME\n>corrupted\nMEX\n", encoding="utf-8")
 
-    for enzyme, specificity, expected, use_sort in test_cases:
-        results = list(
-            db_utils._peptide_generator(
-                str(fasta_path),
-                enzyme,
-                specificity,
-                0,
-                min_len,
-                max_len,
-                valid_aa,
-            )
+    valid_aa = list("ARNDCEQGHILKMFPSTWYV")
+    min_len = 0
+    max_len = 18
+
+    results = list(
+        db_utils._peptide_generator(
+            str(fasta_path),
+            enzyme,
+            specificity,
+            0,
+            min_len,
+            max_len,
+            valid_aa,
         )
+    )
 
-        result_peptides = [p for p, _ in results]
-        expected_peptides = [p for p, _ in expected]
+    result_peptides = [p for p, _ in results]
+    expected_peptides = [p for p, _ in expected]
 
-        if use_sort:
-            assert sorted(result_peptides) == sorted(
-                expected_peptides
-            ), f"Failed for enzyme={enzyme}, specificity={specificity}"
+    if use_sort:
+        assert sorted(result_peptides) == sorted(
+            expected_peptides
+        ), f"Failed for enzyme={enzyme}, specificity={specificity}"
+    else:
+        assert (
+            result_peptides == expected_peptides
+        ), f"Failed for enzyme={enzyme}, specificity={specificity}"
 
 
 def test_version():
