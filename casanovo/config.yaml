@@ -90,7 +90,7 @@ log_every_n_steps: 50
 # Path to save Lance instances.
 lance_dir:
 # Model validation and checkpointing frequency in training steps.
-val_check_interval: 50_000
+val_check_interval: 1
 
 # SPECTRUM PROCESSING OPTIONS
 # Minimum number of peaks for a spectrum to be considered valid.
@@ -135,7 +135,7 @@ train_label_smoothing: 0.01
 
 # TRAINING/INFERENCE OPTIONS
 # Number of spectra in one training batch.
-train_batch_size: 32
+train_batch_size: 8
 # Max number of training epochs.
 max_epochs: 30
 # Shuffle dataset during training.
