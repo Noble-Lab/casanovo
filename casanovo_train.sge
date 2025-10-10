@@ -1,0 +1,18 @@
+#!/bin/bash
+#$ -N casanovo_5_NAR_train
+#$ -cwd
+#$ -o casanovo_train.out
+#$ -e casanovo_train.err
+#$ -l mfree=120G,cuda=1,gpgpu=TRUE
+#$ -V
+
+source /net/noble/vol1/home/ddesai22/anaconda3/etc/profile.d/conda.sh
+conda activate casanovo_5
+
+echo "Conda environment:"
+which python
+which casanovo
+
+casanovo train \
+  --validation_peak_path /net/noble/vol1/home/ddesai22/projects/casanovo/sample_data/sample_preprocessed_spectra.mgf \
+  /net/noble/vol1/home/ddesai22/projects/casanovo/sample_data/sample_preprocessed_spectra.mgf \
