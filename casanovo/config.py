@@ -100,7 +100,6 @@ class Config:
         gradient_clip_algorithm=str,
         precision=str,
         replace_isoleucine_with_leucine=bool,
-        reverse_peptides=bool,
         massivekb_tokenizer=bool,
         residues=dict,
     )
