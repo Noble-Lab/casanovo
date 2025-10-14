@@ -94,6 +94,8 @@ class ModelRunner:
                 ],
             )
 
+            utils.check_dir_file_exists(output_dir, f"{output_rootname}.mztab")
+
         # Configure checkpoints.
         self.callbacks = [
             ModelCheckpoint(
