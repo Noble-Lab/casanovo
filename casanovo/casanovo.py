@@ -199,7 +199,12 @@ def sequence(
             logger.info("  %s", peak_file)
 
         results_path = output_path / f"{output_root_name}.mztab"
-        runner.predict(peak_path, str(results_path), evaluate=evaluate)
+        runner.predict(
+            peak_path,
+            str(results_path),
+            evaluate=evaluate,
+            force_overwrite=force_overwrite,
+        )
         utils.log_annotate_report(
             runner.writer.psms, start_time=start_time, end_time=time.time()
         )
@@ -259,7 +264,9 @@ def db_search(
         logger.info("  %s", fasta_path)
 
         results_path = output_path / f"{output_root_name}.mztab"
-        runner.db_search(peak_path, fasta_path, str(results_path))
+        runner.db_search(
+            peak_path, fasta_path, str(results_path), force_overwrite
+        )
         utils.log_annotate_report(
             runner.writer.psms, start_time=start_time, end_time=time.time()
         )

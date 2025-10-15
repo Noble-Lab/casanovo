@@ -282,6 +282,16 @@ def test_setup_model(monkeypatch):
         assert mock_get.request_counter == 3
 
 
+def test_mztab_overwrite(tiny_config):
+    with tempfile.TemporaryDirectory() as tmp_str:
+        temp_dir = pathlib.Path(tmp_str)
+
+        runner = ModelRunner(
+            config=tiny_config,
+            model_filename="dummy.ckpt",  # This line will never end up being necessary because the desired exception will be thrown before
+        )
+
+
 def test_get_model_weights(monkeypatch):
     """
     Test that model weights can be downloaded from GitHub or used from the
