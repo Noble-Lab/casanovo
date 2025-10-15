@@ -143,7 +143,7 @@ class ModelRunner:
         """
         if not force_overwrite:
             utils.check_dir_file_exists(
-                self.output_dir, f"{self.output_rootname}.mztab"
+                Path(results_path).parent, Path(results_path).name
             )
 
         self.writer = ms_io.MztabWriter(results_path)
@@ -263,7 +263,7 @@ class ModelRunner:
         peak_path: Iterable[str],
         results_path: str,
         evaluate: bool = False,
-        force_overwrite: Optional[bool] = False,
+        force_overwrite: Optional[bool] = True,
     ) -> None:
         """
         Predict peptide sequences with a trained Casanovo model.
@@ -286,7 +286,7 @@ class ModelRunner:
         """
         if not force_overwrite:
             utils.check_dir_file_exists(
-                self.output_dir, f"{self.output_rootname}.mztab"
+                Path(results_path).parent, Path(results_path).name
             )
 
         self.writer = ms_io.MztabWriter(results_path)
