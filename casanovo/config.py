@@ -23,6 +23,7 @@ _config_deprecated = dict(
     max_length="max_peptide_len",
     save_top_k=None,
     model_save_folder_path=None,
+    reverse_peptides=None,
 )
 
 
