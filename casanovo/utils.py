@@ -265,3 +265,15 @@ def check_dir_file_exists(
                 f"File matching wildcard pattern {pattern} already exists in "
                 f"{dir} and can not be overwritten."
             )
+
+
+def is_apple_silicon() -> bool:
+    """
+    Check whether the current device is Apple Silicon.
+
+    Returns
+    -------
+    bool
+        Whether the current device is Apple Silicon.
+    """
+    return platform.system() == "Darwin" and platform.machine() == "arm64"
