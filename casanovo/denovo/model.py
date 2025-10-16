@@ -1362,7 +1362,7 @@ class Spec2PepTargetDecoy(pl.LightningModule):
         )
 
         self.shifted_aa_masses = {
-            self.perturbed_aa_masses[aa] - aa: sfa.AA_MASS[aa]
+            aa: self.perturbed_aa_masses[aa] - sfa.AA_MASS[aa]
             for aa in sfa.AA_MASS.keys()
         }
 
@@ -1566,6 +1566,9 @@ class Spec2PepTargetDecoy(pl.LightningModule):
                     precursor[0, 2].item(),
                     int(precursor[0, 1].item()),
                     self.perturbed_aa_masses,
+                    # For large delta values, install spectrum_utils from:
+                    # https://github.com/JosieHong/spectrum_utils/tree/sort_annot_by_delta
+                    # ensuring each peak is annotated with the fragment that has the smallest delta.
                     fragment_tolerance_da=0.5,  # FIXME
                 )
                 # Update the acumulative mass shift.
@@ -1573,9 +1576,9 @@ class Spec2PepTargetDecoy(pl.LightningModule):
                 #   detokenization bug is fixed.
                 aa_token = tokens[spectrum_idx, aa_idx]
                 aa = self.model_t.tokenizer.detokenize(
-                    torch.unsqueeze(aa_token, 0),
+                    torch.unsqueeze(torch.unsqueeze(aa_token, 0), 0),
                     join=False,
-                )[0]
+                )[0][0]
                 accumulated_mass_shift += self.shifted_aa_masses[aa]
 
                 # Encode the updated demi-decoy spectrum using the decoy model.
