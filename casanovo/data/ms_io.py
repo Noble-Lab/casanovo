@@ -6,10 +6,9 @@ import operator
 import os
 import re
 from pathlib import Path
-from typing import List, Tuple
+from typing import List
 
 import natsort
-import spectrum_utils.proforma
 
 from .. import __version__
 from ..config import Config
@@ -145,67 +144,6 @@ class MztabWriter:
             )
             self._run_map[Path(filename).name] = i
 
-    @staticmethod
-    def get_mod_string(
-        mod: spectrum_utils.proforma.Modification,
-        aa_seq: str,
-    ) -> str:
-        """
-        Format a ProForma modification into an mzTab-style string.
-
-        Parameters
-        ----------
-        mod : spectrum_utils.proforma.Modification
-            A modification object from the parsed ProForma sequence.
-        aa_seq : str
-            The unmodified amino acid sequence with modifications stripped
-
-        Returns
-        -------
-        str
-            The mzTab-formatted modification string.
-        """
-        if mod.position == "N-term":
-            pos = 0
-            residue = "N-term"
-        else:
-            pos = mod.position + 1
-            residue = aa_seq[mod.position]
-
-        for src in mod.source or []:
-            if hasattr(src, "accession"):
-                return f"{pos}-{src.name} ({residue}):{src.accession}"
-
-        return f"{pos}-[{mod.mass:+.4f}]"
-
-    @staticmethod
-    def parse_sequence(seq: str) -> Tuple[str, str]:
-        """
-        Parse a ProForma peptide sequence into a plain amino acid sequence and
-        an mzTab-formatted modifications string.
-
-        Parameters
-        ----------
-        seq : str
-            A peptide sequence in ProForma notation.
-
-        Returns
-        -------
-        aa_seq : str
-            The plain amino acid sequence with modifications stripped.
-        mod_string : str
-            A semicolon-delimited string of modifications in mzTab
-            format, suitable for reporting in the PSM section.
-        """
-        proteoform = spectrum_utils.proforma.parse(seq)[0]
-        aa_seq = proteoform.sequence
-        mod_strings = [
-            MztabWriter.get_mod_string(mod, aa_seq)
-            for mod in proteoform.modifications or []
-        ]
-
-        return aa_seq, "; ".join(mod_strings)
-
     def save(self) -> None:
         """
         Export the spectrum identifications to the mzTab file.
@@ -250,11 +188,10 @@ class MztabWriter:
                 if Path(filename).suffix.lower() == ".mgf" and idx.isnumeric():
                     idx = f"index={idx}"
 
-                seq, mods = self.parse_sequence(psm.sequence)
                 writer.writerow(
                     [
                         "PSM",
-                        seq,  # sequence
+                        psm.aa_sequence,  # sequence
                         i,  # PSM_ID
                         psm.protein,  # accession
                         "null",  # unique
@@ -264,7 +201,7 @@ class MztabWriter:
                         psm.peptide_score,  # search_engine_score[1]
                         # FIXME: Modifications should be specified as
                         #  controlled vocabulary terms.
-                        mods if mods else "null",  # modifications
+                        psm.modifications,  # modifications
                         # FIXME: Can we get the retention time from the data
                         #  loader?
                         "null",  # retention_time
