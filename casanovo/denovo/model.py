@@ -6,7 +6,6 @@ import itertools
 import logging
 import warnings
 from typing import Any, Dict, Generator, Iterable, List, Optional, Tuple, Union
-import copy
 from pathlib import Path
 import sys  # for debug only
 
@@ -1362,6 +1361,12 @@ class Spec2PepTargetDecoy(pl.LightningModule):
             .to_dict()
         )
 
+        self.shifted_aa_masses = {
+            self.perturbed_aa_masses[aa] - aa: sfa.AA_MASS[aa]
+            for aa in sfa.AA_MASS.keys()
+        }
+
+
     def _process_batch(
         self, batch: Dict[str, torch.Tensor]
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
@@ -1455,6 +1460,7 @@ class Spec2PepTargetDecoy(pl.LightningModule):
             mzs_t = mzs[spectrum_idx : spectrum_idx + 1]
             ints_t = ints[spectrum_idx : spectrum_idx + 1]
             precursor = precursors[spectrum_idx : spectrum_idx + 1]
+            accumulated_mass_shift = 0 # cumulative mass shift
 
             # Encode the spectrum using the target model.
             # This encoding remains the same for each prediction and can be
@@ -1490,7 +1496,7 @@ class Spec2PepTargetDecoy(pl.LightningModule):
                     tokens=token,
                     memory=memories_d,
                     memory_key_padding_mask=mem_masks_d,
-                    precursors=precursor,
+                    precursors=precursor + accumulated_mass_shift,
                 )[0:1, -1:, :]
 
                 # Record whether the highest scored amino acid is a target or
@@ -1498,11 +1504,12 @@ class Spec2PepTargetDecoy(pl.LightningModule):
                 if score_t.max() > score_d.max():
                     target_mask[spectrum_idx, aa_idx] = True
                     scores[spectrum_idx, aa_idx, :] = score_t
-                    tokens[spectrum_idx, aa_idx] = torch.argmax(score_t)
                 else:
                     target_mask[spectrum_idx, aa_idx] = False
                     scores[spectrum_idx, aa_idx, :] = score_d
-                    tokens[spectrum_idx, aa_idx] = torch.argmax(score_d)
+
+                # Update the predicted peptide sequence. 
+                tokens[spectrum_idx, aa_idx] = torch.argmax(score_t)
 
                 # Calculate (partially) predicted peptide sequence.
                 pep_tokens = tokens[spectrum_idx, : aa_idx + 1]
@@ -1559,8 +1566,18 @@ class Spec2PepTargetDecoy(pl.LightningModule):
                     precursor[0, 2].item(),
                     int(precursor[0, 1].item()),
                     self.perturbed_aa_masses,
-                    fragment_tolerance_da=0.02,  # FIXME
+                    fragment_tolerance_da=0.5,  # FIXME
                 )
+                # Update the acumulative mass shift.
+                # FIXME: Fix this when depthcharge reverse
+                #   detokenization bug is fixed.
+                aa_token = tokens[spectrum_idx, aa_idx]
+                aa = self.model_t.tokenizer.detokenize(
+                    torch.unsqueeze(aa_token, 0),
+                    join=False,
+                )[0]
+                accumulated_mass_shift += self.shifted_aa_masses[aa]
+
                 # Encode the updated demi-decoy spectrum using the decoy model.
                 memories_d, mem_masks_d = self.model_d.encoder(mzs_d, ints_d)
 
