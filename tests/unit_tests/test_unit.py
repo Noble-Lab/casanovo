@@ -112,9 +112,8 @@ def test_forward_reverse():
 
     # Reverse Direction
     flipped_batch_all_aa_scores = torch.flip(batch_all_aa_scores, dims=[1])
-    flipped_true_aas = torch.flip(true_aas, dims=[1])
     pep_scores_reversed, aa_scores_reversed = _calc_match_score(
-        flipped_batch_all_aa_scores, flipped_true_aas
+        flipped_batch_all_aa_scores, true_aas
     )
 
     assert all([pytest.approx(0.0) == x for x in pep_scores_reversed])
@@ -128,8 +127,6 @@ def test_forward_reverse():
 
 
 def test_output_db(tiny_fasta_file, tmp_path):
-    output_file = tmp_path / "output-db.csv"
-
     pdb = db_utils.ProteinDatabase(
         fasta_path=str(tiny_fasta_file),
         enzyme="trypsin",
@@ -148,10 +145,13 @@ def test_output_db(tiny_fasta_file, tmp_path):
         tokenizer=depthcharge.tokenizers.PeptideTokenizer.from_massivekb(),
     )
 
-    pdb.output_db(str(output_file))
-
+    pdb.output_db(str(tmp_path), "output.csv")
+    output_file = tmp_path / "output.csv"
     ground_truth = pdb.db_peptides
-    loaded = pd.read_csv(output_file, sep="\t", index_col="peptide")
+
+    loaded = pd.read_csv(output_file, sep="\t", index_col=0)
+    ground_truth["protein"] = ground_truth["protein"].apply(str)
+    loaded["protein"] = loaded["protein"].astype(str)
 
     pd.testing.assert_frame_equal(ground_truth, loaded)
 
