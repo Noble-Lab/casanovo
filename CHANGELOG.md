@@ -11,6 +11,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Avoid redundant spectrum encoding during database mode to speed up PSM scoring.
 - `accelerator: "auto"` is overwritten to `accelerator: "cpu"` on Apple Silicon devices due to MPS compatibility issues.
 - Removed `reverse_peptides` from the configuration since decoding from the C-terminus to the N-terminus yields better results.
+- Log a warning if residues in the user configuration are not present in the tokenizer alphabet.
 
 ## [5.0.0] - 2025-07-09
 
