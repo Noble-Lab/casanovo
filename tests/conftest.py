@@ -378,3 +378,15 @@ def tiny_config_db(tmp_path):
             "replace_isoleucine_with_leucine": False,
         },
     )
+
+
+@pytest.fixture
+def tiny_config_foo_residue(tmp_path):
+    """A config file for a db search."""
+    return _get_config_file(
+        tmp_path,
+        "config_outside_residue.yml",
+        additional_cfg={
+            "residues": {"foo": 100},
+        },
+    )
