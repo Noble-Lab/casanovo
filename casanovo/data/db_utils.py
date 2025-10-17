@@ -169,17 +169,26 @@ class ProteinDatabase:
         )
         return peptides
 
-    def output_db(self, csv_file_name: str):
+    def output_db(self, output_path: str, output_root: str) -> None:
         """
-        Dumps peptide database into a txt file of the user provided name
+        Dumps the peptide database to a csv named csv_file_name
+        in the output directory provided from the command line:
+        Columns: protein (list of associated proteins to peptide)
+                 peptide (peptide sequence)
+                 calc_mass (calculated mass of the peptide)
 
         Parameters
         ----------
-        txt_file_name : str
-            Name of the txt file that the database will be written into
+        output_path: str
+            Path that the csv file will be stored
+        output_root: str
+            Name of the file
         """
-        self.db_peptides["protein"] = self.db_peptides["protein"].str[0]
-        self.db_peptides.to_csv(csv_file_name, sep="\t")
+        self.db_peptides.to_csv(
+            os.path.join(output_path, f"{output_root}.csv"),
+            sep="\t",
+            index=True,
+        )
 
     def _calc_pep_mass(self, pep: str) -> float:
         """

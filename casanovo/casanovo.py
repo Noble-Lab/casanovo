@@ -221,11 +221,13 @@ def sequence(
 )
 @click.option(
     "--output_db",
-    "-b",
-    type=str,
-    default=None,
-    help="""Saves digested protein database for debugging
-    Please provide a csv file to save data to.""",
+    is_flag=True,
+    default=False,
+    help="""
+    An option to dump the peptides processed from the data provided for debugging. 
+    Contains the proteins each peptide is associated with, the calculated 
+    mass for each peptide, and the peptide sequence.
+    """,
 )
 def db_search(
     peak_path: Tuple[str],
@@ -234,9 +236,9 @@ def db_search(
     config: Optional[str],
     output_dir: Optional[str],
     output_root: Optional[str],
-    output_db: Optional[str],
     verbosity: str,
     force_overwrite: bool,
+    output_db: Optional[bool] = False,
 ) -> None:
     """Perform a database search on MS/MS data using Casanovo-DB.
 
@@ -272,8 +274,12 @@ def db_search(
         results_path = output_path / f"{output_root_name}.mztab"
         runner.db_search(peak_path, fasta_path, str(results_path))
         if output_db:
-            logger.info(f"Writing protein database to: {str(results_path)}")
-            runner.model.protein_database.output_db(output_db)
+            logger.info("Writing digested peptide database")
+            if not force_overwrite:
+                utils.check_dir_file_exists(output_path, output_root_name)
+            runner.model.protein_database.output_db(
+                output_path, output_root_name
+            )
         utils.log_annotate_report(
             runner.writer.psms, start_time=start_time, end_time=time.time()
         )
@@ -368,7 +374,6 @@ def configure(
     )
     config_fname = output_root if output_root is not None else "casanovo"
     config_fname = Path(config_fname).with_suffix(".yaml")
-
     if not force_overwrite:
         utils.check_dir_file_exists(output_path, str(config_fname))
 
