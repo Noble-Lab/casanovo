@@ -531,3 +531,12 @@ def test_log_metrics(monkeypatch, tiny_config):
             assert pep_precision == pytest.approx(0)
             assert aa_precision == pytest.approx(100)
             assert aa_recall == pytest.approx(100 * (2 / 3))
+
+
+def test_initialize_tokenizer(tmp_path, tiny_config_foo_residue):
+    runner = ModelRunner(config=Config(tiny_config_foo_residue))
+    with pytest.warns(
+        UserWarning,
+        match=r"Configured residue\(s\) not in model alphabet: foo",
+    ):
+        runner.initialize_tokenizer()

@@ -407,6 +407,14 @@ class ModelRunner:
         else:
             tokenizer_clss = PeptideTokenizer
 
+        missing_aa = list(
+            set(self.config.residues) - set(tokenizer_clss.residues)
+        )
+        if missing_aa:
+            warnings.warn(
+                f"Configured residue(s) not in model alphabet: {', '.join(missing_aa)}"
+            )
+
         self.tokenizer = tokenizer_clss(
             residues=self.config.residues,
             replace_isoleucine_with_leucine=self.config.replace_isoleucine_with_leucine,
