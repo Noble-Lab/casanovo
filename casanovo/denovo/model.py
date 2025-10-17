@@ -1492,11 +1492,14 @@ class Spec2PepTargetDecoy(pl.LightningModule):
                     memory_key_padding_mask=mem_masks_t,
                     precursors=precursor,
                 )[0:1, -1:, :]
+                # Update precursor for decoy model accoding to (partially) predicted peptide sequence.
+                precursor_d = precursor.clone()
+                precursor_d[:, 0] += accumulated_mass_shift
                 score_d = self.model_d.decoder(
                     tokens=token,
                     memory=memories_d,
                     memory_key_padding_mask=mem_masks_d,
-                    precursors=precursor + accumulated_mass_shift,
+                    precursors=precursor_d,
                 )[0:1, -1:, :]
 
                 # Record whether the highest scored amino acid is a target or
