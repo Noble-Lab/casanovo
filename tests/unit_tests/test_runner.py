@@ -531,3 +531,18 @@ def test_log_metrics(monkeypatch, tiny_config):
             assert pep_precision == pytest.approx(0)
             assert aa_precision == pytest.approx(100)
             assert aa_recall == pytest.approx(100 * (2 / 3))
+
+
+def test_initialize_tokenizer(caplog):
+    mock_config = unittest.mock.MagicMock()
+    mock_config.residues = {"foo": 100}
+
+    runner = ModelRunner(config=mock_config)
+
+    with caplog.at_level("WARNING"):
+        runner.initialize_tokenizer()
+
+    assert any(
+        "Configured residue(s) not in model alphabet: foo" in msg
+        for msg in caplog.messages
+    )
