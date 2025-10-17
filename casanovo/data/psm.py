@@ -46,20 +46,6 @@ class PepSpecMatch:
     aa_scores: Iterable[float]
     protein: str = "null"
 
-    # Private cache: populated on first access
-    _proteoform_cache: Optional[
-        spectrum_utils.proforma.Proteoform
-    ] = dataclasses.field(default=None, init=False)
-
-    @property
-    def _proteoform(self) -> spectrum_utils.proforma.Proteoform:
-        if self._proteoform_cache is None:
-            self._proteoform_cache = spectrum_utils.proforma.parse(
-                self.sequence
-            )[0]
-
-        return self._proteoform_cache
-
     @staticmethod
     def _get_mod_string(
         mod: spectrum_utils.proforma.Modification,
@@ -92,6 +78,10 @@ class PepSpecMatch:
                 return f"{pos}-{src.name} ({residue}):{src.accession}"
 
         return f"{pos}-[{mod.mass:+.4f}]"
+
+    @property
+    def _proteoform(self) -> spectrum_utils.proforma.Proteoform:
+        return spectrum_utils.proforma.parse(self.sequence)[0]
 
     @property
     def aa_sequence(self) -> Tuple[str, str]:

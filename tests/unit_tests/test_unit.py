@@ -1694,7 +1694,7 @@ def test_get_mod_string():
         ],
         mass=None,
     )
-    s = ms_io.MztabWriter.get_mod_string(mod, "ACDMK")
+    s = psm.PepSpecMatch._get_mod_string(mod, "ACDMK")
     assert s == "4-Oxidation (M):UNIMOD:35"
 
     # Phospho on S (pos=7)
@@ -1703,51 +1703,66 @@ def test_get_mod_string():
         source=[types.SimpleNamespace(name="Phospho", accession="MOD:00696")],
         mass=None,
     )
-    s = ms_io.MztabWriter.get_mod_string(mod, "PEPTIDSX")
+    s = psm.PepSpecMatch._get_mod_string(mod, "PEPTIDSX")
     assert s == "7-Phospho (S):MOD:00696"
 
     # Mass-only positive
     mod = types.SimpleNamespace(position=3, source=None, mass=15.994915)
-    s = ms_io.MztabWriter.get_mod_string(mod, "ACDMK")
+    s = psm.PepSpecMatch._get_mod_string(mod, "ACDMK")
     assert s == "4-[+15.9949]"
 
     # Mass-only negative
     mod = types.SimpleNamespace(position=4, source=None, mass=-17.026549)
-    s = ms_io.MztabWriter.get_mod_string(mod, "PEPTI")
+    s = psm.PepSpecMatch._get_mod_string(mod, "PEPTI")
     assert s == "5-[-17.0265]"
 
 
 def test_parse_sequence():
+    # Default args for PepSpecMatch
+    psm_args = [
+        "spectrum_id",
+        "peptide_score",
+        "charge",
+        "calc_mz",
+        "exp_mz",
+        "aa_scores",
+    ]
+    default_args = {arg: None for arg in psm_args}
+
     # No mod
-    aa, mods = ms_io.MztabWriter.parse_sequence("ACDMK")
-    assert aa == "ACDMK"
-    assert mods == ""
+    match = psm.PepSpecMatch(sequence="ACDMK", **default_args)
+    assert match.aa_sequence == "ACDMK"
+    assert match.modifications == "null"
 
     # Single internal mod
-    aa, mods = ms_io.MztabWriter.parse_sequence("ACDM[Oxidation]K")
-    assert aa == "ACDMK"
-    assert mods == "4-Oxidation (M):UNIMOD:35"
+    match = psm.PepSpecMatch(sequence="ACDM[Oxidation]K", **default_args)
+    assert match.aa_sequence == "ACDMK"
+    assert match.modifications == "4-Oxidation (M):UNIMOD:35"
 
     # Multiple internal mods
-    aa, mods = ms_io.MztabWriter.parse_sequence(
-        "ACDM[Oxidation]KC[Carbamidomethyl]"
+    match = psm.PepSpecMatch(
+        sequence="ACDM[Oxidation]KC[Carbamidomethyl]", **default_args
     )
-    assert aa == "ACDMKC"
-    assert mods == "4-Oxidation (M):UNIMOD:35; 6-Carbamidomethyl (C):UNIMOD:4"
+    assert match.aa_sequence == "ACDMKC"
+    assert (
+        match.modifications
+        == "4-Oxidation (M):UNIMOD:35; 6-Carbamidomethyl (C):UNIMOD:4"
+    )
 
     # N-terminal mod
-    aa, mods = ms_io.MztabWriter.parse_sequence("[Acetyl]-PEPTIDE")
-    assert aa == "PEPTIDE"
-    assert mods == "0-Acetyl (N-term):UNIMOD:1"
+    match = psm.PepSpecMatch(sequence="[Acetyl]-PEPTIDE", **default_args)
+    assert match.aa_sequence == "PEPTIDE"
+    assert match.modifications == "0-Acetyl (N-term):UNIMOD:1"
 
     # N-terminal mod and multiple internal mods
-    aa, mods = ms_io.MztabWriter.parse_sequence(
-        "[Acetyl]-ACDM[Oxidation]KC[Carbamidomethyl]"
+    match = psm.PepSpecMatch(
+        sequence="[Acetyl]-ACDM[Oxidation]KC[Carbamidomethyl]", **default_args
     )
-    assert aa == "ACDMKC"
-    assert (
-        mods
-        == "0-Acetyl (N-term):UNIMOD:1; 4-Oxidation (M):UNIMOD:35; 6-Carbamidomethyl (C):UNIMOD:4"
+    assert match.aa_sequence == "ACDMKC"
+    assert match.modifications == (
+        "0-Acetyl (N-term):UNIMOD:1; "
+        "4-Oxidation (M):UNIMOD:35; "
+        "6-Carbamidomethyl (C):UNIMOD:4"
     )
 
 
