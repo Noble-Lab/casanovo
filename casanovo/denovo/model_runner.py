@@ -411,8 +411,9 @@ class ModelRunner:
             set(self.config.residues) - set(tokenizer_clss.residues)
         )
         if missing_aa:
-            warnings.warn(
-                f"Configured residue(s) not in model alphabet: {', '.join(missing_aa)}"
+            logger.warning(
+                "Configured residue(s) not in model alphabet: %s",
+                ", ".join(missing_aa),
             )
 
         self.tokenizer = tokenizer_clss(
