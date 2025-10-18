@@ -121,6 +121,79 @@ def test_save_and_load_weights(tmp_path, mgf_small, tiny_config):
         runner.predict([mgf_small], mztab)
 
 
+def test_force_overwrite(tmp_path, tiny_config, mgf_small, tiny_fasta_file):
+    config = Config(tiny_config)
+    results_path = tmp_path / "test.mztab"
+    ckpt = tmp_path / "test.ckpt"
+
+    with open(results_path, "w") as f:
+        f.write("test")
+
+    with ModelRunner(
+        config=config,
+        output_dir=tmp_path,
+    ) as runner:
+        runner.train([mgf_small], [mgf_small])
+        runner.trainer.save_checkpoint(ckpt)
+
+    with ModelRunner(
+        config=config,
+        model_filename=str(ckpt),
+        output_dir=tmp_path,
+        output_rootname="test",
+        overwrite_ckpt_check=False,
+    ) as runner:
+        runner.db_search(
+            [str(mgf_small)],
+            str(tiny_fasta_file),
+            str(results_path),
+            force_overwrite=True,
+        )
+
+    with open(results_path, "r") as f:
+        content = f.read()
+        assert content != "test"
+
+    with open(results_path, "w") as f:
+        f.write("test")
+
+    with ModelRunner(
+        config=config,
+        model_filename=str(ckpt),
+        output_dir=tmp_path,
+        output_rootname="test",
+        overwrite_ckpt_check=False,
+    ) as runner:
+        runner.predict(
+            [str(mgf_small)], str(results_path), force_overwrite=True
+        )
+
+    with open(results_path, "r") as f:
+        content = f.read()
+        assert content != "test"
+
+    runner = ModelRunner(
+        config=config,
+        model_filename=str(ckpt),
+        output_dir=tmp_path,
+        output_rootname="test",
+        overwrite_ckpt_check=False,
+    )
+
+    with pytest.raises(FileExistsError):
+        runner.db_search(
+            [str(mgf_small)],
+            str(tiny_fasta_file),
+            str(results_path),
+            force_overwrite=False,
+        )
+
+    with pytest.raises(FileExistsError):
+        runner.predict(
+            [str(mgf_small)], str(results_path), force_overwrite=False
+        )
+
+
 def test_save_and_load_weights_deprecated(tmp_path, mgf_small, tiny_config):
     """Test saving and loading weights with deprecated config options."""
     config = Config(tiny_config)

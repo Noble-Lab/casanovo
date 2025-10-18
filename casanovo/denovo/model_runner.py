@@ -127,6 +127,7 @@ class ModelRunner:
         peak_path: Iterable[str],
         fasta_path: str,
         results_path: str,
+        force_overwrite: Optional[bool] = False,
     ) -> None:
         """
         Perform database search with Casanovo.
@@ -140,6 +141,11 @@ class ModelRunner:
         results_path : str
             Sequencing results file path.
         """
+        if not force_overwrite:
+            utils.check_dir_file_exists(
+                Path(results_path).parent, Path(results_path).name
+            )
+
         self.writer = ms_io.MztabWriter(results_path)
         self.writer.set_metadata(
             self.config,
@@ -257,6 +263,7 @@ class ModelRunner:
         peak_path: Iterable[str],
         results_path: str,
         evaluate: bool = False,
+        force_overwrite: Optional[bool] = True,
     ) -> None:
         """
         Predict peptide sequences with a trained Casanovo model.
@@ -277,6 +284,11 @@ class ModelRunner:
             running model evaluation. Files that are not an annotated
             peak file format will be ignored if evaluate is set to true.
         """
+        if not force_overwrite:
+            utils.check_dir_file_exists(
+                Path(results_path).parent, Path(results_path).name
+            )
+
         self.writer = ms_io.MztabWriter(results_path)
         self.writer.set_metadata(
             self.config,

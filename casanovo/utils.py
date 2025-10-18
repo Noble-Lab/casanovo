@@ -262,7 +262,7 @@ def check_dir_file_exists(
     for pattern in file_patterns:
         if next(dir.glob(pattern), None) is not None:
             raise FileExistsError(
-                f"File matching wildcard pattern {pattern} already exist in "
+                f"File matching wildcard pattern {pattern} already exists in "
                 f"{dir} and can not be overwritten."
             )
 
