@@ -532,7 +532,7 @@ class ModelRunner:
                 ", ".join(missing_aa),
             )
 
-        self.tokenizer = tokenizer_clss(
+        return tokenizer_clss(
             residues=self.config.residues,
             replace_isoleucine_with_leucine=self.config.replace_isoleucine_with_leucine,
             reverse=True,

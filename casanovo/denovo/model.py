@@ -1332,24 +1332,34 @@ class Spec2PepTargetDecoy(pl.LightningModule):
     def __init__(self, model_t: Spec2Pep, model_d: Spec2Pep):
         super().__init__()
 
-        # Consistency checks for all data properties in Spec2Pep model
-        if (
-            model_t.max_peptide_len != model_d.max_peptide_len
-            or model_t.precursor_mass_tol != model_d.precursor_mass_tol
-            or model_t.isotope_error_range != model_d.isotope_error_range
-            or model_t.min_peptide_len != model_d.min_peptide_len
-            or model_t.n_beams != model_d.n_beams
-            or model_t.top_match != model_d.top_match
-            or model_t.stop_token != model_d.stop_token
-            or model_t.vocab_size != model_d.vocab_size
-        ):
+        # Consistency checks for all data properties in Spec2Pep model.
+        attrs_to_check = [
+            "max_peptide_len",
+            "min_peptide_len",
+            "precursor_mass_tol",
+            "isotope_error_range",
+            "n_beams",
+            "top_match",
+            "stop_token",
+            "vocab_size",
+            "residues",
+        ]
+        mismatches = []
+        for attr in attrs_to_check:
+            val_t = getattr(model_t, attr)
+            val_d = getattr(model_d, attr)
+            if val_t != val_d:
+                mismatches.append(f"{attr}: target={val_t}, decoy={val_d}")
+        if mismatches:
+            mismatch_info = "; ".join(mismatches)
             raise ValueError(
-                "The target and decoy models must have the same maximum "
-                "peptide length and vocabulary size."
+                f"Inconsistent configuration between target and decoy models. "
+                f"Mismatched attributes:\n{mismatch_info}"
             )
 
         self.model_t, self.model_d = model_t, model_d
 
+        # Get perturbed amino acid masses.
         self.perturbed_aa_masses = (
             pd.read_csv(
                 Path(__file__).parent.parent / "perturbed_aa_masses.txt",
@@ -1361,11 +1371,14 @@ class Spec2PepTargetDecoy(pl.LightningModule):
             .to_dict()
         )
 
+        # Get shifted amino acid masses, including modifications.
         self.shifted_aa_masses = {
-            aa: self.perturbed_aa_masses[aa] - sfa.AA_MASS[aa]
-            for aa in sfa.AA_MASS.keys()
+            model_t.tokenizer.tokenize(aa).item(): model_d.tokenizer.residues[
+                aa
+            ]
+            - model_t.tokenizer.residues[aa]
+            for aa in model_t.tokenizer.residues.keys()
         }
-
 
     def _process_batch(
         self, batch: Dict[str, torch.Tensor]
@@ -1486,15 +1499,16 @@ class Spec2PepTargetDecoy(pl.LightningModule):
                     )
                 )
 
+                # Get precursor for decoy model accoding to (partially) predicted peptide sequence.
+                precursor_d = precursor.clone()
+                precursor_d[:, 0] += accumulated_mass_shift
+
                 score_t = self.model_t.decoder(
                     tokens=token,
                     memory=memories_t,
                     memory_key_padding_mask=mem_masks_t,
                     precursors=precursor,
                 )[0:1, -1:, :]
-                # Update precursor for decoy model accoding to (partially) predicted peptide sequence.
-                precursor_d = precursor.clone()
-                precursor_d[:, 0] += accumulated_mass_shift
                 score_d = self.model_d.decoder(
                     tokens=token,
                     memory=memories_d,
@@ -1511,7 +1525,7 @@ class Spec2PepTargetDecoy(pl.LightningModule):
                     target_mask[spectrum_idx, aa_idx] = False
                     scores[spectrum_idx, aa_idx, :] = score_d
 
-                # Update the predicted peptide sequence. 
+                # Update the predicted peptide sequence.
                 tokens[spectrum_idx, aa_idx] = torch.argmax(score_t)
 
                 # Calculate (partially) predicted peptide sequence.
@@ -1526,7 +1540,7 @@ class Spec2PepTargetDecoy(pl.LightningModule):
                 )
 
                 # Stop decoding if the stop token is predicted.
-                if tokens[spectrum_idx, aa_idx] == self.model_t.stop_token:
+                if pep_tokens[-1] == self.model_t.stop_token:
                     # Omit the stop token from the peptide sequence (if
                     # predicted).
                     has_stop_token = pep_tokens[-1] == self.model_t.stop_token
@@ -1569,21 +1583,12 @@ class Spec2PepTargetDecoy(pl.LightningModule):
                     precursor[0, 2].item(),
                     int(precursor[0, 1].item()),
                     self.perturbed_aa_masses,
-                    # For large delta values, install spectrum_utils from:
-                    # https://github.com/JosieHong/spectrum_utils/tree/sort_annot_by_delta
-                    # ensuring each peak is annotated with the fragment that has the smallest delta.
                     fragment_tolerance_da=0.5,  # FIXME
                 )
                 # Update the acumulative mass shift.
-                # FIXME: Fix this when depthcharge reverse
-                #   detokenization bug is fixed.
-                aa_token = tokens[spectrum_idx, aa_idx]
-                aa = self.model_t.tokenizer.detokenize(
-                    torch.unsqueeze(torch.unsqueeze(aa_token, 0), 0),
-                    join=False,
-                )[0][0]
-                accumulated_mass_shift += self.shifted_aa_masses[aa]
-
+                accumulated_mass_shift += self.shifted_aa_masses[
+                    pep_tokens[-1].item()
+                ]
                 # Encode the updated demi-decoy spectrum using the decoy model.
                 memories_d, mem_masks_d = self.model_d.encoder(mzs_d, ints_d)
 
@@ -2226,17 +2231,17 @@ def _perturb_spectrum(
 
             # Find the best matching perturbed annotation.
             if matches:
-                best_annot, best_perturbed_mz, _ = min(
+                _, best_perturbed_mz, best_delta = min(
                     matches, key=lambda x: x[2]
                 )
                 print(
                     spectrum.mz[peak_idx],
                     perturbed_spectrum[0, peak_idx, :],
                     best_perturbed_mz,
-                    best_perturbed_mz + best_annot._mz_delta[0],
+                    best_perturbed_mz + best_delta,
                 )
                 perturbed_spectrum[0, peak_idx, 0] = (
-                    best_perturbed_mz + best_annot._mz_delta[0]
+                    best_perturbed_mz + best_delta
                 )
             else:
                 print(f"{annot} not found")
