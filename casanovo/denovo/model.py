@@ -1329,7 +1329,12 @@ class Spec2Pep(pl.LightningModule):
 
 class Spec2PepTargetDecoy(pl.LightningModule):
 
-    def __init__(self, model_t: Spec2Pep, model_d: Spec2Pep):
+    def __init__(
+        self,
+        model_t: Spec2Pep,
+        model_d: Spec2Pep,
+        out_writer: Optional[ms_io.MztabWriter] = None,
+    ):
         super().__init__()
 
         # Consistency checks for all data properties in Spec2Pep model.
@@ -1379,6 +1384,8 @@ class Spec2PepTargetDecoy(pl.LightningModule):
             - model_t.tokenizer.residues[aa]
             for aa in model_t.tokenizer.residues.keys()
         }
+
+        self.out_writer = out_writer
 
     def _process_batch(
         self, batch: Dict[str, torch.Tensor]
@@ -1473,7 +1480,7 @@ class Spec2PepTargetDecoy(pl.LightningModule):
             mzs_t = mzs[spectrum_idx : spectrum_idx + 1]
             ints_t = ints[spectrum_idx : spectrum_idx + 1]
             precursor = precursors[spectrum_idx : spectrum_idx + 1]
-            accumulated_mass_shift = 0 # cumulative mass shift
+            accumulated_mass_shift = 0
 
             # Encode the spectrum using the target model.
             # This encoding remains the same for each prediction and can be
@@ -1653,10 +1660,46 @@ class Spec2PepTargetDecoy(pl.LightningModule):
                     # ),
                     exp_mz=precursor_mz.item(),
                     aa_scores=aa_scores,
+                    aa_mask=aa_mask,
                 )
             )
 
         return predictions
+
+    def on_predict_batch_end(
+        self, outputs: List[psm.PepSpecMatch], *args
+    ) -> None:
+        """
+        Write the predicted PSMs to the output file.
+
+        Parameters
+        ----------
+        outputs : List[psm.PepSpecMatch]
+            The predicted PSMs for the processed batch.
+        """
+        if self.out_writer is None:
+            return
+
+        for spec_match in outputs:
+            if not spec_match.sequence:
+                continue
+
+            # Merge N-terminal scores like Spec2Pep
+            if len(spec_match.aa_scores) >= 2 and any(
+                spec_match.sequence.startswith(mod)
+                for mod in self.model_t.n_term
+            ):
+                spec_match.aa_scores[1] *= spec_match.aa_scores[0]
+                spec_match.aa_scores = spec_match.aa_scores[1:]
+
+            # Compute the precursor m/z for reporting
+            spec_match.calc_mz = (
+                self.model_t.tokenizer.calculate_precursor_ions(
+                    spec_match.sequence, torch.tensor(spec_match.charge)
+                ).item()
+            )
+
+            self.out_writer.psms.append(spec_match)
 
 
 class DbSpec2Pep(Spec2Pep):
