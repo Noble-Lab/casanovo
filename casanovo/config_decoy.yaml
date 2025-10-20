@@ -187,7 +187,8 @@ residues:
   "V": 94.1301
   "W": 193.2168
   "Y": 167.0653
-  "C[Carbamidomethyl]": 163.161764 # 106.1403 + 57.021464 
+
+  # FIXME: Residue-specific rules for '[Oxidation]' (M) and '[Deamidated]' (N/Q) are not yet applied.
   # Amino acid modifications.
   "M[Oxidation]": 140.18391499999998      # Met oxidation:   124.1890 + 15.994915
   "N[Deamidated]": 110.08531599999999     # Asn deamidation: 109.1013 +  0.984016
@@ -198,3 +199,16 @@ residues:
   "[Ammonia-loss]-": -17.026549           # Ammonia loss
   "[+25.980265]-": 25.980265              # Carbamylation and ammonia loss
   #"[Carbamyl][Ammonia-loss]-": 25.980265  # Carbamylation and ammonia loss
+
+  # Correct version. Will update after new model training, since the previous decoy model used the old masses.
+  # "C[Carbamidomethyl]": 603.668100 # 106.140300 + 497.527800
+  # # Amino acid modifications.
+  # "M[Oxidation]": 232.333200      # Met oxidation: 124.189000 + 108.144200
+  # "N[Deamidated]": -174.142000    # Asn deamidation: 109.101300 + -283.243300
+  # "Q[Deamidated]": -160.115100    # Gln deamidation: 123.128200 + -283.243300
+  # # N-terminal modifications.
+  # "[Acetyl]-": 602.711000                 # Acetylation
+  # "[Carbamyl]-": 605.672000               # Carbamylation
+  # "[Ammonia-loss]-": -532.530600          # Ammonia loss
+  # "[+25.980265]-": 73.141400              # Carbamylation and ammonia loss
+  # #"[Carbamyl][Ammonia-loss]-": 73.141400 # Carbamylation and ammonia loss
