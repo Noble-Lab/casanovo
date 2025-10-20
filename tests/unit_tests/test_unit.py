@@ -126,7 +126,7 @@ def test_forward_reverse():
     assert np.allclose(np.array([0.0]), aa_scores_reversed[4])
 
 
-def test_output_db(tiny_fasta_file, tmp_path):
+def test_export(tiny_fasta_file, tmp_path):
     pdb = db_utils.ProteinDatabase(
         fasta_path=str(tiny_fasta_file),
         enzyme="trypsin",
@@ -145,8 +145,8 @@ def test_output_db(tiny_fasta_file, tmp_path):
         tokenizer=depthcharge.tokenizers.PeptideTokenizer.from_massivekb(),
     )
 
-    pdb.output_db(str(tmp_path), "output.csv")
-    output_file = tmp_path / "output.csv"
+    pdb.export(str(tmp_path), "output")
+    output_file = tmp_path / "output.tsv"
     ground_truth = pdb.db_peptides
 
     loaded = pd.read_csv(output_file, sep="\t", index_col=0)
