@@ -1717,6 +1717,41 @@ def test_get_mod_string():
     assert s == "5-[-17.0265]"
 
 
+def test_proteoform_caching():
+    mock_proteoform_1 = unittest.mock.MagicMock(sequence="ACDE")
+    mock_proteoform_2 = unittest.mock.MagicMock(sequence="ACDEK")
+
+    patch_path = f"{psm.PepSpecMatch.__module__}.spectrum_utils.proforma.parse"
+    with unittest.mock.patch(patch_path) as mock_parse:
+        mock_parse.side_effect = [[mock_proteoform_1], [mock_proteoform_2]]
+
+        pep = psm.PepSpecMatch(
+            sequence="ACDE",
+            spectrum_id=("file", "idx"),
+            peptide_score=42.0,
+            charge=2,
+            calc_mz=123.45,
+            exp_mz=123.46,
+            aa_scores=[0.1, 0.2, 0.3, 0.4],
+        )
+
+        # First access should trigger parse()
+        p1 = pep._proteoform
+        assert p1 is mock_proteoform_1
+        mock_parse.assert_called_once_with("ACDE")
+
+        # Second access with same sequence should use cache
+        p2 = pep._proteoform
+        assert p2 is p1
+        mock_parse.assert_called_once()
+
+        # Changed sequence should trigger new parse
+        pep.sequence = "ACDEK"
+        p3 = pep._proteoform
+        assert p3 is mock_proteoform_2
+        assert mock_parse.call_count == 2
+
+
 def test_parse_sequence():
     # Default args for PepSpecMatch
     psm_args = [

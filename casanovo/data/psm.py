@@ -46,6 +46,14 @@ class PepSpecMatch:
     aa_scores: Iterable[float]
     protein: str = "null"
 
+    # Private properties to handle proteoform caching
+    _proteoform_sequence: Optional[str] = dataclasses.field(
+        init=False, default=None
+    )
+    _cache_proteoform: Optional[
+        spectrum_utils.proforma.Proteoform
+    ] = dataclasses.field(init=False, default=None, repr=False, compare=False)
+
     @staticmethod
     def _get_mod_string(
         mod: spectrum_utils.proforma.Modification,
@@ -81,10 +89,24 @@ class PepSpecMatch:
 
     @property
     def _proteoform(self) -> spectrum_utils.proforma.Proteoform:
-        return spectrum_utils.proforma.parse(self.sequence)[0]
+        """
+        Parsed ProForma representation of the peptide sequence.
+
+        Returns
+        -------
+        spectrum_utils.proforma.Proteoform
+            The parsed ProForma object representing the current peptide sequence
+        """
+        if self._proteoform_sequence != self.sequence:
+            self._proteoform_sequence = self.sequence
+            self._cache_proteoform = spectrum_utils.proforma.parse(
+                self.sequence
+            )[0]
+
+        return self._cache_proteoform
 
     @property
-    def aa_sequence(self) -> Tuple[str, str]:
+    def aa_sequence(self) -> str:
         """
         Plain amino-acid sequence with all ProForma modifications removed.
 
