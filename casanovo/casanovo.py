@@ -274,12 +274,9 @@ def db_search(
         results_path = output_path / f"{output_root_name}.mztab"
         runner.db_search(peak_path, fasta_path, str(results_path))
         if output_db:
-            logger.info("Writing digested peptide database")
             if not force_overwrite:
                 utils.check_dir_file_exists(output_path, output_root_name)
-            runner.model.protein_database.output_db(
-                output_path, output_root_name
-            )
+            runner.model.protein_database.export(output_path, output_root_name)
         utils.log_annotate_report(
             runner.writer.psms, start_time=start_time, end_time=time.time()
         )

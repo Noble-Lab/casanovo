@@ -157,7 +157,7 @@ def test_train_and_run(
     # Run Casanovo in database prediction mode.
     output_rootname = "db"
     output_filename = (tmp_path / output_rootname).with_suffix(".mztab")
-    output_db_file = tmp_path / f"{output_rootname}.csv"
+    output_db_file = (tmp_path / output_rootname).with_suffix(".tsv")
 
     search_args = [
         "db-search",
