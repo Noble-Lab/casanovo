@@ -12,6 +12,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - `accelerator: "auto"` is overwritten to `accelerator: "cpu"` on Apple Silicon devices due to MPS compatibility issues.
 - Removed `reverse_peptides` from the configuration since decoding from the C-terminus to the N-terminus yields better results.
 - Log a warning if residues in the user configuration are not present in the tokenizer alphabet.
+- The full proforma sequences of predicted peptides are reported in the `op_ms_run[1]_proforma` of the output MzTab file for backwards compatibility.
+
+### Fixed
+
+- Inline mass modifications are now specified separately from the `sequence` column in the `modifications` column of the output MzTab file, as per the MzTab specification.
 
 ## [5.0.0] - 2025-07-09
 
