@@ -50,9 +50,9 @@ class PepSpecMatch:
     _proteoform_sequence: Optional[str] = dataclasses.field(
         init=False, default=None
     )
-    _cache_proteoform: Optional[
-        spectrum_utils.proforma.Proteoform
-    ] = dataclasses.field(init=False, default=None, repr=False, compare=False)
+    _cache_proteoform: Optional[spectrum_utils.proforma.Proteoform] = (
+        dataclasses.field(init=False, default=None, repr=False, compare=False)
+    )
 
     @staticmethod
     def _get_mod_string(
