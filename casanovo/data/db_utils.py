@@ -169,6 +169,28 @@ class ProteinDatabase:
         )
         return peptides
 
+    def export(self, output_path: str, output_root: str) -> None:
+        """
+        Dumps the peptide database to a tsv file that has
+        output_root as its name in the output directory
+        provided from the command line:
+        Columns: protein (list of associated proteins to peptide)
+                 peptide (peptide sequence)
+                 calc_mass (calculated mass of the peptide)
+
+        Parameters
+        ----------
+        output_path: str
+            Path that the csv file will be stored
+        output_root: str
+            Name of the file
+        """
+        self.db_peptides.to_csv(
+            os.path.join(output_path, f"{output_root}.tsv"),
+            sep="\t",
+            index=True,
+        )
+
     def _calc_pep_mass(self, pep: str) -> float:
         """
         Calculates the neutral mass of a peptide sequence.

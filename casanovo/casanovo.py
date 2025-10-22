@@ -219,6 +219,16 @@ def sequence(
     nargs=1,
     type=click.Path(exists=True, dir_okay=False),
 )
+@click.option(
+    "--output_db",
+    is_flag=True,
+    default=False,
+    help="""
+    An option to dump the peptides processed from the data provided for debugging. 
+    Contains the proteins each peptide is associated with, the calculated 
+    mass for each peptide, and the peptide sequence.
+    """,
+)
 def db_search(
     peak_path: Tuple[str],
     fasta_path: str,
@@ -228,6 +238,7 @@ def db_search(
     output_root: Optional[str],
     verbosity: str,
     force_overwrite: bool,
+    output_db: Optional[bool] = False,
 ) -> None:
     """Perform a database search on MS/MS data using Casanovo-DB.
 
@@ -262,6 +273,10 @@ def db_search(
 
         results_path = output_path / f"{output_root_name}.mztab"
         runner.db_search(peak_path, fasta_path, str(results_path))
+        if output_db:
+            if not force_overwrite:
+                utils.check_dir_file_exists(output_path, output_root_name)
+            runner.model.protein_database.export(output_path, output_root_name)
         utils.log_annotate_report(
             runner.writer.psms, start_time=start_time, end_time=time.time()
         )
