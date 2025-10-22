@@ -6,17 +6,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+## [5.1.0] - 2025-10-22
+
 ### Changed
 
 - Avoid redundant spectrum encoding during database mode to speed up PSM scoring.
 - `accelerator: "auto"` is overwritten to `accelerator: "cpu"` on Apple Silicon devices due to MPS compatibility issues.
 - Removed `reverse_peptides` from the configuration since decoding from the C-terminus to the N-terminus yields better results.
 - Log a warning if residues in the user configuration are not present in the tokenizer alphabet.
-- The full proforma sequences of predicted peptides are reported in the `op_ms_run[1]_proforma` of the output MzTab file for backwards compatibility.
+- The full ProForma sequences of predicted peptides are reported in the `op_ms_run[1]_proforma` of the output MzTab file for backwards compatibility.
 
 ### Fixed
 
-- Inline mass modifications are now specified separately from the `sequence` column in the `modifications` column of the output MzTab file, as per the MzTab specification.
+- Inline mass modifications are now specified separately from the `sequence` column in the `modifications` column of the output mzTab file, as per the mzTab specification.
 
 ## [5.0.0] - 2025-07-09
 
@@ -309,7 +311,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 - Initial Casanovo version.
 
-[Unreleased]: https://github.com/Noble-Lab/casanovo/compare/v5.0.0...HEAD
+[Unreleased]: https://github.com/Noble-Lab/casanovo/compare/v5.1.0...HEAD
+[5.1.0]: https://github.com/Noble-Lab/casanovo/compare/v5.0.0...v5.1.0
 [5.0.0]: https://github.com/Noble-Lab/casanovo/compare/v4.3.0...v5.0.0
 [4.3.0]: https://github.com/Noble-Lab/casanovo/compare/v4.2.1...v4.3.0
 [4.2.1]: https://github.com/Noble-Lab/casanovo/compare/v4.2.0...v4.2.1
