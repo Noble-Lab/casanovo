@@ -1,1 +1,3 @@
 include casanovo/config.yaml
+include casanovo/config_decoy.yaml
+include casanovo/perturbed_aa_masses.txt
