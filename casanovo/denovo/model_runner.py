@@ -522,6 +522,12 @@ class ModelRunner:
             )
             for param in architecture_params:
                 if model_params[param] != self.model.hparams[param]:
+                    if param == "tokenizer":
+                        self._verify_tokenizer(
+                            model_params[param], self.model.hparams[param]
+                        )
+                        continue
+
                     warnings.warn(
                         f"Mismatching {param} parameter in "
                         f"model checkpoint ({self.model.hparams[param]}) "
@@ -600,6 +606,23 @@ class ModelRunner:
             shuffle_buffer_size=self.config.shuffle_buffer_size,
             n_workers=self.config.n_workers,
             lance_dir=lance_dir,
+        )
+
+    @staticmethod
+    def _verify_tokenizer(
+        checkpoint: PeptideTokenizer, config: PeptideTokenizer
+    ) -> None:
+        """Verify that two tokenizers are equivalent"""
+        if checkpoint.residues != config.residues:
+            mismatch_reason = "resides and/or residue masses"
+        elif checkpoint.index != config.index:
+            mismatch_reason = "residue indices"
+        else:
+            return
+
+        warnings.warn(
+            f"Mismatching peptide tokenizer {mismatch_reason} between"
+            "checkpoint and peptide tokenizer - using the checkpoint."
         )
 
     def _get_input_paths(
