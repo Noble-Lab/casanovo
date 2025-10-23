@@ -524,7 +524,7 @@ class ModelRunner:
             tokenizer_clss = PeptideTokenizer
 
         missing_aa = list(
-            set(self.config.residues) - set(tokenizer_clss.residues)
+            set(config.residues) - set(tokenizer_clss.residues)
         )
         if missing_aa:
             logger.warning(
@@ -533,7 +533,7 @@ class ModelRunner:
             )
 
         return tokenizer_clss(
-            residues=self.config.residues,
+            residues=config.residues,
             replace_isoleucine_with_leucine=self.config.replace_isoleucine_with_leucine,
             reverse=True,
             start_token=None,
