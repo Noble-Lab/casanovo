@@ -621,7 +621,7 @@ class ModelRunner:
             return
 
         warnings.warn(
-            f"Mismatching peptide tokenizer {mismatch_reason} between"
+            f"Mismatching peptide tokenizer {mismatch_reason} between "
             "checkpoint and peptide tokenizer - using the checkpoint."
         )
 
