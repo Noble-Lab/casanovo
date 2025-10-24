@@ -562,38 +562,49 @@ def test_initialize_tokenizer(caplog):
     [
         # residues differ: warning about residues/masses
         (
-            {"residues": ["A", "B"], "index": {"A": 0, "B": 1}},
-            {"residues": ["A", "C"], "index": {"A": 0, "B": 1}},
+            {"residues": {"A": 42.0, "B": 43.0}, "index": {"A": 0, "B": 1}},
+            {"residues": {"A": 42.0, "C": 43.0}, "index": {"A": 0, "B": 1}},
+            "residues and/or residue masses",
+        ),
+        # Residue masses differ: warning about residues/masses
+        (
+            {"residues": {"A": 42.0, "B": 43.0}, "index": {"A": 0, "B": 1}},
+            {"residues": {"A": 42.0, "B": 42.0}, "index": {"A": 0, "B": 1}},
             "residues and/or residue masses",
         ),
         # residues same but index differs: warning about indices
         (
-            {"residues": ["A", "B"], "index": {"A": 0, "B": 1}},
-            {"residues": ["A", "B"], "index": {"A": 1, "B": 0}},
+            {"residues": {"A": 42.0, "B": 43.0}, "index": {"A": 0, "B": 1}},
+            {"residues": {"A": 42.0, "B": 43.0}, "index": {"A": 1, "B": 0}},
             "residue indices",
         ),
         # identical: no warning
         (
-            {"residues": ["A", "B"], "index": {"A": 0, "B": 1}},
-            {"residues": ["A", "B"], "index": {"A": 0, "B": 1}},
+            {"residues": {"A": 42.0, "B": 43.0}, "index": {"A": 0, "B": 1}},
+            {"residues": {"A": 42.0, "B": 43.0}, "index": {"A": 0, "B": 1}},
             None,
         ),
     ],
 )
-def test_verify_tokenizer(checkpoint_attrs, config_attrs, expected_substring):
+def test_verify_tokenizer(
+    checkpoint_attrs, config_attrs, expected_substring, caplog
+):
     """Test ModelRunner._verify_tokenizer for warning and non-warning behavior."""
     checkpoint = unittest.mock.MagicMock(**checkpoint_attrs)
     config = unittest.mock.MagicMock(**config_attrs)
 
-    with warnings.catch_warnings(record=True) as w:
-        warnings.simplefilter("always")
+    with caplog.at_level("WARNING"):
         ModelRunner._verify_tokenizer(checkpoint, config)
 
     if expected_substring:
-        assert len(w) == 1
-        msg = str(w[0].message)
+        # Check that exactly one warning was logged
+        warnings_logged = [
+            rec for rec in caplog.records if rec.levelname == "WARNING"
+        ]
+        assert len(warnings_logged) == 1
+        msg = warnings_logged[0].getMessage()
         assert expected_substring in msg
-        assert "Mismatching peptide tokenizer" in msg
+        assert "model checkpoint tokenizer vs config file tokenizer;" in msg
     else:
-        # Test that no warning was thrown
-        assert not w
+        # Ensure no warnings were logged
+        assert not any(rec.levelname == "WARNING" for rec in caplog.records)

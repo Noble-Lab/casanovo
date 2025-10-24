@@ -526,14 +526,14 @@ class ModelRunner:
                         self._verify_tokenizer(
                             model_params[param], self.model.hparams[param]
                         )
-                        continue
-
-                    warnings.warn(
-                        f"Mismatching {param} parameter in "
-                        f"model checkpoint ({self.model.hparams[param]}) "
-                        f"vs config file ({model_params[param]}); "
-                        "using the checkpoint."
-                    )
+                    else:
+                        logger.warning(
+                            "Mismatching %s parameter in model checkpoint (%s) vs"
+                            " config file (%s); using the checkpoint.",
+                            param,
+                            self.model.hparams[param],
+                            model_params[param],
+                        )
         except RuntimeError:
             # This only doesn't work if the weights are from an older
             # version.
@@ -620,9 +620,10 @@ class ModelRunner:
         else:
             return
 
-        warnings.warn(
-            f"Mismatching peptide tokenizer {mismatch_reason} between "
-            "checkpoint and peptide tokenizer - using the checkpoint."
+        logger.warning(
+            "Mismatching %s in model checkpoint tokenizer vs config file tokenizer;"
+            " using the checkpoint tokenizer.",
+            mismatch_reason,
         )
 
     def _get_input_paths(
