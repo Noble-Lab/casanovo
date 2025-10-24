@@ -614,7 +614,7 @@ class ModelRunner:
     ) -> None:
         """Verify that two tokenizers are equivalent"""
         if checkpoint.residues != config.residues:
-            mismatch_reason = "resides and/or residue masses"
+            mismatch_reason = "residues and/or residue masses"
         elif checkpoint.index != config.index:
             mismatch_reason = "residue indices"
         else:
