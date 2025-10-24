@@ -564,7 +564,7 @@ def test_initialize_tokenizer(caplog):
         (
             {"residues": ["A", "B"], "index": {"A": 0, "B": 1}},
             {"residues": ["A", "C"], "index": {"A": 0, "B": 1}},
-            "resides and/or residue masses",
+            "residues and/or residue masses",
         ),
         # residues same but index differs: warning about indices
         (
