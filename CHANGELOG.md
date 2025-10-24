@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+### Fixed
+
+- A mismatching parameter warning will now only be triggered for the tokenizer if the config and checkpoint tokenizers do not have equivalent vocabularies.
+
 ## [5.1.0] - 2025-10-22
 
 ### Changed
