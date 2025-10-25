@@ -1172,12 +1172,14 @@ class Spec2Pep(pl.LightningModule):
             scan,
             precursor_charge,
             precursor_mz,
+            retention_time,
             spectrum_preds,
         ) in zip(
             batch["peak_file"],
             batch["scan_id"],
             batch["precursor_charge"],
             batch["precursor_mz"],
+            batch["retention_time"],
             self.forward(batch),
         ):
             for peptide_score, aa_scores, peptide in spectrum_preds:
@@ -1190,6 +1192,7 @@ class Spec2Pep(pl.LightningModule):
                         calc_mz=np.nan,
                         exp_mz=precursor_mz.item(),
                         aa_scores=aa_scores,
+                        retention_time=retention_time,
                     )
                 )
 
