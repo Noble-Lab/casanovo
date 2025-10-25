@@ -4,13 +4,13 @@ import functools
 import logging
 import os
 import pathlib
-from typing import Optional, Sequence
+from typing import Any, Optional, Sequence
 
 import lightning.pytorch as pl
 import numpy as np
 import pyarrow as pa
 import spectrum_utils.spectrum as sus
-import torch.utils.data._utils.collate
+import torch.utils.data
 from depthcharge.data import (
     AnnotatedSpectrumDataset,
     CustomField,
@@ -20,7 +20,6 @@ from depthcharge.data import (
 from depthcharge.tokenizers import PeptideTokenizer
 from torch.utils.data import DataLoader
 from torch.utils.data.datapipes.iter.combinatorics import ShufflerIterDataPipe
-
 
 logger = logging.getLogger("casanovo")
 
@@ -121,13 +120,7 @@ class DeNovoDataModule(pl.LightningDataModule):
         # Set to None to disable shuffling, otherwise Torch throws an error.
         self.shuffle = shuffle if shuffle else None
         self.shuffle_buffer_size = shuffle_buffer_size
-
         self.n_workers = n_workers if n_workers is not None else os.cpu_count()
-
-        # Custom fields to read from the input files.
-        self.custom_field_anno = CustomField(
-            "seq", lambda x: x["params"]["seq"], pa.string()
-        )
 
         self.train_dataset = None
         self.valid_dataset = None
@@ -194,7 +187,14 @@ class DeNovoDataModule(pl.LightningDataModule):
         torch.utils.data.Dataset
             A PyTorch Dataset for the given peak files.
         """
-        custom_fields = [self.custom_field_anno] if annotated else []
+        custom_fields = [
+            CustomField("retention_time", _get_retention_time, pa.float32())
+        ]
+        if annotated:
+            custom_fields.append(
+                CustomField("seq", lambda x: x["params"]["seq"], pa.string())
+            )
+
         lance_path = pathlib.Path(f"{self.lance_dir}/{mode}.lance")
 
         parse_params = dict(
@@ -285,6 +285,41 @@ class DeNovoDataModule(pl.LightningDataModule):
     def db_dataloader(self) -> torch.utils.data.DataLoader:
         """Get a special dataloader for DB search."""
         return self._make_loader(self.test_dataset)
+
+
+def _get_retention_time(spectrum: dict[str, Any]) -> float:
+    """
+    Extract the retention time from a Pyteomics spectrum (mzML, mzXML, or MGF)
+    and return it in seconds.
+
+    Parameters
+    ----------
+    spectrum : dict
+        A spectrum dictionary as returned by pyteomics.mzml.read(),
+        pyteomics.mzxml.read(), or pyteomics.mgf.read().
+
+    Returns
+    -------
+    float
+        The retention time in seconds, or NaN if unavailable.
+    """
+    # mzML / mzXML style (not nested)
+    for key in ("scan start time", "retention time", "retentionTime"):
+        if key in spectrum:
+            return float(spectrum[key])
+
+    # mzML nested style
+    scan = spectrum.get("scanList", {}).get("scan", [{}])[0]
+    if "scan start time" in scan:
+        return float(scan["scan start time"])
+
+    # MGF style
+    params = spectrum.get("params", {})
+    for key in ("rtinseconds", "rtinsec"):
+        if key in params:
+            return float(params[key])
+
+    return float("nan")
 
 
 def _discard_low_quality(
