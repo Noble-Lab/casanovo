@@ -35,6 +35,8 @@ class PepSpecMatch:
         sequence, where len(aa_scores) == len(sequence).
     protein : str
         Protein associated with the peptide sequence (for db mode).
+    retention_time : float
+        The retention time of the parent MS1 spectrum, NaN if unknown
     """
 
     sequence: str
@@ -45,6 +47,7 @@ class PepSpecMatch:
     exp_mz: float
     aa_scores: Iterable[float]
     protein: str = "null"
+    retention_time: float = float("nan")
 
     # Private properties to handle proteoform caching
     _proteoform_sequence: Optional[str] = dataclasses.field(
