@@ -1332,6 +1332,7 @@ class Spec2PepTargetDecoy(pl.LightningModule):
         self,
         model_t: Spec2Pep,
         model_d: Spec2Pep,
+        fragment_tolerance_da: Optional[float] = 0.5,
         out_writer: Optional[ms_io.MztabWriter] = None,
     ):
         super().__init__()
@@ -1362,6 +1363,8 @@ class Spec2PepTargetDecoy(pl.LightningModule):
             )
 
         self.model_t, self.model_d = model_t, model_d
+
+        self.fragment_tolerance_da = fragment_tolerance_da
 
         # Get perturbed amino acid masses.
         self.perturbed_aa_masses = (
@@ -1611,7 +1614,7 @@ class Spec2PepTargetDecoy(pl.LightningModule):
                     precursor[0, 2].item(),
                     int(precursor[0, 1].item()),
                     self.perturbed_aa_masses,
-                    fragment_tolerance_da=0.5,  # FIXME
+                    fragment_tolerance_da=self.fragment_tolerance_da,
                 )
                 # Encode the updated demi-decoy spectrum using the decoy model.
                 memories_d, mem_masks_d = self.model_d.encoder(mzs_d, ints_d)

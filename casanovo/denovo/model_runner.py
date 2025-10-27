@@ -402,7 +402,7 @@ class ModelRunner:
             tokenizer=self.tokenizer_decoy,
             train=False,
         )
-        self.model = Spec2PepTargetDecoy(model_t, model_d, self.writer)
+        self.model = Spec2PepTargetDecoy(model_t, model_d, out_writer=self.writer)
         self.model.out_writer = self.writer
 
         test_paths = self._get_input_paths(peak_path, False, "test")

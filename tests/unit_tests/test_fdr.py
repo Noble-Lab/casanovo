@@ -37,7 +37,6 @@ def make_mock_model(name: str, aa: str, aa_score: list[float]):
     def _detok(
         tokens, join=True
     ):  # only detokenize the first item in the batch
-        print(tokens)
         chars = []
         for t in tokens[0]:
             tid = int(t.item())
@@ -87,7 +86,6 @@ def make_mock_model(name: str, aa: str, aa_score: list[float]):
             next_score = 1.0
 
         logits[0, -1, next_idx] = next_score
-        print(logits)
         return logits
 
     mock_model.decoder.side_effect = mock_decoder
