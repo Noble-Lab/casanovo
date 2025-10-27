@@ -7,7 +7,6 @@ import logging
 import warnings
 from typing import Any, Dict, Generator, Iterable, List, Optional, Tuple, Union
 from pathlib import Path
-import sys
 
 import einops
 import lightning.pytorch as pl
@@ -1516,7 +1515,7 @@ class Spec2PepTargetDecoy(pl.LightningModule):
                     )
                 )
 
-                # Get precursor for decoy model accoding to (partially) predicted peptide sequence.
+                # Get precursor for decoy model according to (partially) predicted peptide sequence.
                 precursor_d = precursor.clone()
                 precursor_d[:, 0] += accumulated_mass_shift
 
@@ -1616,7 +1615,7 @@ class Spec2PepTargetDecoy(pl.LightningModule):
                 )
                 # Encode the updated demi-decoy spectrum using the decoy model.
                 memories_d, mem_masks_d = self.model_d.encoder(mzs_d, ints_d)
-                # Update the acumulative mass shift.
+                # Update the accumulative mass shift.
                 accumulated_mass_shift += self.shifted_aa_masses[
                     pep_target_tokens[-1].item()
                 ]
@@ -1628,10 +1627,10 @@ class Spec2PepTargetDecoy(pl.LightningModule):
         return psms
 
     def training_step(self, *args) -> None:
-        raise NotImplemented("Combined target-decoy training is not supported")
+        raise NotImplementedError("Combined target-decoy training is not supported")
 
     def validation_step(self, *args) -> None:
-        raise NotImplemented(
+        raise NotImplementedError(
             "Combined target-decoy validation is not supported"
         )
 
@@ -1669,7 +1668,6 @@ class Spec2PepTargetDecoy(pl.LightningModule):
             batch["precursor_mz"],
             self.forward(batch),
         ):
-            print(spectrum_preds, file=sys.stderr)
             peptide_score, aa_scores, aa_mask, peptide = spectrum_preds
             predictions.append(
                 psm.PepSpecMatch(
@@ -2303,18 +2301,11 @@ def _perturb_spectrum(
                 _, best_perturbed_mz, best_delta = min(
                     matches, key=lambda x: x[2]
                 )
-                print(
-                    spectrum.mz[peak_idx],
-                    perturbed_spectrum[0, peak_idx, :],
-                    best_perturbed_mz,
-                    best_perturbed_mz + best_delta,
-                    file=sys.stderr,
-                )
                 perturbed_spectrum[0, peak_idx, 0] = (
                     best_perturbed_mz + best_delta
                 )
             else:
-                print(f"{annot} not found")
+                logger.debug(f"{annot} not found")
 
     # Make sure the spectrum is sorted by m/z again while keeping the
     # zero padding at the end.
@@ -2322,8 +2313,6 @@ def _perturb_spectrum(
         0, non_zero_idx, :
     ][perturbed_spectrum[0, non_zero_idx, 0].argsort()]
 
-    print("spec:", spec, file=sys.stderr)
-    print("perturbed_spectrum:", perturbed_spectrum, file=sys.stderr)
     return perturbed_spectrum[:, 0], perturbed_spectrum[:, 1]
 
 

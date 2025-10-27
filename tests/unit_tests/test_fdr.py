@@ -12,7 +12,7 @@ def make_mock_model(name: str, aa: str, aa_score: list[float]):
     """
     Mock Spec2Pep-like model whose:
       - encoder returns deterministic (memory, mask)
-      - decoder produces predifed `aa_score` with force the next residue of `aa`
+      - decoder produces predefined `aa_score` with force the next residue of `aa`
       - softmax output the same scores as input
       - tokenizer maps residues <-> indices (P=0,E=1,D=2), STOP=3
     """
@@ -51,7 +51,7 @@ def make_mock_model(name: str, aa: str, aa_score: list[float]):
 
     mock_model.tokenizer.detokenize = MagicMock(side_effect=_detok)
 
-    # Encoder (does not envolved in the whole process).
+    # Encoder (does not involved in the whole process).
     def mock_encoder(mz_array: torch.Tensor, intensity_array: torch.Tensor):
         mean_mz = torch.mean(mz_array).item()
         mean_int = torch.mean(intensity_array).item()
