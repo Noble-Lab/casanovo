@@ -2,9 +2,9 @@
 
 import collections
 import csv
+import math
 import operator
 import os
-import math
 import re
 from pathlib import Path
 from typing import List
