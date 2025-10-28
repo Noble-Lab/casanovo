@@ -1192,6 +1192,7 @@ def test_db_stop_token(tiny_config):
         "scan_id": [1, 2],
         "mz_array": torch.zeros((2, 10)),
         "intensity_array": torch.zeros((2, 10)),
+        "retention_time": torch.tensor([420.0, 430.0]),
     }
 
     for predction in db_model.predict_step(mock_batch):
@@ -1227,6 +1228,7 @@ def test_isoleucine_match(tiny_config):
         "intensity_array": torch.zeros((2, 10)),
         "peak_file": ["one.mgf", "two.mgf"],
         "scan_id": [1, 2],
+        "retention_time": torch.tensor([420.0, 430.0]),
     }
 
     matches = db_model.predict_step(batch)
@@ -1529,6 +1531,7 @@ def test_n_term_scores_db(tiny_config, monkeypatch):
             "intensity_array": torch.zeros(B, P),
             "precursor_mz": torch.tensor([42.0, 42.0]),
             "precursor_charge": torch.tensor([1.0, 1.0]),
+            "retention_time": torch.tensor([420.0, 430.0]),
         }
         model.on_predict_batch_end(model.predict_step(dummy_batch))
 
