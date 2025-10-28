@@ -402,7 +402,9 @@ class ModelRunner:
             tokenizer=self.tokenizer_decoy,
             train=False,
         )
-        self.model = Spec2PepTargetDecoy(model_t, model_d, out_writer=self.writer)
+        self.model = Spec2PepTargetDecoy(
+            model_t, model_d, out_writer=self.writer
+        )
         self.model.out_writer = self.writer
 
         test_paths = self._get_input_paths(peak_path, False, "test")
@@ -523,9 +525,7 @@ class ModelRunner:
         else:
             tokenizer_clss = PeptideTokenizer
 
-        missing_aa = list(
-            set(config.residues) - set(tokenizer_clss.residues)
-        )
+        missing_aa = list(set(config.residues) - set(tokenizer_clss.residues))
         if missing_aa:
             logger.warning(
                 "Configured residue(s) not in model alphabet: %s",
@@ -534,7 +534,7 @@ class ModelRunner:
 
         return tokenizer_clss(
             residues=config.residues,
-            replace_isoleucine_with_leucine=self.config.replace_isoleucine_with_leucine,
+            replace_isoleucine_with_leucine=config.replace_isoleucine_with_leucine,
             reverse=True,
             start_token=None,
             stop_token="$",

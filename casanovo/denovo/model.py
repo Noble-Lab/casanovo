@@ -1539,7 +1539,7 @@ class Spec2PepTargetDecoy(pl.LightningModule):
                 # Record whether the highest scored amino acid is a target or
                 # a decoy. If one model stops while the other continues,
                 # record the continuing model.
-                if (score_t.max() > score_d.max()) or stop_d:
+                if stop_d or (score_t.max() > score_d.max()):
                     target_mask[spectrum_idx, aa_idx] = True
                     scores[spectrum_idx, aa_idx, :] = score_t
                     tokens[spectrum_idx, aa_idx] = torch.argmax(score_t)
@@ -1558,6 +1558,9 @@ class Spec2PepTargetDecoy(pl.LightningModule):
                 pep_target_tokens = target_tokens[spectrum_idx, : aa_idx + 1]
                 # FIXME: Fix this when depthcharge reverse
                 #   detokenization bug is fixed.
+                # peptide = self.model_t.tokenizer.detokenize(
+                #     torch.unsqueeze(pred_tokens, 0)
+                # )[0]
                 peptide = "".join(
                     self.model_t.tokenizer.detokenize(
                         torch.unsqueeze(pep_target_tokens, 0),
@@ -1630,7 +1633,9 @@ class Spec2PepTargetDecoy(pl.LightningModule):
         return psms
 
     def training_step(self, *args) -> None:
-        raise NotImplementedError("Combined target-decoy training is not supported")
+        raise NotImplementedError(
+            "Combined target-decoy training is not supported"
+        )
 
     def validation_step(self, *args) -> None:
         raise NotImplementedError(
@@ -1679,12 +1684,6 @@ class Spec2PepTargetDecoy(pl.LightningModule):
                     peptide_score=peptide_score,
                     charge=int(precursor_charge),
                     calc_mz=np.nan,
-                    # TODO: What to report as the calculated m/z, considering
-                    #  that the target and decoy models use different
-                    #  amino acid masses?
-                    # calc_mz=self.peptide_mass_calculator.mass(
-                    #     peptide, precursor_charge
-                    # ),
                     exp_mz=precursor_mz.item(),
                     aa_scores=aa_scores,
                     aa_mask=aa_mask,
@@ -2257,7 +2256,6 @@ def _perturb_spectrum(
         The perturbed demi-decoy spectrum.
     """
     spectrum = torch.stack([mzs, ints], dim=1)
-    spec = spectrum
     perturbed_spectrum = spectrum.clone()
     non_zero_idx = perturbed_spectrum[0, :, 0] > 0
 
