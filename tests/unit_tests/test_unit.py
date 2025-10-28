@@ -30,7 +30,7 @@ import torch
 from casanovo import casanovo, utils, denovo
 from casanovo.config import Config
 from casanovo.data import db_utils, ms_io, psm
-from casanovo.denovo.dataloaders import DeNovoDataModule
+from casanovo.denovo.dataloaders import DeNovoDataModule, _get_retention_time
 from casanovo.denovo.evaluate import aa_match, aa_match_batch, aa_match_metrics
 from casanovo.denovo.model import (
     DbSpec2Pep,
@@ -1192,6 +1192,7 @@ def test_db_stop_token(tiny_config):
         "scan_id": [1, 2],
         "mz_array": torch.zeros((2, 10)),
         "intensity_array": torch.zeros((2, 10)),
+        "retention_time": torch.tensor([420.0, 430.0]),
     }
 
     for predction in db_model.predict_step(mock_batch):
@@ -1227,6 +1228,7 @@ def test_isoleucine_match(tiny_config):
         "intensity_array": torch.zeros((2, 10)),
         "peak_file": ["one.mgf", "two.mgf"],
         "scan_id": [1, 2],
+        "retention_time": torch.tensor([420.0, 430.0]),
     }
 
     matches = db_model.predict_step(batch)
@@ -1529,6 +1531,7 @@ def test_n_term_scores_db(tiny_config, monkeypatch):
             "intensity_array": torch.zeros(B, P),
             "precursor_mz": torch.tensor([42.0, 42.0]),
             "precursor_charge": torch.tensor([1.0, 1.0]),
+            "retention_time": torch.tensor([420.0, 430.0]),
         }
         model.on_predict_batch_end(model.predict_step(dummy_batch))
 
@@ -2494,3 +2497,29 @@ def test_db_spec2pep_forward_no_cache(tiny_config):
 
     # Assert that the non-cached path was taken
     db_model._forward_step.assert_called_once()
+
+
+@pytest.mark.parametrize(
+    "spectrum, expected",
+    [
+        # Flat mzML / mzXML style
+        ({"scan start time": 123.4}, 123.4),
+        ({"retention time": 456.7}, 456.7),
+        ({"retentionTime": 789.0}, 789.0),
+        # Nested mzML style
+        ({"scanList": {"scan": [{"scan start time": 321.0}]}}, 321.0),
+        # MGF style
+        ({"params": {"rtinseconds": 654.0}}, 654.0),
+        ({"params": {"rtinsec": 987.0}}, 987.0),
+        # Missing all keys
+        ({}, math.nan),
+        ({"scanList": {"scan": [{}]}}, math.nan),
+        ({"params": {}}, math.nan),
+    ],
+)
+def test_get_retention_time(spectrum, expected):
+    result = _get_retention_time(spectrum)
+    if math.isnan(expected):
+        assert math.isnan(result)
+    else:
+        assert result == pytest.approx(expected)
