@@ -2,7 +2,6 @@
 
 import shutil
 import unittest.mock
-import warnings
 from pathlib import Path
 
 import depthcharge.tokenizers.peptides

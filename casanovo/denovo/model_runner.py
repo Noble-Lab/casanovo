@@ -12,7 +12,6 @@ from typing import Iterable, List, Optional, Sequence, Union
 import lightning.pytorch as pl
 import lightning.pytorch.loggers
 import torch
-import torch.utils.data
 from depthcharge.tokenizers import PeptideTokenizer
 from depthcharge.tokenizers.peptides import MskbPeptideTokenizer
 from lightning.pytorch.callbacks import LearningRateMonitor, ModelCheckpoint
