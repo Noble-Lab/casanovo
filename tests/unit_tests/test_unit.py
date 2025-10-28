@@ -33,7 +33,7 @@ from casanovo import casanovo, denovo, utils
 from casanovo.casanovo import _SharedFileIOParams
 from casanovo.config import Config
 from casanovo.data import db_utils, ms_io, psm
-from casanovo.denovo.dataloaders import DeNovoDataModule
+from casanovo.denovo.dataloaders import DeNovoDataModule, _get_retention_time
 from casanovo.denovo.evaluate import aa_match, aa_match_batch, aa_match_metrics
 from casanovo.denovo.model import (
     DbSpec2Pep,
