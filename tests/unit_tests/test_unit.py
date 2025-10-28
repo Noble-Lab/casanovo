@@ -30,7 +30,7 @@ import torch
 from casanovo import casanovo, utils, denovo
 from casanovo.config import Config
 from casanovo.data import db_utils, ms_io, psm
-from casanovo.denovo.dataloaders import DeNovoDataModule
+from casanovo.denovo.dataloaders import DeNovoDataModule, _get_retention_time
 from casanovo.denovo.evaluate import aa_match, aa_match_batch, aa_match_metrics
 from casanovo.denovo.model import (
     DbSpec2Pep,
@@ -2494,3 +2494,29 @@ def test_db_spec2pep_forward_no_cache(tiny_config):
 
     # Assert that the non-cached path was taken
     db_model._forward_step.assert_called_once()
+
+
+@pytest.mark.parametrize(
+    "spectrum, expected",
+    [
+        # Flat mzML / mzXML style
+        ({"scan start time": 123.4}, 123.4),
+        ({"retention time": 456.7}, 456.7),
+        ({"retentionTime": 789.0}, 789.0),
+        # Nested mzML style
+        ({"scanList": {"scan": [{"scan start time": 321.0}]}}, 321.0),
+        # MGF style
+        ({"params": {"rtinseconds": 654.0}}, 654.0),
+        ({"params": {"rtinsec": 987.0}}, 987.0),
+        # Missing all keys
+        ({}, math.nan),
+        ({"scanList": {"scan": [{}]}}, math.nan),
+        ({"params": {}}, math.nan),
+    ],
+)
+def test_get_retention_time(spectrum, expected):
+    result = _get_retention_time(spectrum)
+    if math.isnan(expected):
+        assert math.isnan(result)
+    else:
+        assert result == pytest.approx(expected)

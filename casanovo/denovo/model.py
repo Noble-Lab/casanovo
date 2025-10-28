@@ -1192,7 +1192,7 @@ class Spec2Pep(pl.LightningModule):
                         calc_mz=np.nan,
                         exp_mz=precursor_mz.item(),
                         aa_scores=aa_scores,
-                        retention_time=retention_time,
+                        retention_time=retention_time.item(),
                     )
                 )
 
