@@ -176,6 +176,7 @@ class MztabWriter:
                     "start",
                     "end",
                     "opt_ms_run[1]_aa_scores",
+                    "opt_ms_run[1]_aa_mask",
                 ]
             )
             by_id = operator.attrgetter("spectrum_id")
@@ -214,5 +215,15 @@ class MztabWriter:
                         "null",  # end
                         # opt_ms_run[1]_aa_scores
                         ",".join(list(map("{:.5f}".format, psm.aa_scores))),
+                        # opt_ms_run[2]_aa_masks
+                        ",".join(
+                            "1" if x else "0"
+                            for x in (
+                                psm.aa_mask.tolist()
+                                if hasattr(psm.aa_mask, "tolist")
+                                else psm.aa_mask
+                            )
+                        )
+                        or "null",
                     ]
                 )

@@ -1,7 +1,7 @@
 """Peptide spectrum match dataclass."""
 
 import dataclasses
-from typing import Iterable, Tuple
+from typing import Iterable, Optional, Tuple
 
 
 @dataclasses.dataclass
@@ -33,6 +33,9 @@ class PepSpecMatch:
         sequence, where len(aa_scores) == len(sequence).
     protein : str
         Protein associated with the peptide sequence (for db mode).
+    aa_mask : Optional[Iterable[bool]]
+        Boolean mask per amino acid position (True for target-derived,
+        False for decoy-derived amino acids).
     """
 
     sequence: str
@@ -43,3 +46,4 @@ class PepSpecMatch:
     exp_mz: float
     aa_scores: Iterable[float]
     protein: str = "null"
+    aa_mask: Optional[Iterable[bool]] = dataclasses.field(default_factory=list)
