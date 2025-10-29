@@ -145,7 +145,7 @@ def test_export(tiny_fasta_file, tmp_path):
         tokenizer=depthcharge.tokenizers.PeptideTokenizer.from_massivekb(),
     )
 
-    pdb.export(str(tmp_path), "output")
+    pdb.export(tmp_path, "output")
     output_file = tmp_path / "output.tsv"
     ground_truth = pdb.db_peptides
 

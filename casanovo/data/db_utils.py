@@ -11,6 +11,7 @@ import depthcharge.constants
 import depthcharge.tokenizers
 import numpy as np
 import pandas as pd
+from pathlib import Path
 import pyteomics.fasta
 import pyteomics.parser
 
@@ -169,24 +170,24 @@ class ProteinDatabase:
         )
         return peptides
 
-    def export(self, output_path: str, output_root: str) -> None:
+    def export(self, output_path: Path, output_root: str) -> None:
         """
-        Dumps the peptide database to a tsv file that has
-        output_root as its name in the output directory
-        provided from the command line:
-        Columns: protein (list of associated proteins to peptide)
-                 peptide (peptide sequence)
-                 calc_mass (calculated mass of the peptide)
+        Dumps the peptide database to a tsv file
+
+        The file has the following columns:
+        - protein (list of associated proteins to peptide)
+        - peptide (peptide sequence)
+        - calc_mass (calculated mass of the peptide)
 
         Parameters
         ----------
-        output_path: str
-            Path that the csv file will be stored
+        output_path: Path
+            Path that the tsv file will be stored
         output_root: str
-            Name of the file
+           Name of the root directory of the file
         """
         self.db_peptides.to_csv(
-            os.path.join(output_path, f"{output_root}.tsv"),
+            output_path / f"{output_root}.tsv",
             sep="\t",
             index=True,
         )

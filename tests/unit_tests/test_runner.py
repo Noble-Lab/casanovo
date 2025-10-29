@@ -68,10 +68,7 @@ def test_initialize_model(tmp_path, mgf_small):
 
 
 def test_no_model(tiny_config_db, mgf_small, tiny_fasta_file):
-    config = Config(tiny_config_db)
-    with ModelRunner(
-        config=config,
-    ) as runner:
+    with ModelRunner(config=Config(tiny_config_db)) as runner:
         results_path = "test.mztab"
         with pytest.raises(
             ValueError, match="A model file must be provided for DB search"
