@@ -180,7 +180,7 @@ def sequence(
     start_time = time.time()
     utils.log_system_info()
 
-    utils.check_dir_file_exists(output_path, f"{output_root}.mztab")
+    utils.check_dir_file_exists(output_path, f"{output_root_name}.mztab")
     config, model = setup_model(
         model, config, output_path, output_root_name, False
     )
@@ -224,9 +224,9 @@ def sequence(
     is_flag=True,
     default=False,
     help="""
-    An option to dump the peptides processed from the data provided for debugging. 
-    Contains the proteins each peptide is associated with, the calculated 
-    mass for each peptide, and the peptide sequence.
+    Dumps peptides digested from data for debugging
+    Contains mass of peptide, sequence, and proteins it is
+    associated with
     """,
 )
 def db_search(
@@ -252,7 +252,7 @@ def db_search(
     start_time = time.time()
     utils.log_system_info()
 
-    utils.check_dir_file_exists(output_path, f"{output_root}.mztab")
+    utils.check_dir_file_exists(output_path, f"{output_root_name}.mztab")
     config, model = setup_model(
         model, config, output_path, output_root_name, False
     )
@@ -275,7 +275,9 @@ def db_search(
         runner.db_search(peak_path, fasta_path, str(results_path))
         if output_db:
             if not force_overwrite:
-                utils.check_dir_file_exists(output_path, output_root_name)
+                utils.check_dir_file_exists(
+                    output_path, f"{output_root_name}.mztab"
+                )
             runner.model.protein_database.export(output_path, output_root_name)
         utils.log_annotate_report(
             runner.writer.psms, start_time=start_time, end_time=time.time()
