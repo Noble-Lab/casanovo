@@ -5,7 +5,6 @@ import functools
 import hashlib
 import heapq
 import io
-import math
 import os
 import pathlib
 import platform
@@ -17,7 +16,6 @@ import unittest
 import unittest.mock
 
 import depthcharge
-import depthcharge.data
 import depthcharge.tokenizers.peptides
 import einops
 import github
@@ -27,7 +25,7 @@ import pytest
 import requests
 import torch
 
-from casanovo import casanovo, utils, denovo
+from casanovo import casanovo, denovo, utils
 from casanovo.config import Config
 from casanovo.data import db_utils, ms_io, psm
 from casanovo.denovo.dataloaders import DeNovoDataModule
@@ -35,9 +33,223 @@ from casanovo.denovo.evaluate import aa_match, aa_match_batch, aa_match_metrics
 from casanovo.denovo.model import (
     DbSpec2Pep,
     Spec2Pep,
-    _peptide_score,
     _calc_match_score,
+    _peptide_score,
 )
+
+
+def test_forward_reverse():
+    score_A = [0.42, 1.0, 0.0, 0.0, 0.0]
+    score_B = [0.42, 0.0, 1.0, 0.0, 0.0]
+    score_C = [0.42, 0.0, 0.0, 1.0, 0.0]
+    score_padding = [0.00, 0.0, 0.0, 0.0, 0.0]
+    score_none = [0.42, 0.0, 0.0, 0.0, 0.0]
+
+    pep1 = torch.tensor(
+        [
+            score_A,
+            score_B,
+            score_C,
+            score_padding,
+        ]
+    )
+
+    pep2 = torch.tensor(
+        [
+            score_B,
+            score_A,
+            score_C,
+            score_padding,
+        ]
+    )
+
+    pep3 = torch.tensor(
+        [
+            score_C,
+            score_A,
+            score_B,
+            score_padding,
+        ]
+    )
+
+    pep4 = torch.tensor(
+        [
+            score_C,
+            score_B,
+            score_A,
+            score_padding,
+        ]
+    )
+
+    pep5 = torch.tensor(
+        [
+            score_A,
+            score_none,
+            score_none,
+            score_padding,
+        ]
+    )
+
+    true_aas = torch.tensor(
+        [
+            [1, 2, 3],
+            [2, 1, 3],
+            [3, 1, 2],
+            [3, 2, 1],
+            [1, 0, 0],
+        ],
+        dtype=int,
+    )
+
+    # Forward Direction
+    batch_all_aa_scores = torch.stack([pep1, pep2, pep3, pep4, pep5])
+    pep_scores, aa_scores = _calc_match_score(batch_all_aa_scores, true_aas)
+
+    assert all([pytest.approx(1.0) == x for x in pep_scores])
+    assert all(
+        [np.allclose(np.array([1.0, 1.0, 1.0]), x) for x in aa_scores[:4]]
+    )
+    assert np.allclose(np.array([1.0]), aa_scores[4])
+
+    # Reverse Direction
+    flipped_batch_all_aa_scores = torch.flip(batch_all_aa_scores, dims=[1])
+    pep_scores_reversed, aa_scores_reversed = _calc_match_score(
+        flipped_batch_all_aa_scores, true_aas
+    )
+
+    assert all([pytest.approx(0.0) == x for x in pep_scores_reversed])
+    assert all(
+        [
+            np.allclose(np.array([0.0, 0.0, 0.0]), x)
+            for x in aa_scores_reversed[:4]
+        ]
+    )
+    assert np.allclose(np.array([0.0]), aa_scores_reversed[4])
+
+
+def test_export(tiny_fasta_file, tmp_path):
+    pdb = db_utils.ProteinDatabase(
+        fasta_path=str(tiny_fasta_file),
+        enzyme="trypsin",
+        digestion="partial",
+        missed_cleavages=0,
+        min_peptide_len=6,
+        max_peptide_len=100,
+        max_mods=0,
+        precursor_tolerance=20,
+        isotope_error=[0, 0],
+        allowed_fixed_mods="C:C+57.021",
+        allowed_var_mods=(
+            "M:M+15.995,N:N+0.984,Q:Q+0.984,"
+            "nterm:+42.011,nterm:+43.006,nterm:-17.027,nterm:+43.006-17.027"
+        ),
+        tokenizer=depthcharge.tokenizers.PeptideTokenizer.from_massivekb(),
+    )
+
+    pdb.export(tmp_path, "output")
+    output_file = tmp_path / "output.tsv"
+    ground_truth = pdb.db_peptides
+
+    loaded = pd.read_csv(output_file, sep="\t", index_col=0)
+    ground_truth["protein"] = ground_truth["protein"].apply(str)
+    loaded["protein"] = loaded["protein"].astype(str)
+
+    pd.testing.assert_frame_equal(ground_truth, loaded)
+
+
+@pytest.mark.parametrize(
+    "enzyme, specificity, expected, use_sort",
+    [
+        (
+            "N/A",
+            "non-specific",
+            [
+                ("", "foo"),
+                ("M", "foo"),
+                ("ME", "foo"),
+                ("", "foo"),
+                ("E", "foo"),
+                ("", "corrupted"),
+                ("M", "corrupted"),
+                ("ME", "corrupted"),
+                ("", "corrupted"),
+                ("E", "corrupted"),
+                ("", "corrupted"),
+            ],
+            False,
+        ),
+        (
+            "trypsin",
+            "partial",
+            [
+                ("M", "foo"),
+                ("ME", "foo"),
+                ("E", "foo"),
+                ("ME", "corrupted"),
+                ("M", "corrupted"),
+            ],
+            True,
+        ),
+        (
+            ".Q.",
+            "partial",
+            [
+                ("M", "foo"),
+                ("ME", "foo"),
+                ("E", "foo"),
+                ("ME", "corrupted"),
+                ("M", "corrupted"),
+            ],
+            True,
+        ),
+        (
+            "trypsin",
+            "full",
+            [("ME", "foo")],
+            True,
+        ),
+        (
+            ".Q.",
+            "full",
+            [("ME", "foo")],
+            True,
+        ),
+    ],
+)
+def test_digestion_with_unknown_amino_acids(
+    enzyme, specificity, expected, use_sort
+):
+    tmp_path = tempfile.TemporaryDirectory()
+    fasta_path = pathlib.Path(tmp_path.name) / "tiny_fasta.fasta"
+    fasta_path.write_text(">foo\nME\n>corrupted\nMEX\n", encoding="utf-8")
+
+    valid_aa = list("ARNDCEQGHILKMFPSTWYV")
+    min_len = 0
+    max_len = 18
+
+    results = list(
+        db_utils._peptide_generator(
+            str(fasta_path),
+            enzyme,
+            specificity,
+            0,
+            min_len,
+            max_len,
+            valid_aa,
+        )
+    )
+
+    result_peptides = [p for p, _ in results]
+    expected_peptides = [p for p, _ in expected]
+
+    if use_sort:
+        assert sorted(result_peptides) == sorted(
+            expected_peptides
+        ), f"Failed for enzyme={enzyme}, specificity={specificity}"
+    else:
+        assert (
+            result_peptides == expected_peptides
+        ), f"Failed for enzyme={enzyme}, specificity={specificity}"
 
 
 def test_version():

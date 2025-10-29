@@ -75,6 +75,17 @@ def test_initialize_model(tmp_path, mgf_small):
         runner.initialize_model(train=False)
 
 
+def test_no_model(tiny_config_db, mgf_small, tiny_fasta_file):
+    with ModelRunner(config=Config(tiny_config_db)) as runner:
+        results_path = "test.mztab"
+        with pytest.raises(
+            ValueError, match="A model file must be provided for DB search"
+        ):
+            runner.db_search(
+                (str(mgf_small),), str(tiny_fasta_file), str(results_path)
+            )
+
+
 def test_save_and_load_weights(tmp_path, mgf_small, tiny_config):
     """Test saving and loading weights"""
     config = Config(tiny_config)
