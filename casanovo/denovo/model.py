@@ -1569,11 +1569,13 @@ class Spec2PepTargetDecoy(pl.LightningModule):
                 )
 
                 # Terminate the sequence algorithm, if target model predicts the stop token.
+                # Others need to be added later.
                 if pep_target_tokens[-1] == self.model_t.stop_token:
-                    # Omit the stop token from the peptide sequence (if
-                    # predicted).
+                    # Omit the stop token from the peptide sequence (if predicted by target
+                    # model). Also remove the corresponding amino acid score from the mixed
+                    # results to keep the sequence length aligned with the amino acid scores.
                     has_stop_token = (
-                        pep_mixed_tokens[-1] == self.model_t.stop_token
+                        pep_target_tokens[-1] == self.model_t.stop_token
                     )
                     pep_mixed_tokens = (
                         pep_mixed_tokens[:-1]
