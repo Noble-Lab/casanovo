@@ -11,6 +11,8 @@ from typing import Iterable, List, Optional, Sequence, Union
 
 import lightning.pytorch as pl
 import lightning.pytorch.loggers
+import pyarrow as pa
+import pyarrow.parquet as pq
 import torch
 from depthcharge.tokenizers import PeptideTokenizer
 from depthcharge.tokenizers.peptides import MskbPeptideTokenizer
@@ -199,6 +201,44 @@ class ModelRunner:
             self.loaders.train_dataloader(),
             self.loaders.val_dataloader(),
         )
+
+    def evaluate(self, peak_path: Iterable[str], results_path: str) -> None:
+        """Evaluate peptide sequence preditions from a trained Casanovo model.
+
+        Parameters
+        ----------
+        peak_path : iterable of str
+            The path with MS data files for predicting peptide sequences.
+
+        Returns
+        -------
+        self
+        """
+        self.initialize_trainer(train=False)
+        self.initialize_tokenizer()
+        self.initialize_model(train=False)
+
+        test_paths = self._get_input_paths(peak_path, False, "test")
+        self.initialize_data_module(test_paths=test_paths)
+        self.loaders.setup(stage="test", annotated=True)
+
+        schema = pa.schema(
+            [
+                (curr, pa.string())
+                for curr in (
+                    "residues_predicted",
+                    "residues_true",
+                    "peak_file",
+                    "scan_id",
+                )
+            ]
+            + [(curr, pa.float64()) for curr in self.tokenizer.index.keys()]
+            + [("residue_idx", pa.int64())]
+        )
+
+        with pq.ParquetWriter(results_path, schema) as logit_writer:
+            self.model.logit_writer = logit_writer
+            self.trainer.validate(self.model, self.loaders.test_dataloader())
 
     def log_metrics(self, test_dataloader: DataLoader) -> None:
         """
