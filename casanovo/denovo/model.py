@@ -1141,14 +1141,12 @@ class Spec2Pep(pl.LightningModule):
         batch_logits = None
         for (
             spec_pred,
-            spec_truth,
             filename,
             scan,
             curr_residues_pred,
             curr_residues_true,
         ) in zip(
             pred,
-            truth,
             batch["peak_file"],
             batch["scan_id"],
             residues_pred,
