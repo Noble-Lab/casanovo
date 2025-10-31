@@ -10,6 +10,8 @@ from typing import Any, Dict, Generator, Iterable, List, Optional, Tuple, Union
 import einops
 import lightning.pytorch as pl
 import numpy as np
+import pyarrow as pa
+import pyarrow.parquet as pq
 import torch
 from depthcharge.tokenizers import PeptideTokenizer
 
@@ -117,6 +119,7 @@ class Spec2Pep(pl.LightningModule):
         out_writer: Optional[ms_io.MztabWriter] = None,
         calculate_precision: bool = False,
         tokenizer: PeptideTokenizer | None = None,
+        logit_writer: Optional[pq.ParquetWriter] = None,
         **kwargs: Dict,
     ):
         super().__init__()
@@ -178,6 +181,7 @@ class Spec2Pep(pl.LightningModule):
 
         # Output writer during predicting.
         self.out_writer = out_writer
+        self.logit_writer = logit_writer
 
         # Get n-term mod tokens
         self.n_term = [
@@ -1112,38 +1116,77 @@ class Spec2Pep(pl.LightningModule):
             The loss of the validation step.
         """
         # Record the loss.
-        loss = self.training_step(batch, mode="valid")
-        if not self.calculate_precision:
+        pred, truth = self._forward_step(batch)
+        loss = self.val_celoss(
+            pred[:, :-1, :].reshape(-1, self.vocab_size), truth.flatten()
+        )
+
+        self.log(
+            "valid_CELoss",
+            loss.detach(),
+            on_step=False,
+            on_epoch=True,
+            sync_dist=True,
+            batch_size=pred.shape[0],
+        )
+
+        if self.logit_writer is None:
             return loss
 
-        # Calculate and log amino acid and peptide match evaluation
-        # metrics from the predicted peptides.
-        # FIXME: Remove work around when depthcharge reverse detokenization
-        # bug is fixed.
-        # peptides_true = self.tokenizer.detokenize(batch["seq"])
-        peptides_true = [
-            "".join(pep)
-            for pep in self.tokenizer.detokenize(batch["seq"], join=False)
-        ]
-        peptides_pred = [
-            pred
-            for spectrum_preds in self.forward(batch)
-            for _, _, pred in spectrum_preds
-        ]
-        aa_precision, _, pep_precision = evaluate.aa_match_metrics(
-            *evaluate.aa_match_batch(
-                peptides_true, peptides_pred, self.tokenizer.residues
-            )
+        residues_pred = self.tokenizer.detokenize(
+            torch.argmax(pred, dim=2), join=False, trim_stop_token=False
         )
+        residues_true = self.tokenizer.detokenize(truth, join=False)
 
-        batch_size = len(peptides_true)
-        log_args = dict(on_step=False, on_epoch=True, sync_dist=True)
-        self.log(
-            "pep_precision", pep_precision, **log_args, batch_size=batch_size
-        )
-        self.log(
-            "aa_precision", aa_precision, **log_args, batch_size=batch_size
-        )
+        batch_logits = None
+        for (
+            spec_pred,
+            spec_truth,
+            filename,
+            scan,
+            curr_residues_pred,
+            curr_residues_true,
+        ) in zip(
+            pred,
+            truth,
+            batch["peak_file"],
+            batch["scan_id"],
+            residues_pred,
+            residues_true,
+        ):
+            pep_len = len(curr_residues_true)
+            residue_idx = list(range(pep_len))
+            if self.tokenizer.reverse:
+                curr_residues_pred = curr_residues_pred[::-1]
+                curr_residues_true = curr_residues_true[::-1]
+                residue_idx = residue_idx[::-1]
+
+            # Get predicted and ground truth residues
+            curr_logits = {}
+            curr_logits["residues_predicted"] = curr_residues_pred[:pep_len]
+            curr_logits["residues_true"] = curr_residues_true
+            curr_logits["residue_idx"] = residue_idx
+            curr_logits["peak_file"] = [filename] * pep_len
+            curr_logits["scan_id"] = [scan] * pep_len
+
+            # Get by-residue logit values
+            logit_values = {
+                self.tokenizer.reverse_index[i]: residue_logits.tolist()
+                for i, residue_logits in enumerate(spec_pred[:pep_len].T)
+                if i > 0
+            }
+
+            # Update batch logits
+            curr_logits.update(logit_values)
+            if batch_logits is None:
+                batch_logits = curr_logits
+            else:
+                for key in curr_logits.keys():
+                    batch_logits[key].extend(curr_logits[key])
+
+        table = pa.Table.from_pydict(batch_logits)
+        table = table.select(self.logit_writer.schema.names)
+        self.logit_writer.write(table)
         return loss
 
     def predict_step(

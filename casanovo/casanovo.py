@@ -145,6 +145,48 @@ def main() -> None:
     nargs=-1,
     type=click.Path(exists=True, dir_okay=True),
 )
+def get_logits(
+    peak_path: Tuple[str],
+    model: Optional[str],
+    config: Optional[str],
+    output_dir: Optional[str],
+    output_root: Optional[str],
+    verbosity: str,
+    force_overwrite: bool,
+) -> None:
+    """Dump the logits calculated via teacher-forcing on annotated data"""
+    output_path, output_root_name = _setup_output(
+        output_dir, output_root, force_overwrite, verbosity
+    )
+
+    utils.log_system_info()
+    utils.check_dir_file_exists(output_path, f"{output_root}.logits.parquet")
+    config, model = setup_model(
+        model, config, output_path, output_root_name, False
+    )
+
+    with ModelRunner(
+        config,
+        model,
+        output_path,
+        output_root_name if output_root is not None else None,
+        False,
+    ) as runner:
+        logger.info("Sequencing peptides and dumping logits from:")
+        for peak_file in peak_path:
+            logger.info("  %s", peak_file)
+
+        results_path = output_path / f"{output_root_name}.logits.parquet"
+        runner.evaluate(peak_path, str(results_path))
+
+
+@main.command(cls=_SharedParams)
+@click.argument(
+    "peak_path",
+    required=True,
+    nargs=-1,
+    type=click.Path(exists=True, dir_okay=True),
+)
 @click.option(
     "--evaluate",
     "-e",

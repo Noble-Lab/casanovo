@@ -227,6 +227,20 @@ def test_train_and_run(
     )
 
 
+def test_harness():
+    run = functools.partial(
+        CliRunner().invoke, casanovo.main, catch_exceptions=False
+    )
+
+    # Run Casanovo to train a tiny model.
+    args = [
+        "get-logits",
+        "/Users/gwen/casanovo/sample_data/sample_preprocessed_spectra.mgf",
+    ]
+
+    run(args)
+
+
 def test_auxilliary_cli(tmp_path, mgf_small, monkeypatch):
     """Test the secondary CLI commands."""
     run = functools.partial(
