@@ -8,9 +8,9 @@ from spectrum_utils.utils import mass_diff
 
 
 def aa_match_prefix(
-    peptide1: List[List[int]],
-    peptide2: List[List[int]],
-    aa_dict: Dict[int, float],
+    peptide1: List[List[str]],
+    peptide2: List[List[str]],
+    aa_dict: Dict[str, float],
     cum_mass_threshold: float = 0.5,
     ind_mass_threshold: float = 0.1,
 ) -> Tuple[np.ndarray, bool]:
@@ -21,9 +21,9 @@ def aa_match_prefix(
 
     Parameters
     ----------
-    peptide1 : List[List[int]]
+    peptide1 : List[List[str]]
         The first tokenized peptide sequence to be compared.
-    peptide2 : List[List[int]]
+    peptide2 : List[List[str]]
         The second tokenized peptide sequence to be compared.
     aa_dict : Dict[int, float]
         Mapping of amino acid tokens to their mass values.
@@ -64,9 +64,9 @@ def aa_match_prefix(
 
 
 def aa_match_prefix_suffix(
-    peptide1: List[List[int]],
-    peptide2: List[List[int]],
-    aa_dict: Dict[int, float],
+    peptide1: List[List[str]],
+    peptide2: List[List[str]],
+    aa_dict: Dict[str, float],
     cum_mass_threshold: float = 0.5,
     ind_mass_threshold: float = 0.1,
 ) -> Tuple[np.ndarray, bool]:
@@ -76,9 +76,9 @@ def aa_match_prefix_suffix(
 
     Parameters
     ----------
-    peptide1 : List[List[int]]
+    peptide1 : List[List[str]]
         The first tokenized peptide sequence to be compared.
-    peptide2 : List[List[int]]
+    peptide2 : List[List[str]]
         The second tokenized peptide sequence to be compared.
     aa_dict : Dict[int, float]
         Mapping of amino acid tokens to their mass values.
@@ -127,8 +127,8 @@ def aa_match_prefix_suffix(
 
 
 def aa_match(
-    peptide1: List[List[int]] | None,
-    peptide2: List[List[int]] | None,
+    peptide1: List[List[str]] | None,
+    peptide2: List[List[str]] | None,
     aa_dict: Dict[int, float],
     cum_mass_threshold: float = 0.5,
     ind_mass_threshold: float = 0.1,
@@ -139,9 +139,9 @@ def aa_match(
 
     Parameters
     ----------
-    peptide1 : List[List[int]] | None,
+    peptide1 : List[List[str]] | None,
         The first tokenized peptide sequence to be compared.
-    peptide2 : List[List[int]] | None
+    peptide2 : List[List[str]] | None
         The second tokenized peptide sequence to be compared.
     aa_dict : Dict[int, float]
         Mapping of amino acid tokens to their mass values.

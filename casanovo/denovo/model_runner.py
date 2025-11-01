@@ -217,27 +217,27 @@ class ModelRunner:
 
         for batch in test_dataloader:
             for peak_file, scan_id, true_seq in zip(
-                batch["peak_file"], batch["scan_id"], batch["seq"]
+                batch["peak_file"],
+                batch["scan_id"],
+                self.tokenizer.detokenize(batch["seq"], join=False),
             ):
-                true_seqs.append(true_seq.cpu().detach().numpy())
+                true_seqs.append(true_seq)
                 if pred_i < len(self.writer.psms) and self.writer.psms[
                     pred_i
                 ].spectrum_id == (peak_file, scan_id):
-                    pred_tokens = self.model.tokenizer.tokenize(
-                        self.writer.psms[pred_i].sequence
-                    ).squeeze(0)
-                    pred_seqs.append(pred_tokens.cpu().detach().numpy())
+                    curr_pred = self.tokenizer.tokenize(
+                        self.writer.psms[pred_i].sequence, to_strings=True
+                    )[0]
+                    if self.tokenizer.reverse:
+                        curr_pred = curr_pred[::-1]
+
+                    pred_seqs.append(curr_pred)
                     pred_i += 1
                 else:
                     pred_seqs.append(None)
 
-        aa_masses = {
-            aa_token: self.model.tokenizer.residues[aa]
-            for aa, aa_token in self.model.tokenizer.index.items()
-            if aa in self.model.tokenizer.residues
-        }
         aa_precision, aa_recall, pep_precision = aa_match_metrics(
-            *aa_match_batch(true_seqs, pred_seqs, aa_masses)
+            *aa_match_batch(true_seqs, pred_seqs, self.tokenizer.residues)
         )
 
         if self.config["top_match"] > 1:
