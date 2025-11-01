@@ -369,7 +369,73 @@ def test_metrics_logging(tmp_path, mgf_small, tiny_config):
     assert csv_path.is_dir()
 
 
-def test_log_metrics(monkeypatch, tiny_config):
+@pytest.mark.parametrize(
+    "true_psms,pred_psms,expected_pep,expected_aa_prec,expected_aa_rec",
+    [
+        # 100% peptide precision
+        (
+            [("PEP", 1), ("PET", 2)],
+            [("PEP", 1), ("PET", 2)],
+            100,
+            100,
+            100,
+        ),
+        # 50% peptide precision
+        (
+            [("PEP", 1), ("PET", 2)],
+            [("PEP", 1), ("PEP", 2)],
+            100 * (1 / 2),
+            100 * (5 / 6),
+            100 * (5 / 6),
+        ),
+        # skipped spectra (various cases)
+        (
+            [("PEP", 1), ("PET", 2), ("PEI", 3), ("PEG", 4), ("PEA", 5)],
+            [("PEP", 1), ("PET", 2), ("PEI", 3), ("PEA", 5)],
+            100 * (4 / 5),
+            100,
+            100 * (4 / 5),
+        ),
+        (
+            [("PEP", 1), ("PET", 2), ("PEI", 3), ("PEG", 4), ("PEA", 5)],
+            [("PEP", 1), ("PET", 2), ("PEI", 3), ("PEG", 4)],
+            100 * (4 / 5),
+            100,
+            100 * (4 / 5),
+        ),
+        (
+            [("PEP", 1), ("PET", 2), ("PEI", 3), ("PEG", 4), ("PEA", 5)],
+            [("PEP", 1), ("PEI", 3)],
+            100 * (2 / 5),
+            100,
+            100 * (2 / 5),
+        ),
+        (
+            [("PEP", 1), ("PET", 2), ("PEI", 3), ("PEG", 4), ("PEA", 5)],
+            [("PEP", 1), ("PEA", 5)],
+            100 * (2 / 5),
+            100,
+            100 * (2 / 5),
+        ),
+        # un-inferred spectra
+        (
+            [("PEP", 1), ("PET", 2), ("PEI", 3), ("PEG", 4)],
+            [("PE", 1), ("PE", 2), ("PE", 3), ("PE", 4), ("PE", 5)],
+            0,
+            100,
+            100 * (2 / 3),
+        ),
+    ],
+)
+def test_log_metrics(
+    monkeypatch,
+    tiny_config,
+    true_psms,
+    pred_psms,
+    expected_pep,
+    expected_aa_prec,
+    expected_aa_rec,
+):
     def get_mock_loader(psm_list, tokenizer):
         return [
             {
@@ -397,148 +463,30 @@ def test_log_metrics(monkeypatch, tiny_config):
         with ModelRunner(Config(tiny_config)) as runner:
             runner.writer = unittest.mock.MagicMock()
             runner.model = unittest.mock.MagicMock()
-            runner.model.tokenizer = (
-                depthcharge.tokenizers.peptides.MskbPeptideTokenizer()
+            runner.tokenizer = (
+                depthcharge.tokenizers.peptides.PeptideTokenizer()
             )
 
-            true_psms = [
-                get_mock_psm("PEP", ("foo", "index=1")),
-                get_mock_psm("PET", ("foo", "index=2")),
+            true_psms_objs = [
+                get_mock_psm(seq, ("foo", f"index={idx}"))
+                for seq, idx in true_psms
             ]
-            mock_index = get_mock_loader(true_psms, runner.model.tokenizer)
-
-            # Test 100% peptide precision.
-            pred_psms = [
-                get_mock_psm("PEP", ("foo", "index=1")),
-                get_mock_psm("PET", ("foo", "index=2")),
+            pred_psms_objs = [
+                get_mock_psm(seq, ("foo", f"index={idx}"))
+                for seq, idx in pred_psms
             ]
 
-            runner.writer.psms = pred_psms
+            runner.writer.psms = pred_psms_objs
+            mock_index = get_mock_loader(true_psms_objs, runner.tokenizer)
             runner.log_metrics(mock_index)
 
             pep_precision = mock_logger.info.call_args_list[-3][0][1]
             aa_precision = mock_logger.info.call_args_list[-2][0][1]
             aa_recall = mock_logger.info.call_args_list[-1][0][1]
-            assert pep_precision == pytest.approx(100)
-            assert aa_precision == pytest.approx(100)
-            assert aa_recall == pytest.approx(100)
 
-            # Test 50% peptide precision (one wrong).
-            pred_psms = [
-                get_mock_psm("PEP", ("foo", "index=1")),
-                get_mock_psm("PEP", ("foo", "index=2")),
-            ]
-
-            runner.writer.psms = pred_psms
-            runner.log_metrics(mock_index)
-
-            pep_precision = mock_logger.info.call_args_list[-3][0][1]
-            aa_precision = mock_logger.info.call_args_list[-2][0][1]
-            aa_recall = mock_logger.info.call_args_list[-1][0][1]
-            assert pep_precision == pytest.approx(100 * (1 / 2))
-            assert aa_precision == pytest.approx(100 * (5 / 6))
-            assert aa_recall == pytest.approx(100 * (5 / 6))
-
-            # Test skipped spectra.
-            true_psms = [
-                get_mock_psm("PEP", ("foo", "index=1")),
-                get_mock_psm("PET", ("foo", "index=2")),
-                get_mock_psm("PEI", ("foo", "index=3")),
-                get_mock_psm("PEG", ("foo", "index=4")),
-                get_mock_psm("PEA", ("foo", "index=5")),
-            ]
-
-            pred_psms = [
-                get_mock_psm("PEP", ("foo", "index=1")),
-                get_mock_psm("PET", ("foo", "index=2")),
-                get_mock_psm("PEI", ("foo", "index=3")),
-                get_mock_psm("PEA", ("foo", "index=5")),
-            ]
-
-            runner.writer.psms = pred_psms
-            mock_index = get_mock_loader(true_psms, runner.model.tokenizer)
-            runner.log_metrics(mock_index)
-
-            pep_precision = mock_logger.info.call_args_list[-3][0][1]
-            aa_precision = mock_logger.info.call_args_list[-2][0][1]
-            aa_recall = mock_logger.info.call_args_list[-1][0][1]
-            assert pep_precision == pytest.approx(100 * (4 / 5))
-            assert aa_precision == pytest.approx(100)
-            assert aa_recall == pytest.approx(100 * (4 / 5))
-
-            pred_psms = [
-                get_mock_psm("PEP", ("foo", "index=1")),
-                get_mock_psm("PET", ("foo", "index=2")),
-                get_mock_psm("PEI", ("foo", "index=3")),
-                get_mock_psm("PEG", ("foo", "index=4")),
-            ]
-
-            runner.writer.psms = pred_psms
-            runner.log_metrics(mock_index)
-
-            pep_precision = mock_logger.info.call_args_list[-3][0][1]
-            aa_precision = mock_logger.info.call_args_list[-2][0][1]
-            aa_recall = mock_logger.info.call_args_list[-1][0][1]
-            assert pep_precision == pytest.approx(100 * (4 / 5))
-            assert aa_precision == pytest.approx(100)
-            assert aa_recall == pytest.approx(100 * (4 / 5))
-
-            pred_psms = [
-                get_mock_psm("PEP", ("foo", "index=1")),
-                get_mock_psm("PEI", ("foo", "index=3")),
-            ]
-
-            runner.writer.psms = pred_psms
-            runner.log_metrics(mock_index)
-
-            pep_precision = mock_logger.info.call_args_list[-3][0][1]
-            aa_precision = mock_logger.info.call_args_list[-2][0][1]
-            aa_recall = mock_logger.info.call_args_list[-1][0][1]
-            assert pep_precision == pytest.approx(100 * (2 / 5))
-            assert aa_precision == pytest.approx(100)
-            assert aa_recall == pytest.approx(100 * (2 / 5))
-
-            pred_psms = [
-                get_mock_psm("PEP", ("foo", "index=1")),
-                get_mock_psm("PEA", ("foo", "index=5")),
-            ]
-
-            runner.writer.psms = pred_psms
-            runner.log_metrics(mock_index)
-
-            pep_precision = mock_logger.info.call_args_list[-3][0][1]
-            aa_precision = mock_logger.info.call_args_list[-2][0][1]
-            aa_recall = mock_logger.info.call_args_list[-1][0][1]
-            assert pep_precision == pytest.approx(100 * (2 / 5))
-            assert aa_precision == pytest.approx(100)
-            assert aa_recall == pytest.approx(100 * (2 / 5))
-
-            # Test un-inferred spectra.
-            true_psms = [
-                get_mock_psm("PEP", ("foo", "index=1")),
-                get_mock_psm("PET", ("foo", "index=2")),
-                get_mock_psm("PEI", ("foo", "index=3")),
-                get_mock_psm("PEG", ("foo", "index=4")),
-            ]
-
-            pred_psms = [
-                get_mock_psm("PE", ("foo", "index=1")),
-                get_mock_psm("PE", ("foo", "index=2")),
-                get_mock_psm("PE", ("foo", "index=3")),
-                get_mock_psm("PE", ("foo", "index=4")),
-                get_mock_psm("PE", ("foo", "index=5")),
-            ]
-
-            runner.writer.psms = pred_psms
-            mock_index = get_mock_loader(true_psms, runner.model.tokenizer)
-            runner.log_metrics(mock_index)
-
-            pep_precision = mock_logger.info.call_args_list[-3][0][1]
-            aa_precision = mock_logger.info.call_args_list[-2][0][1]
-            aa_recall = mock_logger.info.call_args_list[-1][0][1]
-            assert pep_precision == pytest.approx(0)
-            assert aa_precision == pytest.approx(100)
-            assert aa_recall == pytest.approx(100 * (2 / 3))
+            assert pep_precision == pytest.approx(expected_pep)
+            assert aa_precision == pytest.approx(expected_aa_prec)
+            assert aa_recall == pytest.approx(expected_aa_rec)
 
 
 def test_initialize_tokenizer(caplog):
