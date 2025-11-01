@@ -227,22 +227,6 @@ def test_train_and_run(
     )
 
 
-def test_harness(tmp_path):
-    run = functools.partial(
-        CliRunner().invoke, casanovo.main, catch_exceptions=False
-    )
-
-    run(
-        [
-            "sequence",
-            "/Users/gwen/casanovo/sample_data/sample_preprocessed_spectra.mgf",
-            "--evaluate",
-            "--output_dir",
-            str(tmp_path),
-        ]
-    )
-
-
 def test_auxilliary_cli(tmp_path, mgf_small, monkeypatch):
     """Test the secondary CLI commands."""
     run = functools.partial(
