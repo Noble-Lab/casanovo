@@ -23,6 +23,7 @@ _config_deprecated = dict(
     max_length="max_peptide_len",
     save_top_k=None,
     model_save_folder_path=None,
+    reverse_peptides=None,
 )
 
 
@@ -100,7 +101,6 @@ class Config:
         gradient_clip_algorithm=str,
         precision=str,
         replace_isoleucine_with_leucine=bool,
-        reverse_peptides=bool,
         massivekb_tokenizer=bool,
         residues=dict,
     )
