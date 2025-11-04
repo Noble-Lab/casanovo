@@ -163,8 +163,6 @@ precision: "32-true"
 
 # Replace I by L in peptide sequences.
 replace_isoleucine_with_leucine: true
-# Reverse peptide sequences.
-reverse_peptides: true
 # MassIVE-KB style tokenizer, otherwise ProForma syntax.
 massivekb_tokenizer: false
 

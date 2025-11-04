@@ -176,6 +176,7 @@ class MztabWriter:
                     "start",
                     "end",
                     "opt_ms_run[1]_aa_scores",
+                    "opt_ms_run[1]_proforma",
                 ]
             )
             by_id = operator.attrgetter("spectrum_id")
@@ -190,7 +191,7 @@ class MztabWriter:
                 writer.writerow(
                     [
                         "PSM",
-                        psm.sequence,  # sequence
+                        psm.aa_sequence,  # sequence
                         i,  # PSM_ID
                         psm.protein,  # accession
                         "null",  # unique
@@ -200,7 +201,7 @@ class MztabWriter:
                         psm.peptide_score,  # search_engine_score[1]
                         # FIXME: Modifications should be specified as
                         #  controlled vocabulary terms.
-                        "null",  # modifications
+                        psm.modifications,  # modifications
                         # FIXME: Can we get the retention time from the data
                         #  loader?
                         "null",  # retention_time
@@ -214,5 +215,6 @@ class MztabWriter:
                         "null",  # end
                         # opt_ms_run[1]_aa_scores
                         ",".join(list(map("{:.5f}".format, psm.aa_scores))),
+                        psm.sequence,  # op_ms_run[1]_proforma
                     ]
                 )
