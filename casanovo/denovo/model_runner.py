@@ -683,7 +683,6 @@ def _get_peak_filenames(
     for path in paths:
         path = os.path.expanduser(path)
         path = os.path.expandvars(path)
-
         for fname in glob.glob(path, recursive=True):
             if Path(fname).suffix.lower() in supported_ext:
                 found_files.add(fname)
