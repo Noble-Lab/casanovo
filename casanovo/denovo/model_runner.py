@@ -617,9 +617,9 @@ class ModelRunner:
         List[str]
             The input spectrum paths for the specified mode.
         """
-        ext = (".mgf", ".lance", "d")
+        ext = (".mgf", ".lance")
         if not annotated:
-            ext += (".mzml", ".mzxml")
+            ext += (".mzml", ".mzxml", ".d")
 
         filenames = _get_peak_filenames(peak_path, ext)
         if not filenames:
@@ -683,10 +683,13 @@ def _get_peak_filenames(
     for path in paths:
         path = os.path.expanduser(path)
         path = os.path.expandvars(path)
+
         for fname in glob.glob(path, recursive=True):
             if Path(fname).suffix.lower() in supported_ext:
                 found_files.add(fname)
-            elif Path(fname).is_dir() and Path(fname).suffix.lower() in supported_ext:
+            elif Path(fname).is_dir() and any(
+                Path(fname).name.lower().endswith(ext) for ext in supported_ext
+            ):
                 found_files.add(fname)
             else:
                 warnings.warn(

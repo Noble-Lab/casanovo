@@ -16,6 +16,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Training and optimizer metrics can be logged to a CSV file by setting the `log_metrics` config file option to true. The CSV file will be written to under a sub-directory of the output directory named `csv_logs`.
 - New configuration options for detailed control of the gradients during training (gradient accumulation, clipping).
 - New configuration option `min_peaks` to discard low-quality spectra with too few peaks.
+- timsTOF files can now be accepted as spectra input files
 
 ### Changed
 
