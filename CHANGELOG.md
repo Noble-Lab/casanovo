@@ -8,7 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Changed
 
-- Increased minimum python version from 3.8 to 3.10.
+- Increased minimum Python version from 3.8 to 3.10.
 
 ### Fixed
 
