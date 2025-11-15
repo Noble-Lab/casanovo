@@ -672,6 +672,13 @@ class Spec2Pep(pl.LightningModule):
                 temp_matches[idx[exceeding_indices]] |= can_be_saved
                 to_terminate[exceeding_indices] = ~can_be_saved
 
+                # Discard any beams which exceed the precursor filter but are less
+                # than the minimum peptide length
+                peps_too_short = (
+                    peptide_lens[idx[exceeding_indices]] < self.min_peptide_len
+                )
+                discarded_beams[idx[exceeding_indices[peps_too_short]]] = True
+
             # Terminate beams that are confirmed to exceed the tolerance.
             to_terminate = idx[to_terminate]
             finished_beams[to_terminate] = True
