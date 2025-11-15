@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+## Changed
+
+- Increased minimum python version from 3.8 to 3.10.
+
 ### Fixed
 
 - A mismatching parameter warning will now only be triggered for the tokenizer if the config and checkpoint tokenizers do not have equivalent vocabularies.
