@@ -1775,14 +1775,14 @@ def test_proteoform_caching():
     p1 = pep.aa_sequence
     m1 = pep.modifications
     assert p1 is mock_sequence_1
-    assert m1 is ""
+    assert m1 == ""
     mock_parser.parse.assert_called_once_with("ACDE")
 
     # Second access with same sequence should use cache
     p2 = pep.aa_sequence
     m2 = pep.modifications
     assert p2 is p1
-    assert m2 is ""
+    assert m2 == ""
     mock_parser.parse.assert_called_once()
 
     # Changed sequence should trigger new parse
@@ -1790,7 +1790,7 @@ def test_proteoform_caching():
     p3 = pep.aa_sequence
     m3 = pep.modifications
     assert p3 is mock_sequence_2
-    assert m3 is ""
+    assert m3 == ""
     assert mock_parser.parse.call_count == 2
 
 
