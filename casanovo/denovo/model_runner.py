@@ -21,7 +21,7 @@ from torch.utils.data import DataLoader
 
 from .. import utils
 from ..config import Config
-from ..data import db_utils, ms_io
+from ..data import db_utils, ms_io, psm
 from ..denovo.dataloaders import DeNovoDataModule
 from ..denovo.evaluate import aa_match_batch, aa_match_metrics
 from ..denovo.model import DbSpec2Pep, Spec2Pep
@@ -150,6 +150,7 @@ class ModelRunner:
         self.initialize_tokenizer()
         self.initialize_model(train=False, db_search=True)
         self.model.out_writer = self.writer
+        self.model.peptide_parser = psm.PeptideParser(self.tokenizer)
         self.model.protein_database = db_utils.ProteinDatabase(
             fasta_path,
             self.config.enzyme,
@@ -288,6 +289,7 @@ class ModelRunner:
         self.initialize_tokenizer()
         self.initialize_model(train=False)
         self.model.out_writer = self.writer
+        self.model.peptide_parser = psm.PeptideParser(self.tokenizer)
 
         test_paths = self._get_input_paths(peak_path, False, "test")
         self.writer.set_ms_run(test_paths)

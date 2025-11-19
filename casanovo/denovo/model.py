@@ -179,6 +179,9 @@ class Spec2Pep(pl.LightningModule):
         # Output writer during predicting.
         self.out_writer = out_writer
 
+        # Peptide Parser (not initialized here)
+        self.peptide_parser = None
+
         # Get n-term mod tokens
         self.n_term = [
             aa
@@ -1190,6 +1193,7 @@ class Spec2Pep(pl.LightningModule):
                         calc_mz=np.nan,
                         exp_mz=precursor_mz.item(),
                         aa_scores=aa_scores,
+                        peptide_parser=self.peptide_parser,
                     )
                 )
 
@@ -1458,6 +1462,7 @@ class DbSpec2Pep(Spec2Pep):
                             calc_mz=np.nan,
                             exp_mz=precursor_mz.item(),
                             aa_scores=curr_aa_scores,
+                            peptide_parser=self.peptide_parser,
                         )
                     )
 
