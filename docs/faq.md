@@ -123,6 +123,10 @@ Casanovo v4.2 was trained on a combined tryptic and non-tryptic dataset, as desc
 This dataset consists of 2 million PSMs sampled from MassIVE-KB, with tryptic peptides sampled from the MassIVE-KB v1 data described above and multi-enzyme data derived from the corresponding subsection of MassIVE-KB v2.0.15.
 The data are available [on Zenodo](https://zenodo.org/records/12587317) as annotated MGF files for the training and test splits in the `mskb_final` subdirectory.
 
+**Casanovo v5.0**
+
+Casanovo v5.0 was trained on the same dataset as v4.2.
+
 ### How do I know which model to use after training Casanovo?
 
 When running model validation, Casanovo will use the validation data to compute performance measures (training loss, validation loss, amino acid precision, and peptide precision) and print this information to the console and log file.
