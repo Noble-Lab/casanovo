@@ -126,6 +126,8 @@ class ModelRunner:
         peak_path: Iterable[str],
         fasta_path: str,
         results_path: str,
+        output_db: Optional[bool] = False,
+        check_output_db_overwrite: Optional[bool] = True,
     ) -> None:
         """
         Perform database search with Casanovo.
@@ -139,6 +141,15 @@ class ModelRunner:
         results_path : str
             Sequencing results file path.
         """
+        db_prefix = (
+            f"{self.output_rootname}."
+            if self.output_rootname is not None
+            else ""
+        )
+        db_fname = db_prefix + "db_peptides.tsv"
+        if output_db and check_output_db_overwrite:
+            utils.check_dir_file_exists(self.output_dir, db_fname)
+
         self.writer = ms_io.MztabWriter(results_path)
         self.writer.set_metadata(
             self.config,
@@ -163,6 +174,14 @@ class ModelRunner:
             self.config.allowed_var_mods,
             self.model.tokenizer,
         )
+
+        if output_db:
+            db_fpath = Path(self.output_dir / db_fname)
+            logger.info("Writing peptide database to: %s", str(db_fpath))
+            db_peptides = self.model.protein_database.db_peptides.copy()
+            db_peptides["protein"] = db_peptides["protein"].map(lambda x: ",".join(x))
+            db_peptides.to_csv(db_fpath, sep="\t")
+
         test_paths = self._get_input_paths(peak_path, False, "test")
         self.writer.set_ms_run(test_paths)
         self.initialize_data_module(test_paths=test_paths)

@@ -219,9 +219,18 @@ def sequence(
     nargs=1,
     type=click.Path(exists=True, dir_okay=False),
 )
+@click.option(
+    "--output_peptide_db",
+    "-db",
+    is_flag=True,
+    help="If set, the peptide database will be written to the output directory",
+    default=False,
+    type=click.BOOL
+)
 def db_search(
     peak_path: Tuple[str],
     fasta_path: str,
+    output_peptide_db: bool,
     model: Optional[str],
     config: Optional[str],
     output_dir: Optional[str],
@@ -261,7 +270,13 @@ def db_search(
         logger.info("  %s", fasta_path)
 
         results_path = output_path / f"{output_root_name}.mztab"
-        runner.db_search(peak_path, fasta_path, str(results_path))
+        runner.db_search(
+            peak_path,
+            fasta_path,
+            str(results_path),
+            output_db=output_peptide_db,
+            check_output_db_overwrite=not force_overwrite,
+        )
         utils.log_annotate_report(
             runner.writer.psms, start_time=start_time, end_time=time.time()
         )
