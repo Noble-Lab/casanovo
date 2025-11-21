@@ -190,9 +190,6 @@ class ProteinDatabase:
             + depthcharge.constants.H2O
         )
 
-    def to_tsv(self, path: os.PathLike) -> None:
-        output_db_protein_column = self.db_peptides["protein"].map(lambda x: ",".join(x))
-
     def get_candidates(
         self,
         precursor_mz: float,

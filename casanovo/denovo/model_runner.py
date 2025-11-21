@@ -179,7 +179,9 @@ class ModelRunner:
             db_fpath = Path(self.output_dir / db_fname)
             logger.info("Writing peptide database to: %s", str(db_fpath))
             db_peptides = self.model.protein_database.db_peptides.copy()
-            db_peptides["protein"] = db_peptides["protein"].map(lambda x: ",".join(x))
+            db_peptides["protein"] = db_peptides["protein"].map(
+                lambda x: ",".join(x)
+            )
             db_peptides.to_csv(db_fpath, sep="\t")
 
         test_paths = self._get_input_paths(peak_path, False, "test")

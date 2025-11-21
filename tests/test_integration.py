@@ -157,6 +157,9 @@ def test_train_and_run(
     # Run Casanovo in database prediction mode.
     output_rootname = "db"
     output_filename = (tmp_path / output_rootname).with_suffix(".mztab")
+    output_db_filename = (tmp_path / output_rootname).with_suffix(
+        ".db_peptides.tsv"
+    )
 
     search_args = [
         "db-search",
@@ -170,12 +173,14 @@ def test_train_and_run(
         output_rootname,
         str(mgf_medium),
         str(tiny_fasta_file),
+        "--output_peptide_db",
     ]
 
     result = run(search_args)
 
     assert result.exit_code == 0
     assert output_filename.exists()
+    assert output_db_filename.exists()
 
     # Verify that the output file is correct.
     mztab = pyteomics.mztab.MzTab(str(output_filename))

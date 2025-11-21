@@ -1,5 +1,6 @@
 """Unit tests specifically for the model_runner module."""
 
+import contextlib
 import shutil
 import unittest.mock
 from pathlib import Path
@@ -592,3 +593,80 @@ def test_verify_tokenizer(
     else:
         # Ensure no warnings were logged
         assert not any(rec.levelname == "WARNING" for rec in caplog.records)
+
+
+@pytest.mark.parametrize("check_output_db_overwrite", [False, True])
+@pytest.mark.parametrize("output_db", [False, True])
+def test_output_db(
+    tiny_fasta_file,
+    mgf_small,
+    tiny_config,
+    tmp_path,
+    check_output_db_overwrite,
+    output_db,
+):
+    config = Config(tiny_config)
+    expected_db_path = tmp_path / "db_peptides.tsv"
+    results_path = tmp_path / "results.mztab"
+    model_path = tmp_path / "model.ckpt"
+
+    # Train a quick model.
+    config.max_epochs = 1
+    config.n_layers = 1
+    with ModelRunner(config=config, output_dir=tmp_path) as runner:
+        runner.train([mgf_small], [mgf_small])
+        runner.trainer.save_checkpoint(model_path)
+
+    with ModelRunner(
+        config,
+        output_dir=tmp_path,
+        model_filename=model_path,
+        overwrite_ckpt_check=False,
+    ) as runner:
+        runner.db_search(
+            [mgf_small],
+            str(tiny_fasta_file),
+            results_path,
+            output_db=output_db,
+            check_output_db_overwrite=check_output_db_overwrite,
+        )
+
+    if output_db:
+        assert expected_db_path.is_file()
+    else:
+        assert not expected_db_path.is_file()
+
+    # Create dummy database file
+    with open(expected_db_path, "w") as f:
+        f.write("foobar")
+
+    # Test that exception is raised if overwriting is disallowed
+    results_path = tmp_path / "results2.mztab"
+    test_ctx = (
+        pytest.raises(FileExistsError)
+        if check_output_db_overwrite and output_db
+        else contextlib.nullcontext()
+    )
+    with ModelRunner(
+        config,
+        output_dir=tmp_path,
+        model_filename=model_path,
+        overwrite_ckpt_check=False,
+    ) as runner, test_ctx:
+        runner.db_search(
+            [mgf_small],
+            str(tiny_fasta_file),
+            results_path,
+            output_db=output_db,
+            check_output_db_overwrite=check_output_db_overwrite,
+        )
+
+    with open(expected_db_path) as f:
+        db_content = f.read()
+
+    if check_output_db_overwrite or not output_db:
+        # Check that database file remains unchanged
+        assert db_content == "foobar"
+    else:
+        # Check that the database file IS changed
+        assert db_content != "foobar"

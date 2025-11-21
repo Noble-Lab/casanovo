@@ -225,7 +225,7 @@ def sequence(
     is_flag=True,
     help="If set, the peptide database will be written to the output directory",
     default=False,
-    type=click.BOOL
+    type=click.BOOL,
 )
 def db_search(
     peak_path: Tuple[str],
