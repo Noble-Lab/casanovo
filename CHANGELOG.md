@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+## [5.1.1] - 2025-11-27
+
+### Changed
+
+- Hotfix to avoid excessively slow peptide parsing during mzTab export.
+
 ## [5.1.0] - 2025-10-22
 
 ### Changed
@@ -311,7 +317,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 - Initial Casanovo version.
 
-[Unreleased]: https://github.com/Noble-Lab/casanovo/compare/v5.1.0...HEAD
+[Unreleased]: https://github.com/Noble-Lab/casanovo/compare/v5.1.1...HEAD
+[5.1.0]: https://github.com/Noble-Lab/casanovo/compare/v5.1.0...v5.1.1
 [5.1.0]: https://github.com/Noble-Lab/casanovo/compare/v5.0.0...v5.1.0
 [5.0.0]: https://github.com/Noble-Lab/casanovo/compare/v4.3.0...v5.0.0
 [4.3.0]: https://github.com/Noble-Lab/casanovo/compare/v4.2.1...v4.3.0
