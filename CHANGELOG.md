@@ -32,6 +32,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 - Hotfix to avoid excessively slow peptide parsing during mzTab export.
 
+## [5.1.1] - 2025-11-27
+
+### Changed
+
+- Hotfix to avoid excessively slow peptide parsing during mzTab export.
+
 ## [5.1.0] - 2025-10-22
 
 ### Changed
