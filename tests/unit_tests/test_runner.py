@@ -15,13 +15,14 @@ from casanovo.denovo.model_runner import ModelRunner
 
 
 def test_loading_timstof_folders(tmp_path, monkeypatch):
-    #Mocking constructor of ModelRunner
-    def minimal_init(self): 
-        pass 
+    # Mocking constructor of ModelRunner
+    def minimal_init(self):
+        pass
+
     monkeypatch.setattr(ModelRunner, "__init__", minimal_init)
     runner = ModelRunner()
 
-    #Testing real path
+    # Testing real path
     real_path = tmp_path / "sample.d"
     real_path.mkdir()
 
@@ -32,20 +33,21 @@ def test_loading_timstof_folders(tmp_path, monkeypatch):
     assert len(paths) > 0
     assert paths == [str(real_path)]
 
-    #Testing unsupported extension
+    # Testing unsupported extension
     fake_path = tmp_path / "test.hi"
     fake_path.mkdir()
     with pytest.raises(FileNotFoundError):
         runner._get_input_paths(
             peak_path=(fake_path,), annotated=False, mode="train"
         )
-    
-    #Testing fake path 
+
+    # Testing fake path
     fake_path = tmp_path / "nonexistent"
     with pytest.raises(FileNotFoundError):
         runner._get_input_paths(
             peak_path=(fake_path,), annotated=False, mode="train"
         )
+
 
 def test_initialize_model(tmp_path, mgf_small):
     """Test initializing a new or existing model."""
