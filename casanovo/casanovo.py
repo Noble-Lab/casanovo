@@ -219,16 +219,6 @@ def sequence(
     nargs=1,
     type=click.Path(exists=True, dir_okay=False),
 )
-@click.option(
-    "--output_db",
-    is_flag=True,
-    default=False,
-    help="""
-    Dumps peptides digested from data for debugging.
-    Contains mass of peptide, sequence, and proteins it is
-    associated with.
-    """,
-)
 def db_search(
     peak_path: Tuple[str],
     fasta_path: str,

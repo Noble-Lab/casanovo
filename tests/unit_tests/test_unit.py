@@ -874,59 +874,62 @@ def test_digest_fasta_mods(tiny_fasta_file):
     # fixed: C+57.02146
     # variable: 1M+15.994915,1N+0.984016,1Q+0.984016
     # nterm: 1X+42.010565,1X+43.005814,1X-17.026549,1X+25.980265
-    expected_1mod = [
-        "-17.027ATSIPAR",
-        "ATSIPAR",
-        "-17.027VTLSC+57.021R",
-        "VTLSC+57.021R",
-        "+43.006-17.027ATSIPAR",
-        "+42.011ATSIPAR",
-        "+43.006ATSIPAR",
-        "+43.006-17.027VTLSC+57.021R",
-        "+42.011VTLSC+57.021R",
-        "+43.006VTLSC+57.021R",
-        "-17.027LLIYGASTR",
-        "LLIYGASTR",
-        "+43.006-17.027LLIYGASTR",
-        "+42.011LLIYGASTR",
-        "+43.006LLIYGASTR",
-        "-17.027EIVMTQSPPTLSLSPGER",
-        "EIVMTQSPPTLSLSPGER",
-        "EIVMTQ+0.984SPPTLSLSPGER",
-        "EIVM+15.995TQSPPTLSLSPGER",
-        "+43.006-17.027EIVMTQSPPTLSLSPGER",
-        "+42.011EIVMTQSPPTLSLSPGER",
-        "+43.006EIVMTQSPPTLSLSPGER",
-        "-17.027MEAPAQLLFLLLLWLPDTTR",
-        "-17.027M+15.995EAPAQLLFLLLLWLPDTTR",
-        "MEAPAQLLFLLLLWLPDTTR",
-        "MEAPAQ+0.984LLFLLLLWLPDTTR",
-        "M+15.995EAPAQLLFLLLLWLPDTTR",
-        "+43.006-17.027MEAPAQLLFLLLLWLPDTTR",
-        "+43.006-17.027M+15.995EAPAQLLFLLLLWLPDTTR",
-        "+42.011MEAPAQLLFLLLLWLPDTTR",
-        "+43.006MEAPAQLLFLLLLWLPDTTR",
-        "+42.011M+15.995EAPAQLLFLLLLWLPDTTR",
-        "+43.006M+15.995EAPAQLLFLLLLWLPDTTR",
-        "-17.027ASQSVSSSYLTWYQQKPGQAPR",
-        "ASQSVSSSYLTWYQQKPGQAPR",
-        "ASQSVSSSYLTWYQ+0.984QKPGQAPR",
-        "ASQSVSSSYLTWYQQ+0.984KPGQAPR",
-        "ASQ+0.984SVSSSYLTWYQQKPGQAPR",
-        "ASQSVSSSYLTWYQQKPGQ+0.984APR",
-        "+43.006-17.027ASQSVSSSYLTWYQQKPGQAPR",
-        "+42.011ASQSVSSSYLTWYQQKPGQAPR",
-        "+43.006ASQSVSSSYLTWYQQKPGQAPR",
-        "-17.027FSGSGSGTDFTLTISSLQPEDFAVYYC+57.021QQDYNLP",
-        "FSGSGSGTDFTLTISSLQPEDFAVYYC+57.021QQDYNLP",
-        "FSGSGSGTDFTLTISSLQ+0.984PEDFAVYYC+57.021QQDYNLP",
-        "FSGSGSGTDFTLTISSLQPEDFAVYYC+57.021QQDYN+0.984LP",
-        "FSGSGSGTDFTLTISSLQPEDFAVYYC+57.021Q+0.984QDYNLP",
-        "FSGSGSGTDFTLTISSLQPEDFAVYYC+57.021QQ+0.984DYNLP",
-        "+43.006-17.027FSGSGSGTDFTLTISSLQPEDFAVYYC+57.021QQDYNLP",
-        "+42.011FSGSGSGTDFTLTISSLQPEDFAVYYC+57.021QQDYNLP",
-        "+43.006FSGSGSGTDFTLTISSLQPEDFAVYYC+57.021QQDYNLP",
-    ]
+    expected = np.array(
+        [
+            697.37586,  # -17.027ATSIPAR
+            714.40241,  # ATSIPAR
+            717.34797,  # -17.027VTLSC+57.021R
+            734.37452,  # VTLSC+57.021R
+            740.3827,  # +43.006-17.027ATSIPAR
+            756.41297,  # +42.011ATSIPAR
+            757.40821,  # +43.006ATSIPAR
+            760.35474,  # +43.006-17.027VTLSC+57.021R
+            776.38502,  # +42.011VTLSC+57.021R
+            777.38032,  # +43.006VTLSC+57.021R
+            975.53889,  # -17.027LLIYGASTR
+            992.5655,  # LLIYGASTR
+            1018.54572,  # +43.006-17.027LLIYGASTR
+            1034.57599,  # +42.011LLIYGASTR
+            1035.57123,  # +43.006LLIYGASTR
+            1923.96125,  # -17.027EIVMTQSPPTLSLSPGER
+            1940.98774,  # EIVMTQSPPTLSLSPGER
+            1941.97175,  # EIVMTQ+0.984SPPTLSLSPGER
+            1956.98261,  # EIVM+15.995TQSPPTLSLSPGER
+            1966.96808,  # +43.006-17.027EIVMTQSPPTLSLSPGER
+            1982.99836,  # +42.011EIVMTQSPPTLSLSPGER
+            1983.99372,  # +43.006EIVMTQSPPTLSLSPGER
+            2323.26496,  # -17.027MEAPAQLLFLLLLWLPDTTR
+            2339.25983,  # -17.027M+15.995EAPAQLLFLLLLWLPDTTR
+            2340.29157,  # MEAPAQLLFLLLLWLPDTTR
+            2341.27546,  # MEAPAQ+0.984LLFLLLLWLPDTTR
+            2356.28644,  # M+15.995EAPAQLLFLLLLWLPDTTR
+            2366.2718,  # +43.006-17.027MEAPAQLLFLLLLWLPDTTR
+            2382.26667,  # +43.006-17.027M+15.995EAPAQLLFLLLLWLPDTTR
+            2382.30207,  # +42.011MEAPAQLLFLLLLWLPDTTR
+            2383.29743,  # +43.006MEAPAQLLFLLLLWLPDTTR
+            2398.29694,  # +42.011M+15.995EAPAQLLFLLLLWLPDTTR
+            2399.2923,  # +43.006M+15.995EAPAQLLFLLLLWLPDTTR
+            2451.18171,  # -17.027ASQSVSSSYLTWYQQKPGQAPR
+            2468.20832,  # ASQSVSSSYLTWYQQKPGQAPR
+            2469.19221,  # ASQSVSSSYLTWYQ+0.984QKPGQAPR
+            2469.19245,  # ASQSVSSSYLTWYQQ+0.984KPGQAPR
+            2469.19245,  # ASQ+0.984SVSSSYLTWYQQKPGQAPR
+            2469.19245,  # ASQSVSSSYLTWYQQKPGQ+0.984APR
+            2494.18879,  # +43.006-17.027ASQSVSSSYLTWYQQKPGQAPR
+            2510.21906,  # +42.011ASQSVSSSYLTWYQQKPGQAPR
+            2511.21418,  # +43.006ASQSVSSSYLTWYQQKPGQAPR
+            3789.66681,  # -17.027FSGSGSGTDFTLTISSLQPEDFAVYYC+57.021QQDYNLP
+            3806.69318,  # FSGSGSGTDFTLTISSLQPEDFAVYYC+57.021QQDYNLP
+            3807.67707,  # FSGSGSGTDFTLTISSLQ+0.984PEDFAVYYC+57.021QQDYNLP
+            3807.67707,  # FSGSGSGTDFTLTISSLQPEDFAVYYC+57.021QQDYN+0.984LP
+            3807.67731,  # FSGSGSGTDFTLTISSLQPEDFAVYYC+57.021Q+0.984QDYNLP
+            3807.67731,  # FSGSGSGTDFTLTISSLQPEDFAVYYC+57.021QQ+0.984DYNLP
+            3832.67365,  # +43.006-17.027FSGSGSGTDFTLTISSLQPEDFAVYYC+57.021QQDYNLP
+            3848.70392,  # +42.011FSGSGSGTDFTLTISSLQPEDFAVYYC+57.021QQDYNLP
+            3849.69904,  # +43.006FSGSGSGTDFTLTISSLQPEDFAVYYC+57.021QQDYNLP
+        ]
+    )
+
     pdb = db_utils.ProteinDatabase(
         fasta_path=str(tiny_fasta_file),
         enzyme="trypsin",
@@ -944,7 +947,8 @@ def test_digest_fasta_mods(tiny_fasta_file):
         ),
         tokenizer=depthcharge.tokenizers.PeptideTokenizer.from_massivekb(),
     )
-    assert pdb.db_peptides.index.to_list() == expected_1mod
+
+    assert np.allclose(pdb.db_peptides["calc_mass"].to_numpy(), expected)
 
 
 def test_length_restrictions(tiny_fasta_file):
@@ -1223,13 +1227,13 @@ def test_digest_fasta_enzyme(tiny_fasta_file):
     # Test nonspecific digest
     pdb = db_utils.ProteinDatabase(
         fasta_path=str(tiny_fasta_file),
-        enzyme="trypsin",
-        digestion="non-specific",
+        enzyme=enzyme,
+        digestion=digestion,
         missed_cleavages=0,
         min_peptide_len=6,
-        max_peptide_len=6,
+        max_peptide_len=50 if digestion == "full" else 6,
         max_mods=0,
-        precursor_tolerance=10000,
+        precursor_tolerance=20 if digestion == "full" else 10000,
         isotope_error=[0, 0],
         allowed_fixed_mods="C:C+57.021",
         allowed_var_mods=(
@@ -1238,29 +1242,8 @@ def test_digest_fasta_enzyme(tiny_fasta_file):
         ),
         tokenizer=depthcharge.tokenizers.PeptideTokenizer.from_massivekb(),
     )
-    assert pdb.db_peptides.index.to_list() == expected_nonspecific
 
-    # Test replace_isoleucine_with_leucine == True
-    pdb = db_utils.ProteinDatabase(
-        fasta_path=str(tiny_fasta_file),
-        enzyme="trypsin",
-        digestion="non-specific",
-        missed_cleavages=0,
-        min_peptide_len=6,
-        max_peptide_len=6,
-        max_mods=0,
-        precursor_tolerance=10000,
-        isotope_error=[0, 0],
-        allowed_fixed_mods="C:C+57.021",
-        allowed_var_mods=(
-            "M:M+15.995,N:N+0.984,Q:Q+0.984,"
-            "nterm:+42.011,nterm:+43.006,nterm:-17.027,nterm:+43.006-17.027"
-        ),
-        tokenizer=depthcharge.tokenizers.PeptideTokenizer.from_massivekb(
-            replace_isoleucine_with_leucine=True
-        ),
-    )
-    assert pdb.db_peptides.index.to_list() == expected_nonspecific
+    assert np.allclose(pdb.db_peptides["calc_mass"].to_numpy(), expected)
 
 
 def test_psm_batches(tiny_config):

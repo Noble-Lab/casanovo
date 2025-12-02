@@ -12,6 +12,7 @@ import depthcharge.constants
 import depthcharge.tokenizers
 import numpy as np
 import pandas as pd
+from pathlib import Path
 import pyteomics.fasta
 import pyteomics.parser
 
