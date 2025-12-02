@@ -14,6 +14,7 @@
 # peptide score.
 # database search: Select candidate peptides within the specified precursor m/z
 # tolerance.
+# Set to "inf" (with quotation marks) to disable the filter entirely.
 precursor_mass_tol: 50  # ppm
 # Isotopes to consider when comparing predicted and observed precursor m/z's.
 isotope_error_range: [0, 1]
@@ -162,8 +163,6 @@ precision: "32-true"
 
 # Replace I by L in peptide sequences.
 replace_isoleucine_with_leucine: true
-# Reverse peptide sequences.
-reverse_peptides: true
 # MassIVE-KB style tokenizer, otherwise ProForma syntax.
 massivekb_tokenizer: false
 

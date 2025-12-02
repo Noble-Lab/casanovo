@@ -17,7 +17,7 @@ classifiers = [
     "Operating System :: OS Independent",
     "Topic :: Scientific/Engineering :: Bio-Informatics",
 ]
-requires-python = ">=3.8"
+requires-python = ">=3.10"
 dependencies = [
     "appdirs",
     "lightning>=2.4",
