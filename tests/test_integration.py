@@ -12,8 +12,6 @@ from casanovo import casanovo
 TEST_DIR = Path(__file__).resolve().parent
 
 
-# FAILED
-# Unpickling error at line 504 in model_runner.py
 def test_train_and_run(
     mgf_small,
     mzml_small,
