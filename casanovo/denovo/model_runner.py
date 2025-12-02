@@ -681,15 +681,18 @@ def _get_peak_filenames(
     """
     found_files = set()
     for path in paths:
+        print(path)
         path = os.path.expanduser(path)
         path = os.path.expandvars(path)
         for fname in glob.glob(path, recursive=True):
+            print(f"***{fname}")
             if Path(fname).suffix.lower() in supported_ext:
+                print(Path(fname).suffix.lower())
                 found_files.add(fname)
-            elif Path(fname).is_dir() and any(
-                Path(fname).name.lower().endswith(ext) for ext in supported_ext
-            ):
-                found_files.add(fname)
+            #elif Path(fname).is_dir() and any(
+                #Path(fname).name.lower().endswith(ext) for ext in supported_ext
+            #):
+                #found_files.add(fname)
             else:
                 warnings.warn(
                     f"Ignoring unsupported peak file: {fname}", RuntimeWarning

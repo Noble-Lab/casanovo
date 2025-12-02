@@ -14,30 +14,38 @@ from casanovo.data.psm import PepSpecMatch
 from casanovo.denovo.model_runner import ModelRunner
 
 
-def test_loading_timstof_folders(tiny_config, tmp_path, mgf_small):
-    config = Config(tiny_config)
-    config.max_epochs = 1
-    config.n_layers = 1
-    ckpt = tmp_path / "test.ckpt"
+def test_loading_timstof_folders(tmp_path, monkeypatch):
+    #Mocking constructor of ModelRunner
+    def minimal_init(self): 
+        pass 
+    monkeypatch.setattr(ModelRunner, "__init__", minimal_init)
+    runner = ModelRunner()
 
+    #Testing real path
     real_path = tmp_path / "sample.d"
     real_path.mkdir()
 
-    with ModelRunner(config=config, output_dir=tmp_path) as runner:
-        runner.train([mgf_small], [mgf_small])
-        runner.trainer.save_checkpoint(ckpt)
-
     paths = runner._get_input_paths(
-        peak_path=(real_path,), annotated=False, mode="train"
+        peak_path=(str(real_path),), annotated=False, mode="train"
     )
-    assert len(paths) > 0
 
+    assert len(paths) > 0
+    assert paths == [str(real_path)]
+
+    #Testing unsupported extension
+    fake_path = tmp_path / "test.hi"
+    fake_path.mkdir()
+    with pytest.raises(FileNotFoundError):
+        runner._get_input_paths(
+            peak_path=(fake_path,), annotated=False, mode="train"
+        )
+    
+    #Testing fake path 
     fake_path = tmp_path / "nonexistent"
     with pytest.raises(FileNotFoundError):
         runner._get_input_paths(
             peak_path=(fake_path,), annotated=False, mode="train"
         )
-
 
 def test_initialize_model(tmp_path, mgf_small):
     """Test initializing a new or existing model."""
