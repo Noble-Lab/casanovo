@@ -49,6 +49,8 @@ def test_loading_timstof_folders(tmp_path, monkeypatch):
         )
 
 
+# FAILING
+# Also failing because of unpickling error at line 504 in model_runner.py
 def test_initialize_model(tmp_path, mgf_small):
     """Test initializing a new or existing model."""
     config = Config()
@@ -110,6 +112,7 @@ def test_initialize_model(tmp_path, mgf_small):
         runner.initialize_model(train=False)
 
 
+# FAILING
 def test_save_and_load_weights(tmp_path, mgf_small, tiny_config):
     """Test saving and loading weights"""
     config = Config(tiny_config)
@@ -164,6 +167,7 @@ def test_save_and_load_weights(tmp_path, mgf_small, tiny_config):
         runner.predict([mgf_small], mztab)
 
 
+# FAILING
 def test_save_and_load_weights_deprecated(tmp_path, mgf_small, tiny_config):
     """Test saving and loading weights with deprecated config options."""
     config = Config(tiny_config)
@@ -278,6 +282,7 @@ def test_save_final_model(tmp_path, mgf_small, tiny_config):
     assert validation_file.exists()
 
 
+# FAILING
 def test_evaluate(
     tmp_path, mgf_small, mzml_small, mgf_small_unannotated, tiny_config
 ):

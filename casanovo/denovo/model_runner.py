@@ -502,7 +502,10 @@ class ModelRunner:
         model_clss = DbSpec2Pep if db_search else Spec2Pep
         try:
             self.model = model_clss.load_from_checkpoint(
-                self.model_filename, map_location=device, **loaded_model_params
+                self.model_filename,
+                map_location=device,
+                **loaded_model_params,
+                weights_only=False,
             )
             # Use tokenizer initialized from config file instead of loaded
             # from checkpoint file.
@@ -704,18 +707,11 @@ def _get_peak_filenames(
     """
     found_files = set()
     for path in paths:
-        print(path)
         path = os.path.expanduser(path)
         path = os.path.expandvars(path)
         for fname in glob.glob(path, recursive=True):
-            print(f"***{fname}")
             if Path(fname).suffix.lower() in supported_ext:
-                print(Path(fname).suffix.lower())
                 found_files.add(fname)
-            # elif Path(fname).is_dir() and any(
-            # Path(fname).name.lower().endswith(ext) for ext in supported_ext
-            # ):
-            # found_files.add(fname)
             else:
                 warnings.warn(
                     f"Ignoring unsupported peak file: {fname}", RuntimeWarning
