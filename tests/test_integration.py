@@ -1,10 +1,10 @@
 import functools
 import subprocess
-import yaml
 from pathlib import Path
 
 import pyteomics.mztab
 import pytest
+import yaml
 from click.testing import CliRunner
 
 from casanovo import casanovo

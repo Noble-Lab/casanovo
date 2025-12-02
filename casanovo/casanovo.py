@@ -224,9 +224,9 @@ def sequence(
     is_flag=True,
     default=False,
     help="""
-    Dumps peptides digested from data for debugging
+    Dumps peptides digested from data for debugging.
     Contains mass of peptide, sequence, and proteins it is
-    associated with
+    associated with.
     """,
 )
 def db_search(
@@ -276,7 +276,7 @@ def db_search(
         if output_db:
             if not force_overwrite:
                 utils.check_dir_file_exists(
-                    output_path, f"{output_root_name}.mztab"
+                    output_path, f"{output_root_name}.tsv"
                 )
             runner.model.protein_database.export(output_path, output_root_name)
         utils.log_annotate_report(
