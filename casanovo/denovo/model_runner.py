@@ -535,6 +535,7 @@ class ModelRunner:
                     self.model_filename,
                     map_location=device,
                     **model_params,
+                    weights_only=False,
                 )
                 self.model.tokenizer = tokenizer
             except RuntimeError:
