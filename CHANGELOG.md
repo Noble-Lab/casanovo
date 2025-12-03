@@ -24,6 +24,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Removed `reverse_peptides` from the configuration since decoding from the C-terminus to the N-terminus yields better results.
 - Log a warning if residues in the user configuration are not present in the tokenizer alphabet.
 - The full ProForma sequences of predicted peptides are reported in the `op_ms_run[1]_proforma` of the output MzTab file for backwards compatibility.
+- Added export feature for db search - now exports a .tsv containing the digested peptides for debugging
 
 ### Fixed
 

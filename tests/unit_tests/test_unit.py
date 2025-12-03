@@ -5,6 +5,7 @@ import functools
 import hashlib
 import heapq
 import io
+import math
 import os
 import pathlib
 import platform
@@ -16,6 +17,7 @@ import unittest
 import unittest.mock
 
 import depthcharge
+import depthcharge.data
 import depthcharge.tokenizers.peptides
 import einops
 import github
@@ -24,6 +26,7 @@ import pandas as pd
 import pytest
 import requests
 import torch
+
 from casanovo import casanovo, denovo, utils
 from casanovo.config import Config
 from casanovo.data import db_utils, ms_io, psm
@@ -38,6 +41,7 @@ from casanovo.denovo.model import (
 
 
 def test_forward_reverse():
+    """Test forward and reverse peptide predictions"""
     score_A = [0.42, 1.0, 0.0, 0.0, 0.0]
     score_B = [0.42, 0.0, 1.0, 0.0, 0.0]
     score_C = [0.42, 0.0, 0.0, 1.0, 0.0]
@@ -127,6 +131,7 @@ def test_forward_reverse():
 
 
 def test_export(tiny_fasta_file, tmp_path):
+    """Test for export feature in db search"""
     pdb = db_utils.ProteinDatabase(
         fasta_path=str(tiny_fasta_file),
         enzyme="trypsin",
@@ -218,6 +223,7 @@ def test_export(tiny_fasta_file, tmp_path):
 def test_digestion_with_unknown_amino_acids(
     enzyme, specificity, expected, use_sort
 ):
+    """Test digestion with unknown amino acids"""
     tmp_path = tempfile.TemporaryDirectory()
     fasta_path = pathlib.Path(tmp_path.name) / "tiny_fasta.fasta"
     fasta_path.write_text(">foo\nME\n>corrupted\nMEX\n", encoding="utf-8")
@@ -1001,230 +1007,199 @@ def test_length_restrictions(tiny_fasta_file):
     assert pdb.db_peptides.index.to_list() == expected_short
 
 
-def test_digest_fasta_enzyme(tiny_fasta_file):
-    # arg-c enzyme
-    expected_argc = [
-        "ATSIPAR",
-        "VTLSC+57.021R",
-        "LLIYGASTR",
-        "EIVMTQSPPTLSLSPGER",
-        "MEAPAQLLFLLLLWLPDTTR",
-        "ASQSVSSSYLTWYQQKPGQAPR",
-        "FSGSGSGTDFTLTISSLQPEDFAVYYC+57.021QQDYNLP",
-    ]
-
-    # asp-n enzyme
-    expected_aspn = ["DFAVYYC+57.021QQ", "DFTLTISSLQPE", "MEAPAQLLFLLLLWLP"]
-
-    expected_semispecific = [
-        "FSGSGS",
-        "ATSIPA",
-        "ASQSVS",
-        "PGQAPR",
-        "TSIPAR",
-        "MEAPAQ",
-        "LLIYGA",
-        "YGASTR",
-        "LSPGER",
-        "LPDTTR",
-        "EIVMTQ",
-        "VTLSC+57.021R",
-        "QDYNLP",
-    ]
-
-    expected_nonspecific = [
-        "SGSGSG",
-        "GSGSGT",
-        "SGSGTD",
-        "FSGSGS",
-        "ATSIPA",
-        "GASTRA",
-        "LSLSPG",
-        "ASQSVS",
-        "GSGTDF",
-        "SLSPGE",
-        "QSVSSS",
-        "SQSVSS",
-        "KPGQAP",
-        "SPPTLS",
-        "ASTRAT",
-        "RFSGSG",
-        "IYGAST",
-        "APAQLL",
-        "PTLSLS",
-        "TLSLSP",
-        "TLTISS",
-        "STRATS",
-        "LIYGAS",
-        "ARFSGS",
-        "PGQAPR",
-        "SGTDFT",
-        "PPTLSL",
-        "EAPAQL",
-        "QKPGQA",
-        "SVSSSY",
-        "TQSPPT",
-        "LTISSL",
-        "PARFSG",
-        "GQAPRL",
-        "QSPPTL",
-        "SPGERV",
-        "ISSLQP",
-        "TSIPAR",
-        "RATSIP",
-        "MEAPAQ",
-        "RASQSV",
-        "TISSLQ",
-        "TRATSI",
-        "LLIYGA",
-        "GTDFTL",
-        "YGASTR",
-        "VSSSYL",
-        "SSSYLT",
-        "LSPGER",
-        "PGERVT",
-        "MTQSPP",
-        "SSLQPE",
-        "VMTQSP",
-        "GERVTL",
-        "PEDFAV",
-        "IVMTQS",
-        "FTLTIS",
-        "APRLLI",
-        "QQKPGQ",
-        "SLQPED",
-        "PAQLLF",
-        "IPARFS",
-        "SIPARF",
-        "LSC+57.021RAS",
-        "TDFTLT",
-        "QAPRLL",
-        "LPDTTR",
-        "ERVTLS",
-        "AQLLFL",
-        "QPEDFA",
-        "TLSC+57.021RA",
-        "SC+57.021RASQ",
-        "C+57.021RASQS",
-        "DFTLTI",
-        "PDTTRE",
-        "TTREIV",
-        "EIVMTQ",
-        "YQQKPG",
-        "LFLLLL",
-        "LLFLLL",
-        "WLPDTT",
-        "DTTREI",
-        "RLLIYG",
-        "RVTLSC+57.021",
-        "VTLSC+57.021R",
-        "EDFAVY",
-        "LWLPDT",
-        "QLLFLL",
-        "LQPEDF",
-        "TREIVM",
-        "REIVMT",
-        "QDYNLP",
-        "LLLWLP",
-        "SSYLTW",
-        "LLWLPD",
-        "LLLLWL",
-        "PRLLIY",
-        "DFAVYY",
-        "QQDYNL",
-        "AVYYC+57.021Q",
-        "FLLLLW",
-        "FAVYYC+57.021",
-        "C+57.021QQDYN",
-        "SYLTWY",
-        "LTWYQQ",
-        "WYQQKP",
-        "TWYQQK",
-        "VYYC+57.021QQ",
-        "YLTWYQ",
-        "YYC+57.021QQD",
-        "YC+57.021QQDY",
-    ]
-
-    pdb = db_utils.ProteinDatabase(
-        fasta_path=str(tiny_fasta_file),
-        enzyme="arg-c",
-        digestion="full",
-        missed_cleavages=0,
-        min_peptide_len=6,
-        max_peptide_len=50,
-        max_mods=0,
-        precursor_tolerance=20,
-        isotope_error=[0, 0],
-        allowed_fixed_mods="C:C+57.021",
-        allowed_var_mods=(
-            "M:M+15.995,N:N+0.984,Q:Q+0.984,"
-            "nterm:+42.011,nterm:+43.006,nterm:-17.027,nterm:+43.006-17.027"
+@pytest.mark.parametrize(
+    "enzyme,digestion,expected",
+    [
+        pytest.param(
+            "arg-c",
+            "full",
+            np.array(
+                [
+                    714.40241,  # ATSIPAR
+                    734.37452,  # VTLSC+57.021R
+                    992.5655,  # LLIYGASTR
+                    1940.98774,  # EIVMTQSPPTLSLSPGER
+                    2340.29157,  # MEAPAQLLFLLLLWLPDTTR
+                    2468.20832,  # ASQSVSSSYLTWYQQKPGQAPR
+                    3806.69318,  # FSGSGSGTDFTLTISSLQPEDFAVYYC+57.021QQDYNLP
+                ]
+            ),
+            id="arg-c",
         ),
-        tokenizer=depthcharge.tokenizers.PeptideTokenizer.from_massivekb(),
-    )
-    assert pdb.db_peptides.index.to_list() == expected_argc
-
-    pdb = db_utils.ProteinDatabase(
-        fasta_path=str(tiny_fasta_file),
-        enzyme="asp-n",
-        digestion="full",
-        missed_cleavages=0,
-        min_peptide_len=6,
-        max_peptide_len=50,
-        max_mods=0,
-        precursor_tolerance=20,
-        isotope_error=[0, 0],
-        allowed_fixed_mods="C:C+57.021",
-        allowed_var_mods=(
-            "M:M+15.995,N:N+0.984,Q:Q+0.984,"
-            "nterm:+42.011,nterm:+43.006,nterm:-17.027,nterm:+43.006-17.027"
+        pytest.param(
+            "asp-n",
+            "full",
+            np.array(
+                [
+                    1192.48591,  # DFAVYYC+57.021QQ
+                    1349.67145,  # DFTLTISSLQPE
+                    1867.06818,  # MEAPAQLLFLLLLWLP
+                ]
+            ),
+            id="asp-n",
         ),
-        tokenizer=depthcharge.tokenizers.PeptideTokenizer.from_massivekb(),
-    )
-    assert pdb.db_peptides.index.to_list() == expected_aspn
-
-    # Test regex rule instead of named enzyme
-    pdb = db_utils.ProteinDatabase(
-        fasta_path=str(tiny_fasta_file),
-        enzyme="R",
-        digestion="full",
-        missed_cleavages=0,
-        min_peptide_len=6,
-        max_peptide_len=50,
-        max_mods=0,
-        precursor_tolerance=20,
-        isotope_error=[0, 0],
-        allowed_fixed_mods="C:C+57.021",
-        allowed_var_mods=(
-            "M:M+15.995,N:N+0.984,Q:Q+0.984,"
-            "nterm:+42.011,nterm:+43.006,nterm:-17.027,nterm:+43.006-17.027"
+        pytest.param(
+            "R",
+            "full",
+            np.array(
+                [
+                    714.40241,  # ATSIPAR
+                    734.37452,  # VTLSC+57.021R
+                    992.5655,  # LLIYGASTR
+                    1940.98774,  # EIVMTQSPPTLSLSPGER
+                    2340.29157,  # MEAPAQLLFLLLLWLPDTTR
+                    2468.20832,  # ASQSVSSSYLTWYQQKPGQAPR
+                    3806.69318,  # FSGSGSGTDFTLTISSLQPEDFAVYYC+57.021QQDYNLP
+                ]
+            ),
+            id="regex-R",
         ),
-        tokenizer=depthcharge.tokenizers.PeptideTokenizer.from_massivekb(),
-    )
-    assert pdb.db_peptides.index.to_list() == expected_argc
-
-    # Test semispecific digest
-    pdb = db_utils.ProteinDatabase(
-        fasta_path=str(tiny_fasta_file),
-        enzyme="trypsin",
-        digestion="partial",
-        missed_cleavages=0,
-        min_peptide_len=6,
-        max_peptide_len=6,
-        max_mods=0,
-        precursor_tolerance=10000,
-        isotope_error=[0, 0],
-        allowed_fixed_mods="C[+57.021]",
-        allowed_var_mods=(
-            "M[+15.995],N[+0.984],Q[+0.984],"
-            "n[+42.011],n[+43.006],n[-17.027],n[+43.006-17.027]"
+        pytest.param(
+            "trypsin",
+            "partial",
+            np.array(
+                [
+                    540.21796,  # FSGSGS
+                    558.30128,  # ATSIPA
+                    577.27076,  # ASQSVS
+                    624.33436,  # PGQAPR
+                    643.3653,  # TSIPAR
+                    645.27924,  # MEAPAQ
+                    648.38459,  # LLIYGA
+                    653.3133,  # YGASTR
+                    657.34455,  # LSPGER
+                    701.37079,  # LPDTTR
+                    719.35236,  # EIVMTQ
+                    734.37452,  # VTLSC+57.021R
+                    748.33912,  # QDYNLP
+                ]
+            ),
+            id="semispecific",
         ),
-        tokenizer=depthcharge.tokenizers.PeptideTokenizer.from_massivekb(),
-    )
-    assert pdb.db_peptides.index.to_list() == expected_semispecific
-
-    # Test nonspecific digest
+        pytest.param(
+            "trypsin",
+            "non-specific",
+            np.array(
+                [
+                    450.17106,  # SGSGSG
+                    464.18665,  # GSGSGT
+                    522.19211,  # SGSGTD
+                    540.21796,  # FSGSGS
+                    558.30128,  # ATSIPA
+                    561.28705,  # GASTRA
+                    572.31696,  # LSLSPG
+                    577.27076,  # ASQSVS
+                    582.22858,  # GSGTDF
+                    588.27546,  # SLSPGE
+                    593.26569,  # QSVSSS
+                    593.26569,  # SQSVSS
+                    596.32819,  # KPGQAP
+                    600.3119,  # SPPTLS
+                    605.3133,  # ASTRAT
+                    609.28711,  # RFSGSG
+                    610.29621,  # IYGAST
+                    611.36426,  # APAQLL
+                    616.34321,  # PTLSLS
+                    616.34321,  # TLSLSP
+                    620.33808,  # TLTISS
+                    621.30817,  # STRATS
+                    622.33259,  # LIYGAS
+                    623.30274,  # ARFSGS
+                    624.33436,  # PGQAPR
+                    626.25477,  # SGTDFT
+                    626.3639,  # PPTLSL
+                    627.32282,  # EAPAQL
+                    627.33405,  # QKPGQA
+                    628.27045,  # SVSSSY
+                    629.30207,  # TQSPPT
+                    632.37446,  # LTISSL
+                    633.32343,  # PARFSG
+                    640.36567,  # GQAPRL
+                    641.33845,  # QSPPTL
+                    643.32892,  # SPGERV
+                    643.35407,  # ISSLQP
+                    643.3653,  # TSIPAR
+                    643.3653,  # RATSIP
+                    645.27924,  # MEAPAQ
+                    646.33985,  # RASQSV
+                    647.349,  # TISSLQ
+                    647.36024,  # TRATSI
+                    648.38459,  # LLIYGA
+                    652.30683,  # GTDFTL
+                    653.3133,  # YGASTR
+                    654.32252,  # VSSSYL
+                    656.3017,  # SSSYLT
+                    657.34455,  # LSPGER
+                    657.34455,  # PGERVT
+                    659.29487,  # MTQSPP
+                    659.31263,  # SSLQPE
+                    661.31049,  # VMTQSP
+                    673.37586,  # GERVTL
+                    676.30683,  # PEDFAV
+                    677.3418,  # IVMTQS
+                    680.37446,  # FTLTIS
+                    681.45374,  # APRLLI
+                    684.35554,  # QQKPGQ
+                    687.30756,  # SLQPED
+                    687.39551,  # PAQLLF
+                    689.38605,  # IPARFS
+                    689.38605,  # SIPARF
+                    692.32758,  # LSC+57.021RAS
+                    696.33301,  # TDFTLT
+                    696.42817,  # QAPRLL
+                    701.37079,  # LPDTTR
+                    703.38642,  # ERVTLS
+                    703.42682,  # AQLLFL
+                    705.29694,  # QPEDFA
+                    706.34321,  # TLSC+57.021RA
+                    707.30207,  # SC+57.021RASQ
+                    707.30213,  # C+57.021RASQS
+                    708.36939,  # DFTLTI
+                    717.32929,  # PDTTRE
+                    717.40204,  # TTREIV
+                    719.35236,  # EIVMTQ
+                    719.3603,  # YQQKPG
+                    730.49927,  # LFLLLL
+                    730.49927,  # LLFLLL
+                    731.349,  # WLPDTT
+                    733.36066,  # DTTREI
+                    733.44861,  # RLLIYG
+                    734.37452,  # RVTLSC+57.021
+                    734.37452,  # VTLSC+57.021R
+                    742.31733,  # EDFAVY
+                    743.38544,  # LWLPDT
+                    745.47376,  # QLLFLL
+                    747.34394,  # LQPEDF
+                    747.39484,  # TREIVM
+                    747.3949,  # REIVMT
+                    748.33912,  # QDYNLP
+                    753.47883,  # LLLWLP
+                    755.349,  # SSYLTW
+                    755.42176,  # LLWLPD
+                    769.51014,  # LLLLWL
+                    773.47993,  # PRLLIY
+                    776.33814,  # DFAVYY
+                    779.34492,  # QQDYNL
+                    802.33198,  # AVYYC+57.021Q
+                    803.49451,  # FLLLLW
+                    821.34186,  # FAVYYC+57.021
+                    826.29157,  # C+57.021QQDYN
+                    831.38032,  # SYLTWY
+                    837.40217,  # LTWYQQ
+                    848.41816,  # WYQQKP
+                    852.41303,  # TWYQQK
+                    859.35346,  # VYYC+57.021QQ
+                    872.4068,  # YLTWYQ
+                    875.31196,  # YYC+57.021QQD
+                    875.31202,  # YC+57.021QQDY
+                ]
+            ),
+            id="nonspecific",
+        ),
+    ],
+)
+def test_digest_fasta_enzyme(tiny_fasta_file, enzyme, digestion, expected):
+    """Test peptide digestion behavior for various enzymes and digest modes."""
     pdb = db_utils.ProteinDatabase(
         fasta_path=str(tiny_fasta_file),
         enzyme=enzyme,

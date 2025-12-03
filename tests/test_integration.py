@@ -169,7 +169,7 @@ def test_train_and_run(
         str(tmp_path),
         "--output_root",
         output_rootname,
-        "--output_db",
+        "--export",
         str(mgf_medium),
         str(tiny_fasta_file),
     ]

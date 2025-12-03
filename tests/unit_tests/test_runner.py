@@ -8,6 +8,7 @@ import depthcharge.tokenizers.peptides
 import numpy as np
 import pytest
 import torch
+
 from casanovo.config import Config
 from casanovo.data.psm import PepSpecMatch
 from casanovo.denovo.model_runner import ModelRunner
@@ -75,6 +76,7 @@ def test_initialize_model(tmp_path, mgf_small):
 
 
 def test_no_model(tiny_config_db, mgf_small, tiny_fasta_file):
+    """Test running a model with no weights"""
     config = Config(tiny_config_db)
     with ModelRunner(config=config) as runner:
         results_path = "test.mztab"
