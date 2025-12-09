@@ -538,6 +538,7 @@ class ModelRunner:
                 self.model = model_clss.load_from_checkpoint(
                     self.model_filename,
                     map_location=device,
+                    weights_only=False,
                     **model_params,
                 )
                 self.model.tokenizer = tokenizer
