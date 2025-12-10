@@ -212,9 +212,12 @@ class ModelRunner:
             if curr_psm.ground_truth_sequence is None:
                 n_no_ground_truth += 1
                 continue
-
-            pred_seqs.append(curr_psm.sequence)
-            true_seqs.append(curr_psm.ground_truth_sequence)
+    
+            true_seqs.append(self.tokenizer.split(curr_psm.ground_truth_sequence))
+            if curr_psm.sequence is None:
+                pred_seqs.append(None)
+            else:
+                pred_seqs.append(self.tokenizer.split(curr_psm.sequence))
 
         if n_no_ground_truth > 0:
             logger.warning(
@@ -229,16 +232,11 @@ class ModelRunner:
                 " dataset is annotated."
             )
 
-        aa_masses = {
-            aa_token: self.model.tokenizer.residues[aa]
-            for aa, aa_token in self.model.tokenizer.index.items()
-            if aa in self.model.tokenizer.residues
-        }
         aa_precision, aa_recall, pep_precision = aa_match_metrics(
-            *aa_match_batch(true_seqs, pred_seqs, aa_masses)
+            *aa_match_batch(true_seqs, pred_seqs, self.tokenizer.residues)
         )
 
-        if self.config["top_match"] > 1:
+        if self.config.top_match > 1:
             logger.warning(
                 "The behavior for calculating evaluation metrics is undefined "
                 "when the 'top_match' configuration option is set to a value "
