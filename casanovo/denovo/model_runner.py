@@ -200,36 +200,34 @@ class ModelRunner:
             self.loaders.val_dataloader(),
         )
 
-    def log_metrics(self, test_dataloader: DataLoader) -> None:
+    def log_metrics(self) -> None:
         """
         Log peptide precision and amino acid precision.
 
         Calculate and log peptide precision and amino acid precision
         based off of model predictions and spectrum annotations.
-
-        Parameters
-        ----------
-        test_dataloader : DataLoader
-            Index containing the annotated spectra used to generate
-            model predictions.
         """
-        pred_seqs, true_seqs, pred_i = [], [], 0
+        pred_seqs, true_seqs, n_no_ground_truth = [], [], 0
+        for curr_psm in self.writer.psms:
+            if curr_psm.ground_truth_sequence is None:
+                n_no_ground_truth += 1
+                continue
 
-        for batch in test_dataloader:
-            for peak_file, scan_id, true_seq in zip(
-                batch["peak_file"], batch["scan_id"], batch["seq"]
-            ):
-                true_seqs.append(true_seq.cpu().detach().numpy())
-                if pred_i < len(self.writer.psms) and self.writer.psms[
-                    pred_i
-                ].spectrum_id == (peak_file, scan_id):
-                    pred_tokens = self.model.tokenizer.tokenize(
-                        self.writer.psms[pred_i].sequence
-                    ).squeeze(0)
-                    pred_seqs.append(pred_tokens.cpu().detach().numpy())
-                    pred_i += 1
-                else:
-                    pred_seqs.append(None)
+            pred_seqs.append(curr_psm.sequence)
+            true_seqs.append(curr_psm.ground_truth_sequence)
+
+        if n_no_ground_truth > 0:
+            logger.warning(
+                "No ground truth sequence was logged for %d PSMs",
+                n_no_ground_truth,
+            )
+
+        if len(true_seqs) == 0:
+            logger.warning(
+                "No ground truth sequence was logged for any PSM, so the metrics"
+                " calculation will be skipped. You may want to check whether the "
+                " dataset is annotated."
+            )
 
         aa_masses = {
             aa_token: self.model.tokenizer.residues[aa]
@@ -307,11 +305,9 @@ class ModelRunner:
 
             raise
 
-        predict_dataloader = self.loaders.predict_dataloader()
-        self.trainer.predict(self.model, predict_dataloader)
-
+        self.trainer.predict(self.model, self.loaders.predict_dataloader())
         if evaluate:
-            self.log_metrics(predict_dataloader)
+            self.log_metrics()
 
     def initialize_trainer(self, train: bool) -> None:
         """
