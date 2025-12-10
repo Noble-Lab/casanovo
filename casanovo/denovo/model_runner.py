@@ -212,8 +212,10 @@ class ModelRunner:
             if curr_psm.ground_truth_sequence is None:
                 n_no_ground_truth += 1
                 continue
-    
-            true_seqs.append(self.tokenizer.split(curr_psm.ground_truth_sequence))
+
+            true_seqs.append(
+                self.tokenizer.split(curr_psm.ground_truth_sequence)
+            )
             if curr_psm.sequence is None:
                 pred_seqs.append(None)
             else:
