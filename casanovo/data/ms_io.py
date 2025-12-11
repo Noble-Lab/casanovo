@@ -14,7 +14,50 @@ from .. import __version__
 from ..config import Config
 from .psm import PepSpecMatch
 
+def _build_mgf_scan_index(mgf_path: str) -> dict:
+    """
+    Build an index mapping spectrum position to SCANS value for an MGF file.
 
+    Reads only the header lines of each spectrum entry (never the peak
+    data), so this is very fast even for large files.
+
+    Parameters
+    ----------
+    mgf_path : str
+        Path to the MGF file.
+
+    Returns
+    -------
+    dict
+        Mapping from spectrum index (as a string, e.g. ``"0"``) to the
+        SCANS field value (e.g. ``"17"``). Only spectra that contain a
+        ``SCANS``, ``SCAN``, or ``SCAN ID`` header field are included.
+    """
+    index2scan = {}
+    index = 0
+    current_scan = None
+    in_ions = False
+    try:
+        with open(mgf_path, "r", errors="replace") as fh:
+            for line in fh:
+                stripped = line.strip()
+                upper = stripped.upper()
+                if upper == "BEGIN IONS":
+                    in_ions = True
+                    current_scan = None
+                elif upper == "END IONS":
+                    if current_scan is not None:
+                        index2scan[str(index)] = current_scan
+                    index += 1
+                    in_ions = False
+                elif in_ions:
+                    for prefix in ("SCANS=", "SCAN=", "SCAN ID="):
+                        if upper.startswith(prefix):
+                            current_scan = stripped.split("=", 1)[1].strip()
+                            break
+    except OSError:
+        pass
+    return index2scan
 class MztabWriter:
     """
     Export spectrum identifications to an mzTab file.
@@ -43,6 +86,7 @@ class MztabWriter:
             ),
         ]
         self._run_map = {}
+        self._mgf_scan_index = {}  # {(filename_base, index_str): scan_num_str}
         self.psms: List[PepSpecMatch] = []
 
     def set_metadata(self, config: Config, **kwargs) -> None:
@@ -144,6 +188,28 @@ class MztabWriter:
             )
             self._run_map[Path(filename).name] = i
 
+    def set_mgf_scan_index(self, peak_filenames: List[str]) -> None:
+        """
+        Pre-compute the MGF scan number index for the given peak files.
+
+        For each MGF file, reads the ``SCANS`` (or ``SCAN`` / ``SCAN ID``)
+        header field of every spectrum entry and stores a mapping from
+        spectrum index to scan number.  Called once before prediction so
+        that ``save()`` can embed the scan number in the ``spectra_ref``
+        column without re-reading the files at write time.
+
+        Parameters
+        ----------
+        peak_filenames : List[str]
+            The input peak file paths (mzML files are silently ignored).
+        """
+        for path in peak_filenames:
+            if Path(path).suffix.lower() != ".mgf":
+                continue
+            name = Path(path).name
+            for idx_str, scan_num in _build_mgf_scan_index(path).items():
+                self._mgf_scan_index[(name, idx_str)] = scan_num
+
     def save(self) -> None:
         """
         Export the spectrum identifications to the mzTab file.
@@ -185,6 +251,12 @@ class MztabWriter:
                 1,
             ):
                 filename, idx = psm.spectrum_id
+                if Path(filename).suffix.lower() == ".mgf" and idx.isnumeric():
+                    scan_num = self._mgf_scan_index.get((filename, idx))
+                    idx = f"index={idx}"
+                    if scan_num:
+                        idx = f"{idx} scan={scan_num}"
+
                 writer.writerow(
                     [
                         "PSM",

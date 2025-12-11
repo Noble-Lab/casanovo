@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+## [5.1.2] - 2025-12-11
+
+### Changed
+
+- Hotfix to ensure compatibility with PyTorch v2.6 when loading weights files.
+
 ### Added
 
 - A TSV file with all candidate peptides can be exported during database searching with the `--export` flag.
@@ -342,8 +348,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 - Initial Casanovo version.
 
-[Unreleased]: https://github.com/Noble-Lab/casanovo/compare/v5.1.2...HEAD
-[5.1.2]: https://github.com/Noble-Lab/casanovo/compare/v5.1.1...v5.1.2
+[Unreleased]: https://github.com/Noble-Lab/casanovo/compare/v5.1.1...HEAD
 [5.1.1]: https://github.com/Noble-Lab/casanovo/compare/v5.1.0...v5.1.1
 [5.1.0]: https://github.com/Noble-Lab/casanovo/compare/v5.0.0...v5.1.0
 [5.0.0]: https://github.com/Noble-Lab/casanovo/compare/v4.3.0...v5.0.0
