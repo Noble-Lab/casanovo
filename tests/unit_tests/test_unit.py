@@ -2147,6 +2147,34 @@ def test_finish_beams(tiny_config):
     )
 
 
+def test_peptide_too_short_too_heavy(tiny_config):
+    config = Config(tiny_config)
+    model = Spec2Pep(
+        n_beams=1,
+        min_peptide_len=20,
+        tokenizer=depthcharge.tokenizers.peptides.PeptideTokenizer(
+            residues=config.residues
+        ),
+    )
+
+    # Mass of "peptid"
+    precursors = torch.tensor([[670.31737, 2.0, 336.16596]])
+    peptide = "PEPTIDE"
+    tokens = model.tokenizer.tokenize(peptide)
+    step = len(peptide) - 1
+    # This needs to be initialized, but is recalculated anyway so the value
+    # doesn't matter
+    model._cumulative_masses = torch.tensor([42.424242])
+
+    finished_beams, beam_fits_precursor, discarded_beams = model._finish_beams(
+        tokens, precursors, step
+    )
+
+    assert finished_beams.item()
+    assert discarded_beams.item()
+    assert not beam_fits_precursor.item()
+
+
 def test_cache_finished_beams(tiny_config):
     config = Config(tiny_config)
     model = Spec2Pep(
