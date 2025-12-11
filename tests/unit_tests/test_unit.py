@@ -142,10 +142,10 @@ def test_export(tiny_fasta_file, tmp_path):
         max_mods=0,
         precursor_tolerance=20,
         isotope_error=[0, 0],
-        allowed_fixed_mods="C:C+57.021",
+        allowed_fixed_mods="C[+57.021]",
         allowed_var_mods=(
-            "M:M+15.995,N:N+0.984,Q:Q+0.984,"
-            "nterm:+42.011,nterm:+43.006,nterm:-17.027,nterm:+43.006-17.027"
+            "M[+15.995],N[+0.984],Q[+0.984],"
+            "n[+42.011],n[+43.006],n[-17.027],n[+43.006-17.027]"
         ),
         tokenizer=depthcharge.tokenizers.PeptideTokenizer.from_massivekb(),
     )
@@ -221,11 +221,10 @@ def test_export(tiny_fasta_file, tmp_path):
     ],
 )
 def test_digestion_with_unknown_amino_acids(
-    enzyme, specificity, expected, use_sort
+    enzyme, specificity, expected, use_sort, tmp_path
 ):
     """Test digestion with unknown amino acids"""
-    tmp_path = tempfile.TemporaryDirectory()
-    fasta_path = pathlib.Path(tmp_path.name) / "tiny_fasta.fasta"
+    fasta_path = tmp_path / "tiny_fasta.fasta"
     fasta_path.write_text(">foo\nME\n>corrupted\nMEX\n", encoding="utf-8")
 
     valid_aa = list("ARNDCEQGHILKMFPSTWYV")
@@ -255,11 +254,6 @@ def test_digestion_with_unknown_amino_acids(
         assert (
             result_peptides == expected_peptides
         ), f"Failed for enzyme={enzyme}, specificity={specificity}"
-
-    try:
-        tmp_path.cleanup()
-    except PermissionError:
-        shutil.rmtree(tmp_path.name, ignore_errors=True)
 
 
 def test_version():
@@ -865,10 +859,10 @@ def test_digest_fasta_cleave(tiny_fasta_file):
             max_mods=0,
             precursor_tolerance=20,
             isotope_error=[0, 0],
-            allowed_fixed_mods="C:C+57.021",
+            allowed_fixed_mods="C[+57.021]",
             allowed_var_mods=(
-                "M:M+15.995,N:N+0.984,Q:Q+0.984,"
-                "nterm:+42.011,nterm:+43.006,nterm:-17.027,nterm:+43.006-17.027"
+                "M[+15.995],N[+0.984],Q[+0.984],"
+                "n[+42.011],n[+43.006],n[-17.027],n[+43.006-17.027]"
             ),
             tokenizer=depthcharge.tokenizers.PeptideTokenizer.from_massivekb(),
         )
@@ -946,10 +940,10 @@ def test_digest_fasta_mods(tiny_fasta_file):
         max_mods=1,
         precursor_tolerance=20,
         isotope_error=[0, 0],
-        allowed_fixed_mods="C:C+57.021",
+        allowed_fixed_mods="C[+57.021]",
         allowed_var_mods=(
-            "M:M+15.995,N:N+0.984,Q:Q+0.984,"
-            "nterm:+42.011,nterm:+43.006,nterm:-17.027,nterm:+43.006-17.027"
+            "M[+15.995],N[+0.984],Q[+0.984],"
+            "n[+42.011],n[+43.006],n[-17.027],n[+43.006-17.027]"
         ),
         tokenizer=depthcharge.tokenizers.PeptideTokenizer.from_massivekb(),
     )
@@ -978,10 +972,10 @@ def test_length_restrictions(tiny_fasta_file):
         max_mods=0,
         precursor_tolerance=20,
         isotope_error=[0, 0],
-        allowed_fixed_mods="C:C+57.021",
+        allowed_fixed_mods="C[+57.021]",
         allowed_var_mods=(
-            "M:M+15.995,N:N+0.984,Q:Q+0.984,"
-            "nterm:+42.011,nterm:+43.006,nterm:-17.027,nterm:+43.006-17.027"
+            "M[+15.995],N[+0.984],Q[+0.984],"
+            "n[+42.011],n[+43.006],n[-17.027],n[+43.006-17.027]"
         ),
         tokenizer=depthcharge.tokenizers.PeptideTokenizer.from_massivekb(),
     )
@@ -997,10 +991,10 @@ def test_length_restrictions(tiny_fasta_file):
         max_mods=0,
         precursor_tolerance=20,
         isotope_error=[0, 0],
-        allowed_fixed_mods="C:C+57.021",
+        allowed_fixed_mods="C[+57.021]",
         allowed_var_mods=(
-            "M:M+15.995,N:N+0.984,Q:Q+0.984,"
-            "nterm:+42.011,nterm:+43.006,nterm:-17.027,nterm:+43.006-17.027"
+            "M[+15.995],N[+0.984],Q[+0.984],"
+            "n[+42.011],n[+43.006],n[-17.027],n[+43.006-17.027]"
         ),
         tokenizer=depthcharge.tokenizers.PeptideTokenizer.from_massivekb(),
     )
@@ -1210,10 +1204,10 @@ def test_digest_fasta_enzyme(tiny_fasta_file, enzyme, digestion, expected):
         max_mods=0,
         precursor_tolerance=20 if digestion == "full" else 10000,
         isotope_error=[0, 0],
-        allowed_fixed_mods="C:C+57.021",
+        allowed_fixed_mods="C[+57.021]",
         allowed_var_mods=(
-            "M:M+15.995,N:N+0.984,Q:Q+0.984,"
-            "nterm:+42.011,nterm:+43.006,nterm:-17.027,nterm:+43.006-17.027"
+            "M[+15.995],N[+0.984],Q[+0.984],"
+            "n[+42.011],n[+43.006],n[-17.027],n[+43.006-17.027]"
         ),
         tokenizer=depthcharge.tokenizers.PeptideTokenizer.from_massivekb(),
     )
@@ -1428,10 +1422,10 @@ def test_get_candidates(tiny_fasta_file):
         max_mods=0,
         precursor_tolerance=10000,
         isotope_error=[0, 0],
-        allowed_fixed_mods="C:C+57.021",
+        allowed_fixed_mods="C[+57.021]",
         allowed_var_mods=(
-            "M:M+15.995,N:N+0.984,Q:Q+0.984,"
-            "nterm:+42.011,nterm:+43.006,nterm:-17.027,nterm:+43.006-17.027"
+            "M[+15.995],N[+0.984],Q[+0.984],"
+            "n[+42.011],n[+43.006],n[-17.027],n[+43.006-17.027]"
         ),
         tokenizer=depthcharge.tokenizers.PeptideTokenizer.from_massivekb(),
     )
@@ -1448,10 +1442,10 @@ def test_get_candidates(tiny_fasta_file):
         max_mods=0,
         precursor_tolerance=150000,
         isotope_error=[0, 0],
-        allowed_fixed_mods="C:C+57.021",
+        allowed_fixed_mods="C[+57.021]",
         allowed_var_mods=(
-            "M:M+15.995,N:N+0.984,Q:Q+0.984,"
-            "nterm:+42.011,nterm:+43.006,nterm:-17.027,nterm:+43.006-17.027"
+            "M[+15.995],N[+0.984],Q[+0.984],"
+            "n[+42.011],n[+43.006],n[-17.027],n[+43.006-17.027]"
         ),
         tokenizer=depthcharge.tokenizers.PeptideTokenizer.from_massivekb(),
     )
@@ -1468,10 +1462,10 @@ def test_get_candidates(tiny_fasta_file):
         max_mods=0,
         precursor_tolerance=600000,
         isotope_error=[0, 0],
-        allowed_fixed_mods="C:C+57.021",
+        allowed_fixed_mods="C[+57.021]",
         allowed_var_mods=(
-            "M:M+15.995,N:N+0.984,Q:Q+0.984,"
-            "nterm:+42.011,nterm:+43.006,nterm:-17.027,nterm:+43.006-17.027"
+            "M[+15.995],N[+0.984],Q[+0.984],"
+            "n[+42.011],n[+43.006],n[-17.027],n[+43.006-17.027]"
         ),
         tokenizer=depthcharge.tokenizers.PeptideTokenizer.from_massivekb(),
     )
@@ -1535,10 +1529,10 @@ def test_get_candidates_isotope_error(tiny_fasta_file):
         max_mods=0,
         precursor_tolerance=10000,
         isotope_error=[0, 0],
-        allowed_fixed_mods="C:C+57.021",
+        allowed_fixed_mods="C[+57.021]",
         allowed_var_mods=(
-            "M:M+15.995,N:N+0.984,Q:Q+0.984,"
-            "nterm:+42.011,nterm:+43.006,nterm:-17.027,nterm:+43.006-17.027"
+            "M[+15.995],N[+0.984],Q[+0.984],"
+            "n[+42.011],n[+43.006],n[-17.027],n[+43.006-17.027]"
         ),
         tokenizer=depthcharge.tokenizers.PeptideTokenizer.from_massivekb(),
     )
@@ -1556,10 +1550,10 @@ def test_get_candidates_isotope_error(tiny_fasta_file):
         max_mods=0,
         precursor_tolerance=10000,
         isotope_error=[0, 1],
-        allowed_fixed_mods="C:C+57.021",
+        allowed_fixed_mods="C[+57.021]",
         allowed_var_mods=(
-            "M:M+15.995,N:N+0.984,Q:Q+0.984,"
-            "nterm:+42.011,nterm:+43.006,nterm:-17.027,nterm:+43.006-17.027"
+            "M[+15.995],N[+0.984],Q[+0.984],"
+            "n[+42.011],n[+43.006],n[-17.027],n[+43.006-17.027]"
         ),
         tokenizer=depthcharge.tokenizers.PeptideTokenizer.from_massivekb(),
     )
@@ -1577,10 +1571,10 @@ def test_get_candidates_isotope_error(tiny_fasta_file):
         max_mods=0,
         precursor_tolerance=10000,
         isotope_error=[0, 2],
-        allowed_fixed_mods="C:C+57.021",
+        allowed_fixed_mods="C[+57.021]",
         allowed_var_mods=(
-            "M:M+15.995,N:N+0.984,Q:Q+0.984,"
-            "nterm:+42.011,nterm:+43.006,nterm:-17.027,nterm:+43.006-17.027"
+            "M[+15.995],N[+0.984],Q[+0.984],"
+            "n[+42.011],n[+43.006],n[-17.027],n[+43.006-17.027]"
         ),
         tokenizer=depthcharge.tokenizers.PeptideTokenizer.from_massivekb(),
     )
@@ -1598,10 +1592,10 @@ def test_get_candidates_isotope_error(tiny_fasta_file):
         max_mods=0,
         precursor_tolerance=10000,
         isotope_error=[0, 3],
-        allowed_fixed_mods="C:C+57.021",
+        allowed_fixed_mods="C[+57.021]",
         allowed_var_mods=(
-            "M:M+15.995,N:N+0.984,Q:Q+0.984,"
-            "nterm:+42.011,nterm:+43.006,nterm:-17.027,nterm:+43.006-17.027"
+            "M[+15.995],N[+0.984],Q[+0.984],"
+            "n[+42.011],n[+43.006],n[-17.027],n[+43.006-17.027]"
         ),
         tokenizer=depthcharge.tokenizers.PeptideTokenizer.from_massivekb(),
     )
