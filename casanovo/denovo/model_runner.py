@@ -406,6 +406,15 @@ class ModelRunner:
         else:
             tokenizer_clss = PeptideTokenizer
 
+        missing_aa = list(
+            set(self.config.residues) - set(tokenizer_clss.residues)
+        )
+        if missing_aa:
+            logger.warning(
+                "Configured residue(s) not in model alphabet: %s",
+                ", ".join(missing_aa),
+            )
+
         self.tokenizer = tokenizer_clss(
             residues=self.config.residues,
             replace_isoleucine_with_leucine=self.config.replace_isoleucine_with_leucine,
@@ -504,8 +513,8 @@ class ModelRunner:
             self.model = model_clss.load_from_checkpoint(
                 self.model_filename,
                 map_location=device,
-                **loaded_model_params,
                 weights_only=False,
+                **loaded_model_params,
             )
             # Use tokenizer initialized from config file instead of loaded
             # from checkpoint file.
@@ -534,6 +543,7 @@ class ModelRunner:
                 self.model = model_clss.load_from_checkpoint(
                     self.model_filename,
                     map_location=device,
+                    weights_only=False,
                     **model_params,
                     weights_only=False,
                 )
