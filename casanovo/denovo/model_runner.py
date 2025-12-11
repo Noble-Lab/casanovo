@@ -511,7 +511,10 @@ class ModelRunner:
         model_clss = DbSpec2Pep if db_search else Spec2Pep
         try:
             self.model = model_clss.load_from_checkpoint(
-                self.model_filename, map_location=device, **loaded_model_params
+                self.model_filename,
+                map_location=device,
+                weights_only=False,
+                **loaded_model_params,
             )
             # Use tokenizer initialized from config file instead of loaded
             # from checkpoint file.
@@ -540,6 +543,7 @@ class ModelRunner:
                 self.model = model_clss.load_from_checkpoint(
                     self.model_filename,
                     map_location=device,
+                    weights_only=False,
                     **model_params,
                 )
                 self.model.tokenizer = tokenizer

@@ -17,7 +17,7 @@ classifiers = [
     "Operating System :: OS Independent",
     "Topic :: Scientific/Engineering :: Bio-Informatics",
 ]
-requires-python = ">=3.8"
+requires-python = ">=3.10"
 dependencies = [
     "appdirs",
     "lightning>=2.4",
@@ -33,7 +33,7 @@ dependencies = [
     "requests",
     "rich-click>=1.6.1",
     "scikit-learn",
-    "spectrum_utils",
+    "spectrum-utils>=0.5.0",
     "tensorboard",
     "torch>=2.2",
     "tqdm",
