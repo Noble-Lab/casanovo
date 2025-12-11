@@ -9,6 +9,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ### Fixed
 
 - A mismatching parameter warning will now only be triggered for the tokenizer if the config and checkpoint tokenizers do not have equivalent vocabularies.
+- Fix an issue which led the reported peptide precision to be 0 during evaluation mode.
 
 ## [5.1.0] - 2025-10-22
 
