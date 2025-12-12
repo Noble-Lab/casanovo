@@ -18,6 +18,7 @@ from ..data import ms_io, psm
 from ..denovo.transformers import PeptideDecoder, SpectrumEncoder
 from . import evaluate
 
+
 logger = logging.getLogger("casanovo")
 
 
