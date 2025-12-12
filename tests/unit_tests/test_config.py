@@ -5,7 +5,6 @@ import logging
 import pytest
 import yaml
 
-
 from casanovo.config import Config
 
 
