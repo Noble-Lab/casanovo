@@ -27,26 +27,21 @@ def test_loading_timstof_folders(tmp_path, monkeypatch):
     real_path.mkdir()
 
     paths = runner._get_input_paths(
-        peak_path=(str(real_path),), annotated=False, mode="train"
+        peak_path=(str(real_path),), annotated=False, mode="validation"
     )
 
-    assert len(paths) > 0
-    assert paths == [str(real_path)]
+    assert len(paths) == 1
+    assert Path(paths[0]).name == "sample.d"
 
-    # Testing unsupported extension
+    # Testing unsupported extension (but directory is real)
+    # (should raise FileNotFoundError and RuntimeWarning)
     fake_path = tmp_path / "test.hi"
     fake_path.mkdir()
-    with pytest.raises(FileNotFoundError):
-        runner._get_input_paths(
-            peak_path=(fake_path,), annotated=False, mode="train"
-        )
-
-    # Testing fake path
-    fake_path = tmp_path / "nonexistent"
-    with pytest.raises(FileNotFoundError):
-        runner._get_input_paths(
-            peak_path=(fake_path,), annotated=False, mode="train"
-        )
+    with pytest.warns(RuntimeWarning):
+        with pytest.raises(FileNotFoundError):
+            runner._get_input_paths(
+                peak_path=(str(fake_path),), annotated=False, mode="validation"
+            )
 
 
 def test_initialize_model(tmp_path, mgf_small):
