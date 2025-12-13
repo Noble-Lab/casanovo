@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+### Added
+
+- timsTOF files (in the format of .d folders) can now be accepted as spectra input files.
+
 ### Changed
 
 - Increased minimum Python version from 3.8 to 3.10.
@@ -14,6 +18,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 - A mismatching parameter warning will now only be triggered for the tokenizer if the config and checkpoint tokenizers do not have equivalent vocabularies.
 - Removed erroneous tokenizer vocabulary warning.
+
+## [5.1.2] - 2025-12-11
+
+### Changed
+
+- Hotfix to ensure compatibility with PyTorch v2.6 when loading weights files.
+
+## [5.1.1] - 2025-11-27
+
+### Changed
+
+- Hotfix to avoid excessively slow peptide parsing during mzTab export.
 
 ## [5.1.0] - 2025-10-22
 
@@ -39,7 +55,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Training and optimizer metrics can be logged to a CSV file by setting the `log_metrics` config file option to true. The CSV file will be written to under a sub-directory of the output directory named `csv_logs`.
 - New configuration options for detailed control of the gradients during training (gradient accumulation, clipping).
 - New configuration option `min_peaks` to discard low-quality spectra with too few peaks.
-- timsTOF files (in the format of .d folders) can now be accepted as spectra input files.
 
 ### Changed
 
@@ -321,7 +336,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 - Initial Casanovo version.
 
-[Unreleased]: https://github.com/Noble-Lab/casanovo/compare/v5.1.0...HEAD
+[Unreleased]: https://github.com/Noble-Lab/casanovo/compare/v5.1.2...HEAD
+[5.1.2]: https://github.com/Noble-Lab/casanovo/compare/v5.1.1...v5.1.2
+[5.1.1]: https://github.com/Noble-Lab/casanovo/compare/v5.1.0...v5.1.1
 [5.1.0]: https://github.com/Noble-Lab/casanovo/compare/v5.0.0...v5.1.0
 [5.0.0]: https://github.com/Noble-Lab/casanovo/compare/v4.3.0...v5.0.0
 [4.3.0]: https://github.com/Noble-Lab/casanovo/compare/v4.2.1...v4.3.0
