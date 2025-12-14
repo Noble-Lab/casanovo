@@ -142,10 +142,10 @@ def test_export(tiny_fasta_file, tmp_path):
         max_mods=0,
         precursor_tolerance=20,
         isotope_error=[0, 0],
-        allowed_fixed_mods="C:C+57.021",
+        allowed_fixed_mods="C:C[Carbamidomethyl]",
         allowed_var_mods=(
-            "M:M+15.995,N:N+0.984,Q:Q+0.984,"
-            "nterm:+42.011,nterm:+43.006,nterm:-17.027,nterm:+43.006-17.027"
+            "M:M[Oxidation],N:N[Deamidated],Q:Q[Deamidated],"
+            "nterm:[Acetyl]-,nterm:[Carbamyl]-,nterm:[Ammonia-loss]-,nterm:[+25.980265]-"
         ),
         tokenizer=depthcharge.tokenizers.PeptideTokenizer.from_massivekb(),
     )
@@ -798,52 +798,52 @@ def test_digest_fasta_cleave(tiny_fasta_file):
     # No missed cleavages
     expected_normal = [
         "ATSIPAR",
-        "VTLSC+57.021R",
+        "VTLSC[Carbamidomethyl]R",
         "LLIYGASTR",
         "EIVMTQSPPTLSLSPGER",
         "MEAPAQLLFLLLLWLPDTTR",
         "ASQSVSSSYLTWYQQKPGQAPR",
-        "FSGSGSGTDFTLTISSLQPEDFAVYYC+57.021QQDYNLP",
+        "FSGSGSGTDFTLTISSLQPEDFAVYYC[Carbamidomethyl]QQDYNLP",
     ]
 
     # 1 missed cleavage
     expected_1missedcleavage = [
         "ATSIPAR",
-        "VTLSC+57.021R",
+        "VTLSC[Carbamidomethyl]R",
         "LLIYGASTR",
         "LLIYGASTRATSIPAR",
         "EIVMTQSPPTLSLSPGER",
         "MEAPAQLLFLLLLWLPDTTR",
         "ASQSVSSSYLTWYQQKPGQAPR",
-        "EIVMTQSPPTLSLSPGERVTLSC+57.021R",
-        "VTLSC+57.021RASQSVSSSYLTWYQQKPGQAPR",
+        "EIVMTQSPPTLSLSPGERVTLSC[Carbamidomethyl]R",
+        "VTLSC[Carbamidomethyl]RASQSVSSSYLTWYQQKPGQAPR",
         "ASQSVSSSYLTWYQQKPGQAPRLLIYGASTR",
-        "FSGSGSGTDFTLTISSLQPEDFAVYYC+57.021QQDYNLP",
+        "FSGSGSGTDFTLTISSLQPEDFAVYYC[Carbamidomethyl]QQDYNLP",
         "MEAPAQLLFLLLLWLPDTTREIVMTQSPPTLSLSPGER",
-        "ATSIPARFSGSGSGTDFTLTISSLQPEDFAVYYC+57.021QQDYNLP",
+        "ATSIPARFSGSGSGTDFTLTISSLQPEDFAVYYC[Carbamidomethyl]QQDYNLP",
     ]
 
     # 3 missed cleavages
     expected_3missedcleavage = [
         "ATSIPAR",
-        "VTLSC+57.021R",
+        "VTLSC[Carbamidomethyl]R",
         "LLIYGASTR",
         "LLIYGASTRATSIPAR",
         "EIVMTQSPPTLSLSPGER",
         "MEAPAQLLFLLLLWLPDTTR",
         "ASQSVSSSYLTWYQQKPGQAPR",
-        "EIVMTQSPPTLSLSPGERVTLSC+57.021R",
-        "VTLSC+57.021RASQSVSSSYLTWYQQKPGQAPR",
+        "EIVMTQSPPTLSLSPGERVTLSC[Carbamidomethyl]R",
+        "VTLSC[Carbamidomethyl]RASQSVSSSYLTWYQQKPGQAPR",
         "ASQSVSSSYLTWYQQKPGQAPRLLIYGASTR",
-        "FSGSGSGTDFTLTISSLQPEDFAVYYC+57.021QQDYNLP",
+        "FSGSGSGTDFTLTISSLQPEDFAVYYC[Carbamidomethyl]QQDYNLP",
         "ASQSVSSSYLTWYQQKPGQAPRLLIYGASTRATSIPAR",
-        "VTLSC+57.021RASQSVSSSYLTWYQQKPGQAPRLLIYGASTR",
+        "VTLSC[Carbamidomethyl]RASQSVSSSYLTWYQQKPGQAPRLLIYGASTR",
         "MEAPAQLLFLLLLWLPDTTREIVMTQSPPTLSLSPGER",
-        "ATSIPARFSGSGSGTDFTLTISSLQPEDFAVYYC+57.021QQDYNLP",
-        "VTLSC+57.021RASQSVSSSYLTWYQQKPGQAPRLLIYGASTRATSIPAR",
-        "MEAPAQLLFLLLLWLPDTTREIVMTQSPPTLSLSPGERVTLSC+57.021R",
-        "EIVMTQSPPTLSLSPGERVTLSC+57.021RASQSVSSSYLTWYQQKPGQAPR",
-        "LLIYGASTRATSIPARFSGSGSGTDFTLTISSLQPEDFAVYYC+57.021QQDYNLP",
+        "ATSIPARFSGSGSGTDFTLTISSLQPEDFAVYYC[Carbamidomethyl]QQDYNLP",
+        "VTLSC[Carbamidomethyl]RASQSVSSSYLTWYQQKPGQAPRLLIYGASTRATSIPAR",
+        "MEAPAQLLFLLLLWLPDTTREIVMTQSPPTLSLSPGERVTLSC[Carbamidomethyl]R",
+        "EIVMTQSPPTLSLSPGERVTLSC[Carbamidomethyl]RASQSVSSSYLTWYQQKPGQAPR",
+        "LLIYGASTRATSIPARFSGSGSGTDFTLTISSLQPEDFAVYYC[Carbamidomethyl]QQDYNLP",
     ]
     for missed_cleavages, expected in zip(
         (0, 1, 3),
@@ -859,10 +859,10 @@ def test_digest_fasta_cleave(tiny_fasta_file):
             max_mods=0,
             precursor_tolerance=20,
             isotope_error=[0, 0],
-            allowed_fixed_mods="C:C+57.021",
+            allowed_fixed_mods="C:C[Carbamidomethyl]",
             allowed_var_mods=(
-                "M:M+15.995,N:N+0.984,Q:Q+0.984,"
-                "nterm:+42.011,nterm:+43.006,nterm:-17.027,nterm:+43.006-17.027"
+                "M:M[Oxidation],N:N[Deamidated],Q:Q[Deamidated],"
+                "nterm:[Acetyl]-,nterm:[Carbamyl]-,nterm:[Ammonia-loss]-,nterm:[+25.980265]-"
             ),
             tokenizer=depthcharge.tokenizers.PeptideTokenizer.from_massivekb(),
         )
@@ -940,10 +940,10 @@ def test_digest_fasta_mods(tiny_fasta_file):
         max_mods=1,
         precursor_tolerance=20,
         isotope_error=[0, 0],
-        allowed_fixed_mods="C:C+57.021",
+        allowed_fixed_mods="C:C[Carbamidomethyl]",
         allowed_var_mods=(
-            "M:M+15.995,N:N+0.984,Q:Q+0.984,"
-            "nterm:+42.011,nterm:+43.006,nterm:-17.027,nterm:+43.006-17.027"
+            "M:M[Oxidation],N:N[Deamidated],Q:Q[Deamidated],"
+            "nterm:[Acetyl]-,nterm:[Carbamyl]-,nterm:[Ammonia-loss]-,nterm:[+25.980265]-"
         ),
         tokenizer=depthcharge.tokenizers.PeptideTokenizer.from_massivekb(),
     )
@@ -956,11 +956,11 @@ def test_length_restrictions(tiny_fasta_file):
     expected_long = [
         "MEAPAQLLFLLLLWLPDTTR",
         "ASQSVSSSYLTWYQQKPGQAPR",
-        "FSGSGSGTDFTLTISSLQPEDFAVYYC+57.021QQDYNLP",
+        "FSGSGSGTDFTLTISSLQPEDFAVYYC[Carbamidomethyl]QQDYNLP",
     ]
 
     # length between 6 and 8
-    expected_short = ["ATSIPAR", "VTLSC+57.021R"]
+    expected_short = ["ATSIPAR", "VTLSC[Carbamidomethyl]R"]
 
     pdb = db_utils.ProteinDatabase(
         fasta_path=str(tiny_fasta_file),
@@ -972,10 +972,10 @@ def test_length_restrictions(tiny_fasta_file):
         max_mods=0,
         precursor_tolerance=20,
         isotope_error=[0, 0],
-        allowed_fixed_mods="C:C+57.021",
+        allowed_fixed_mods="C:C[Carbamidomethyl]",
         allowed_var_mods=(
-            "M:M+15.995,N:N+0.984,Q:Q+0.984,"
-            "nterm:+42.011,nterm:+43.006,nterm:-17.027,nterm:+43.006-17.027"
+            "M:M[Oxidation],N:N[Deamidated],Q:Q[Deamidated],"
+            "nterm:[Acetyl]-,nterm:[Carbamyl]-,nterm:[Ammonia-loss]-,nterm:[+25.980265]-"
         ),
         tokenizer=depthcharge.tokenizers.PeptideTokenizer.from_massivekb(),
     )
@@ -991,10 +991,10 @@ def test_length_restrictions(tiny_fasta_file):
         max_mods=0,
         precursor_tolerance=20,
         isotope_error=[0, 0],
-        allowed_fixed_mods="C:C+57.021",
+        allowed_fixed_mods="C:C[Carbamidomethyl]",
         allowed_var_mods=(
-            "M:M+15.995,N:N+0.984,Q:Q+0.984,"
-            "nterm:+42.011,nterm:+43.006,nterm:-17.027,nterm:+43.006-17.027"
+            "M:M[Oxidation],N:N[Deamidated],Q:Q[Deamidated],"
+            "nterm:[Acetyl]-,nterm:[Carbamyl]-,nterm:[Ammonia-loss]-,nterm:[+25.980265]-"
         ),
         tokenizer=depthcharge.tokenizers.PeptideTokenizer.from_massivekb(),
     )
@@ -1204,10 +1204,10 @@ def test_digest_fasta_enzyme(tiny_fasta_file, enzyme, digestion, expected):
         max_mods=0,
         precursor_tolerance=20 if digestion == "full" else 10000,
         isotope_error=[0, 0],
-        allowed_fixed_mods="C:C+57.021",
+        allowed_fixed_mods="C:C[Carbamidomethyl]",
         allowed_var_mods=(
-            "M:M+15.995,N:N+0.984,Q:Q+0.984,"
-            "nterm:+42.011,nterm:+43.006,nterm:-17.027,nterm:+43.006-17.027"
+            "M:M[Oxidation],N:N[Deamidated],Q:Q[Deamidated],"
+            "nterm:[Acetyl]-,nterm:[Carbamyl]-,nterm:[Ammonia-loss]-,nterm:[+25.980265]-"
         ),
         tokenizer=depthcharge.tokenizers.PeptideTokenizer.from_massivekb(),
     )
@@ -1410,7 +1410,7 @@ def test_get_candidates(tiny_fasta_file):
     expected_midwindow = ["LLIYGASTR"]
 
     # precursor window is 600000
-    expected_widewindow = ["ATSIPAR", "VTLSC+57.021R", "LLIYGASTR"]
+    expected_widewindow = ["ATSIPAR", "VTLSC[Carbamidomethyl]R", "LLIYGASTR"]
 
     pdb = db_utils.ProteinDatabase(
         fasta_path=str(tiny_fasta_file),
@@ -1422,10 +1422,10 @@ def test_get_candidates(tiny_fasta_file):
         max_mods=0,
         precursor_tolerance=10000,
         isotope_error=[0, 0],
-        allowed_fixed_mods="C:C+57.021",
+        allowed_fixed_mods="C:C[Carbamidomethyl]",
         allowed_var_mods=(
-            "M:M+15.995,N:N+0.984,Q:Q+0.984,"
-            "nterm:+42.011,nterm:+43.006,nterm:-17.027,nterm:+43.006-17.027"
+            "M:M[Oxidation],N:N[Deamidated],Q:Q[Deamidated],"
+            "nterm:[Acetyl]-,nterm:[Carbamyl]-,nterm:[Ammonia-loss]-,nterm:[+25.980265]-"
         ),
         tokenizer=depthcharge.tokenizers.PeptideTokenizer.from_massivekb(),
     )
@@ -1442,10 +1442,10 @@ def test_get_candidates(tiny_fasta_file):
         max_mods=0,
         precursor_tolerance=150000,
         isotope_error=[0, 0],
-        allowed_fixed_mods="C:C+57.021",
+        allowed_fixed_mods="C:C[Carbamidomethyl]",
         allowed_var_mods=(
-            "M:M+15.995,N:N+0.984,Q:Q+0.984,"
-            "nterm:+42.011,nterm:+43.006,nterm:-17.027,nterm:+43.006-17.027"
+            "M:M[Oxidation],N:N[Deamidated],Q:Q[Deamidated],"
+            "nterm:[Acetyl]-,nterm:[Carbamyl]-,nterm:[Ammonia-loss]-,nterm:[+25.980265]-"
         ),
         tokenizer=depthcharge.tokenizers.PeptideTokenizer.from_massivekb(),
     )
@@ -1462,10 +1462,10 @@ def test_get_candidates(tiny_fasta_file):
         max_mods=0,
         precursor_tolerance=600000,
         isotope_error=[0, 0],
-        allowed_fixed_mods="C:C+57.021",
+        allowed_fixed_mods="C:C[Carbamidomethyl]",
         allowed_var_mods=(
-            "M:M+15.995,N:N+0.984,Q:Q+0.984,"
-            "nterm:+42.011,nterm:+43.006,nterm:-17.027,nterm:+43.006-17.027"
+            "M:M[Oxidation],N:N[Deamidated],Q:Q[Deamidated],"
+            "nterm:[Acetyl]-,nterm:[Carbamyl]-,nterm:[Ammonia-loss]-,nterm:[+25.980265]-"
         ),
         tokenizer=depthcharge.tokenizers.PeptideTokenizer.from_massivekb(),
     )
@@ -1529,10 +1529,10 @@ def test_get_candidates_isotope_error(tiny_fasta_file):
         max_mods=0,
         precursor_tolerance=10000,
         isotope_error=[0, 0],
-        allowed_fixed_mods="C:C+57.021",
+        allowed_fixed_mods="C:C[Carbamidomethyl]",
         allowed_var_mods=(
-            "M:M+15.995,N:N+0.984,Q:Q+0.984,"
-            "nterm:+42.011,nterm:+43.006,nterm:-17.027,nterm:+43.006-17.027"
+            "M:M[Oxidation],N:N[Deamidated],Q:Q[Deamidated],"
+            "nterm:[Acetyl]-,nterm:[Carbamyl]-,nterm:[Ammonia-loss]-,nterm:[+25.980265]-"
         ),
         tokenizer=depthcharge.tokenizers.PeptideTokenizer.from_massivekb(),
     )
@@ -1550,10 +1550,10 @@ def test_get_candidates_isotope_error(tiny_fasta_file):
         max_mods=0,
         precursor_tolerance=10000,
         isotope_error=[0, 1],
-        allowed_fixed_mods="C:C+57.021",
+        allowed_fixed_mods="C:C[Carbamidomethyl]",
         allowed_var_mods=(
-            "M:M+15.995,N:N+0.984,Q:Q+0.984,"
-            "nterm:+42.011,nterm:+43.006,nterm:-17.027,nterm:+43.006-17.027"
+            "M:M[Oxidation],N:N[Deamidated],Q:Q[Deamidated],"
+            "nterm:[Acetyl]-,nterm:[Carbamyl]-,nterm:[Ammonia-loss]-,nterm:[+25.980265]-"
         ),
         tokenizer=depthcharge.tokenizers.PeptideTokenizer.from_massivekb(),
     )
@@ -1571,10 +1571,10 @@ def test_get_candidates_isotope_error(tiny_fasta_file):
         max_mods=0,
         precursor_tolerance=10000,
         isotope_error=[0, 2],
-        allowed_fixed_mods="C:C+57.021",
+        allowed_fixed_mods="C:C[Carbamidomethyl]",
         allowed_var_mods=(
-            "M:M+15.995,N:N+0.984,Q:Q+0.984,"
-            "nterm:+42.011,nterm:+43.006,nterm:-17.027,nterm:+43.006-17.027"
+            "M:M[Oxidation],N:N[Deamidated],Q:Q[Deamidated],"
+            "nterm:[Acetyl]-,nterm:[Carbamyl]-,nterm:[Ammonia-loss]-,nterm:[+25.980265]-"
         ),
         tokenizer=depthcharge.tokenizers.PeptideTokenizer.from_massivekb(),
     )
@@ -1592,10 +1592,10 @@ def test_get_candidates_isotope_error(tiny_fasta_file):
         max_mods=0,
         precursor_tolerance=10000,
         isotope_error=[0, 3],
-        allowed_fixed_mods="C:C+57.021",
+        allowed_fixed_mods="C:C[Carbamidomethyl]",
         allowed_var_mods=(
-            "M:M+15.995,N:N+0.984,Q:Q+0.984,"
-            "nterm:+42.011,nterm:+43.006,nterm:-17.027,nterm:+43.006-17.027"
+            "M:M[Oxidation],N:N[Deamidated],Q:Q[Deamidated],"
+            "nterm:[Acetyl]-,nterm:[Carbamyl]-,nterm:[Ammonia-loss]-,nterm:[+25.980265]-"
         ),
         tokenizer=depthcharge.tokenizers.PeptideTokenizer.from_massivekb(),
     )
