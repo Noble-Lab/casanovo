@@ -299,8 +299,9 @@ class ModelRunner:
                 error_message = (
                     "Error creating annotated spectrum dataloaders. This may "
                     "be the result of having an unannotated peak file present "
-                    "in the validation peak file path list. Check that the "
-                    "spectrum files are annotated correctly."
+                    "in the validation peak file path list. Check that the input"
+                    "spectrum files are annotated, and if they are that the "
+                    "format is correct."
                 )
 
                 logger.error(error_message)
