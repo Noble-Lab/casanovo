@@ -256,92 +256,120 @@ def test_save_final_model(tmp_path, mgf_small, tiny_config):
     assert validation_file.exists()
 
 
-def test_evaluate(
-    tmp_path, mgf_small, mzml_small, mgf_small_unannotated, tiny_config
-):
-    """Test model evaluation during sequencing"""
-    # Train tiny model
+def test_evaluate_success(tmp_path, mgf_small, tiny_config):
+    """Test successful model evaluation with annotated peak files."""
     config = Config(tiny_config)
     config.max_epochs = 1
+
     model_file = tmp_path / "epoch=0-step=1.ckpt"
+    result_file = tmp_path / "result.mztab"
+
     with ModelRunner(config, output_dir=tmp_path) as runner:
         runner.train([mgf_small], [mgf_small])
 
     assert model_file.is_file()
 
-    # Test evaluation with annotated peak file
-    result_file = tmp_path / "result.mztab"
     with ModelRunner(
         config, model_filename=str(model_file), overwrite_ckpt_check=False
     ) as runner:
         runner.predict([mgf_small], result_file, evaluate=True)
 
     assert result_file.is_file()
-    result_file.unlink()
 
+
+@pytest.mark.parametrize(
+    "input_files, expect_match",
+    [
+        pytest.param(
+            ["mzml_small"],
+            False,
+            id="mzml_only",
+        ),
+        pytest.param(
+            ["mgf_small_unannotated"],
+            True,
+            id="unannotated_mgf_only",
+        ),
+        pytest.param(
+            ["mgf_small_unannotated", "mzml_small"],
+            True,
+            id="unannotated_mgf_and_mzml",
+        ),
+        pytest.param(
+            ["mgf_small", "mzml_small"],
+            False,
+            id="annotated_mgf_and_mzml",
+        ),
+        pytest.param(
+            ["mgf_small", "mgf_small_unannotated"],
+            True,
+            id="annotated_and_unannotated_mgf",
+        ),
+        pytest.param(
+            ["mgf_small", "mgf_small_unannotated", "mzml_small"],
+            True,
+            id="annotated_unannotated_and_mzml",
+        ),
+        pytest.param(
+            ["improperly_annotated_file"],
+            True,
+            id="improperly_annotated_mgf_missing_seq",
+        ),
+    ],
+)
+def test_evaluate_failure_cases(
+    tmp_path,
+    mgf_small,
+    mzml_small,
+    mgf_small_unannotated,
+    tiny_config,
+    input_files,
+    expect_match,
+):
+    """Test all evaluation failure modes."""
     exception_string = (
         "Error creating annotated spectrum dataloaders. This may "
         "be the result of having an unannotated peak file present "
         "in the validation peak file path list."
     )
 
-    with pytest.raises(TypeError):
+    config = Config(tiny_config)
+    config.max_epochs = 1
+
+    model_file = tmp_path / "epoch=0-step=1.ckpt"
+    result_file = tmp_path / "result.mztab"
+
+    with ModelRunner(config, output_dir=tmp_path) as runner:
+        runner.train([mgf_small], [mgf_small])
+
+    assert model_file.is_file()
+
+    mgf_path = Path(mgf_small)
+    improperly_annotated_file = mgf_path.parent / "improperly_annotated.mgf"
+    improperly_annotated_file.write_text(
+        mgf_path.read_text().replace("SEQ=", "PEPTIDE=")
+    )
+
+    file_map = {
+        "mgf_small": mgf_small,
+        "mzml_small": mzml_small,
+        "mgf_small_unannotated": mgf_small_unannotated,
+        "improperly_annotated_file": improperly_annotated_file,
+    }
+
+    files = [file_map[name] for name in input_files]
+
+    with pytest.raises(
+        TypeError,
+        match=exception_string if expect_match else None,
+    ):
         with ModelRunner(
             config, model_filename=str(model_file), overwrite_ckpt_check=False
         ) as runner:
-            runner.predict([mzml_small], result_file, evaluate=True)
+            runner.predict(files, result_file, evaluate=True)
 
-    with pytest.raises(TypeError, match=exception_string):
-        with ModelRunner(
-            config, model_filename=str(model_file), overwrite_ckpt_check=False
-        ) as runner:
-            runner.predict([mgf_small_unannotated], result_file, evaluate=True)
-
-    with pytest.raises(TypeError, match=exception_string):
-        with ModelRunner(
-            config, model_filename=str(model_file), overwrite_ckpt_check=False
-        ) as runner:
-            runner.predict(
-                [mgf_small_unannotated, mzml_small], result_file, evaluate=True
-            )
-
-    # MzTab with just metadata is written in the case of FileNotFound
-    # or TypeError early exit
+    # Metadata-only MzTab should still be written
     assert result_file.is_file()
-    result_file.unlink()
-
-    # Test mix of annotated an unannotated peak files
-    with pytest.raises(TypeError):
-        with ModelRunner(
-            config, model_filename=str(model_file), overwrite_ckpt_check=False
-        ) as runner:
-            runner.predict([mgf_small, mzml_small], result_file, evaluate=True)
-
-    assert result_file.is_file()
-    result_file.unlink()
-
-    with pytest.raises(TypeError, match=exception_string):
-        with ModelRunner(
-            config, model_filename=str(model_file), overwrite_ckpt_check=False
-        ) as runner:
-            runner.predict(
-                [mgf_small, mgf_small_unannotated], result_file, evaluate=True
-            )
-
-    assert result_file.is_file()
-    result_file.unlink()
-
-    with pytest.raises(TypeError, match=exception_string):
-        with ModelRunner(
-            config, model_filename=str(model_file), overwrite_ckpt_check=False
-        ) as runner:
-            runner.predict(
-                [mgf_small, mgf_small_unannotated, mzml_small],
-                result_file,
-                evaluate=True,
-            )
-
-    result_file.unlink()
 
 
 def test_metrics_logging(tmp_path, mgf_small, tiny_config):
