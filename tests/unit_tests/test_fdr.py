@@ -276,15 +276,11 @@ def test_psm_output_lengths_three_cases(mock_perturb):
             mixed_aa_scores,
             target_mask,
             peptide,
-            debug_target_aa_scores,
-            debug_decoy_aa_scores,
         ) = psms[0]
 
         lengths = [
             len(mixed_aa_scores),
             len(target_mask),
-            len(debug_target_aa_scores),
-            len(debug_decoy_aa_scores),
         ]
 
         assert (

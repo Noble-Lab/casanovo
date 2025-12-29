@@ -1727,9 +1727,6 @@ class Spec2PepTargetDecoy(pl.LightningModule):
             A peptide-spectrum match consists of the peptide score, the
             amino acid scores, the amino acids target mask, and the
             predicted peptide sequence.
-
-            DEBUG VERSION: Returns (peptide_score, mixed_aa_scores, target_mask,
-                                   peptide, target_aa_scores, decoy_aa_scores)
         """
         mzs, ints, precursors, _ = self._process_batch(batch)
         batch_size = mzs.shape[0]
@@ -1755,10 +1752,6 @@ class Spec2PepTargetDecoy(pl.LightningModule):
         target_scores = torch.zeros(
             batch_size, max_len, vocab_size, device=device
         )  # Target scores
-        # DEBUG: Add decoy scores tensor
-        decoy_scores = torch.zeros(
-            batch_size, max_len, vocab_size, device=device
-        )  # DEBUG: Decoy scores
 
         tokens = torch.zeros(
             batch_size, max_len, dtype=torch.int64, device=device
@@ -1766,10 +1759,6 @@ class Spec2PepTargetDecoy(pl.LightningModule):
         target_tokens = torch.zeros(
             batch_size, max_len, dtype=torch.int64, device=device
         )  # Target tokens
-        # DEBUG: Add decoy tokens tensor
-        decoy_tokens = torch.zeros(
-            batch_size, max_len, dtype=torch.int64, device=device
-        )  # DEBUG: Decoy tokens
 
         # Track which spectra are still active
         active = torch.ones(batch_size, dtype=torch.bool, device=device)
@@ -1829,15 +1818,6 @@ class Spec2PepTargetDecoy(pl.LightningModule):
                 # Store target scores ALWAYS
                 target_scores[spec_idx, aa_idx, :] = score_t[i, 0, :]
                 target_tokens[spec_idx, aa_idx] = torch.argmax(score_t[i])
-
-                # DEBUG: Store decoy scores when available
-                if spec_idx_item in score_d_dict:
-                    decoy_scores[spec_idx, aa_idx, :] = score_d_dict[
-                        spec_idx_item
-                    ][0, :]
-                    decoy_tokens[spec_idx, aa_idx] = torch.argmax(
-                        score_d_dict[spec_idx_item]
-                    )
 
                 if use_target:
                     masks[spec_idx, aa_idx] = True
@@ -1930,19 +1910,12 @@ class Spec2PepTargetDecoy(pl.LightningModule):
             mixed_seq_tokens = tokens[spec_idx, :seq_len]
             target_mask = masks[spec_idx][:seq_len].cpu().detach().numpy()
 
-            # DEBUG: Get decoy tokens
-            decoy_seq_tokens = decoy_tokens[spec_idx, :seq_len]
-
             # Apply softmax to scores
             mixed_probs = self.model_t.softmax(
                 scores[spec_idx : spec_idx + 1, :seq_len, :]
             )
             target_probs = self.model_t.softmax(
                 target_scores[spec_idx : spec_idx + 1, :seq_len, :]
-            )
-            # DEBUG: Apply softmax to decoy scores
-            decoy_probs = self.model_d.softmax(
-                decoy_scores[spec_idx : spec_idx + 1, :seq_len, :]
             )
 
             # Extract probability at each position for the chosen token
@@ -1954,22 +1927,16 @@ class Spec2PepTargetDecoy(pl.LightningModule):
             mixed_aa_scores = mixed_probs[0, range(seq_len), mixed_seq_tokens]
             mixed_aa_scores = mixed_aa_scores.cpu().detach().numpy()
 
-            # DEBUG: Extract decoy scores at each position for the decoy token
-            decoy_aa_scores = decoy_probs[0, range(seq_len), decoy_seq_tokens]
-            decoy_aa_scores = decoy_aa_scores.cpu().detach().numpy()
-
             # Reverse arrays if tokenizer is in reverse mode (N to C terminus)
             if self.tokenizer.reverse:
                 target_aa_scores = target_aa_scores[::-1]
                 mixed_aa_scores = mixed_aa_scores[::-1]
                 target_mask = target_mask[::-1]
-                decoy_aa_scores = decoy_aa_scores[::-1]  # DEBUG
 
             # Add 0 score for forced truncation (no natural stop token)
             # Target: check if target sequence ended with natural stop token
             if not (target_seq_tokens[-1] == self.model_t.stop_token).item():
                 target_aa_scores = np.append(target_aa_scores, 0)
-                decoy_aa_scores = np.append(decoy_aa_scores, 0)  # DEBUG
                 target_mask = np.append(target_mask, True)
 
             # Mixed: check if mixed sequence ended with natural stop token
@@ -1986,23 +1953,8 @@ class Spec2PepTargetDecoy(pl.LightningModule):
             # Remove stop token from outputs
             mixed_aa_scores = mixed_aa_scores[:-1]
             target_mask = target_mask[:-1]
-            target_aa_scores = target_aa_scores[:-1]  # DEBUG
-            decoy_aa_scores = decoy_aa_scores[:-1]  # DEBUG
 
-            # DEBUG VERSION: Extended tuple with target/decoy scores
-            psms.append(
-                (
-                    peptide_score,
-                    mixed_aa_scores,
-                    target_mask,
-                    peptide,
-                    target_aa_scores,  # DEBUG: pure target scores
-                    decoy_aa_scores,  # DEBUG: pure decoy scores
-                )
-            )
-
-            # FINAL VERSION: Uncomment this and remove the debug version above
-            # psms.append((peptide_score, mixed_aa_scores, target_mask, peptide))
+            psms.append((peptide_score, mixed_aa_scores, target_mask, peptide))
 
         return psms
 
@@ -2050,8 +2002,7 @@ class Spec2PepTargetDecoy(pl.LightningModule):
             batch["precursor_mz"],
             self.forward(batch),
         ):
-            # peptide_score, aa_scores, aa_mask, peptide = spectrum_preds
-            peptide_score, aa_scores, aa_mask, peptide, debug_target_aa_scores, debug_decoy_aa_scores = spectrum_preds  # DEBUG 
+            peptide_score, aa_scores, aa_mask, peptide = spectrum_preds
             predictions.append(
                 psm.PepSpecMatch(
                     sequence=peptide,
@@ -2062,9 +2013,6 @@ class Spec2PepTargetDecoy(pl.LightningModule):
                     exp_mz=precursor_mz.item(),
                     aa_scores=aa_scores,
                     aa_mask=aa_mask,
-                    # DEBUG: Add target/decoy aa scores
-                    debug_target_aa_scores=debug_target_aa_scores,
-                    debug_decoy_aa_scores=debug_decoy_aa_scores,
                 )
             )
 
