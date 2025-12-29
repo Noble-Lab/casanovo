@@ -178,6 +178,8 @@ class MztabWriter:
                     "opt_ms_run[1]_aa_scores",
                     "opt_ms_run[1]_proforma",
                     "opt_ms_run[1]_aa_mask",
+                    "debug_ms_run[1]_target_aa_scores",  # DEBUG
+                    "debug_ms_run[1]_decoy_aa_scores",  # DEBUG
                 ]
             )
             by_id = operator.attrgetter("spectrum_id")
@@ -218,14 +220,21 @@ class MztabWriter:
                         ",".join(list(map("{:.5f}".format, psm.aa_scores))),
                         psm.sequence,  # op_ms_run[1]_proforma
                         # opt_ms_run[2]_aa_masks
+                        ",".join("1" if x else "0" for x in psm.aa_mask),
+                        # DEBUG
+                        # debug_ms_run[1]_target_aa_scores
                         ",".join(
-                            "1" if x else "0"
-                            for x in (
-                                psm.aa_mask.tolist()
-                                if hasattr(psm.aa_mask, "tolist")
-                                else psm.aa_mask
+                            list(
+                                map(
+                                    "{:.5f}".format, psm.debug_target_aa_scores
+                                )
                             )
-                        )
-                        or "null",
+                        ),
+                        # debug_ms_run[1]_decoy_aa_scores
+                        ",".join(
+                            list(
+                                map("{:.5f}".format, psm.debug_decoy_aa_scores)
+                            )
+                        ),
                     ]
                 )

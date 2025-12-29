@@ -50,6 +50,14 @@ class PepSpecMatch:
     protein: str = "null"
     aa_mask: Optional[Iterable[bool]] = dataclasses.field(default_factory=list)
 
+    # DEBUG
+    debug_target_aa_scores: Optional[Iterable[float]] = (
+        dataclasses.field(default=None)
+    )
+    debug_decoy_aa_scores: Optional[Iterable[float]] = (
+        dataclasses.field(default=None)
+    )
+
     # Private properties to handle proteoform caching
     _proteoform_sequence: Optional[str] = dataclasses.field(
         init=False, default=None
