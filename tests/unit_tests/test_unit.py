@@ -2087,7 +2087,6 @@ def test_beam_search_decode(tiny_config):
     config = casanovo.Config(tiny_config)
     model = Spec2Pep(
         n_beams=4,
-        residues="massivekb",
         min_peptide_len=4,
         tokenizer=depthcharge.tokenizers.peptides.PeptideTokenizer(
             residues=config.residues
@@ -2097,446 +2096,342 @@ def test_beam_search_decode(tiny_config):
 
     batch = 1
     length = model.max_peptide_len + 1
-    vocab = len(model.tokenizer) + 1
     beam = model.n_beams
     step = 3
     device = model.device
 
-    # Initialize required attributes
     model._batch_size = batch
     model._beam_size = beam
     model._cumulative_masses = torch.zeros(batch * beam, device=device)
 
-    # Initialize scores and tokens
-    scores = torch.full(
-        size=(batch, length, vocab, beam), fill_value=torch.nan, device=device
-    )
+    vocab = len(model.tokenizer) + 1
+    scores = torch.full((batch, length, vocab, beam), torch.nan, device=device)
     scores = einops.rearrange(scores, "B L V S -> (B S) L V")
+
     tokens = torch.zeros(
         batch * beam, length, dtype=torch.int64, device=device
     )
-
-    # Create cache for decoded beams
-    pred_cache = collections.OrderedDict((i, []) for i in range(batch))
-
-    # Ground truth peptide is "PEPK"
-    true_peptide = "PEPK"
     precursors = torch.tensor(
         [469.25364, 2.0, 235.63410], device=device
-    ).repeat(beam * batch, 1)
+    ).repeat(beam, 1)
 
-    # Fill scores and tokens with relevant predictions
-    scores[:, : step + 1, :] = 0
     peptides = [
         ("PEPK", False),
         ("PEPR", False),
         ("PEPG", False),
         ("PEP", True),
     ]
-    for i, (peptide, add_stop) in enumerate(peptides):
-        tokens[i, : step + 1] = model.tokenizer.tokenize(
-            peptide, add_stop=add_stop
-        )[0]
-        for j in range(step + 1):
-            scores[i, j, tokens[i, j]] = 1
 
-    # Set cumulative masses
-    for i in range(batch * beam):
-        mass = 0
+    for i, (pep, add_stop) in enumerate(peptides):
+        toks = model.tokenizer.tokenize(pep, add_stop=add_stop)[0]
+        tokens[i, : step + 1] = toks
         for j in range(step + 1):
-            token = tokens[i, j].item()
-            if token != 0 and token < len(model.token_masses):
-                mass += model.token_masses[token]
+            scores[i, j, toks[j]] = 1
+
+    # update masses
+    for i in range(batch * beam):
+        mass = sum(
+            model.token_masses[tokens[i, j].item()]
+            for j in range(step + 1)
+            if 0 < tokens[i, j].item() < len(model.token_masses)
+        )
         model._cumulative_masses[i] = mass
 
-    try:
-        # Test _finish_beams()
-        (
-            finished_beams,
-            beam_fits_precursor,
-            discarded_beams,
-        ) = model._finish_beams(tokens, precursors, step)
+    finished, fits, discarded = model._finish_beams(tokens, precursors, step)
 
-        # Second beam finished due to the precursor m/z filter, final beam
-        # finished due to predicted stop token, first and third beam
-        # unfinished. Final beam discarded due to length.
-        assert torch.equal(
-            finished_beams,
-            torch.tensor([False, True, False, True], device=device),
-        )
-        assert torch.equal(
-            beam_fits_precursor,
-            torch.tensor([False, False, False, False], device=device),
-        )
-        assert torch.equal(
-            discarded_beams,
-            torch.tensor([False, False, False, True], device=device),
-        )
+    assert torch.equal(
+        finished, torch.tensor([False, True, False, True], device=device)
+    )
+    assert torch.equal(
+        fits, torch.tensor([False, False, False, False], device=device)
+    )
+    assert torch.equal(
+        discarded, torch.tensor([False, False, False, True], device=device)
+    )
 
-        # Test _cache_finished_beams()
-        model._cache_finished_beams(
-            tokens,
-            scores,
-            step,
-            finished_beams & ~discarded_beams,
-            beam_fits_precursor,
-            pred_cache,
+
+def test_peptide_too_short_too_heavy(tiny_config):
+    config = Config(tiny_config)
+    model = Spec2Pep(
+        n_beams=1,
+        min_peptide_len=20,
+        tokenizer=depthcharge.tokenizers.peptides.PeptideTokenizer(
+            residues=config.residues
+        ),
+    )
+
+    # Mass of "peptid"
+    precursors = torch.tensor([[670.31737, 2.0, 336.16596]])
+    peptide = "PEPTIDE"
+    tokens = model.tokenizer.tokenize(peptide)
+    step = len(peptide) - 1
+    # This needs to be initialized, but is recalculated anyway so the value
+    # doesn't matter
+    model._cumulative_masses = torch.tensor([42.424242])
+
+    finished_beams, beam_fits_precursor, discarded_beams = model._finish_beams(
+        tokens, precursors, step
+    )
+
+    assert finished_beams.item()
+    assert discarded_beams.item()
+    assert not beam_fits_precursor.item()
+
+
+def test_cache_finished_beams(tiny_config):
+    config = Config(tiny_config)
+    model = Spec2Pep(
+        n_beams=4,
+        residues="massivekb",
+        tokenizer=depthcharge.tokenizers.peptides.PeptideTokenizer(
+            residues=config.residues
+        ),
+    )
+
+    batch = 1
+    beam = model.n_beams
+    length = 10
+    step = 3
+    device = model.device
+
+    model._batch_size = batch
+    model._beam_size = beam
+
+    scores = torch.zeros(
+        (beam, length, len(model.tokenizer) + 1), device=device
+    )
+    tokens = torch.zeros((beam, length), dtype=torch.int64, device=device)
+
+    pred_cache = collections.OrderedDict((i, []) for i in range(batch))
+
+    true_tok = model.tokenizer.tokenize("PEPR")[0]
+    tokens[1, : step + 1] = true_tok
+    scores[1, : step + 1, true_tok] = 1
+
+    finished = torch.tensor([False, True, False, False], device=device)
+    discarded = torch.tensor([False, False, False, False], device=device)
+    fits = torch.tensor([False, False, False, False], device=device)
+
+    model._cache_finished_beams(
+        tokens, scores, step, finished & ~discarded, fits, pred_cache
+    )
+
+    cached = [
+        pep for (_, _, _, pep) in pred_cache[0] if torch.equal(pep, true_tok)
+    ]
+    assert len(cached) == 1
+
+
+def test_get_top_peptide_ranking(tiny_config):
+    config = Config(tiny_config)
+    model = Spec2Pep(
+        tokenizer=depthcharge.tokenizers.peptides.PeptideTokenizer(
+            residues=config.residues
         )
+    )
 
-        # Verify that the correct peptides have been cached
-        correct_cached = 0
-        for _, _, _, pep in pred_cache[0]:
-            if torch.equal(pep, model.tokenizer.tokenize("PEPR")[0]):
-                correct_cached += 1
-        assert correct_cached == 1
+    cache = collections.OrderedDict({0: []})
 
-        # Test _get_top_peptide()
-        # Create test cache
-        test_cache = collections.OrderedDict((i, []) for i in range(batch))
+    heapq.heappush(
+        cache[0], (0.93, 0.1, [0.93] * 4, model.tokenizer.tokenize("PEPY")[0])
+    )
+    heapq.heappush(
+        cache[0], (0.95, 0.2, [0.95] * 4, model.tokenizer.tokenize("PEPK")[0])
+    )
+    heapq.heappush(
+        cache[0], (0.94, 0.3, [0.94] * 4, model.tokenizer.tokenize("PEPP")[0])
+    )
+
+    result = next(model._get_top_peptide(cache))
+    assert result[0][-1] == "PEPK"
+
+
+@pytest.mark.parametrize("topk", [1, 2, 3])
+def test_get_top_peptide_multiple(topk, tiny_config):
+    config = Config(tiny_config)
+    model = Spec2Pep(
+        top_match=topk,
+        tokenizer=depthcharge.tokenizers.peptides.PeptideTokenizer(
+            residues=config.residues
+        ),
+    )
+
+    cache = collections.OrderedDict({0: []})
+    cache_items = [(0.9, "PEPY"), (0.8, "PEPK"), (0.7, "PEPP")]
+    for score, seq in cache_items:
         heapq.heappush(
-            test_cache[0],
-            (0.93, 0.1, 4 * [0.93], model.tokenizer.tokenize("PEPY")[0]),
-        )
-        heapq.heappush(
-            test_cache[0],
-            (0.95, 0.2, 4 * [0.95], model.tokenizer.tokenize("PEPK")[0]),
-        )
-        heapq.heappush(
-            test_cache[0],
-            (0.94, 0.3, 4 * [0.94], model.tokenizer.tokenize("PEPP")[0]),
+            cache[0],
+            (score, 0.0, [score] * 3, model.tokenizer.tokenize(seq)[0]),
         )
 
-        # Verify that the highest scoring peptide is returned
-        assert next(model._get_top_peptide(test_cache))[0][-1] == "PEPK"
+    result = next(model._get_top_peptide(cache))
+    assert len(result) == topk
+    for i in range(topk):
+        assert result[i][2] == cache_items[i][1]
 
-        # Test empty predictions case
-        empty_cache = collections.OrderedDict((i, []) for i in range(batch))
-        assert len(list(model._get_top_peptide(empty_cache))[0]) == 0
 
-        # Test multiple PSMs per spectrum
-        model.top_match = 2
-        top_results = next(model._get_top_peptide(test_cache))
-        assert set([pep[-1] for pep in top_results]) == {"PEPK", "PEPP"}
-
-        # Test reverse AA scores when decoder is reversed.
-        pred_cache = {
-            0: [
-                (
-                    1.0,
-                    0.42,
-                    np.array([1.0, 0.0]),
-                    model.tokenizer.tokenize("PE")[0],
-                )
-            ]
-        }
-
-        # Test when tokenizer is reversed
-        model.tokenizer.reverse = True
-        top_peptides = list(model._get_top_peptide(pred_cache))
-        assert len(top_peptides) == 1
-        assert len(top_peptides[0]) == 1
-        assert np.allclose(top_peptides[0][0][1], np.array([0.0, 1.0]))
-        assert top_peptides[0][0][2] == "EP"
-
-        # Test when tokenizer is not reversed
-        model.tokenizer.reverse = False
-        top_peptides = list(model._get_top_peptide(pred_cache))
-        assert len(top_peptides) == 1
-        assert len(top_peptides[0]) == 1
-        assert np.allclose(top_peptides[0][0][1], np.array([1.0, 0.0]))
-        assert top_peptides[0][0][2] == "PE"
-
-        # Test _get_topk_beams()
-        # Reset test state
-        step = 4
-        scores[2, step, :] = 0
-        next_tokens = model.tokenizer.tokenize(["P", "S", "A", "G"]).flatten()
-        scores[2, step, next_tokens] = torch.tensor(
-            [4.0, 3.0, 2.0, 1.0], device=device
+@pytest.mark.parametrize("reverse", [True, False])
+def test_get_top_peptide_reverse(reverse, tiny_config):
+    config = Config(tiny_config)
+    model = Spec2Pep(
+        tokenizer=depthcharge.tokenizers.peptides.PeptideTokenizer(
+            residues=config.residues
         )
-        test_finished_beams = torch.tensor(
-            [True, True, False, True], device=device
-        )
+    )
 
-        # Update cumulative masses
-        token_indices = [
-            model.tokenizer.index[aa] for aa in ["P", "S", "A", "G"]
-        ]
-        token_masses = [model.token_masses[idx] for idx in token_indices]
-        base_mass = model._cumulative_masses[2]
+    model.tokenizer.reverse = reverse
 
-        new_tokens, new_scores = model._get_topk_beams(
-            tokens, scores, test_finished_beams, batch, step
-        )
-
-        # Verify generated tokens and scores
-        expected_tokens = model.tokenizer.tokenize(
-            ["PEPGP", "PEPGS", "PEPGA", "PEPGG"]
-        )
-        assert torch.equal(new_tokens[:, : step + 1], expected_tokens)
-
-        # Verify cumulative masses are correctly updated
-        for i, token in enumerate(token_indices):
-            expected_mass = base_mass + token_masses[i]
-            assert torch.isclose(model._cumulative_masses[i], expected_mass)
-
-        # Test _finish_beams with negative mass tokens
-        # Reset model and test conditions
-        model = Spec2Pep(
-            n_beams=2,
-            tokenizer=depthcharge.tokenizers.peptides.MskbPeptideTokenizer(
-                residues=config.residues
-            ),
-        )
-
-        # Initialize attributes
-        model._batch_size = batch
-        model._beam_size = 2
-        model._cumulative_masses = torch.zeros(batch * 2, device=device)
-
-        step = 1
-        beam = 2
-
-        # Ground truth peptide is "-17.027GK".
-        precursors = torch.tensor(
-            [186.10044, 2.0, 94.05750], device=device
-        ).repeat(beam * batch, 1)
-        tokens = torch.zeros(
-            batch * beam, length, dtype=torch.int64, device=device
-        )
-        tokens[:, : step + 1] = model.tokenizer.tokenize(["GK", "AK"])
-
-        # Set cumulative masses
-        for i in range(batch * beam):
-            mass = 0
-            for j in range(step + 1):
-                token = tokens[i, j].item()
-                if token != 0 and token < len(model.token_masses):
-                    mass += model.token_masses[token]
-            model._cumulative_masses[i] = mass
-
-        # Test _finish_beams
-        (
-            finished_beams,
-            beam_fits_precursor,
-            discarded_beams,
-        ) = model._finish_beams(tokens, precursors, step)
-        assert torch.equal(
-            finished_beams, torch.tensor([False, True], device=device)
-        )
-        assert torch.equal(
-            beam_fits_precursor, torch.tensor([False, False], device=device)
-        )
-        assert torch.equal(
-            discarded_beams, torch.tensor([False, False], device=device)
-        )
-
-        # Test _finish_beams with multiple/internal N-mods and dummy predictions
-        model = Spec2Pep(
-            n_beams=3,
-            min_peptide_len=3,
-            tokenizer=depthcharge.tokenizers.peptides.PeptideTokenizer(
-                residues=config.residues
-            ),
-        )
-
-        # Initialize attributes
-        model._batch_size = batch
-        model._beam_size = 3
-        model._cumulative_masses = torch.zeros(batch * 3, device=device)
-
-        beam = 3
-        step = 4
-
-        # Precursor m/z irrelevant for this test
-        precursors = torch.tensor(
-            [1861.0044, 2.0, 940.5750], device=device
-        ).repeat(beam * batch, 1)
-
-        # Use sequences with invalid mass modifications
-        tokens = torch.zeros(
-            batch * beam, length, dtype=torch.int64, device=device
-        )
-        sequences = [
-            ["K", "A", "A", "A", "[+25.980265]-"],
-            ["K", "A", "A", "[Acetyl]-", "A"],
-            ["K", "A", "A", "[Carbamyl]-", "[Ammonia-loss]-"],
-        ]
-
-        for i, seq in enumerate(sequences):
-            tokens[i, : step + 1] = torch.tensor(
-                [model.tokenizer.index[aa] for aa in seq], device=device
+    cache = {
+        0: [
+            (
+                1.0,
+                0.42,
+                np.array([1.0, 0.0]),
+                model.tokenizer.tokenize("PE")[0],
             )
+        ]
+    }
 
-        # Set cumulative masses
-        for i in range(batch * beam):
-            mass = 0
-            for j in range(step + 1):
-                token = tokens[i, j].item()
-                if token != 0 and token < len(model.token_masses):
-                    mass += model.token_masses[token]
-            model._cumulative_masses[i] = mass
+    result = list(model._get_top_peptide(cache))
 
-        # Test _finish_beams - all should be discarded
-        (
-            finished_beams,
-            beam_fits_precursor,
-            discarded_beams,
-        ) = model._finish_beams(tokens, precursors, step)
-        assert torch.equal(
-            finished_beams, torch.tensor([False, False, False], device=device)
-        )
-        assert torch.equal(
-            beam_fits_precursor,
-            torch.tensor([False, False, False], device=device),
-        )
-        assert torch.equal(
-            discarded_beams, torch.tensor([False, True, True], device=device)
-        )
+    assert len(result) == 1
+    assert len(result[0]) == 1
+    assert isinstance(result[0][0][2], str)  # string peptide
 
-        # Test _get_topk_beams with finished beams in the batch
-        model = Spec2Pep(
-            n_beams=1,
-            min_peptide_len=3,
-            tokenizer=depthcharge.tokenizers.peptides.PeptideTokenizer(
-                residues=config.residues
-            ),
-        )
 
-        # Sizes and other variables
-        batch = 2
-        beam = model.n_beams
+def test_get_topk_beams(tiny_config):
+    config = Config(tiny_config)
+    model = Spec2Pep(
+        n_beams=1,
+        tokenizer=depthcharge.tokenizers.peptides.PeptideTokenizer(
+            residues=config.residues
+        ),
+    )
+    batch = 2
+    step = 4
+    beam = model.n_beams
+    device = model.device
 
-        # Initialize attributes
-        model._batch_size = batch
-        model._beam_size = beam
-        model._cumulative_masses = torch.zeros(batch * beam, device=device)
+    model._batch_size = batch
+    model._beam_size = beam
+    model._cumulative_masses = torch.zeros(batch * beam, device=device)
 
-        length = model.max_peptide_len + 1
-        vocab = len(model.tokenizer) + 1
-        step = 4
+    length = model.max_peptide_len + 1
+    vocab = len(model.tokenizer) + 1
 
-        # Initialize dummy scores and tokens
-        scores = torch.full(
-            size=(batch, length, vocab, beam),
-            fill_value=torch.nan,
-            device=device,
-        )
-        scores = einops.rearrange(scores, "B L V S -> (B S) L V")
-        tokens = torch.zeros(
-            batch * beam, length, dtype=torch.int64, device=device
-        )
+    scores = torch.zeros((batch * beam, length, vocab), device=device)
+    tokens = torch.zeros(
+        (batch * beam, length), dtype=torch.int64, device=device
+    )
 
-        # Simulate non-zero amino acid-level probability scores
-        scores[:, : step + 1, :] = torch.rand(
-            batch * beam, step + 1, vocab, device=device
-        )
-        scores[:, step, range(1, 4)] = torch.tensor(
-            [1.0, 2.0, 3.0], device=device
-        )
+    scores[:, step, :4] = torch.tensor([1.0, 2.0, 3.0, 4.0], device=device)
+    finished = torch.tensor([True, False], device=device)
+    new_tokens, _ = model._get_topk_beams(
+        tokens, scores, finished, batch, step
+    )
 
-        # Simulate one finished and one unfinished beam in the same batch
-        tokens[0, :step] = model.tokenizer.tokenize("PEP", add_stop=True)[
-            0
-        ].to(device)
-        tokens[1, :step] = model.tokenizer.tokenize("PEPG")[0].to(device)
+    # only second beam should extend
+    assert not torch.equal(new_tokens[0], new_tokens[1])
 
-        # Set cumulative masses
-        for i in range(batch * beam):
-            mass = 0
-            for j in range(step):
-                token = tokens[i, j].item()
-                if token != 0 and token < len(model.token_masses):
-                    mass += model.token_masses[token]
-            model._cumulative_masses[i] = mass
 
-        # Set finished beams array to allow decoding from only one beam
-        test_finished_beams = torch.tensor([True, False], device=device)
+def test_finish_beams_negative_mods(tiny_config):
+    config = Config(tiny_config)
+    model = Spec2Pep(
+        n_beams=2,
+        tokenizer=depthcharge.tokenizers.peptides.MskbPeptideTokenizer(
+            residues=config.residues
+        ),
+        residues=config.residues,
+        min_peptide_len=0,
+    )
+    batch = 1
+    beam = 2
+    device = model.device
 
-        new_tokens, new_scores = model._get_topk_beams(
-            tokens, scores, test_finished_beams, batch, step
-        )
+    model._batch_size = batch
+    model._beam_size = beam
+    model._cumulative_masses = torch.zeros(batch * beam, device=device)
 
-        # Only the second peptide should have a new token predicted
-        expected_tokens = tokens.clone()
-        expected_tokens[1, len("PEPG")] = 3
+    length = model.max_peptide_len + 1
+    step = 1
+    tokens = torch.zeros((beam, length), dtype=torch.int64, device=device)
+    tokens[:, : step + 1] = model.tokenizer.tokenize(["GK", "AK"])
+    precursors = torch.tensor(
+        [186.10044, 2.0, 94.05750], device=device
+    ).repeat(beam, 1)
+    finished, fits, disc = model._finish_beams(tokens, precursors, step)
 
-        assert torch.equal(new_tokens, expected_tokens)
+    # Ground truth peptide is "-17.027GK".
+    assert torch.equal(finished, torch.tensor([False, True], device=device))
+    assert torch.equal(fits, torch.tensor([False, False], device=device))
+    assert torch.equal(disc, torch.tensor([False, False], device=device))
 
-        # Test full functionality of beam search decode
-        # Test max peptide length and early stopping
-        model.max_peptide_len = 0
-        # 1 spectrum with 5 peaks (2 values: m/z and intensity)
-        mzs = ints = torch.zeros(1, 5, device=device)
-        precursors = torch.tensor([[469.25364, 2.0, 235.63410]], device=device)
 
-        # Expected to stop before loop begins
-        assert (
-            len(list(model.beam_search_decode(mzs, ints, precursors))[0]) == 0
-        )
+def test_beam_search_decode_early_termination(tiny_config):
+    config = Config(tiny_config)
+    model = Spec2Pep(
+        n_beams=1,
+        tokenizer=depthcharge.tokenizers.peptides.PeptideTokenizer(
+            residues=config.residues
+        ),
+    )
 
-        # Reset max peptide length
-        model.max_peptide_len = 100
+    model.max_peptide_len = 0
+    mzs = ints = torch.zeros(1, 5, device=model.device)
+    precursors = torch.tensor(
+        [[469.25364, 2.0, 235.63410]], device=model.device
+    )
 
-        # Test that duplicate peptide scores don't lead to a conflict in the cache.
-        model = Spec2Pep(
-            n_beams=1,
-            min_peptide_len=3,
-            tokenizer=depthcharge.tokenizers.peptides.PeptideTokenizer(
-                residues=config.residues
-            ),
-        )
+    assert len(list(model.beam_search_decode(mzs, ints, precursors))[0]) == 0
 
-        # Initialize attributes
-        model._batch_size = 2
-        model._beam_size = 1
-        model._cumulative_masses = torch.zeros(2 * 1, device=device)
 
-        batch = 2  # B
-        beam = model.n_beams
-        length = model.max_peptide_len + 1
-        vocab = len(model.tokenizer) + 1  # V
-        step = 4
+def test_duplicate_peptide_scores(tiny_config):
+    config = Config(tiny_config)
+    model = Spec2Pep(
+        n_beams=1,
+        min_peptide_len=3,
+        tokenizer=depthcharge.tokenizers.peptides.PeptideTokenizer(
+            residues=config.residues
+        ),
+    )
 
-        # Simulate beams with identical amino acid scores but different tokens
-        scores = torch.zeros(size=(batch * beam, length, vocab), device=device)
-        scores[: batch * beam, : step + 1, :] = torch.rand(1, device=device)
-        tokens = torch.zeros(
-            batch * beam, length, dtype=torch.int64, device=device
-        )
-        tokens[: batch * beam, :step] = torch.randint(
-            1, vocab, (batch * beam, step), device=device
-        )
+    batch = 2
+    beam = model.n_beams
+    device = model.device
 
-        # Set cumulative masses
-        for i in range(batch * beam):
-            mass = 0
-            for j in range(step):
-                token = tokens[i, j].item()
-                if token != 0 and token < len(model.token_masses):
-                    mass += model.token_masses[token]
-            model._cumulative_masses[i] = mass
+    model._batch_size = batch
+    model._beam_size = beam
+    model._cumulative_masses = torch.zeros(batch * beam, device=device)
 
-        pred_cache = collections.OrderedDict((i, []) for i in range(batch))
-        model._cache_finished_beams(
-            tokens,
-            scores,
-            step,
-            torch.ones(batch * beam, dtype=torch.bool, device=device),
-            torch.ones(batch * beam, dtype=torch.bool, device=device),
-            pred_cache,
-        )
+    length = model.max_peptide_len + 1
+    vocab = len(model.tokenizer) + 1
+    step = 4
 
-        for beam_i, preds in pred_cache.items():
-            assert len(preds) == beam
-            peptide_scores = [pep[0] for pep in preds]
-            assert np.allclose(peptide_scores, peptide_scores[0])
+    scores = torch.zeros((batch * beam, length, vocab), device=device)
+    scores[:, : step + 1, :] = torch.rand(1, device=device)
 
-    finally:
-        # Clean up temporary attributes
-        for attr in ["_cumulative_masses", "_batch_size", "_beam_size"]:
-            if hasattr(model, attr):
-                delattr(model, attr)
+    tokens = torch.zeros(
+        (batch * beam, length), dtype=torch.int64, device=device
+    )
+    tokens[:, :step] = torch.randint(
+        1, vocab, (batch * beam, step), device=device
+    )
+
+    pred_cache = collections.OrderedDict((i, []) for i in range(batch))
+
+    model._cache_finished_beams(
+        tokens,
+        scores,
+        step,
+        torch.ones(batch * beam, dtype=torch.bool, device=device),
+        torch.ones(batch * beam, dtype=torch.bool, device=device),
+        pred_cache,
+    )
+
+    for _, preds in pred_cache.items():
+        assert len(preds) == beam
+        vals = [p[0] for p in preds]
+        assert np.allclose(vals, vals[0])
 
 
 class MiniTok:
