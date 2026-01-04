@@ -275,7 +275,7 @@ class Spec2Pep(pl.LightningModule):
         return mzs, intensities, precursors, seqs
 
     def forward(self, batch):
-        return self.forward_step(batch)
+        return self._forward_step(batch)
 
     def _forward_step(
         self,
