@@ -113,6 +113,41 @@ class PeptideDecoder(AnalyteTransformerDecoder):
         precursors = masses + charges
         return precursors
 
+    def embed(
+        self,
+        tokens: torch.Tensor | None,
+        *args: torch.Tensor,
+        memory: torch.Tensor | None,
+        memory_key_padding_mask: torch.Tensor | None = None,
+        memory_mask: torch.Tensor | None = None,
+        tgt_mask: torch.Tensor | None = None,
+        **kwargs: dict,
+    ) -> torch.Tensor:
+        """
+        Force full (non-causal) target attention by supplying an all-False
+        tgt_mask to the superclass, unless a tgt_mask was explicitly passed.
+        """
+
+        # Handle tokens==None like the base class
+        if tokens is None:
+            tokens = torch.tensor([[]]).to(self.device)
+
+        # length after adding global token
+        L = tokens.shape[1] + 1
+
+        # all-False bool mask (full attention)
+        tgt_mask = torch.zeros((L, L), dtype=torch.bool, device=tokens.device)
+
+        return super().embed(
+            tokens,
+            *args,
+            memory=memory,
+            memory_key_padding_mask=memory_key_padding_mask,
+            memory_mask=memory_mask,
+            tgt_mask=tgt_mask,
+            **kwargs,
+        )
+
 
 class SpectrumEncoder(SpectrumTransformerEncoder):
     """

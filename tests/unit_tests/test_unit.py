@@ -2080,8 +2080,12 @@ def test_spectrum_preprocessing(tmp_path, mgf_small):
     max_charge = 4
 
 
-def test_finish_beams(tiny_config):
-    config = Config(tiny_config)
+@pytest.mark.skip(reason="No Beam Search in Non-AR Model")
+def test_beam_search_decode(tiny_config):
+    """
+    Test beam search decoding and its sub-functions.
+    """
+    config = casanovo.Config(tiny_config)
     model = Spec2Pep(
         n_beams=4,
         min_peptide_len=4,
@@ -2145,8 +2149,9 @@ def test_finish_beams(tiny_config):
     assert torch.equal(
         discarded, torch.tensor([False, False, False, True], device=device)
     )
+    
 
-
+@pytest.mark.skip(reason="No Beam Search in Non-AR Model")
 def test_peptide_too_short_too_heavy(tiny_config):
     config = Config(tiny_config)
     model = Spec2Pep(
@@ -2175,6 +2180,7 @@ def test_peptide_too_short_too_heavy(tiny_config):
     assert not beam_fits_precursor.item()
 
 
+@pytest.mark.skip(reason="No Beam Search in Non-AR Model")
 def test_cache_finished_beams(tiny_config):
     config = Config(tiny_config)
     model = Spec2Pep(
@@ -2217,8 +2223,9 @@ def test_cache_finished_beams(tiny_config):
         pep for (_, _, _, pep) in pred_cache[0] if torch.equal(pep, true_tok)
     ]
     assert len(cached) == 1
+    
 
-
+@pytest.mark.skip(reason="No Beam Search in Non-AR Model")
 def test_get_top_peptide_ranking(tiny_config):
     config = Config(tiny_config)
     model = Spec2Pep(
@@ -2243,6 +2250,7 @@ def test_get_top_peptide_ranking(tiny_config):
     assert result[0][-1] == "PEPK"
 
 
+@pytest.mark.skip(reason="No Beam Search in Non-AR Model")
 @pytest.mark.parametrize("topk", [1, 2, 3])
 def test_get_top_peptide_multiple(topk, tiny_config):
     config = Config(tiny_config)
@@ -2265,8 +2273,9 @@ def test_get_top_peptide_multiple(topk, tiny_config):
     assert len(result) == topk
     for i in range(topk):
         assert result[i][2] == cache_items[i][1]
+        
 
-
+@pytest.mark.skip(reason="No Beam Search in Non-AR Model")
 @pytest.mark.parametrize("reverse", [True, False])
 def test_get_top_peptide_reverse(reverse, tiny_config):
     config = Config(tiny_config)
@@ -2296,6 +2305,7 @@ def test_get_top_peptide_reverse(reverse, tiny_config):
     assert isinstance(result[0][0][2], str)  # string peptide
 
 
+@pytest.mark.skip(reason="No Beam Search in Non-AR Model")
 def test_get_topk_beams(tiny_config):
     config = Config(tiny_config)
     model = Spec2Pep(
@@ -2331,6 +2341,7 @@ def test_get_topk_beams(tiny_config):
     assert not torch.equal(new_tokens[0], new_tokens[1])
 
 
+@pytest.mark.skip(reason="No Beam Search in Non-AR Model")
 def test_finish_beams_negative_mods(tiny_config):
     config = Config(tiny_config)
     model = Spec2Pep(
@@ -2364,6 +2375,7 @@ def test_finish_beams_negative_mods(tiny_config):
     assert torch.equal(disc, torch.tensor([False, False], device=device))
 
 
+@pytest.mark.skip(reason="No Beam Search in Non-AR Model")
 def test_beam_search_decode_early_termination(tiny_config):
     config = Config(tiny_config)
     model = Spec2Pep(
@@ -2382,6 +2394,7 @@ def test_beam_search_decode_early_termination(tiny_config):
     assert len(list(model.beam_search_decode(mzs, ints, precursors))[0]) == 0
 
 
+@pytest.mark.skip(reason="No Beam Search in Non-AR Model")
 def test_duplicate_peptide_scores(tiny_config):
     config = Config(tiny_config)
     model = Spec2Pep(
@@ -2482,6 +2495,7 @@ def _build_model(tok, cls=Spec2Pep, ppm_tol=20):
     return model
 
 
+@pytest.mark.skip(reason="No Beam Search in Non-AR Model")
 def test_precursor_rescue():
     """
     Verifies that the current Spec2Pep keeps a rescuable beam alive,
