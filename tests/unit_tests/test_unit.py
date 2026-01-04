@@ -2079,6 +2079,7 @@ def test_spectrum_preprocessing(tmp_path, mgf_small):
         assert spec["precursor_charge"] <= max_charge
     max_charge = 4
 
+
 @pytest.mark.skip(reason="No Beam Search in Non-AR Model")
 def test_beam_search_decode(tiny_config):
     """
@@ -2483,6 +2484,7 @@ def _build_model(tok, cls=Spec2Pep, ppm_tol=20):
         [tok.residues["P"]], dtype=torch.float64
     )
     return model
+
 
 @pytest.mark.skip(reason="No Beam Search in Non-AR Model")
 def test_precursor_rescue():
