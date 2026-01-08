@@ -13,6 +13,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ### Changed
 
 - Increased minimum Python version from 3.8 to 3.10.
+- DepthCharge is upgraded to the latest version 0.4.9.
 
 ### Fixed
 
