@@ -959,17 +959,9 @@ class Spec2Pep(pl.LightningModule):
                             if self.tokenizer.reverse
                             else aa_scores
                         ),
-                        # FIXME: Remove work around when depthcharge reverse
-                        #   detokenization bug is fixed.
-                        # self.tokenizer.detokenize(
-                        #     torch.unsqueeze(pred_tokens, 0)
-                        # )[0],
-                        "".join(
-                            self.tokenizer.detokenize(
-                                torch.unsqueeze(pred_tokens, 0),
-                                join=False,
-                            )[0]
-                        ),
+                        self.tokenizer.detokenize(
+                            torch.unsqueeze(pred_tokens, 0)
+                        )[0],
                     )
                     for pep_score, _, aa_scores, pred_tokens in heapq.nlargest(
                         self.top_match, peptides
@@ -1122,13 +1114,7 @@ class Spec2Pep(pl.LightningModule):
 
         # Calculate and log amino acid and peptide match evaluation
         # metrics from the predicted peptides.
-        # FIXME: Remove work around when depthcharge reverse detokenization
-        # bug is fixed.
-        # peptides_true = self.tokenizer.detokenize(batch["seq"])
-        peptides_true = [
-            "".join(pep)
-            for pep in self.tokenizer.detokenize(batch["seq"], join=False)
-        ]
+        peptides_true = self.tokenizer.detokenize(batch["seq"])
         peptides_pred = [
             pred
             for spectrum_preds in self.forward(batch)

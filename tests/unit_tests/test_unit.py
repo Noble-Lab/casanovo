@@ -1784,7 +1784,7 @@ def test_spectrum_id_mgf(mgf_small, tmp_path):
             ]
         ):
             assert dataset[i]["peak_file"][0] == filename.name
-            assert dataset[i]["scan_id"][0] == scan_id
+            assert dataset[i]["scan_id"][0] == f"index={scan_id}"
 
 
 def test_spectrum_id_mzml(mzml_small, tmp_path):
