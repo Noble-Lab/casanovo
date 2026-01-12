@@ -63,7 +63,7 @@ class _SharedFileIOParams(click.RichCommand):
             click.Option(
                 ("-o", "--output_root"),
                 help="The root name for all output files.",
-                type=click.Path(dir_okay=False),
+                type=str,
             ),
             click.Option(
                 ("-f", "--force_overwrite"),
