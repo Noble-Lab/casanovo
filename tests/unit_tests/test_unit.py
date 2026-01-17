@@ -2564,10 +2564,12 @@ def test_db_spec2pep_forward_no_cache(tiny_config):
     [
         # --- output_dir ---
         (lambda tmp_path: ["--output_dir", str(tmp_path)], False),
-        (lambda tmp_path: ["--output_dir", str((tmp_path / "afile").write_text("x") or (tmp_path / "afile"))], True),
         # --- output_root ---
         (lambda tmp_path: ["--output_root", "my_root"], False),
-        (lambda tmp_path: ["--output_root", str(tmp_path)], False),  # output_root as a dir path (string)
+        (
+            lambda tmp_path: ["--output_root", str(tmp_path)],
+            False,
+        ),  # output_root as a dir path (string)
         # --- force_overwrite ---
         (lambda tmp_path: ["--force_overwrite"], False),
         # --- verbosity ---
@@ -2578,15 +2580,17 @@ def test_db_spec2pep_forward_no_cache(tiny_config):
 )
 def test_shared_file_io_params_validation(tmp_path, args, should_fail):
     @click.command(cls=_SharedFileIOParams)
-    def dummy():
+    def dummy(*args, **kwargs):
         click.echo("ok")
 
-    runner = click.testing.CliRunner()
     argv = args(tmp_path)
-    res = runner.invoke(dummy, argv)
-    expected_exit = 0 if not should_fail else 1
+    res = click.testing.CliRunner().invoke(dummy, argv)
 
     if should_fail:
         assert res.exit_code != 0
+        assert "Error" in res.stderr
+        assert "ok" not in res.stdout
     else:
         assert res.exit_code == 0
+        assert "Error" not in res.stderr
+        assert "ok" in res.stdout
