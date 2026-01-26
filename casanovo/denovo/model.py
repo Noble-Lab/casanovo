@@ -1027,7 +1027,7 @@ class Spec2Pep(pl.LightningModule):
                 )
                 next_aa_scores, next_pep_score = _aa_pep_score(
                     next_aa_scores,
-                    abs(calc_mz - precursor_mz) < self.precursor_mass_tol,
+                    True # Don't penalize precursor mass
                 )
                 next_peptide = self.tokenizer.detokenize(
                     next_peptide.unsqueeze(0)
