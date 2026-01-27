@@ -423,7 +423,7 @@ class Spec2Pep(pl.LightningModule):
             is_valid_position[~ends_stop_token, step] = True
 
         is_n_term[is_valid_position] = False
-        discarded_beams |= torch.any(is_n_term)
+        discarded_beams |= torch.any(is_n_term, dim=1)
 
         # Check which beams should be terminated or discarded based on the
         # predicted peptide.
