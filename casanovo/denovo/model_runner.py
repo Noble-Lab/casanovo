@@ -525,7 +525,7 @@ class ModelRunner:
             # This only doesn't work if the weights are from an older
             # version.
             try:
-                self.model = model_clss.load_from_checkpoint(  # needs to
+                self.model = model_clss.load_from_checkpoint(
                     self.model_filename,
                     map_location=device,
                     **model_params,
