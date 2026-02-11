@@ -330,7 +330,13 @@ def train(
         for peak_file in validation_peak_path:
             logger.info("  %s", peak_file)
 
-        runner.train(train_peak_path, validation_peak_path)
+        if config.restart_training is True:
+            runner.train(
+                train_peak_path, validation_peak_path, ckpt_path=model
+            )
+        else:
+            runner.train(train_peak_path, validation_peak_path)
+
         utils.log_run_report(start_time=start_time, end_time=time.time())
 
 

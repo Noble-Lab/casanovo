@@ -175,6 +175,7 @@ class ModelRunner:
         self,
         train_peak_path: Iterable[str],
         valid_peak_path: Iterable[str],
+        ckpt_path: Optional[str],
     ) -> None:
         """
         Train the Casanovo model.
@@ -199,6 +200,7 @@ class ModelRunner:
             self.model,
             self.loaders.train_dataloader(),
             self.loaders.val_dataloader(),
+            ckpt_path=ckpt_path,
         )
 
     def log_metrics(self, test_dataloader: DataLoader) -> None:
@@ -523,7 +525,7 @@ class ModelRunner:
             # This only doesn't work if the weights are from an older
             # version.
             try:
-                self.model = model_clss.load_from_checkpoint(
+                self.model = model_clss.load_from_checkpoint(  # needs to
                     self.model_filename,
                     map_location=device,
                     **model_params,
