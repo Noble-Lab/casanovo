@@ -175,7 +175,7 @@ class ModelRunner:
         self,
         train_peak_path: Iterable[str],
         valid_peak_path: Iterable[str],
-        ckpt_path: Optional[str],
+        ckpt_path: Optional[str] = None,
     ) -> None:
         """
         Train the Casanovo model.
