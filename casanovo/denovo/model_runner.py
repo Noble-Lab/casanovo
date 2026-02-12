@@ -199,7 +199,7 @@ class ModelRunner:
 
         if ckpt_path is not None:
             with torch.serialization.safe_globals([np.core.multiarray.scalar]):
-                checkpoint = torch.load(ckpt_path)
+                checkpoint = torch.load(ckpt_path, weights_only=False)
 
             self.model.load_state_dict(checkpoint["state_dict"])
             ckpt_path = None
