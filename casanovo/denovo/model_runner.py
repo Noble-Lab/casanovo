@@ -201,7 +201,7 @@ class ModelRunner:
         self.initialize_data_module(train_paths, valid_paths)
         self.loaders.setup()
 
-        with torch.serialization.safe_globals([np.core.multiarray.scalar]):
+        with torch.serialization.safe_globals([numpy.dtype]):
             self.trainer.fit(
                 self.model,
                 self.loaders.train_dataloader(),
