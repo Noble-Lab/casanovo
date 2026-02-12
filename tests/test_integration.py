@@ -49,6 +49,26 @@ def test_train_and_run(
     assert model_file.exists()
     assert best_model.exists()
 
+    # Run Casanovo with restarting training
+    train_args = [
+        "train",
+        str(mgf_small),
+        "--config",
+        tiny_config,
+        "--output_dir",
+        str(tmp_path),
+        "--output_root",
+        "train_resuming" "--model",
+        str(model_file),
+    ]
+
+    result = run(train_args)
+    model_file = tmp_path / "train_resuming.epoch=19-step=20.ckpt"
+    best_model = tmp_path / "train_resuming.best.ckpt"
+    assert result.exit_code == 0
+    assert model_file.exists()
+    assert best_model.exists()
+
     # Run Casanovo in de novo prediction mode.
     output_rootname = "test"
     output_filename = (tmp_path / output_rootname).with_suffix(".mztab")
