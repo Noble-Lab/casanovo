@@ -205,6 +205,7 @@ class ModelRunner:
             [
                 numpy.core.multiarray.scalar,
                 numpy.dtype,
+                numpy.dtype("float64"),
             ]
         )
 
