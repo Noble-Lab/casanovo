@@ -203,8 +203,8 @@ class ModelRunner:
 
         torch.serialization.add_safe_globals(
             [
-                np.core.multiarray.scalar,
-                np.dtype,
+                numpy.core.multiarray.scalar,
+                numpy.dtype,
             ]
         )
 
