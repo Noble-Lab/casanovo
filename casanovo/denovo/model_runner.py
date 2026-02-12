@@ -197,13 +197,19 @@ class ModelRunner:
         self.initialize_data_module(train_paths, valid_paths)
         self.loaders.setup()
 
-        with torch.serialization.safe_globals([np.core.multiarray.scalar]):
-            self.trainer.fit(
-                self.model,
-                self.loaders.train_dataloader(),
-                self.loaders.val_dataloader(),
-                ckpt_path=ckpt_path,
-            )
+        if ckpt_path is not None:
+            with torch.serialization.safe_globals([np.core.multiarray.scalar]):
+                checkpoint = torch.load(ckpt_path)
+
+            self.model.load_state_dict(checkpoint["state_dict"])
+            ckpt_path = None
+
+        self.trainer.fit(
+            self.model,
+            self.loaders.train_dataloader(),
+            self.loaders.val_dataloader(),
+            ckpt_path=ckpt_path,
+        )
 
     def log_metrics(self, test_dataloader: DataLoader) -> None:
         """
