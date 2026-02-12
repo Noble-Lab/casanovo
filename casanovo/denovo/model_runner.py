@@ -187,6 +187,10 @@ class ModelRunner:
             The path to the MS data files for training.
         valid_peak_path : iterable of str
             The path to the MS data files for validation.
+        ckpt_path : str, optional
+            Path to a checkpoint file to resume training from. When provided,
+            training will resume from the saved optimizer state, learning rate
+            scheduler, and epoch. If None, training starts fresh (default).
         """
         self.initialize_trainer(train=True)
         self.initialize_tokenizer()

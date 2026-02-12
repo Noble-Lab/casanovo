@@ -330,7 +330,7 @@ def train(
         for peak_file in validation_peak_path:
             logger.info("  %s", peak_file)
 
-        if config.load_weights_only is False:
+        if not config.load_weights_only:
             runner.train(
                 train_peak_path, validation_peak_path, ckpt_path=model
             )

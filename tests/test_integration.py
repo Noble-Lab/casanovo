@@ -76,6 +76,11 @@ def test_train_and_run(
     assert result.exit_code == 0
     assert best_model.exists()
 
+    # Restore config for subsequent tests
+    config_data["load_weights_only"] = True
+    with tiny_config.open("w") as f:
+        yaml.dump(config_data, f)
+
     # Run Casanovo in de novo prediction mode.
     output_rootname = "test"
     output_filename = (tmp_path / output_rootname).with_suffix(".mztab")
