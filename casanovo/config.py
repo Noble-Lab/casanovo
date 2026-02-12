@@ -103,7 +103,7 @@ class Config:
         reverse_peptides=bool,
         massivekb_tokenizer=bool,
         residues=dict,
-        restart_training=bool,
+        load_weights_only=bool,
     )
 
     def __init__(self, config_file: Optional[str] = None):
