@@ -73,6 +73,11 @@ def test_train_and_run(
 
     result = run(train_args)
     best_model = tmp_path / "train_resuming.best.ckpt"
+    import os
+
+    for root, dirs, files in os.walk(tmp_path):
+        print(f"Directory: {root}")
+        print(f"Files: {files}")
     assert result.exit_code == 0
     assert best_model.exists()
 
