@@ -11,7 +11,6 @@ from typing import Iterable, List, Optional, Sequence, Union
 
 import lightning.pytorch as pl
 import lightning.pytorch.loggers
-import numpy
 import torch
 import torch.utils.data
 from depthcharge.tokenizers import PeptideTokenizer
@@ -201,19 +200,12 @@ class ModelRunner:
         self.initialize_data_module(train_paths, valid_paths)
         self.loaders.setup()
 
-        torch.serialization.add_safe_globals(
-            [
-                numpy.core.multiarray.scalar,
-                numpy.dtype,
-                numpy.dtype("float64"),
-            ]
-        )
-
         self.trainer.fit(
             self.model,
             self.loaders.train_dataloader(),
             self.loaders.val_dataloader(),
             ckpt_path=ckpt_path,
+            weights_only=False,
         )
 
     def log_metrics(self, test_dataloader: DataLoader) -> None:
