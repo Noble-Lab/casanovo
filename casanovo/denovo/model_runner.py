@@ -11,7 +11,7 @@ from typing import Iterable, List, Optional, Sequence, Union
 
 import lightning.pytorch as pl
 import lightning.pytorch.loggers
-import numpy as np
+import numpy
 import torch
 import torch.utils.data
 from depthcharge.tokenizers import PeptideTokenizer
