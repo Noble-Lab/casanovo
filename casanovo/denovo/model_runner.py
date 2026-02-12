@@ -201,12 +201,13 @@ class ModelRunner:
         self.initialize_data_module(train_paths, valid_paths)
         self.loaders.setup()
 
-        self.trainer.fit(
-            self.model,
-            self.loaders.train_dataloader(),
-            self.loaders.val_dataloader(),
-            ckpt_path=ckpt_path,
-        )
+        with torch.serialization.safe_globals([numpy.core.multiarray.scalar]):
+            self.trainer.fit(
+                self.model,
+                self.loaders.train_dataloader(),
+                self.loaders.val_dataloader(),
+                ckpt_path=ckpt_path,
+            )
 
     def log_metrics(self, test_dataloader: DataLoader) -> None:
         """
