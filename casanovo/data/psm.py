@@ -1,7 +1,9 @@
 """Peptide spectrum match dataclass."""
 
 import dataclasses
-from typing import Iterable, Tuple
+from typing import Iterable, Optional, Tuple
+
+import spectrum_utils.proforma
 
 
 @dataclasses.dataclass
@@ -43,3 +45,96 @@ class PepSpecMatch:
     exp_mz: float
     aa_scores: Iterable[float]
     protein: str = "null"
+
+    # Private properties to handle proteoform caching
+    _proteoform_sequence: Optional[str] = dataclasses.field(
+        init=False, default=None
+    )
+    _cache_proteoform: Optional[spectrum_utils.proforma.Proteoform] = (
+        dataclasses.field(init=False, default=None, repr=False, compare=False)
+    )
+
+    @staticmethod
+    def _get_mod_string(
+        mod: spectrum_utils.proforma.Modification,
+        aa_seq: str,
+    ) -> str:
+        """
+        Format a ProForma modification into an mzTab-style string.
+
+        Parameters
+        ----------
+        mod : spectrum_utils.proforma.Modification
+            A modification object from the parsed ProForma sequence.
+        aa_seq : str
+            The unmodified amino acid sequence with modifications stripped
+
+        Returns
+        -------
+        str
+            The mzTab-formatted modification string.
+        """
+        if mod.position == "N-term":
+            pos = 0
+            residue = "N-term"
+        else:
+            pos = mod.position + 1
+            residue = aa_seq[mod.position]
+
+        for src in mod.source or []:
+            if hasattr(src, "accession"):
+                return f"{pos}-{src.name} ({residue}):{src.accession}"
+
+        return f"{pos}-[{mod.mass:+.4f}]"
+
+    @property
+    def _proteoform(self) -> spectrum_utils.proforma.Proteoform:
+        """
+        Parsed ProForma representation of the peptide sequence.
+
+        Returns
+        -------
+        spectrum_utils.proforma.Proteoform
+            The parsed ProForma object representing the current peptide sequence
+        """
+        if self._proteoform_sequence != self.sequence:
+            self._proteoform_sequence = self.sequence
+            self._cache_proteoform = spectrum_utils.proforma.parse(
+                self.sequence
+            )[0]
+
+        return self._cache_proteoform
+
+    @property
+    def aa_sequence(self) -> str:
+        """
+        Plain amino-acid sequence with all ProForma modifications removed.
+
+        Returns
+        -------
+        str
+            The peptide sequence stripped of modification annotations.
+        """
+        return self._proteoform.sequence
+
+    @property
+    def modifications(self) -> str:
+        """
+        mzTab-formatted modification string.
+
+        Returns
+        -------
+        str
+            A semicolon-delimited list of modifications (e.g.,
+            ``"0-Acetyl (N-term):MOD:00000; 5-[+15.9949]"``).
+            Returns ``"null"`` if the peptide has no modifications.
+        """
+        mods = self._proteoform.modifications or []
+        if not mods:
+            return "null"
+
+        mod_strings = [
+            self._get_mod_string(mod, self.aa_sequence) for mod in mods
+        ]
+
+        return "; ".join(mod_strings)
