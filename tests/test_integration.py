@@ -73,7 +73,10 @@ def test_train_and_run(
         result = run(train_args)
         best_model = tmp_path / "train_resuming.best.ckpt"
         assert result.exit_code == 0
-        assert best_model.exists()
+        all_files = [f.name for f in tmp_path.iterdir()]
+        assert (
+            best_model.exists()
+        ), f"Expected {best_model.name} but found: {all_files}"
 
     finally:
         config_data["load_weights_only"] = True
