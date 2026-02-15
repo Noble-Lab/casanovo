@@ -50,30 +50,35 @@ def test_train_and_run(
     assert best_model.exists()
 
     with tiny_config.open("r") as f:
-        content = f.read()
+        config_data = yaml.safe_load(f)
 
-    content = content.replace(
-        "load_weights_only: true", "load_weights_only: false"
-    )
+    try:
+        config_data["load_weights_only"] = False
+        with tiny_config.open("w") as f:
+            yaml.dump(config_data, f)
 
-    with tiny_config.open("w") as f:
-        f.write(content)
+        train_args = [
+            "train",
+            str(mgf_small),
+            "--config",
+            tiny_config,
+            "--output_dir",
+            str(tmp_path),
+            "--output_root",
+            "train_resuming",
+            "--model",
+            str(model_file),
+        ]
 
-    train_args = [
-        "train",
-        str(mgf_small),
-        "--config",
-        tiny_config,
-        "--output_dir",
-        str(tmp_path),
-        "--output_root",
-        "train_resuming",
-        "--model",
-        str(model_file),
-    ]
+        result = run(train_args)
+        best_model = tmp_path / "train_resuming.best.ckpt"
+        assert result.exit_code == 0
+        assert best_model.exists()
 
-    result = run(train_args)
-    assert result.exit_code == 0
+    finally:
+        config_data["load_weights_only"] = True
+        with tiny_config.open("w") as f:
+            yaml.dump(config_data, f)
 
     # Run Casanovo in de novo prediction mode.
     output_rootname = "test"
