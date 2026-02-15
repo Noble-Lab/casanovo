@@ -54,6 +54,7 @@ def test_train_and_run(
 
     try:
         config_data["load_weights_only"] = False
+        config_data["max_epochs"] = 40
         with tiny_config.open("w") as f:
             yaml.dump(config_data, f)
 
@@ -80,6 +81,7 @@ def test_train_and_run(
 
     finally:
         config_data["load_weights_only"] = True
+        config_data["max_epochs"] = 20
         with tiny_config.open("w") as f:
             yaml.dump(config_data, f)
 
