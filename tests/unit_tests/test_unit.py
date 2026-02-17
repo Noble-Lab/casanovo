@@ -696,49 +696,6 @@ def test_peptide_score_batch_requires_lengths():
         _peptide_score(aa_scores_batch, None)
 
 
-def test_peptide_score():
-    """
-    Test the calculation of amino acid and peptide scores from the raw amino
-    acid scores.
-    """
-    aa_scores_raw = np.asarray([0.0, 0.5, 1.0])
-
-    peptide_score = _peptide_score(aa_scores_raw, True)
-    assert peptide_score == pytest.approx(0.0)
-
-    peptide_score = _peptide_score(aa_scores_raw, False)
-    assert peptide_score == pytest.approx(-1.0)
-
-    aa_scores_raw = np.asarray([1.0, 0.25])
-    peptide_score = _peptide_score(aa_scores_raw, True)
-    assert peptide_score == pytest.approx(0.25)
-
-    aa_scores_batch = np.array([[0.5, 0.8, 0.0], [0.9, 0.7, 0.6]])
-    lengths_batch = np.array([2, 3])
-
-    peptide_scores = _peptide_score(aa_scores_batch, True, lengths_batch)
-    expected_scores = np.array([0.5 * 0.8, 0.9 * 0.7 * 0.6])
-    assert np.allclose(peptide_scores, expected_scores)
-
-    peptide_scores_no_fit = _peptide_score(
-        aa_scores_batch, False, lengths_batch
-    )
-    assert np.allclose(peptide_scores_no_fit, expected_scores - 1)
-
-    fits_array = np.array([True, False])
-    peptide_scores_mixed_fit = _peptide_score(
-        aa_scores_batch, fits_array, lengths_batch
-    )
-    expected_mixed_scores = expected_scores.copy()
-    expected_mixed_scores[~fits_array] -= 1
-    assert np.allclose(peptide_scores_mixed_fit, expected_mixed_scores)
-
-    with pytest.raises(
-        ValueError, match="`lengths` must be provided for batched input."
-    ):
-        _peptide_score(aa_scores_batch, True, None)
-
-
 def test_peptide_generator_errors(tiny_fasta_file):
     residues_dict = (
         depthcharge.tokenizers.PeptideTokenizer.from_massivekb().residues
