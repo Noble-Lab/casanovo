@@ -649,6 +649,53 @@ def test_is_valid_url():
     assert not casanovo._is_valid_url("foobar")
 
 
+@pytest.mark.parametrize(
+    "aa_scores_raw, expected",
+    [
+        (np.asarray([0.0, 0.5, 1.0]), 0.0),
+        (np.asarray([1.0, 0.25]), 0.25),
+    ],
+)
+def test_peptide_score_scalar(aa_scores_raw, expected):
+    peptide_score = _peptide_score(aa_scores_raw)
+    assert peptide_score == pytest.approx(expected)
+
+
+def test_peptide_score_batch():
+    aa_scores_batch = np.array(
+        [
+            [0.5, 0.8, 0.0],
+            [0.9, 0.7, 0.6],
+        ]
+    )
+    lengths_batch = np.array([2, 3])
+
+    expected_scores = np.array(
+        [
+            0.5 * 0.8,
+            0.9 * 0.7 * 0.6,
+        ]
+    )
+
+    peptide_scores = _peptide_score(aa_scores_batch, lengths_batch)
+    assert np.allclose(peptide_scores, expected_scores)
+
+
+def test_peptide_score_batch_requires_lengths():
+    aa_scores_batch = np.array(
+        [
+            [0.5, 0.8, 0.0],
+            [0.9, 0.7, 0.6],
+        ]
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="`lengths` must be provided for batched input.",
+    ):
+        _peptide_score(aa_scores_batch, None)
+
+
 def test_peptide_score():
     """
     Test the calculation of amino acid and peptide scores from the raw amino
@@ -2102,7 +2149,6 @@ def test_finish_beams(tiny_config):
 
     model._batch_size = batch
     model._beam_size = beam
-    model._cumulative_masses = torch.zeros(batch * beam, device=device)
 
     vocab = len(model.tokenizer) + 1
     scores = torch.full((batch, length, vocab, beam), torch.nan, device=device)
@@ -2111,9 +2157,6 @@ def test_finish_beams(tiny_config):
     tokens = torch.zeros(
         batch * beam, length, dtype=torch.int64, device=device
     )
-    precursors = torch.tensor(
-        [469.25364, 2.0, 235.63410], device=device
-    ).repeat(beam, 1)
 
     peptides = [
         ("PEPK", False),
@@ -2128,54 +2171,15 @@ def test_finish_beams(tiny_config):
         for j in range(step + 1):
             scores[i, j, toks[j]] = 1
 
-    # update masses
-    for i in range(batch * beam):
-        mass = sum(
-            model.token_masses[tokens[i, j].item()]
-            for j in range(step + 1)
-            if 0 < tokens[i, j].item() < len(model.token_masses)
-        )
-        model._cumulative_masses[i] = mass
+    finished, discarded = model._finish_beams(tokens, step)
 
-    finished, fits, discarded = model._finish_beams(tokens, precursors, step)
-
+    # Last beam discarded for being too short
     assert torch.equal(
-        finished, torch.tensor([False, True, False, True], device=device)
-    )
-    assert torch.equal(
-        fits, torch.tensor([False, False, False, False], device=device)
+        finished, torch.tensor([False, False, False, True], device=device)
     )
     assert torch.equal(
         discarded, torch.tensor([False, False, False, True], device=device)
     )
-
-
-def test_peptide_too_short_too_heavy(tiny_config):
-    config = Config(tiny_config)
-    model = Spec2Pep(
-        n_beams=1,
-        min_peptide_len=20,
-        tokenizer=depthcharge.tokenizers.peptides.PeptideTokenizer(
-            residues=config.residues
-        ),
-    )
-
-    # Mass of "peptid"
-    precursors = torch.tensor([[670.31737, 2.0, 336.16596]])
-    peptide = "PEPTIDE"
-    tokens = model.tokenizer.tokenize(peptide)
-    step = len(peptide) - 1
-    # This needs to be initialized, but is recalculated anyway so the value
-    # doesn't matter
-    model._cumulative_masses = torch.tensor([42.424242])
-
-    finished_beams, beam_fits_precursor, discarded_beams = model._finish_beams(
-        tokens, precursors, step
-    )
-
-    assert finished_beams.item()
-    assert discarded_beams.item()
-    assert not beam_fits_precursor.item()
 
 
 def test_cache_finished_beams(tiny_config):
@@ -2210,10 +2214,9 @@ def test_cache_finished_beams(tiny_config):
 
     finished = torch.tensor([False, True, False, False], device=device)
     discarded = torch.tensor([False, False, False, False], device=device)
-    fits = torch.tensor([False, False, False, False], device=device)
 
     model._cache_finished_beams(
-        tokens, scores, step, finished & ~discarded, fits, pred_cache
+        tokens, scores, step, finished & ~discarded, pred_cache
     )
 
     cached = [
@@ -2334,39 +2337,6 @@ def test_get_topk_beams(tiny_config):
     assert not torch.equal(new_tokens[0], new_tokens[1])
 
 
-def test_finish_beams_negative_mods(tiny_config):
-    config = Config(tiny_config)
-    model = Spec2Pep(
-        n_beams=2,
-        tokenizer=depthcharge.tokenizers.peptides.MskbPeptideTokenizer(
-            residues=config.residues
-        ),
-        residues=config.residues,
-        min_peptide_len=0,
-    )
-    batch = 1
-    beam = 2
-    device = model.device
-
-    model._batch_size = batch
-    model._beam_size = beam
-    model._cumulative_masses = torch.zeros(batch * beam, device=device)
-
-    length = model.max_peptide_len + 1
-    step = 1
-    tokens = torch.zeros((beam, length), dtype=torch.int64, device=device)
-    tokens[:, : step + 1] = model.tokenizer.tokenize(["GK", "AK"])
-    precursors = torch.tensor(
-        [186.10044, 2.0, 94.05750], device=device
-    ).repeat(beam, 1)
-    finished, fits, disc = model._finish_beams(tokens, precursors, step)
-
-    # Ground truth peptide is "-17.027GK".
-    assert torch.equal(finished, torch.tensor([False, True], device=device))
-    assert torch.equal(fits, torch.tensor([False, False], device=device))
-    assert torch.equal(disc, torch.tensor([False, False], device=device))
-
-
 def test_beam_search_decode_early_termination(tiny_config):
     config = Config(tiny_config)
     model = Spec2Pep(
@@ -2423,7 +2393,6 @@ def test_duplicate_peptide_scores(tiny_config):
         tokens,
         scores,
         step,
-        torch.ones(batch * beam, dtype=torch.bool, device=device),
         torch.ones(batch * beam, dtype=torch.bool, device=device),
         pred_cache,
     )
@@ -2483,53 +2452,6 @@ def _build_model(tok, cls=Spec2Pep, ppm_tol=20):
         [tok.residues["P"]], dtype=torch.float64
     )
     return model
-
-
-def test_precursor_rescue():
-    """
-    Verifies that the current Spec2Pep keeps a rescuable beam alive,
-    while the legacy-style logic still terminates it.
-    """
-    tok = MiniTok()
-    charge = 2
-    target_mass = tok.residues["P"] + tok.residues["NLoss2"] + 18.01056
-    precursor_mz = target_mass / charge + 1.007276
-    # Sequence “P” + padding
-    TOKENS = torch.tensor([[tok.index["P"], 0, 0]])
-    PRECURSOR = torch.tensor(
-        [[target_mass, charge, precursor_mz]], dtype=torch.float64
-    )
-    STEP = 0
-
-    new_model = _build_model(tok)
-    finished, _, _ = new_model._finish_beams(TOKENS, PRECURSOR, STEP)
-    assert (
-        not finished.item()
-    ), "New logic failed and beam terminated unexpectedly!"
-
-    class PrematureSpec2Pep(Spec2Pep):
-        """
-        Mimic the legacy behaviour, abort immediately if ppm > tol,
-        without trying negative-mass residues.
-        """
-
-        def _finish_beams(self, tokens, precursors, step):
-            theo = self.tokenizer.calculate_precursor_ions(
-                tokens[:, : step + 1], precursors[:, 1]
-            )
-            delta = (theo - precursors[:, 2]) / precursors[:, 2] * 1e6
-            over = delta.abs() > self.precursor_mass_tol
-            # Terminate all over-tol beams
-            finished = over.clone()
-            beam_fits = ~over
-            discarded = torch.zeros_like(over)
-            return finished, beam_fits, discarded
-
-    old_like = _build_model(tok, PrematureSpec2Pep)
-    finished_old, _, _ = old_like._finish_beams(TOKENS, PRECURSOR, STEP)
-    assert (
-        finished_old.item()
-    ), "Old logic was expected to terminate the beam but did not"
 
 
 def test_db_spec2pep_forward_no_cache(tiny_config):
