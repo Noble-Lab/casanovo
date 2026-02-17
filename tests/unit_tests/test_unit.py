@@ -2208,7 +2208,6 @@ def test_get_top_peptide_ranking(tiny_config):
 
 @pytest.mark.parametrize("topk", [1, 2, 3])
 def test_get_top_peptide_multiple(topk, tiny_config):
-    # foo
     config = Config(tiny_config)
     model = Spec2Pep(
         top_match=topk,
