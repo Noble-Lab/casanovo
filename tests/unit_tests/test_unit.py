@@ -2139,6 +2139,55 @@ def test_finish_beams(tiny_config):
     )
 
 
+@pytest.mark.parametrize("reverse", [True, False])
+def test_invalid_n_term_mod(tiny_config, reverse):
+    config = Config(tiny_config)
+    model = Spec2Pep(
+        n_beams=4,
+        residues="massivekb",
+        tokenizer=depthcharge.tokenizers.peptides.PeptideTokenizer(
+            residues=config.residues
+        ),
+    )
+
+    model.tokenizer.reverse = reverse
+    length = model.max_peptide_len + 1
+    step = 4
+    device = model.device
+    model.min_peptide_len = 3
+
+    # (peptide, should_be_discarded)
+    peptides = [
+        (["P", "E", "P", "K", "K"], False),
+        (["[Acetyl]-", "P", "E", "P", "K"], not reverse),
+        (["[Acetyl]-", "[Acetyl]-", "P", "E", "P"], True),
+        (["[Acetyl]-", "P", "E", "P", "[Acetyl]-"], True),
+        (["P", "E", "P", "K", "[Acetyl]-"], reverse),
+        (["P", "E", "P", "[Acetyl]-", "$"], reverse),
+        (["P", "E", "[Acetyl]-", "P", "K"], True),
+    ]
+
+    tokens = torch.zeros(
+        len(peptides), length, dtype=torch.int64, device=device
+    )
+
+    # Stop the tokenizer from protecting against invalid n-term mods
+    index = model.tokenizer.index
+    index["$"] = model.tokenizer.stop_int
+    for i, (pep, _) in enumerate(peptides):
+        toks = torch.tensor([index[aa] for aa in pep], device=device)
+        tokens[i, : step + 1] = toks
+
+    expected_discarded = torch.tensor([c for _, c in peptides], device=device)
+    expected_finished = torch.tensor(
+        [pep[-1] == "$" for pep, _ in peptides], device=device
+    )
+    finished, discarded = model._finish_beams(tokens, step)
+
+    assert torch.equal(discarded, expected_discarded)
+    assert torch.equal(finished, expected_finished)
+
+
 def test_cache_finished_beams(tiny_config):
     config = Config(tiny_config)
     model = Spec2Pep(

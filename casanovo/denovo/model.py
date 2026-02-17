@@ -450,20 +450,18 @@ class Spec2Pep(pl.LightningModule):
             final_pos[ends_stop_token] = step - 1
 
             # Vectorized check for multiple N-terminal modifications
-            last_token_is_nterm = torch.isin(
-                tokens[dim0, final_pos], nterm_idx
-            )
-            prev_token_is_nterm = torch.isin(
-                tokens[dim0, final_pos - 1], nterm_idx
-            )
-            multiple_mods = last_token_is_nterm & prev_token_is_nterm
+            num_modifications = torch.isin(tokens, nterm_idx).sum(dim=1)
+            has_n_term = num_modifications > 0
+            multiple_mods = num_modifications > 1
 
             # Vectorized check for internal N-terminal modifications
-            has_n_term = torch.any(torch.isin(tokens, nterm_idx), dim=1)
             if self.tokenizer.reverse:
                 first_token_is_nterm = torch.isin(tokens[dim0, 0], nterm_idx)
                 internal_mods = has_n_term & ~first_token_is_nterm
             else:
+                last_token_is_nterm = torch.isin(
+                    tokens[dim0, final_pos], nterm_idx
+                )
                 internal_mods = has_n_term & ~last_token_is_nterm
 
             discarded_beams = discarded_beams | multiple_mods | internal_mods
