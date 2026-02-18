@@ -650,7 +650,7 @@ def test_is_valid_url():
 
 
 @pytest.mark.parametrize(
-    "aa_scores_raw, expected",
+    ("aa_scores_raw", "expected"),
     [
         (np.asarray([0.0, 0.5, 1.0]), 0.0),
         (np.asarray([1.0, 0.25]), 0.25),
@@ -691,7 +691,7 @@ def test_peptide_score_batch_requires_lengths():
 
     with pytest.raises(
         ValueError,
-        match="`lengths` must be provided for batched input.",
+        match="`lengths` must be provided for batched input\.",
     ):
         _peptide_score(aa_scores_batch, None)
 
