@@ -103,7 +103,6 @@ class Config:
         replace_isoleucine_with_leucine=bool,
         massivekb_tokenizer=bool,
         residues=dict,
-        load_weights_only=bool,
     )
 
     def __init__(self, config_file: Optional[str] = None):

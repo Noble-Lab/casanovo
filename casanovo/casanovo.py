@@ -292,6 +292,7 @@ def db_search(
     training, or only the weights. Defaults to False.
     """,
     required=False,
+    default=False,
     is_flag=True,
 )
 def train(
@@ -303,7 +304,7 @@ def train(
     output_root: Optional[str],
     verbosity: str,
     force_overwrite: bool,
-    load_all_states: Optional[bool],
+    load_all_states: bool,
 ) -> None:
     """Train a Casanovo model on your own data.
 
@@ -311,12 +312,12 @@ def train(
     those provided by MassIVE-KB, from which to train a new Casnovo
     model.
     """
-    if model is None and load_all_states is not None:
+    if model is None and load_all_states:
         warnings.warn(
             "When --load_all_states is specified, model must be as well."
         )
 
-    if not Path(model).is_file() and load_all_states:
+    if load_all_states and model is not None and not Path(model).is_file():
         warnings.warn(
             "When --load_all_states is True, then model specified must be a path."
         )
