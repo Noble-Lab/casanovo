@@ -289,9 +289,10 @@ def db_search(
     "--load_all_states",
     help="""
     Flag to indicate whether all states are loaded when re-starting 
-    training, or only the weights.
+    training, or only the weights. Defaults to False.
     """,
-    required=True,
+    required=False,
+    is_flag=True,
 )
 def train(
     train_peak_path: Tuple[str],
