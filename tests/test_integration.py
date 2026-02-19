@@ -53,7 +53,6 @@ def test_train_and_run(
         config_data = yaml.safe_load(f)
 
     try:
-        config_data["load_weights_only"] = False
         config_data["max_epochs"] = 40
         with tiny_config.open("w") as f:
             yaml.dump(config_data, f)
@@ -69,18 +68,15 @@ def test_train_and_run(
             "train_resuming",
             "--model",
             str(model_file),
+            "--load_all_states",
         ]
 
         result = run(train_args)
         best_model = tmp_path / "train_resuming.best.ckpt"
         assert result.exit_code == 0
-        all_files = [f.name for f in tmp_path.iterdir()]
-        assert (
-            best_model.exists()
-        ), f"Expected {best_model.name} but found: {all_files}"
+        assert best_model.exists()
 
     finally:
-        config_data["load_weights_only"] = True
         config_data["max_epochs"] = 20
         with tiny_config.open("w") as f:
             yaml.dump(config_data, f)
