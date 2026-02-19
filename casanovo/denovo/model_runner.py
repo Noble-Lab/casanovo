@@ -200,13 +200,20 @@ class ModelRunner:
         self.initialize_data_module(train_paths, valid_paths)
         self.loaders.setup()
 
-        self.trainer.fit(
-            self.model,
-            self.loaders.train_dataloader(),
-            self.loaders.val_dataloader(),
-            ckpt_path=ckpt_path,
-            weights_only=False,
-        )
+        if ckpt_path is None:
+            self.trainer.fit(
+                self.model,
+                self.loaders.train_dataloader(),
+                self.loaders.val_dataloader(),
+            )
+        else:
+            self.trainer.fit(
+                self.model,
+                self.loaders.train_dataloader(),
+                self.loaders.val_dataloader(),
+                ckpt_path=ckpt_path,
+                weights_only=False,
+            )
 
     def log_metrics(self, test_dataloader: DataLoader) -> None:
         """

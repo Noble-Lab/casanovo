@@ -148,10 +148,6 @@ num_sanity_val_steps: 0
 # Calculate peptide and amino acid precision during training.
 # This is expensive, so we recommend against it.
 calculate_precision: false
-# When restarting training from a checkpoint:
-# - true: Load only model weights (start fresh optimizer/scheduler/epoch)
-# - false: Resume full training state (optimizer, scheduler, epoch from checkpoint)
-load_weights_only: true
 
 # Accumulates gradients over `k` batches before stepping the optimizer.
 accumulate_grad_batches: 1

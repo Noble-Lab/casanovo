@@ -285,6 +285,14 @@ def db_search(
     multiple=True,
     type=click.Path(exists=True, dir_okay=True),
 )
+@click.option(
+    "--load_all_states",
+    help="""
+    Flag to indicate whether all states are loaded when re-starting 
+    training, or only the weights. Defaults to false
+    """,
+    required=True,
+)
 def train(
     train_peak_path: Tuple[str],
     validation_peak_path: Optional[Tuple[str]],
@@ -294,6 +302,7 @@ def train(
     output_root: Optional[str],
     verbosity: str,
     force_overwrite: bool,
+    load_all_states: Optional[bool],
 ) -> None:
     """Train a Casanovo model on your own data.
 
@@ -301,6 +310,16 @@ def train(
     those provided by MassIVE-KB, from which to train a new Casnovo
     model.
     """
+    if model is None and load_weights_only is not None:
+        warnings.warn(
+            "When --load_all_states is specified, model must be as well."
+        )
+
+    if not Path(model).is_file() and not load_weights_only:
+        warnings.warn(
+            "When --load_all_states is False, then model specified must be a path."
+        )
+
     output_path, output_root_name = _setup_output(
         output_dir, output_root, force_overwrite, verbosity
     )
@@ -330,9 +349,9 @@ def train(
         for peak_file in validation_peak_path:
             logger.info("  %s", peak_file)
 
-        if not config.load_weights_only:
+        if load_all_states:
             runner.train(
-                train_peak_path, validation_peak_path, ckpt_path=model
+                train_peak_path, validation_peak_path, ckpt_path=ckpt_path
             )
         else:
             runner.train(train_peak_path, validation_peak_path)
