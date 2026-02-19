@@ -289,7 +289,7 @@ def db_search(
     "--load_all_states",
     help="""
     Flag to indicate whether all states are loaded when re-starting 
-    training, or only the weights. Defaults to false
+    training, or only the weights.
     """,
     required=True,
 )
@@ -315,9 +315,9 @@ def train(
             "When --load_all_states is specified, model must be as well."
         )
 
-    if not Path(model).is_file() and not load_all_states:
+    if not Path(model).is_file() and load_all_states:
         warnings.warn(
-            "When --load_all_states is False, then model specified must be a path."
+            "When --load_all_states is True, then model specified must be a path."
         )
 
     output_path, output_root_name = _setup_output(
@@ -351,7 +351,7 @@ def train(
 
         if load_all_states:
             runner.train(
-                train_peak_path, validation_peak_path, ckpt_path=ckpt_path
+                train_peak_path, validation_peak_path, ckpt_path=model
             )
         else:
             runner.train(train_peak_path, validation_peak_path)
