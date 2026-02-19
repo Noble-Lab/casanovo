@@ -310,12 +310,12 @@ def train(
     those provided by MassIVE-KB, from which to train a new Casnovo
     model.
     """
-    if model is None and load_weights_only is not None:
+    if model is None and load_all_states is not None:
         warnings.warn(
             "When --load_all_states is specified, model must be as well."
         )
 
-    if not Path(model).is_file() and not load_weights_only:
+    if not Path(model).is_file() and not load_all_states:
         warnings.warn(
             "When --load_all_states is False, then model specified must be a path."
         )
