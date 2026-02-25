@@ -399,15 +399,13 @@ class Spec2Pep(pl.LightningModule):
         Track all beams that have been finished.
 
         Beams are finished by predicting the stop token or because they
-        were terminated due to exceeding the precursor m/z tolerance.
+        were terminated due to violating minimum peptide length or
+        invalid N-terminal modification placement.
 
         Parameters
         ----------
         tokens : torch.Tensor of shape (n_spectra * n_beams, max_length)
             Predicted amino acid tokens for all beams and all spectra.
-        precursors : torch.Tensor of shape (n_spectra * n_beams, 3)
-            The measured precursor mass (axis 0), precursor charge
-            (axis 1), and precursor m/z (axis 2) of each MS/MS spectrum.
         step : int
             Index of the current decoding step.
 
