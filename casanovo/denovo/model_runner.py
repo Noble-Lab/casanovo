@@ -523,16 +523,7 @@ class ModelRunner:
             self.model.tokenizer = tokenizer
 
             # the check and raise error part
-            model_vocab_size = self.model.vocab_size
-            tokenizer_vocab_size = len(tokenizer) + 1
-            if model_vocab_size > tokenizer_vocab_size:
-                raise ValueError(
-                    f"The model was trained with a vocabulary of size "
-                    f"{model_vocab_size}, but the current config only "
-                    f"defines a vocabulary of size {tokenizer_vocab_size}. "
-                    f"Ensure your config's `residues` match those used "
-                    f"during training."
-                )
+            self._validate_vocab_compatibility(tokenizer)
 
             architecture_params = set(model_params.keys()) - set(
                 loaded_model_params.keys()
@@ -564,16 +555,7 @@ class ModelRunner:
                 self.model.tokenizer = tokenizer
 
                 # the check and raise error part
-                model_vocab_size = self.model.vocab_size
-                tokenizer_vocab_size = len(tokenizer) + 1
-                if model_vocab_size > tokenizer_vocab_size:
-                    raise ValueError(
-                        f"The model was trained with a vocabulary of "
-                        f"size {model_vocab_size}, but the current "
-                        f"config only defines a vocabulary of size "
-                        f"{tokenizer_vocab_size}. Ensure your config's "
-                        f"`residues` match those used during training."
-                    )
+                self._validate_vocab_compatibility(tokenizer)
 
             except RuntimeError:
                 raise RuntimeError(
@@ -720,6 +702,17 @@ class ModelRunner:
             return DDPStrategy(find_unused_parameters=False, static_graph=True)
         else:
             return "auto"
+
+    def _validate_vocab_compatibility(self, tokenizer) -> None:
+        model_vocab_size = self.model.vocab_size
+        tokenizer_vocab_size = len(tokenizer) + 1
+        if model_vocab_size > tokenizer_vocab_size:
+            raise ValueError(
+                "The model was trained with a vocabulary of size "
+                f"{model_vocab_size}, but the current config only defines "
+                f"a vocabulary of size {tokenizer_vocab_size}. Ensure your "
+                "config's `residues` match those used during training."
+            )
 
 
 def _get_peak_filenames(
