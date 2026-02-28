@@ -521,6 +521,19 @@ class ModelRunner:
             # Use tokenizer initialized from config file instead of loaded
             # from checkpoint file.
             self.model.tokenizer = tokenizer
+
+            # the check and raise error part
+            model_vocab_size = self.model.vocab_size
+            tokenizer_vocab_size = len(tokenizer) + 1
+            if model_vocab_size > tokenizer_vocab_size:
+                raise ValueError(
+                    f"The model was trained with a vocabulary of size "
+                    f"{model_vocab_size}, but the current config only "
+                    f"defines a vocabulary of size {tokenizer_vocab_size}. "
+                    f"Ensure your config's `residues` match those used "
+                    f"during training."
+                )
+
             architecture_params = set(model_params.keys()) - set(
                 loaded_model_params.keys()
             )
@@ -549,6 +562,19 @@ class ModelRunner:
                     **model_params,
                 )
                 self.model.tokenizer = tokenizer
+
+                # the check and raise error part
+                model_vocab_size = self.model.vocab_size
+                tokenizer_vocab_size = len(tokenizer) + 1
+                if model_vocab_size > tokenizer_vocab_size:
+                    raise ValueError(
+                        f"The model was trained with a vocabulary of "
+                        f"size {model_vocab_size}, but the current "
+                        f"config only defines a vocabulary of size "
+                        f"{tokenizer_vocab_size}. Ensure your config's "
+                        f"`residues` match those used during training."
+                    )
+
             except RuntimeError:
                 raise RuntimeError(
                     "Weights file incompatible with the current version of "
