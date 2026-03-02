@@ -455,15 +455,9 @@ class Spec2Pep(pl.LightningModule):
                 # Only discard beams we have actually checked
                 discarded_beams[has_n_term] |= multiple_mods | internal_mods
 
-        # Calculate peptide lengths
+        # Calculate peptide lengths, and adjust for stop tokens
         peptide_lens = torch.full((batch_size,), step + 1, device=device)
-        # Adjust for stop tokens
-        if self.tokenizer.reverse:
-            has_stop_at_start = tokens[:, 0] == self.stop_token
-            peptide_lens[has_stop_at_start] -= 1
-        else:
-            has_stop_at_end = ends_stop_token
-            peptide_lens[has_stop_at_end] -= 1
+        peptide_lens[ends_stop_token] -= 1
 
         # Discard beams that don't meet minimum peptide length
         too_short = peptide_lens < self.min_peptide_len
