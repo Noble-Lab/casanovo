@@ -423,7 +423,7 @@ class Spec2Pep(pl.LightningModule):
             is_valid_position[~ends_stop_token, step] = True
 
         is_n_term[is_valid_position] = False
-        discarded_beams |= torch.any(is_n_term)
+        discarded_beams |= torch.any(is_n_term, dim=1)
 
         # Check which beams should be terminated or discarded based on the
         # predicted peptide.
@@ -1027,7 +1027,7 @@ class Spec2Pep(pl.LightningModule):
                 )
                 next_aa_scores, next_pep_score = _aa_pep_score(
                     next_aa_scores,
-                    abs(calc_mz - precursor_mz) < self.precursor_mass_tol,
+                    True # Don't penalize precursor mass
                 )
                 next_peptide = self.tokenizer.detokenize(
                     next_peptide.unsqueeze(0)
