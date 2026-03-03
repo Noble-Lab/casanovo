@@ -596,3 +596,61 @@ def test_initialize_tokenizer(caplog):
         "Configured residue(s) not in model alphabet: foo" in msg
         for msg in caplog.messages
     )
+
+
+def test_validate_vocab_compatibility():
+    """Test ModelRunner._validate_vocab_compatibility raises or passes correctly."""
+    config = Config()
+    runner = ModelRunner(config=config)
+    runner.model = unittest.mock.MagicMock()
+
+    # Should raise ValueError when model vocab > tokenizer vocab.
+    tokenizer = unittest.mock.MagicMock()
+    tokenizer.__len__ = unittest.mock.Mock(return_value=5)
+    runner.model.vocab_size = 10  # 10 > 5 + 1 = 6
+    with pytest.raises(ValueError, match="vocabulary of size"):
+        runner._validate_vocab_compatibility(tokenizer)
+
+    # Should pass silently when model vocab == tokenizer vocab.
+    runner.model.vocab_size = 6  # 6 == 5 + 1
+    runner._validate_vocab_compatibility(tokenizer)  # no exception
+
+    # Should pass silently when model vocab < tokenizer vocab.
+    runner.model.vocab_size = 3  # 3 < 5 + 1 = 6
+    runner._validate_vocab_compatibility(tokenizer)  # no exception
+
+
+def test_initialize_model_calls_validate_vocab_compatibility(tmp_path, mgf_small):
+    """Test that initialize_model calls _validate_vocab_compatibility when loading
+    from a checkpoint."""
+    config = Config()
+    config.max_epochs = 1
+    config.n_layers = 1
+    ckpt = tmp_path / "test.ckpt"
+
+    # Train a quick model and save a checkpoint.
+    with ModelRunner(config=config, output_dir=tmp_path) as runner:
+        runner.train([mgf_small], [mgf_small])
+        runner.trainer.save_checkpoint(ckpt)
+
+    # Loading from checkpoint should call _validate_vocab_compatibility.
+    runner = ModelRunner(config=config, model_filename=str(ckpt))
+    runner.initialize_tokenizer()
+    with unittest.mock.patch.object(
+        ModelRunner,
+        "_validate_vocab_compatibility",
+        autospec=True,
+    ) as mock_validate:
+        runner.initialize_model(train=False)
+        mock_validate.assert_called_once()
+
+    # Same check during training (resume from checkpoint).
+    runner = ModelRunner(config=config, model_filename=str(ckpt))
+    runner.initialize_tokenizer()
+    with unittest.mock.patch.object(
+        ModelRunner,
+        "_validate_vocab_compatibility",
+        autospec=True,
+    ) as mock_validate:
+        runner.initialize_model(train=True)
+        mock_validate.assert_called_once()
