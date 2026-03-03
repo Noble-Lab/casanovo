@@ -620,7 +620,9 @@ def test_validate_vocab_compatibility():
     runner._validate_vocab_compatibility(tokenizer)  # no exception
 
 
-def test_initialize_model_calls_validate_vocab_compatibility(tmp_path, mgf_small):
+def test_initialize_model_calls_validate_vocab_compatibility(
+    tmp_path, mgf_small
+):
     """Test that initialize_model calls _validate_vocab_compatibility when loading
     from a checkpoint."""
     config = Config()
