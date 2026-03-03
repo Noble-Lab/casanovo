@@ -135,7 +135,8 @@ weight_decay: 1e-5
 train_label_smoothing: 0.01
 
 # TRAINING/INFERENCE OPTIONS
-# Number of spectra in one training batch.
+# Number of spectra in one training batch. The true batch size passed to
+# n GPUs is batch_size/n.
 train_batch_size: 32
 # Max number of training epochs.
 max_epochs: 30
@@ -152,10 +153,10 @@ calculate_precision: false
 # Accumulates gradients over `k` batches before stepping the optimizer.
 accumulate_grad_batches: 1
 # The value at which to clip gradients. `None` disables gradient clipping.
-gradient_clip_val:
+gradient_clip_val: 1.0
 # The gradient clipping algorithm to use.
 # Must be one of: "value", "norm", or `None`.
-gradient_clip_algorithm:
+gradient_clip_algorithm: "norm"
 # Floating point precision.
 # Must be one of: "16-true", "16-mixed", "bf16-true", "bf16-mixed", "32-true",
 # "64-true", "64", "32", "16", or "bf16".
