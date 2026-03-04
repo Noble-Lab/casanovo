@@ -1,10 +1,10 @@
 import functools
 import subprocess
-import yaml
 from pathlib import Path
 
 import pyteomics.mztab
 import pytest
+import yaml
 from click.testing import CliRunner
 
 from casanovo import casanovo
@@ -157,6 +157,7 @@ def test_train_and_run(
     # Run Casanovo in database prediction mode.
     output_rootname = "db"
     output_filename = (tmp_path / output_rootname).with_suffix(".mztab")
+    output_db_file = (tmp_path / output_rootname).with_suffix(".tsv")
 
     search_args = [
         "db-search",
@@ -168,6 +169,7 @@ def test_train_and_run(
         str(tmp_path),
         "--output_root",
         output_rootname,
+        "--export",
         str(mgf_medium),
         str(tiny_fasta_file),
     ]
@@ -176,6 +178,7 @@ def test_train_and_run(
 
     assert result.exit_code == 0
     assert output_filename.exists()
+    assert output_db_file.exists()
 
     # Verify that the output file is correct.
     mztab = pyteomics.mztab.MzTab(str(output_filename))

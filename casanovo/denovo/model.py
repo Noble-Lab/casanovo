@@ -517,8 +517,8 @@ class Spec2Pep(pl.LightningModule):
             peptide_lens[has_stop_at_end] -= 1
 
         # Discard beams that don't meet minimum peptide length
-        too_short = finished_beams & (peptide_lens < self.min_peptide_len)
-        discarded_beams[too_short] = True
+        too_short = peptide_lens < self.min_peptide_len
+        discarded_beams[too_short & finished_beams] = True
 
         # Mask for beams we need to check mass tolerance
         beams_to_check = ~discarded_beams
@@ -674,6 +674,10 @@ class Spec2Pep(pl.LightningModule):
             # Terminate beams that are confirmed to exceed the tolerance.
             to_terminate = idx[to_terminate]
             finished_beams[to_terminate] = True
+
+            # Discard any beams which exceed the precursor filter but are less
+            # than the minimum peptide length
+            discarded_beams[to_terminate] = too_short[to_terminate]
 
             # update beam_fits_precursor for finished beams
             beam_fits_precursor |= temp_matches & finished_beams
@@ -954,17 +958,9 @@ class Spec2Pep(pl.LightningModule):
                             if self.tokenizer.reverse
                             else aa_scores
                         ),
-                        # FIXME: Remove work around when depthcharge reverse
-                        #   detokenization bug is fixed.
-                        # self.tokenizer.detokenize(
-                        #     torch.unsqueeze(pred_tokens, 0)
-                        # )[0],
-                        "".join(
-                            self.tokenizer.detokenize(
-                                torch.unsqueeze(pred_tokens, 0),
-                                join=False,
-                            )[0]
-                        ),
+                        self.tokenizer.detokenize(
+                            torch.unsqueeze(pred_tokens, 0)
+                        )[0],
                     )
                     for pep_score, _, aa_scores, pred_tokens in heapq.nlargest(
                         self.top_match, peptides
@@ -1117,13 +1113,7 @@ class Spec2Pep(pl.LightningModule):
 
         # Calculate and log amino acid and peptide match evaluation
         # metrics from the predicted peptides.
-        # FIXME: Remove work around when depthcharge reverse detokenization
-        # bug is fixed.
-        # peptides_true = self.tokenizer.detokenize(batch["seq"])
-        peptides_true = [
-            "".join(pep)
-            for pep in self.tokenizer.detokenize(batch["seq"], join=False)
-        ]
+        peptides_true = self.tokenizer.detokenize(batch["seq"])
         peptides_pred = [
             pred
             for spectrum_preds in self.forward(batch)
