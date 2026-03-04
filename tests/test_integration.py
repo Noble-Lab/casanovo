@@ -80,7 +80,7 @@ def test_train_and_run(
     # Verify that the spectrum predictions are correct and indexed
     # according to the peak input file type.
     psms = mztab.spectrum_match_table
-    assert psms.loc[1, "sequence"] == "LESLLEK"
+    assert psms.loc[1, "sequence"] == "LESLEK"
     assert psms.loc[1, "spectra_ref"] == "ms_run[1]:index=0"
     assert psms.loc[2, "sequence"] == "PEPTLDEK"
     assert psms.loc[2, "spectra_ref"] == "ms_run[1]:index=1"

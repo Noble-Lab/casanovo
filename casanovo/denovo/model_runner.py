@@ -25,7 +25,6 @@ from ..denovo.dataloaders import DeNovoDataModule
 from ..denovo.evaluate import aa_match_batch, aa_match_metrics
 from ..denovo.model import DbSpec2Pep, Spec2Pep
 
-
 logger = logging.getLogger("casanovo")
 
 
