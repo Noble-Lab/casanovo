@@ -581,4 +581,3 @@ def test_verify_tokenizer(
     else:
         # Ensure no warnings were logged
         assert not any(rec.levelname == "WARNING" for rec in caplog.records)
-
