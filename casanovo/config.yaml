@@ -135,6 +135,7 @@ weight_decay: 1e-5
 train_label_smoothing: 0.01
 
 # TRAINING/INFERENCE OPTIONS
+# Number of spectra in one training batch.
 # Per-device micro-batch is train_batch_size / n on n GPUs.
 train_batch_size: 32
 # Max number of training epochs.
