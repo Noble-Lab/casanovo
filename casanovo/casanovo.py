@@ -312,10 +312,6 @@ def train(
     those provided by MassIVE-KB, from which to train a new Casnovo
     model.
     """
-    if model is None and load_all_states:
-        warnings.warn(
-            "When --load_all_states is specified, model must be as well."
-        )
 
     if load_all_states:
         if model is None:
