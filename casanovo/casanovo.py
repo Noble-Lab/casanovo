@@ -388,7 +388,8 @@ def _warn_if_invalid(model: Optional[str], load_all_states: bool):
     if load_all_states:
         if model is None:
             warnings.warn(
-                "When --load_all_states is specified, --model must also be provided.",
+                "When --load_all_states is specified, --model must also be provided."
+                "Training will resume without model information.",
                 stacklevel=2,
             )
         elif _is_valid_url(model):

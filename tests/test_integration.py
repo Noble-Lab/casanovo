@@ -51,6 +51,7 @@ def test_train_and_run(
 
     with tiny_config.open("r") as f:
         config_data = yaml.safe_load(f)
+    original_max_epochs = config_data.get("max_epochs")
 
     try:
         config_data["max_epochs"] = 40
@@ -76,7 +77,11 @@ def test_train_and_run(
         assert result.exit_code == 0
         assert best_model.exists()
     finally:
-        config_data["max_epochs"] = 20
+        if original_max_epochs is None:
+            config_data.pop("max_epochs", None)
+        else:
+            config_data["max_epochs"] = original_max_epochs
+
         with tiny_config.open("w") as f:
             yaml.dump(config_data, f)
 
