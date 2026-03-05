@@ -87,7 +87,7 @@ def test_train_and_run(
                 "--output_dir",
                 str(tmp_path),
                 "--output_root",
-                "train_resuming",
+                "train_resuming_url",
                 "--model",
                 "https://github.com/Noble-Lab/casanovo",
                 "--load_all_states",
@@ -105,7 +105,7 @@ def test_train_and_run(
                 "--output_dir",
                 str(tmp_path),
                 "--output_root",
-                "train_resuming",
+                "train_resuming_test",
                 "--model",
                 "test",
                 "--load_all_states",
@@ -123,7 +123,7 @@ def test_train_and_run(
                 "--output_dir",
                 str(tmp_path),
                 "--output_root",
-                "train_resuming",
+                "train_resuming_no_model",
                 "--load_all_states",
             ]
 
