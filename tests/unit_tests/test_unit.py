@@ -786,7 +786,7 @@ def test_length_restrictions(tiny_fasta_file):
 
 
 @pytest.mark.parametrize(
-    "enzyme,digestion,expected",
+    ("enzyme,digestion,expected"),
     [
         pytest.param(
             "arg-c",

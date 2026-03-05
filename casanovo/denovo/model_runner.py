@@ -525,9 +525,9 @@ class ModelRunner:
                 if model_params[param] != self.model.hparams[param]:
                     if param == "tokenizer":
                         self._verify_tokenizer(
-                            model_params[param], self.model.hparams[param]
+                            self.model.hparams[param], model_params[param]
                         )
-                    else:
+
                         logger.warning(
                             "Mismatching %s parameter in model checkpoint (%s) vs"
                             " config file (%s); using the checkpoint.",
@@ -624,7 +624,7 @@ class ModelRunner:
 
         logger.warning(
             "Mismatching %s in model checkpoint tokenizer vs config file tokenizer;"
-            " using the checkpoint tokenizer.",
+            " using the config tokenizer.",
             mismatch_reason,
         )
 
