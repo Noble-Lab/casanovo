@@ -313,23 +313,7 @@ def train(
     model.
     """
 
-    if load_all_states:
-        if model is None:
-            warnings.warn(
-                "When --load_all_states is specified, --model must also be provided.",
-                stacklevel=2,
-            )
-        elif _is_valid_url(model):
-            warnings.warn(
-                "Full model state cannot be loaded from a URL. "
-                "Please provide a local file path when --load_all_states is True.",
-                stacklevel=2,
-            )
-        elif not Path(model).is_file():
-            warnings.warn(
-                "When --load_all_states is True, the model path must point to an existing file.",
-                stacklevel=2,
-            )
+    _warn_if_invalid(model, load_all_states)
 
     output_path, output_root_name = _setup_output(
         output_dir, output_root, force_overwrite, verbosity
@@ -398,6 +382,26 @@ def configure(
     config_path = str(output_path / config_fname)
     Config.copy_default(config_path)
     logger.info(f"Wrote {config_path}")
+
+
+def _warn_if_invalid(model: Optional[str], load_all_states: bool):
+    if load_all_states:
+        if model is None:
+            warnings.warn(
+                "When --load_all_states is specified, --model must also be provided.",
+                stacklevel=2,
+            )
+        elif _is_valid_url(model):
+            warnings.warn(
+                "Full model state cannot be loaded from a URL. "
+                "Please provide a local file path when --load_all_states is True.",
+                stacklevel=2,
+            )
+        elif not Path(model).is_file():
+            warnings.warn(
+                "When --load_all_states is True, the model path must point to an existing file.",
+                stacklevel=2,
+            )
 
 
 def setup_logging(

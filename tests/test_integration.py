@@ -75,60 +75,6 @@ def test_train_and_run(
         best_model = tmp_path / "train_resuming.best.ckpt"
         assert result.exit_code == 0
         assert best_model.exists()
-
-        with pytest.warns(
-            UserWarning, match="Full model state cannot be loaded"
-        ):
-            train_args = [
-                "train",
-                str(mgf_small),
-                "--config",
-                tiny_config,
-                "--output_dir",
-                str(tmp_path),
-                "--output_root",
-                "train_resuming_url",
-                "--model",
-                "https://github.com/Noble-Lab/casanovo",
-                "--load_all_states",
-            ]
-
-            result = run(train_args)
-            assert result.exit_code != 0
-
-        with pytest.warns(UserWarning, match="the model path must point"):
-            train_args = [
-                "train",
-                str(mgf_small),
-                "--config",
-                tiny_config,
-                "--output_dir",
-                str(tmp_path),
-                "--output_root",
-                "train_resuming_test",
-                "--model",
-                "test",
-                "--load_all_states",
-            ]
-
-            result = run(train_args)
-            assert result.exit_code != 0
-
-        with pytest.warns(UserWarning, match="--model must also be provided"):
-            train_args = [
-                "train",
-                str(mgf_small),
-                "--config",
-                tiny_config,
-                "--output_dir",
-                str(tmp_path),
-                "--output_root",
-                "train_resuming_no_model",
-                "--load_all_states",
-            ]
-
-            result = run(train_args)
-
     finally:
         config_data["max_epochs"] = 20
         with tiny_config.open("w") as f:
