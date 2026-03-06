@@ -449,25 +449,26 @@ class Spec2Pep(pl.LightningModule):
 
             # Vectorized check for multiple N-terminal modifications
             num_modifications = torch.isin(tokens, nterm_idx).sum(dim=1)
-            multiple_mods = num_modifications > 1
-
-            # Vectorized check for internal N-terminal modifications.
-            # This will fail to catch internal modifications in some cases
-            # where there are multiple mods, but these are already discarded
-            # by the previous check.
             has_n_term = num_modifications > 0
-            if self.tokenizer.reverse:
-                first_token_is_nterm_mod = torch.isin(
-                    tokens[dim0, 0], nterm_idx
-                )
-                internal_mods = has_n_term & ~first_token_is_nterm_mod
-            else:
-                last_token_is_nterm_mod = torch.isin(
-                    tokens[dim0, final_pos], nterm_idx
-                )
-                internal_mods = has_n_term & ~last_token_is_nterm_mod
 
-            discarded_beams = discarded_beams | multiple_mods | internal_mods
+            # We only need to this check if there are any n-term mods
+            if torch.any(has_n_term).item():
+                # Catch multiple modifications, pretty straightforward
+                multiple_mods = num_modifications > 1
+
+                # Vectorized check for internal N-terminal modifications.
+                # This will fail to catch internal modifications in some cases
+                # where there are multiple mods, but these are already discarded
+                # by the previous check.
+                n_terminal_pos = 0 if self.tokenizer.reverse else final_pos
+                nterm_token_is_mod = torch.isin(
+                    tokens[dim0, n_terminal_pos], nterm_idx
+                )
+                internal_mods = has_n_term & ~nterm_token_is_mod
+
+                discarded_beams = (
+                    discarded_beams | multiple_mods | internal_mods
+                )
 
         # Calculate peptide lengths
         peptide_lens = torch.full((batch_size,), step + 1, device=device)
