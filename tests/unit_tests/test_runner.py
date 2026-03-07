@@ -624,11 +624,11 @@ def test_validate_vocab_compatibility():
 
 
 def test_initialize_model_calls_validate_vocab_compatibility(
-    tmp_path, mgf_small
+    tmp_path, mgf_small, tiny_config
 ):
     """Test that initialize_model calls _validate_vocab_compatibility when loading
     from a checkpoint."""
-    config = Config()
+    config = Config(tiny_config)
     config.max_epochs = 1
     config.n_layers = 1
     ckpt = tmp_path / "test.ckpt"
