@@ -521,9 +521,6 @@ class ModelRunner:
             # from checkpoint file.
             self.model.tokenizer = tokenizer
 
-            # the check and raise error part
-            self._validate_vocab_compatibility(tokenizer)
-
             architecture_params = set(model_params.keys()) - set(
                 loaded_model_params.keys()
             )
@@ -553,14 +550,13 @@ class ModelRunner:
                 )
                 self.model.tokenizer = tokenizer
 
-                # the check and raise error part
-                self._validate_vocab_compatibility(tokenizer)
-
             except RuntimeError:
                 raise RuntimeError(
                     "Weights file incompatible with the current version of "
                     "Casanovo."
                 )
+
+        self._validate_vocab_compatibility()
 
     def initialize_data_module(
         self,
@@ -702,9 +698,17 @@ class ModelRunner:
         else:
             return "auto"
 
-    def _validate_vocab_compatibility(self, tokenizer) -> None:
+    def _validate_vocab_compatibility(self) -> None:
+        """Check that the model vocabulary is compatible with the tokenizer.
+
+        Raises
+        ------
+        ValueError
+            If the model vocabulary size exceeds the tokenizer vocabulary
+            size.
+        """
         model_vocab_size = self.model.vocab_size
-        tokenizer_vocab_size = len(tokenizer) + 1
+        tokenizer_vocab_size = len(self.tokenizer) + 1
         if model_vocab_size > tokenizer_vocab_size:
             raise ValueError(
                 "The model was trained with a vocabulary of size "
