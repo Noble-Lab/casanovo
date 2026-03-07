@@ -164,6 +164,7 @@ class ModelRunner:
         )
         test_paths = self._get_input_paths(peak_path, False, "test")
         self.writer.set_ms_run(test_paths)
+        self.writer.set_mgf_scan_index(test_paths)
         self.initialize_data_module(test_paths=test_paths)
         self.loaders.protein_database = self.model.protein_database
         self.loaders.setup(stage="test", annotated=False)
@@ -289,6 +290,7 @@ class ModelRunner:
 
         test_paths = self._get_input_paths(peak_path, False, "test")
         self.writer.set_ms_run(test_paths)
+        self.writer.set_mgf_scan_index(test_paths)
         self.initialize_data_module(test_paths=test_paths)
 
         try:
