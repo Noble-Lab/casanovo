@@ -1619,6 +1619,31 @@ def test_spectrum_id_mgf(mgf_small, tmp_path):
             assert dataset[i]["scan_id"][0] == scan_id
 
 
+def test_log_training_set_size(mgf_small, tmp_path, caplog):
+    """Test that the number of training and validation spectra is logged."""
+    import logging
+
+    mgf_small2 = tmp_path / "mgf_small2.mgf"
+    shutil.copy(mgf_small, mgf_small2)
+    data_module = DeNovoDataModule(
+        lance_dir=tmp_path.name,
+        train_paths=[mgf_small, mgf_small2],
+        valid_paths=[mgf_small],
+        min_peaks=0,
+        shuffle=False,
+    )
+    with caplog.at_level(logging.INFO, logger="casanovo"):
+        data_module.setup()
+
+    assert any(
+        "Training with" in msg and "spectra" in msg for msg in caplog.messages
+    )
+    assert any(
+        "Validating with" in msg and "spectra" in msg
+        for msg in caplog.messages
+    )
+
+
 def test_spectrum_id_mzml(mzml_small, tmp_path):
     """Test that spectra from mzML files are specified by their scan id."""
     mzml_small2 = tmp_path / "mzml_small2.mzml"

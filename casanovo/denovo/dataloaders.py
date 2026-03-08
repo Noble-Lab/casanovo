@@ -21,7 +21,6 @@ from depthcharge.tokenizers import PeptideTokenizer
 from torch.utils.data import DataLoader
 from torch.utils.data.datapipes.iter.combinatorics import ShufflerIterDataPipe
 
-
 logger = logging.getLogger("casanovo")
 
 
@@ -162,6 +161,12 @@ class DeNovoDataModule(pl.LightningDataModule):
                     mode="valid",
                     shuffle=False,
                 )
+            if self.train_dataset is not None:
+                n_train = self._get_n_spectra(self.train_dataset)
+                logger.info("Training with %d spectra.", n_train)
+            if self.valid_dataset is not None:
+                n_valid = self._get_n_spectra(self.valid_dataset)
+                logger.info("Validating with %d spectra.", n_valid)
         if stage in (None, "test"):
             if self.test_paths is not None:
                 self.test_dataset = self._make_dataset(
@@ -239,6 +244,25 @@ class DeNovoDataModule(pl.LightningDataModule):
             )
 
         return dataset
+
+    @staticmethod
+    def _get_n_spectra(dataset):
+        """Get the number of spectra in a dataset.
+
+        Parameters
+        ----------
+        dataset : torch.utils.data.Dataset
+            The dataset from which to get the number of spectra. This
+            may be wrapped in a ShufflerIterDataPipe.
+
+        Returns
+        -------
+        int
+            The number of spectra in the dataset.
+        """
+        if isinstance(dataset, ShufflerIterDataPipe):
+            dataset = dataset.datapipe
+        return dataset.n_spectra
 
     def _make_loader(
         self, dataset: torch.utils.data.Dataset, shuffle: bool = False
