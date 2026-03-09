@@ -246,7 +246,7 @@ class DeNovoDataModule(pl.LightningDataModule):
         return dataset
 
     @staticmethod
-    def _get_n_spectra(dataset):
+    def _get_n_spectra(dataset) -> int:
         """Get the number of spectra in a dataset.
 
         Parameters
