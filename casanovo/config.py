@@ -71,6 +71,7 @@ class Config:
         log_metrics=bool,
         log_every_n_steps=int,
         lance_dir=str,
+        train_check_interval=int,
         val_check_interval=int,
         min_peaks=int,
         max_peaks=int,

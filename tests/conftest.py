@@ -287,6 +287,7 @@ def _get_config_file(file_path, file_name, additional_cfg=None):
         "log_metrics": False,
         "log_every_n_steps": 50,
         "lance_dir": None,
+        "train_check_interval": 1,
         "val_check_interval": 1,
         "min_peaks": 10,
         "max_peaks": 150,

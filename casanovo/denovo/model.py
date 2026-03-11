@@ -74,8 +74,8 @@ class Spec2Pep(pl.LightningModule):
         Number of beams used during beam search decoding.
     top_match : int
         Number of PSMs to return for each spectrum.
-    n_log : int
-        The number of epochs to wait between logging messages.
+    train_check_interval : int
+        The number of training steps between logging messages.
     train_label_smoothing : float
         Smoothing factor when calculating the training loss.
     warmup_iters : int
@@ -110,7 +110,7 @@ class Spec2Pep(pl.LightningModule):
         min_peptide_len: int = 6,
         n_beams: int = 1,
         top_match: int = 1,
-        n_log: int = 10,
+        train_check_interval: int = 50_000,
         train_label_smoothing: float = 0.01,
         warmup_iters: int = 100_000,
         cosine_schedule_period_iters: int = 600_000,
@@ -173,7 +173,7 @@ class Spec2Pep(pl.LightningModule):
 
         # Logging.
         self.calculate_precision = calculate_precision
-        self.n_log = n_log
+        self.train_check_interval = train_check_interval
         self._history = []
 
         # Output writer during predicting.
@@ -1079,8 +1079,8 @@ class Spec2Pep(pl.LightningModule):
         self.log(
             f"{mode}_CELoss",
             loss.detach(),
-            on_step=False,
-            on_epoch=True,
+            on_step=(mode == "train"),
+            on_epoch=(mode != "train"),
             sync_dist=True,
             batch_size=pred.shape[0],
         )
@@ -1185,10 +1185,12 @@ class Spec2Pep(pl.LightningModule):
 
         return predictions
 
-    def on_train_epoch_end(self) -> None:
+    def on_train_batch_end(self, outputs, batch, batch_idx) -> None:
         """
-        Log the training loss at the end of each epoch.
+        Log the training loss at the end of each training step.
         """
+        if self.trainer.global_step % self.train_check_interval != 0:
+            return
         if "train_CELoss" in self.trainer.callback_metrics:
             train_loss = (
                 self.trainer.callback_metrics["train_CELoss"].detach().item()
@@ -1273,7 +1275,7 @@ class Spec2Pep(pl.LightningModule):
 
             logger.info(header)
         metrics = self._history[-1]
-        if metrics["step"] % self.n_log == 0:
+        if metrics["step"] % self.train_check_interval == 0:
             msg = "%i\t%.6f\t%.6f"
             vals = [
                 metrics["step"],
