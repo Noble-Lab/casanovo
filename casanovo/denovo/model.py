@@ -443,32 +443,30 @@ class Spec2Pep(pl.LightningModule):
 
         # Discard beams with invalid modification combinations
         if step > 1:
-            dim0 = torch.arange(batch_size, device=device)
             final_pos = torch.full((batch_size,), step, device=device)
             final_pos[ends_stop_token] = step - 1
 
             # Vectorized check for multiple N-terminal modifications
-            num_modifications = torch.isin(tokens, nterm_idx).sum(dim=1)
+            token_is_nterm = torch.isin(tokens, nterm_idx)
+            num_modifications = token_is_nterm.sum(dim=1)
             has_n_term = num_modifications > 0
 
             # We only need to this check if there are any n-term mods
             if torch.any(has_n_term).item():
                 # Catch multiple modifications, pretty straightforward
-                multiple_mods = num_modifications > 1
+                multiple_mods = num_modifications[has_n_term] > 1
 
                 # Vectorized check for internal N-terminal modifications.
                 # This will fail to catch internal modifications in some cases
                 # where there are multiple mods, but these are already discarded
                 # by the previous check.
-                n_terminal_pos = 0 if self.tokenizer.reverse else final_pos
-                nterm_token_is_mod = torch.isin(
-                    tokens[dim0, n_terminal_pos], nterm_idx
+                n_terminal_pos = (
+                    0 if self.tokenizer.reverse else final_pos[has_n_term]
                 )
-                internal_mods = has_n_term & ~nterm_token_is_mod
+                internal_mods = ~token_is_nterm[has_n_term, n_terminal_pos]
 
-                discarded_beams = (
-                    discarded_beams | multiple_mods | internal_mods
-                )
+                # Only discard beams we have actually checked
+                discarded_beams[has_n_term] |= multiple_mods | internal_mods
 
         # Calculate peptide lengths
         peptide_lens = torch.full((batch_size,), step + 1, device=device)
