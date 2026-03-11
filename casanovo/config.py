@@ -10,7 +10,6 @@ import yaml
 
 from . import utils
 
-
 logger = logging.getLogger("casanovo")
 
 
