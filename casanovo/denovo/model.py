@@ -98,7 +98,6 @@ class Spec2Pep(pl.LightningModule):
         max_peptide_len: int = 100,
         residues: str | Dict[str, float] = "canonical",
         max_charge: int = 5,
-        precursor_mass_tol: float = 50,
         min_peptide_len: int = 6,
         n_beams: int = 1,
         top_match: int = 1,
@@ -156,7 +155,6 @@ class Spec2Pep(pl.LightningModule):
         # Data properties.
         self.max_peptide_len = max_peptide_len
         self.residues = residues
-        self.precursor_mass_tol = precursor_mass_tol
         self.min_peptide_len = min_peptide_len
         self.n_beams = n_beams
         self.top_match = top_match
