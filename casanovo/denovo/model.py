@@ -61,12 +61,6 @@ class Spec2Pep(pl.LightningModule):
     precursor_mass_tol : float
         The maximum allowable precursor mass tolerance (in ppm) for
         correct predictions.
-    isotope_error_range : Tuple[int, int]
-        Take into account the error introduced by choosing a
-        non-monoisotopic peak for fragmentation by not penalizing
-        predicted precursor m/z's that fit the specified isotope error:
-        `abs(calc_mz - (precursor_mz - isotope * 1.00335 / precursor_charge))
-        < precursor_mass_tol`
     min_peptide_len : int
         The minimum length of predicted peptides.
     n_beams : int
@@ -105,7 +99,6 @@ class Spec2Pep(pl.LightningModule):
         residues: str | Dict[str, float] = "canonical",
         max_charge: int = 5,
         precursor_mass_tol: float = 50,
-        isotope_error_range: Tuple[int, int] = (0, 1),
         min_peptide_len: int = 6,
         n_beams: int = 1,
         top_match: int = 1,
@@ -164,7 +157,6 @@ class Spec2Pep(pl.LightningModule):
         self.max_peptide_len = max_peptide_len
         self.residues = residues
         self.precursor_mass_tol = precursor_mass_tol
-        self.isotope_error_range = isotope_error_range
         self.min_peptide_len = min_peptide_len
         self.n_beams = n_beams
         self.top_match = top_match
