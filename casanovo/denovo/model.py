@@ -15,6 +15,7 @@ from depthcharge.tokenizers import PeptideTokenizer
 
 from .. import config
 from ..data import ms_io, psm
+from ..denovo.muon import Muon
 from ..denovo.transformers import PeptideDecoder, SpectrumEncoder
 from . import evaluate
 
@@ -117,6 +118,9 @@ class Spec2Pep(pl.LightningModule):
         out_writer: Optional[ms_io.MztabWriter] = None,
         calculate_precision: bool = False,
         tokenizer: PeptideTokenizer | None = None,
+        use_muon: bool = False,
+        muon_lr: float = 0.02,
+        muon_momentum: float = 0.95,
         **kwargs: Dict,
     ):
         super().__init__()
@@ -150,6 +154,9 @@ class Spec2Pep(pl.LightningModule):
         # Optimizer settings.
         self.warmup_iters = warmup_iters
         self.cosine_schedule_period_iters = cosine_schedule_period_iters
+        self.use_muon = use_muon
+        self.muon_lr = muon_lr
+        self.muon_momentum = muon_momentum
         # `kwargs` will contain additional arguments as well as
         # unrecognized arguments, including deprecated ones. Remove the
         # deprecated ones.
@@ -1304,22 +1311,77 @@ class Spec2Pep(pl.LightningModule):
         self,
     ) -> Tuple[List[torch.optim.Optimizer], Dict[str, Any]]:
         """
-        Initialize the optimizer.
+        Initialize the optimizer(s) and learning rate scheduler(s).
 
-        We use the Adam optimizer with a cosine learning rate scheduler.
+        When ``use_muon`` is False, a single Adam optimizer with a cosine
+        warmup scheduler is returned.  When ``use_muon`` is True, 2-D
+        hidden-layer weight matrices use the Muon optimizer and all other
+        parameters (embeddings, biases, LayerNorm, classifier head) use
+        Adam; each optimizer gets its own cosine warmup scheduler.
 
         Returns
         -------
         Tuple[List[torch.optim.Optimizer], Dict[str, Any]]
-            The initialized Adam optimizer and its learning rate
-            scheduler.
+            The optimizer(s) and their learning rate scheduler(s).
         """
-        optimizer = torch.optim.Adam(self.parameters(), **self.opt_kwargs)
-        # Apply learning rate scheduler per step.
-        lr_scheduler = CosineWarmupScheduler(
-            optimizer, self.warmup_iters, self.cosine_schedule_period_iters
+        if not self.use_muon:
+            optimizer = torch.optim.Adam(
+                self.parameters(), **self.opt_kwargs
+            )
+            scheduler = CosineWarmupScheduler(
+                optimizer,
+                self.warmup_iters,
+                self.cosine_schedule_period_iters,
+            )
+            return [optimizer], {"scheduler": scheduler, "interval": "step"}
+
+        # Split parameters: Muon for 2D hidden weights, Adam for everything
+        # else.  Excluded from Muon: embeddings, classifier head,
+        # latent_spectrum (3D), biases, LayerNorm params, and input/output
+        # encoders.
+        _adam_name_substrings = (
+            "charge_encoder",  # nn.Embedding
+            "token_encoder",   # nn.Embedding
+            "mass_encoder",    # FloatEncoder (positional)
+            "peak_encoder",    # PeakEncoder (input)
+            "latent_spectrum", # 3D parameter (1×1×d_model)
+            "decoder.final",   # output classifier head
+            ".norm",           # LayerNorm weights
+            "positional",      # sinusoidal positional encodings
         )
-        return [optimizer], {"scheduler": lr_scheduler, "interval": "step"}
+        muon_params, adam_params = [], []
+        for name, param in self.named_parameters():
+            if not param.requires_grad:
+                continue
+            if param.ndim == 2 and not any(
+                s in name for s in _adam_name_substrings
+            ):
+                muon_params.append(param)
+            else:
+                adam_params.append(param)
+
+        muon_opt = Muon(
+            muon_params, lr=self.muon_lr, momentum=self.muon_momentum
+        )
+        adam_opt = torch.optim.Adam(adam_params, **self.opt_kwargs)
+
+        muon_sched = CosineWarmupScheduler(
+            muon_opt,
+            self.warmup_iters,
+            self.cosine_schedule_period_iters,
+        )
+        adam_sched = CosineWarmupScheduler(
+            adam_opt,
+            self.warmup_iters,
+            self.cosine_schedule_period_iters,
+        )
+        return (
+            [muon_opt, adam_opt],
+            [
+                {"scheduler": muon_sched, "interval": "step"},
+                {"scheduler": adam_sched, "interval": "step"},
+            ],
+        )
 
 
 class DbSpec2Pep(Spec2Pep):

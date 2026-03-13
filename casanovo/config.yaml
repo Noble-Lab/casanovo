@@ -127,6 +127,12 @@ dim_intensity:
 warmup_iters: 100_000
 # The number of iterations for the cosine half period of the learning rate.
 cosine_schedule_period_iters: 600_000
+# Use Muon optimizer for 2D hidden-layer weights (Adam used for all others).
+use_muon: false
+# Learning rate for the Muon optimizer.
+muon_lr: 0.02
+# SGD momentum for the Muon optimizer.
+muon_momentum: 0.95
 # Learning rate for weight updates during training.
 learning_rate: 5e-4
 # Regularization term for weight updates.

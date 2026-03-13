@@ -461,6 +461,9 @@ class ModelRunner:
             weight_decay=self.config.weight_decay,
             train_label_smoothing=self.config.train_label_smoothing,
             calculate_precision=self.config.calculate_precision,
+            use_muon=self.config.use_muon,
+            muon_lr=self.config.muon_lr,
+            muon_momentum=self.config.muon_momentum,
             out_writer=self.writer,
             tokenizer=tokenizer,
         )
@@ -481,6 +484,9 @@ class ModelRunner:
             weight_decay=self.config.weight_decay,
             train_label_smoothing=self.config.train_label_smoothing,
             calculate_precision=self.config.calculate_precision,
+            use_muon=self.config.use_muon,
+            muon_lr=self.config.muon_lr,
+            muon_momentum=self.config.muon_momentum,
             out_writer=self.writer,
         )
 
