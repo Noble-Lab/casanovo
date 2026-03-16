@@ -33,17 +33,12 @@ def n_workers() -> int:
 
     On Windows and MacOS, we only use the main process. See:
     https://discuss.pytorch.org/t/errors-when-using-num-workers-0-in-dataloader/97564/4
-    https://github.com/pytorch/pytorch/issues/70344
 
     Returns
     -------
     int
         The number of workers.
     """
-    # FIXME: remove multiprocessing Linux deadlock issue workaround when
-    # deadlock issue is resolved.
-    return 0
-
     # Windows or MacOS: no multiprocessing.
     if platform.system() in ["Windows", "Darwin"]:
         logger.warning(
