@@ -5,7 +5,6 @@ import functools
 import hashlib
 import heapq
 import io
-import math
 import os
 import pathlib
 import platform
@@ -269,7 +268,8 @@ def test_version():
 def test_n_workers(monkeypatch):
     """Check that n_workers is correct without a GPU."""
     monkeypatch.setattr("torch.cuda.is_available", lambda: False)
-    cpu_fun = lambda x: ["foo"] * 31
+    def cpu_fun(x):
+        return ["foo"] * 31
 
     with monkeypatch.context() as mnk:
         mnk.setattr("psutil.Process.cpu_affinity", cpu_fun, raising=False)
@@ -1388,9 +1388,8 @@ def test_isoleucine_match(tiny_config):
     )
     db_model = DbSpec2Pep(tokenizer=tokenizer)
     peptides = [["PEPTLDEK"], ["PEPTIDEK"]]
-    mock_get_candidates = lambda _, precursor_charge: pd.Series(
-        peptides[precursor_charge - 1]
-    )
+    def mock_get_candidates(_, precursor_charge):
+        return pd.Series(peptides[precursor_charge - 1])
 
     db_model = DbSpec2Pep(tokenizer=tokenizer)
     db_model.protein_database = unittest.mock.MagicMock()
