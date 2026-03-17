@@ -58,6 +58,8 @@ def _build_mgf_scan_index(mgf_path: str) -> dict:
     except OSError:
         pass
     return index2scan
+
+
 class MztabWriter:
     """
     Export spectrum identifications to an mzTab file.

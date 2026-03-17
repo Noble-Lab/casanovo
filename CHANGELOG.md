@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+### Added
+
+- Track instrument-assigned scan numbers from MGF file `SCANS`, `SCAN`, or
+  `SCAN ID` header fields and include them in the mzTab `spectra_ref` column
+  alongside the spectrum file index (e.g. `ms_run[1]:index=0 scan=17`).
+
 ## [5.1.2] - 2025-12-11
 
 ### Changed
@@ -30,6 +36,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Fixed an issue which led the reported peptide precision to be 0 during evaluation mode.
 - Peptide predictions failing the minimum peptide length are not reported, irrespective of whether they match or exceed the precursor mass.
 - Setting `--output_root` to a directory will no longer cause an error.
+
+### Added
+
+- Track instrument-assigned scan numbers from MGF file `SCANS`, `SCAN`, or
+  `SCAN ID` header fields and include them in the mzTab `spectra_ref` column
+  alongside the spectrum file index (e.g. `ms_run[1]:index=0 scan=17`).
 
 ## [5.1.2] - 2025-12-11
 
@@ -348,6 +360,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 - Initial Casanovo version.
 
+[Unreleased]: https://github.com/Noble-Lab/casanovo/compare/v5.1.2...HEAD
+[5.1.2]: https://github.com/Noble-Lab/casanovo/compare/v5.1.1...v5.1.2
 [Unreleased]: https://github.com/Noble-Lab/casanovo/compare/v5.1.1...HEAD
 [5.1.1]: https://github.com/Noble-Lab/casanovo/compare/v5.1.0...v5.1.1
 [5.1.0]: https://github.com/Noble-Lab/casanovo/compare/v5.0.0...v5.1.0

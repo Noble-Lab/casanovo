@@ -391,12 +391,16 @@ def tiny_config_db(tmp_path):
             "replace_isoleucine_with_leucine": False,
         },
     )
+
+
 @pytest.fixture
 def mgf_small_with_scans(tmp_path):
     """An MGF file with 2 annotated spectra containing SCANS fields."""
     peptides = ["LESLIEK", "PEPTIDEK"]
     mgf_file = tmp_path / "small_with_scans.mgf"
     return _create_mgf(peptides, mgf_file, scan_nums=[17, 42])
+
+
 @pytest.fixture
 def mgf_small_with_scans_unannotated(tmp_path):
     """An MGF file with 2 unannotated spectra containing SCANS fields."""

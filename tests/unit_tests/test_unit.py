@@ -2552,9 +2552,7 @@ def test_scan_num_in_mztab_spectra_ref(tmp_path):
     After set_mgf_scan_index is called, MztabWriter must embed the scan
     number in spectra_ref: 'ms_run[1]:index=0 scan=17'.
     """
-    import pyteomics.mztab
-    from casanovo.data.ms_io import MztabWriter
-    from casanovo.data.psm import PepSpecMatch
+
 
     # Create a minimal MGF with SCANS=17 for the first spectrum.
     mgf_file = tmp_path / "test.mgf"
@@ -2563,11 +2561,11 @@ def test_scan_num_in_mztab_spectra_ref(tmp_path):
     )
 
     results_path = str(tmp_path / "results.mztab")
-    writer = MztabWriter(results_path)
+    writer = ms_io.MztabWriter(results_path)
     writer.set_ms_run([str(mgf_file)])
     writer.set_mgf_scan_index([str(mgf_file)])
     writer.psms = [
-        PepSpecMatch(
+        psm.PepSpecMatch(
             sequence="PEPTIDE",
             spectrum_id=("test.mgf", "0"),
             peptide_score=0.9,
@@ -2590,9 +2588,7 @@ def test_no_scan_num_keeps_index_only_spectra_ref(tmp_path):
     An MGF without SCANS must produce 'ms_run[1]:index=0' only,
     preserving backward compatibility.
     """
-    import pyteomics.mztab
-    from casanovo.data.ms_io import MztabWriter
-    from casanovo.data.psm import PepSpecMatch
+
 
     mgf_file = tmp_path / "test_no_scan.mgf"
     mgf_file.write_text(
@@ -2600,11 +2596,11 @@ def test_no_scan_num_keeps_index_only_spectra_ref(tmp_path):
     )
 
     results_path = str(tmp_path / "results_no_scan.mztab")
-    writer = MztabWriter(results_path)
+    writer = ms_io.MztabWriter(results_path)
     writer.set_ms_run([str(mgf_file)])
     writer.set_mgf_scan_index([str(mgf_file)])  # index will be empty
     writer.psms = [
-        PepSpecMatch(
+        psm.PepSpecMatch(
             sequence="PEPTIDE",
             spectrum_id=("test_no_scan.mgf", "0"),
             peptide_score=0.9,
@@ -2627,16 +2623,14 @@ def test_mzml_spectra_ref_unaffected_by_scan_num_feature(
     mzML spectra use their native scan ID and must be unchanged even
     when set_mgf_scan_index is called (mzML files are silently ignored).
     """
-    import pyteomics.mztab
-    from casanovo.data.ms_io import MztabWriter
-    from casanovo.data.psm import PepSpecMatch
+
 
     results_path = str(tmp_path / "results_mzml.mztab")
-    writer = MztabWriter(results_path)
+    writer = ms_io.MztabWriter(results_path)
     writer.set_ms_run([str(mzml_small)])
     writer.set_mgf_scan_index([str(mzml_small)])  # mzML ignored silently
     writer.psms = [
-        PepSpecMatch(
+        psm.PepSpecMatch(
             sequence="PEPTIDE",
             spectrum_id=("small.mzml", "scan=17"),
             peptide_score=0.9,

@@ -23,34 +23,6 @@ from torch.utils.data.datapipes.iter.combinatorics import ShufflerIterDataPipe
 
 logger = logging.getLogger("casanovo")
 
-def _extract_mgf_scan_num(spectrum_dict: dict) -> str:
-    """
-    Extract the scan number from an MGF spectrum's parameter block.
-
-    Tries the keys ``scans``, ``scan``, and ``scan id`` in that order
-    (DepthCharge/pyteomics normalises MGF header keys to lowercase).
-    Returns an empty string when no scan number is present (e.g. for
-    mzML spectra or MGF files that omit the SCANS field).
-
-    Parameters
-    ----------
-    spectrum_dict : dict
-        The raw spectrum dictionary supplied by DepthCharge's parser.
-
-    Returns
-    -------
-    str
-        The scan number as a string, or ``""`` if absent.
-    """
-    try:
-        params = spectrum_dict.get("params", {})
-        for key in ("scans", "scan", "scan id"):
-            val = params.get(key)
-            if val is not None and str(val).strip():
-                return str(val).strip()
-    except Exception:
-        pass
-    return ""
 
 class DeNovoDataModule(pl.LightningDataModule):
     """
