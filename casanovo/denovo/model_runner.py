@@ -480,14 +480,6 @@ class ModelRunner:
             out_writer=self.writer,
         )
 
-        if db_search:
-            db_only_params = dict(
-                isotope_error_range=self.config.isotope_error_range,
-                precursor_mass_tol=self.config.precursor_mass_tol,
-            )
-            model_params.update(db_only_params)
-            loaded_model_params.update(db_only_params)
-
         if self.model_filename is None:
             if db_search:
                 logger.error("A model file must be provided for DB search")

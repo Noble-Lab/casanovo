@@ -58,9 +58,6 @@ class Spec2Pep(pl.LightningModule):
         collection of amino acids and masses.
     max_charge : int
         The maximum precursor charge to consider.
-    precursor_mass_tol : float
-        The maximum allowable precursor mass tolerance (in ppm) for
-        correct predictions.
     min_peptide_len : int
         The minimum length of predicted peptides.
     n_beams : int
