@@ -8,10 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Added
 
-- Track instrument-assigned scan numbers from MGF file `SCANS`, `SCAN`, or
-  `SCAN ID` header fields and include them in the mzTab `spectra_ref` column
-  alongside the spectrum file index (e.g. `ms_run[1]:index=0 scan=17`).
-
+- Track instrument-assigned scan numbers from MGF `SCANS`, `SCAN`, and `SCAN ID` header fields in a new `opt_global_cv_MS:1003057_scan_number` mzTab column.
 ## [5.1.2] - 2025-12-11
 
 ### Changed
@@ -39,9 +36,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Added
 
-- Track instrument-assigned scan numbers from MGF file `SCANS`, `SCAN`, or
-  `SCAN ID` header fields and include them in the mzTab `spectra_ref` column
-  alongside the spectrum file index (e.g. `ms_run[1]:index=0 scan=17`).
+- Track instrument-assigned scan numbers from MGF `SCANS`, `SCAN`, and `SCAN ID` header fields in a new `opt_global_cv_MS:1003057_scan_number` mzTab column.
 
 ## [5.1.2] - 2025-12-11
 
@@ -362,7 +357,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 [Unreleased]: https://github.com/Noble-Lab/casanovo/compare/v5.1.2...HEAD
 [5.1.2]: https://github.com/Noble-Lab/casanovo/compare/v5.1.1...v5.1.2
-[Unreleased]: https://github.com/Noble-Lab/casanovo/compare/v5.1.1...HEAD
 [5.1.1]: https://github.com/Noble-Lab/casanovo/compare/v5.1.0...v5.1.1
 [5.1.0]: https://github.com/Noble-Lab/casanovo/compare/v5.0.0...v5.1.0
 [5.0.0]: https://github.com/Noble-Lab/casanovo/compare/v4.3.0...v5.0.0

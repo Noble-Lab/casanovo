@@ -6,21 +6,24 @@ import operator
 import os
 import re
 from pathlib import Path
+from collections.abc import Iterator
 from typing import List
 
 import logging
 
 import natsort
 
-logger = logging.getLogger("casanovo")
-
 from .. import __version__
 from ..config import Config
 from .psm import PepSpecMatch
 
-def _build_mgf_scan_index(mgf_path: str) -> dict:
+logger = logging.getLogger("casanovo")
+
+
+def _build_mgf_scan_index(mgf_path: str) -> Iterator[tuple[str, str]]:
     """
-    Build an index mapping spectrum position to SCANS value for an MGF file.
+    Yield (spectrum_ref_id, scan_number) pairs for spectra in an MGF file
+    that contain a SCANS, SCAN, or SCAN ID header field.
 
     Reads only the header lines of each spectrum entry (never the peak
     data), so this is very fast even for large files.
@@ -30,14 +33,14 @@ def _build_mgf_scan_index(mgf_path: str) -> dict:
     mgf_path : str
         Path to the MGF file.
 
-    Returns
-    -------
-    dict
-        Mapping from spectrum index (as a string, e.g. ``"0"``) to the
-        SCANS field value (e.g. ``"17"``). Only spectra that contain a
-        ``SCANS``, ``SCAN``, or ``SCAN ID`` header field are included.
+    Yields
+    ------
+    tuple[str, str]
+        A ``(spectrum_ref_id, scan_number)`` pair where
+        *spectrum_ref_id* uses the ``index=N`` nativeID format required
+        by the mzTab multiple-peak-list nativeID specification
+        (MS:1000774).
     """
-    index2scan = {}
     index = 0
     current_scan = None
     in_ions = False
@@ -51,7 +54,7 @@ def _build_mgf_scan_index(mgf_path: str) -> dict:
                     current_scan = None
                 elif upper == "END IONS":
                     if current_scan is not None:
-                        index2scan[str(index)] = current_scan
+                        yield f"index={index}", current_scan
                     index += 1
                     in_ions = False
                 elif in_ions:
@@ -65,7 +68,6 @@ def _build_mgf_scan_index(mgf_path: str) -> dict:
             mgf_path,
             e,
         )
-    return index2scan
 
 
 class MztabWriter:
@@ -184,7 +186,8 @@ class MztabWriter:
 
     def set_ms_run(self, peak_filenames: List[str]) -> None:
         """
-        Add input peak files to the mzTab metadata section.
+        Add input peak files to the mzTab metadata section and
+        pre-compute the MGF scan number index for any MGF files.
 
         Parameters
         ----------
@@ -197,28 +200,10 @@ class MztabWriter:
                 (f"ms_run[{i}]-location", Path(filename).as_uri()),
             )
             self._run_map[Path(filename).name] = i
-
-    def set_mgf_scan_index(self, peak_filenames: List[str]) -> None:
-        """
-        Pre-compute the MGF scan number index for the given peak files.
-
-        For each MGF file, reads the ``SCANS`` (or ``SCAN`` / ``SCAN ID``)
-        header field of every spectrum entry and stores a mapping from
-        spectrum index to scan number.  Called once before prediction so
-        that ``save()`` can embed the scan number in the ``spectra_ref``
-        column without re-reading the files at write time.
-
-        Parameters
-        ----------
-        peak_filenames : List[str]
-            The input peak file paths (mzML files are silently ignored).
-        """
-        for path in peak_filenames:
-            if Path(path).suffix.lower() != ".mgf":
-                continue
-            name = Path(path).name
-            for idx_str, scan_num in _build_mgf_scan_index(path).items():
-                self._mgf_scan_index[(name, idx_str)] = scan_num
+            if Path(filename).suffix.lower() == ".mgf":
+                name = Path(filename).name
+                for ref_id, scan_num in _build_mgf_scan_index(filename):
+                    self._mgf_scan_index[(name, ref_id)] = scan_num
 
     def save(self) -> None:
         """
@@ -253,6 +238,7 @@ class MztabWriter:
                     "end",
                     "opt_ms_run[1]_aa_scores",
                     "opt_ms_run[1]_proforma",
+                    "opt_global_cv_MS:1003057_scan_number",
                 ]
             )
             by_id = operator.attrgetter("spectrum_id")
@@ -261,20 +247,13 @@ class MztabWriter:
                 1,
             ):
                 filename, idx = psm.spectrum_id
-                if Path(filename).suffix.lower() == ".mgf":
-                    # Normalize idx: handle both "0" and "index=0" shapes.
-                    numeric_idx = (
-                        idx[len("index="):]
-                        if idx.startswith("index=")
-                        else idx
-                    )
-                    if numeric_idx.isnumeric():
-                        scan_num = self._mgf_scan_index.get(
-                            (filename, numeric_idx)
-                        )
-                        idx = f"index={numeric_idx}"
-                        if scan_num:
-                            idx = f"{idx} scan={scan_num}"
+                run_idx = self._run_map[filename]
+                scan_col = "null"
+                if Path(filename).suffix.lower() == ".mgf" and idx.isnumeric():
+                    idx = f"index={idx}"
+                    scan_num = self._mgf_scan_index.get((filename, idx))
+                    if scan_num:
+                        scan_col = f"ms_run[{run_idx}]:scan={scan_num}"
 
                 writer.writerow(
                     [
@@ -296,13 +275,14 @@ class MztabWriter:
                         psm.charge,  # charge
                         psm.exp_mz,  # exp_mass_to_charge
                         psm.calc_mz,  # calc_mass_to_charge
-                        f"ms_run[{self._run_map[filename]}]:{idx}",
+                        f"ms_run[{run_idx}]:{idx}",
                         "null",  # pre
                         "null",  # post
                         "null",  # start
                         "null",  # end
                         # opt_ms_run[1]_aa_scores
                         ",".join(list(map("{:.5f}".format, psm.aa_scores))),
-                        psm.sequence,  # op_ms_run[1]_proforma
+                        psm.sequence,  # opt_ms_run[1]_proforma
+                        scan_col,  # opt_global_cv_MS:1003057_scan_number
                     ]
                 )

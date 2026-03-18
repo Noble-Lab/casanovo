@@ -192,11 +192,6 @@ class DeNovoDataModule(pl.LightningDataModule):
         torch.utils.data.Dataset
             A PyTorch Dataset for the given peak files.
         """
-        # Include the MGF scan number CustomField only for test/inference
-        # datasets. Training and validation datasets never need scan numbers,
-        # and adding the field there would store null values for MGF files
-        # that lack a SCANS header, causing torch.tensor([None, ...]) to
-        # raise an uncaught RuntimeError inside DepthCharge's _tensorize.
         custom_fields = [self.custom_field_anno] if annotated else []
         lance_path = pathlib.Path(f"{self.lance_dir}/{mode}.lance")
 

@@ -268,6 +268,7 @@ def test_version():
 def test_n_workers(monkeypatch):
     """Check that n_workers is correct without a GPU."""
     monkeypatch.setattr("torch.cuda.is_available", lambda: False)
+
     def cpu_fun(x):
         return ["foo"] * 31
 
@@ -1388,6 +1389,7 @@ def test_isoleucine_match(tiny_config):
     )
     db_model = DbSpec2Pep(tokenizer=tokenizer)
     peptides = [["PEPTLDEK"], ["PEPTIDEK"]]
+
     def mock_get_candidates(_, precursor_charge):
         return pd.Series(peptides[precursor_charge - 1])
 
@@ -2522,7 +2524,7 @@ def test_shared_file_io_params_validation(tmp_path, args, should_fail):
         assert res.exit_code == 0
         assert "Error" not in res.stderr
         assert "ok" in res.stdout
-# issue 142- mgf scan number tracking
+
 
 def test_mgf_scan_index_built_correctly(mgf_small_with_scans, tmp_path):
     """
@@ -2531,8 +2533,8 @@ def test_mgf_scan_index_built_correctly(mgf_small_with_scans, tmp_path):
     """
     from casanovo.data.ms_io import _build_mgf_scan_index
 
-    result = _build_mgf_scan_index(str(mgf_small_with_scans))
-    assert result == {"0": "17", "1": "42"}
+    result = dict(_build_mgf_scan_index(str(mgf_small_with_scans)))
+    assert result == {"index=0": "17", "index=1": "42"}
 
 
 def test_mgf_without_scans_gives_empty_index(mgf_small, tmp_path):
@@ -2542,7 +2544,7 @@ def test_mgf_without_scans_gives_empty_index(mgf_small, tmp_path):
     """
     from casanovo.data.ms_io import _build_mgf_scan_index
 
-    result = _build_mgf_scan_index(str(mgf_small))
+    result = dict(_build_mgf_scan_index(str(mgf_small)))
     assert result == {}
 
 
@@ -2557,8 +2559,8 @@ def test_mgf_scan_alias_scan_field(tmp_path):
     mgf_file.write_text(
         "BEGIN IONS\nSCAN=99\nPEPMASS=400.2\nCHARGE=2+\n200.0 1.0\nEND IONS\n"
     )
-    result = _build_mgf_scan_index(str(mgf_file))
-    assert result == {"0": "99"}
+    result = dict(_build_mgf_scan_index(str(mgf_file)))
+    assert result == {"index=0": "99"}
 
 
 def test_mgf_scan_alias_scan_id_field(tmp_path):
@@ -2572,17 +2574,15 @@ def test_mgf_scan_alias_scan_id_field(tmp_path):
     mgf_file.write_text(
         "BEGIN IONS\nSCAN ID=42\nPEPMASS=400.2\nCHARGE=2+\n200.0 1.0\nEND IONS\n"
     )
-    result = _build_mgf_scan_index(str(mgf_file))
-    assert result == {"0": "42"}
+    result = dict(_build_mgf_scan_index(str(mgf_file)))
+    assert result == {"index=0": "42"}
 
 
 def test_scan_num_in_mztab_spectra_ref(tmp_path):
     """
     After set_mgf_scan_index is called, MztabWriter must embed the scan
-    number in spectra_ref: 'ms_run[1]:index=0 scan=17'.
+    number in a new opt_global_cv_MS:1003057_scan_number column.
     """
-
-
     # Create a minimal MGF with SCANS=17 for the first spectrum.
     mgf_file = tmp_path / "test.mgf"
     mgf_file.write_text(
@@ -2592,7 +2592,6 @@ def test_scan_num_in_mztab_spectra_ref(tmp_path):
     results_path = str(tmp_path / "results.mztab")
     writer = ms_io.MztabWriter(results_path)
     writer.set_ms_run([str(mgf_file)])
-    writer.set_mgf_scan_index([str(mgf_file)])
     writer.psms = [
         psm.PepSpecMatch(
             sequence="PEPTIDE",
@@ -2607,9 +2606,12 @@ def test_scan_num_in_mztab_spectra_ref(tmp_path):
     writer.save()
 
     mztab = pyteomics.mztab.MzTab(results_path)
-    spectra_ref = mztab.spectrum_match_table.loc[1, "spectra_ref"]
-    assert "index=0" in spectra_ref, f"Missing index=0 in: {spectra_ref}"
-    assert "scan=17" in spectra_ref, f"Missing scan=17 in: {spectra_ref}"
+    psms = mztab.spectrum_match_table
+    assert psms.loc[1, "spectra_ref"] == "ms_run[1]:index=0"
+    assert (
+        psms.loc[1, "opt_global_cv_MS:1003057_scan_number"]
+        == "ms_run[1]:scan=17"
+    )
 
 
 def test_no_scan_num_keeps_index_only_spectra_ref(tmp_path):
@@ -2617,8 +2619,6 @@ def test_no_scan_num_keeps_index_only_spectra_ref(tmp_path):
     An MGF without SCANS must produce 'ms_run[1]:index=0' only,
     preserving backward compatibility.
     """
-
-
     mgf_file = tmp_path / "test_no_scan.mgf"
     mgf_file.write_text(
         "BEGIN IONS\nPEPMASS=400.2\nCHARGE=2+\n200.0 1.0\nEND IONS\n"
@@ -2627,7 +2627,6 @@ def test_no_scan_num_keeps_index_only_spectra_ref(tmp_path):
     results_path = str(tmp_path / "results_no_scan.mztab")
     writer = ms_io.MztabWriter(results_path)
     writer.set_ms_run([str(mgf_file)])
-    writer.set_mgf_scan_index([str(mgf_file)])  # index will be empty
     writer.psms = [
         psm.PepSpecMatch(
             sequence="PEPTIDE",
@@ -2642,22 +2641,19 @@ def test_no_scan_num_keeps_index_only_spectra_ref(tmp_path):
     writer.save()
 
     mztab = pyteomics.mztab.MzTab(results_path)
-    assert mztab.spectrum_match_table.loc[1, "spectra_ref"] == "ms_run[1]:index=0"
+    psms = mztab.spectrum_match_table
+    assert psms.loc[1, "spectra_ref"] == "ms_run[1]:index=0"
+    assert psms.loc[1, "opt_global_cv_MS:1003057_scan_number"] is None
 
 
-def test_mzml_spectra_ref_unaffected_by_scan_num_feature(
-    mzml_small, tmp_path
-):
+def test_mzml_spectra_ref_unaffected_by_scan_num_feature(mzml_small, tmp_path):
     """
     mzML spectra use their native scan ID and must be unchanged even
-    when set_mgf_scan_index is called (mzML files are silently ignored).
+    when set_ms_run is called (mzML files are silently ignored).
     """
-
-
     results_path = str(tmp_path / "results_mzml.mztab")
     writer = ms_io.MztabWriter(results_path)
     writer.set_ms_run([str(mzml_small)])
-    writer.set_mgf_scan_index([str(mzml_small)])  # mzML ignored silently
     writer.psms = [
         psm.PepSpecMatch(
             sequence="PEPTIDE",
@@ -2672,4 +2668,6 @@ def test_mzml_spectra_ref_unaffected_by_scan_num_feature(
     writer.save()
 
     mztab = pyteomics.mztab.MzTab(results_path)
-    assert mztab.spectrum_match_table.loc[1, "spectra_ref"] == "ms_run[1]:scan=17"
+    assert (
+        mztab.spectrum_match_table.loc[1, "spectra_ref"] == "ms_run[1]:scan=17"
+    )
