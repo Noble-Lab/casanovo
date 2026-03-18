@@ -185,9 +185,6 @@ class MztabWriter:
                 1,
             ):
                 filename, idx = psm.spectrum_id
-                if Path(filename).suffix.lower() == ".mgf" and idx.isnumeric():
-                    idx = f"index={idx}"
-
                 writer.writerow(
                     [
                         "PSM",
