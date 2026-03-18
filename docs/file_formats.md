@@ -164,7 +164,7 @@ The PSM section in mzTab files starts with a header line, indicated by the `PSH`
 Next, the following lines each start with the `PSM` key and contain information for an individual PSM predicted by Casanovo.
 
 ```
-PSH	sequence	PSM_ID	accession	unique	database	database_version	search_engine	search_engine_score[1]	modifications	retention_time	charge	exp_mass_to_charge	calc_mass_to_charge	spectra_ref	pre	post	start	end	opt_global_aa_scores    opt_ms_global_cv_MS:1003169_proforma_peptidoform_sequence
+PSH	sequence	PSM_ID	accession	unique	database	database_version	search_engine	search_engine_score[1]	modifications	retention_time	charge	exp_mass_to_charge	calc_mass_to_charge	spectra_ref	pre	post	start	end	opt_global_aa_scores    opt_global_cv_MS:1003169_proforma_peptidoform_sequence
 PSM	EPPTPLTYVAGAGSGVR	1	null	null	null	null	[MS, MS:1003281, Casanovo, 4.0.1]	0.968312939008077	null	null	2.0	836.439	836.4386613168799	ms_run[1]:index=0	null	null	null	null	0.96454,0.90841,0.97874,0.97979,0.97915,0.98254,0.98184,0.97898,0.86762,0.97782,0.97771,0.97899,0.97987,0.97788,0.97949,0.98074,0.97561    EPPTPLTYVAGAGSGVR
 PSM	VVHGFYNPAVSRVLEQ	2	null	null	null	null	[MS, MS:1003281, Casanovo, 4.0.1]	0.9652494998539195	null	null	3.0	605.6572	605.65644936688	ms_run[1]:index=1	null	null	null	null	0.96870,0.97701,0.85667,0.97274,0.97827,0.97790,0.97829,0.97706,0.97654,0.97725,0.97778,0.95544,0.95622,0.96240,0.96992,0.96909    VVHGFYNPAVSRVLEQ
 PSM	EPPTPLTYVAGGSLNR	3	null	null	null	null	[MS, MS:1003281, Casanovo, 4.0.1]	0.813004752730622	null	null	2.0	836.4398	836.4386608168799	ms_run[1]:index=2	null	null	null	null	0.78636,0.45168,0.64947,0.68432,0.89344,0.90091,0.90124,0.56938,0.89757,0.90204,0.90129,0.90190,0.80076,0.90097,0.90233,0.87599    EPPTPLTYVAGGSLNR
@@ -179,12 +179,12 @@ Key information for each PSM is as follows:
 - `search_engine_score[1]`: The score of this PSM.
 - `spectra_ref`: Unique identifier linking the prediction back to the original spectrum in the input file(s).
 - `opt_global_aa_scores`: Casanovo predicts peptides in an autoregressive fashion, one amino acid at a time. This column contains comma-separated scores of the individual amino acid predictions.
-- `opt_ms_global_cv_MS:1003169_proforma_peptidoform_sequence`: The predicted modified peptide sequence in ProForma format.
+- `opt_global_cv_MS:1003169_proforma_peptidoform_sequence`: The predicted modified peptide sequence in ProForma format.
 
 When running Casanovo in _database searching mode_ rather than *de novo* peptide sequencing mode, the PSM section will look slightly differently:
 
 ```
-PSH	sequence	PSM_ID	accession	unique	database	database_version	search_engine	search_engine_score[1]	modifications	retention_time	charge	exp_mass_to_charge	calc_mass_to_charge	spectra_ref	pre	post	start	end	opt_global_aa_scores    opt_ms_global_cv_MS:1003169_proforma_peptidoform_sequence
+PSH	sequence	PSM_ID	accession	unique	database	database_version	search_engine	search_engine_score[1]	modifications	retention_time	charge	exp_mass_to_charge	calc_mass_to_charge	spectra_ref	pre	post	start	end	opt_global_aa_scores    opt_global_cv_MS:1003169_proforma_peptidoform_sequence
 PSM	THMELGGK	1	sp|A5A616|MGTS_ECOLI	null	null	null	[MS, MS:1003281, Casanovo, 4.1.1.dev8+g258edb4.d20240329]	0.6994086	null	null	2	444.71582381688	444.7159	ms_run[1]:index=0	null	null	null	null	0.84454,0.81027,0.83296,0.56239,0.40844,0.83554,0.82437,0.84730,0.84514    THM[Oxidation]ELGGK
 ...
 ```
