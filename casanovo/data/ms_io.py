@@ -58,7 +58,16 @@ def _build_mgf_scan_index(mgf_path: str) -> Iterator[tuple[str, str]]:
                 elif in_ions:
                     for prefix in ("SCANS=", "SCAN=", "SCAN ID="):
                         if upper.startswith(prefix):
-                            current_scan = stripped.split("=", 1)[1].strip()
+                            scan_value = stripped.split("=", 1)[1].strip()
+                            if re.fullmatch(r"\d+", scan_value):
+                                current_scan = scan_value
+                            else:
+                                logger.warning(
+                                    "Ignoring non-numeric %s value %r in %s",
+                                    prefix[:-1],
+                                    scan_value,
+                                    mgf_path,
+                                )
                             break
     except OSError as e:
         logger.warning(

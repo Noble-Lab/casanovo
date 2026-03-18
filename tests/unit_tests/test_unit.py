@@ -2668,6 +2668,6 @@ def test_mzml_spectra_ref_unaffected_by_scan_num_feature(mzml_small, tmp_path):
     writer.save()
 
     mztab = pyteomics.mztab.MzTab(results_path)
-    assert (
-        mztab.spectrum_match_table.loc[1, "spectra_ref"] == "ms_run[1]:scan=17"
-    )
+    psms = mztab.spectrum_match_table
+    assert psms.loc[1, "spectra_ref"] == "ms_run[1]:scan=17"
+    assert psms.loc[1, "opt_global_cv_MS:1003057_scan_number"] is None
