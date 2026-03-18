@@ -14,8 +14,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 - Increased minimum Python version from 3.8 to 3.10.
 - DepthCharge is upgraded to the latest version 0.4.9.
-- A more descriptive error message will now be logged for some annotated spectrum file parsing failure cases.
-- The precursor mass filter will no longer be applied in *de novo* mode, so the config options `precursor_mass_tol` and `isotope_error_range` will now only apply to database search mode, and peptide-level scores will no longer be adjusted based on the precursor mass.
+- A more descriptive error message is logged for some annotated spectrum file parsing failure cases.
+- The precursor mass filter is no longer applied in *de novo* mode, and correspondingly peptide-level scores are no longer penalized based on the precursor mass. The config options `precursor_mass_tol` and `isotope_error_range` now only apply to database search mode.
 
 ### Fixed
 
