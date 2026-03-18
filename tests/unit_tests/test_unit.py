@@ -2546,6 +2546,36 @@ def test_mgf_without_scans_gives_empty_index(mgf_small, tmp_path):
     assert result == {}
 
 
+def test_mgf_scan_alias_scan_field(tmp_path):
+    """
+    _build_mgf_scan_index must recognise the SCAN= header alias
+    in addition to SCANS=.
+    """
+    from casanovo.data.ms_io import _build_mgf_scan_index
+
+    mgf_file = tmp_path / "alias_scan.mgf"
+    mgf_file.write_text(
+        "BEGIN IONS\nSCAN=99\nPEPMASS=400.2\nCHARGE=2+\n200.0 1.0\nEND IONS\n"
+    )
+    result = _build_mgf_scan_index(str(mgf_file))
+    assert result == {"0": "99"}
+
+
+def test_mgf_scan_alias_scan_id_field(tmp_path):
+    """
+    _build_mgf_scan_index must recognise the SCAN ID= header alias
+    in addition to SCANS=.
+    """
+    from casanovo.data.ms_io import _build_mgf_scan_index
+
+    mgf_file = tmp_path / "alias_scan_id.mgf"
+    mgf_file.write_text(
+        "BEGIN IONS\nSCAN ID=42\nPEPMASS=400.2\nCHARGE=2+\n200.0 1.0\nEND IONS\n"
+    )
+    result = _build_mgf_scan_index(str(mgf_file))
+    assert result == {"0": "42"}
+
+
 def test_scan_num_in_mztab_spectra_ref(tmp_path):
     """
     After set_mgf_scan_index is called, MztabWriter must embed the scan

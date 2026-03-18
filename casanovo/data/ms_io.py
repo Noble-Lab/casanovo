@@ -8,7 +8,11 @@ import re
 from pathlib import Path
 from typing import List
 
+import logging
+
 import natsort
+
+logger = logging.getLogger("casanovo")
 
 from .. import __version__
 from ..config import Config
@@ -55,8 +59,12 @@ def _build_mgf_scan_index(mgf_path: str) -> dict:
                         if upper.startswith(prefix):
                             current_scan = stripped.split("=", 1)[1].strip()
                             break
-    except OSError:
-        pass
+    except OSError as e:
+        logger.warning(
+            "Could not read MGF file %s to build scan index: %s",
+            mgf_path,
+            e,
+        )
     return index2scan
 
 
@@ -253,11 +261,20 @@ class MztabWriter:
                 1,
             ):
                 filename, idx = psm.spectrum_id
-                if Path(filename).suffix.lower() == ".mgf" and idx.isnumeric():
-                    scan_num = self._mgf_scan_index.get((filename, idx))
-                    idx = f"index={idx}"
-                    if scan_num:
-                        idx = f"{idx} scan={scan_num}"
+                if Path(filename).suffix.lower() == ".mgf":
+                    # Normalize idx: handle both "0" and "index=0" shapes.
+                    numeric_idx = (
+                        idx[len("index="):]
+                        if idx.startswith("index=")
+                        else idx
+                    )
+                    if numeric_idx.isnumeric():
+                        scan_num = self._mgf_scan_index.get(
+                            (filename, numeric_idx)
+                        )
+                        idx = f"index={numeric_idx}"
+                        if scan_num:
+                            idx = f"{idx} scan={scan_num}"
 
                 writer.writerow(
                     [
