@@ -269,7 +269,7 @@ def test_n_workers(monkeypatch):
     """Check that n_workers is correct without a GPU."""
     monkeypatch.setattr("torch.cuda.is_available", lambda: False)
 
-    def cpu_fun(x):
+    def cpu_fun(_: object) -> list[str]:
         return ["foo"] * 31
 
     with monkeypatch.context() as mnk:
@@ -2643,7 +2643,7 @@ def test_no_scan_num_keeps_index_only_spectra_ref(tmp_path):
     mztab = pyteomics.mztab.MzTab(results_path)
     psms = mztab.spectrum_match_table
     assert psms.loc[1, "spectra_ref"] == "ms_run[1]:index=0"
-    assert psms.loc[1, "opt_global_cv_MS:1003057_scan_number"] is None
+    assert pd.isna(psms.loc[1, "opt_global_cv_MS:1003057_scan_number"])
 
 
 def test_mzml_spectra_ref_unaffected_by_scan_num_feature(mzml_small, tmp_path):
@@ -2670,4 +2670,4 @@ def test_mzml_spectra_ref_unaffected_by_scan_num_feature(mzml_small, tmp_path):
     mztab = pyteomics.mztab.MzTab(results_path)
     psms = mztab.spectrum_match_table
     assert psms.loc[1, "spectra_ref"] == "ms_run[1]:scan=17"
-    assert psms.loc[1, "opt_global_cv_MS:1003057_scan_number"] is None
+    assert pd.isna(psms.loc[1, "opt_global_cv_MS:1003057_scan_number"])
