@@ -2,14 +2,12 @@
 
 import collections
 import csv
+import logging
 import operator
 import os
 import re
-from pathlib import Path
 from collections.abc import Iterator
-from typing import List
-
-import logging
+from pathlib import Path
 
 import natsort
 
@@ -45,7 +43,7 @@ def _build_mgf_scan_index(mgf_path: str) -> Iterator[tuple[str, str]]:
     current_scan = None
     in_ions = False
     try:
-        with open(mgf_path, "r", errors="replace") as fh:
+        with open(mgf_path, errors="replace") as fh:
             for line in fh:
                 stripped = line.strip()
                 upper = stripped.upper()
@@ -99,7 +97,7 @@ class MztabWriter:
         ]
         self._run_map = {}
         self._mgf_scan_index = {}  # {(filename_base, index_str): scan_num_str}
-        self.psms: List[PepSpecMatch] = []
+        self.psms: list[PepSpecMatch] = []
 
     def set_metadata(self, config: Config, **kwargs) -> None:
         """
@@ -184,14 +182,14 @@ class MztabWriter:
                     (f"software[1]-setting[{i}]", f"{key} = {value}")
                 )
 
-    def set_ms_run(self, peak_filenames: List[str]) -> None:
+    def set_ms_run(self, peak_filenames: list[str]) -> None:
         """
         Add input peak files to the mzTab metadata section and
         pre-compute the MGF scan number index for any MGF files.
 
         Parameters
         ----------
-        peak_filenames : List[str]
+        peak_filenames : list[str]
             The input peak file name(s).
         """
         for i, filename in enumerate(natsort.natsorted(peak_filenames), 1):
@@ -249,8 +247,11 @@ class MztabWriter:
                 filename, idx = psm.spectrum_id
                 run_idx = self._run_map[filename]
                 scan_col = "null"
-                if Path(filename).suffix.lower() == ".mgf" and idx.isnumeric():
-                    idx = f"index={idx}"
+                if Path(filename).suffix.lower() == ".mgf":
+                    # Normalize idx to "index=N" format, handling both
+                    # bare numeric IDs ("0") and prefixed IDs ("index=0").
+                    if idx.isnumeric():
+                        idx = f"index={idx}"
                     scan_num = self._mgf_scan_index.get((filename, idx))
                     if scan_num:
                         scan_col = f"ms_run[{run_idx}]:scan={scan_num}"

@@ -2526,7 +2526,7 @@ def test_shared_file_io_params_validation(tmp_path, args, should_fail):
         assert "ok" in res.stdout
 
 
-def test_mgf_scan_index_built_correctly(mgf_small_with_scans, tmp_path):
+def test_mgf_scan_index_built_correctly(mgf_small_with_scans):
     """
     _build_mgf_scan_index must return a dict mapping spectrum index
     strings to the SCANS field values written into the MGF file.
@@ -2537,7 +2537,7 @@ def test_mgf_scan_index_built_correctly(mgf_small_with_scans, tmp_path):
     assert result == {"index=0": "17", "index=1": "42"}
 
 
-def test_mgf_without_scans_gives_empty_index(mgf_small, tmp_path):
+def test_mgf_without_scans_gives_empty_index(mgf_small):
     """
     An MGF file without any SCANS fields must produce an empty index
     (not crash and not map anything).
@@ -2595,7 +2595,7 @@ def test_scan_num_in_mztab_spectra_ref(tmp_path):
     writer.psms = [
         psm.PepSpecMatch(
             sequence="PEPTIDE",
-            spectrum_id=("test.mgf", "0"),
+            spectrum_id=("test.mgf", "index=0"),
             peptide_score=0.9,
             charge=2,
             calc_mz=400.2,
@@ -2630,7 +2630,7 @@ def test_no_scan_num_keeps_index_only_spectra_ref(tmp_path):
     writer.psms = [
         psm.PepSpecMatch(
             sequence="PEPTIDE",
-            spectrum_id=("test_no_scan.mgf", "0"),
+            spectrum_id=("test_no_scan.mgf", "index=0"),
             peptide_score=0.9,
             charge=2,
             calc_mz=400.2,
