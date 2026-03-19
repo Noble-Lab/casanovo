@@ -81,7 +81,7 @@ class ProteinDatabase:
         configured_mods = set()
         mods_to_check = (
             [self.fixed_mods, self.var_mods]
-            if max_mods > 0
+            if max_mods is None or max_mods > 0
             else [self.fixed_mods]
         )
         for mod_dict in mods_to_check:
