@@ -120,8 +120,6 @@ dim_feedforward: 1024
 n_layers: 9
 # Dropout rate for model weights.
 dropout: 0.0
-# Number of dimensions to use for encoding peak intensity.
-dim_intensity:
 # The number of iterations for the linear warm-up of the learning rate.
 warmup_iters: 100_000
 # The number of iterations for the cosine half period of the learning rate.
@@ -157,7 +155,9 @@ accumulate_grad_batches: 1
 gradient_clip_val: 1.0
 # The gradient clipping algorithm to use.
 # Must be one of: "value", "norm", or `None`.
-# "value" 
+# "value": The gradient values are clipped to the range [-gradient_clip_val, gradient_clip_val]
+# "norm": If the total L2 norm of the gradients exceeds gradient_clip_val, the gradients 
+#         are rescaled so the total L2 norm equals gradient_clip_val
 gradient_clip_algorithm: "norm"
 # Floating point precision.
 # Must be one of: "16-true", "16-mixed", "bf16-true", "bf16-mixed", "32-true",
