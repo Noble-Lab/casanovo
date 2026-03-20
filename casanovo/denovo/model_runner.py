@@ -195,9 +195,12 @@ class ModelRunner:
         self.initialize_data_module(train_paths, valid_paths)
         self.loaders.setup()
 
+        train_loader = self.loaders.train_dataloader()
+        logger.info("Training set size: %d spectra", len(train_loader.dataset))
+
         self.trainer.fit(
             self.model,
-            self.loaders.train_dataloader(),
+            train_loader,
             self.loaders.val_dataloader(),
         )
 
