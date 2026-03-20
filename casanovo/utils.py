@@ -106,13 +106,7 @@ def _get_report_dict(
         return None
 
     # Mass modifications do not contribute to sequence length.
-    # FIXME: If PTMs are represented in ProForma notation this filtering
-    #  operation needs to be reimplemented.
-    pep_lens = (
-        results_table["sequence"]
-        .str.replace(r"[^a-zA-Z]", "", regex=True)
-        .apply(len)
-    )
+    pep_lens = results_table["sequence"].apply(len)
     min_pep_len, med_pep_len, max_pep_len = np.quantile(pep_lens, [0, 0.5, 1])
     # Get binned confidence scores.
     binned_scores = {
@@ -204,7 +198,7 @@ def log_annotate_report(
     run_report = _get_report_dict(
         pd.DataFrame(
             {
-                "sequence": [psm.sequence for psm in predictions],
+                "sequence": [psm.aa_sequence for psm in predictions],
                 "score": [psm.peptide_score for psm in predictions],
             }
         ),
@@ -265,3 +259,15 @@ def check_dir_file_exists(
                 f"File matching wildcard pattern {pattern} already exist in "
                 f"{dir} and can not be overwritten."
             )
+
+
+def is_apple_silicon() -> bool:
+    """
+    Check whether the current device is Apple Silicon.
+
+    Returns
+    -------
+    bool
+        Whether the current device is Apple Silicon.
+    """
+    return platform.system() == "Darwin" and platform.machine() == "arm64"

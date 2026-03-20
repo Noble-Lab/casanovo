@@ -12,6 +12,7 @@ import platform
 import re
 import shutil
 import tempfile
+import types
 import unittest
 import unittest.mock
 
@@ -445,6 +446,31 @@ def test_peptide_score():
     aa_scores_raw = np.asarray([1.0, 0.25])
     peptide_score = _peptide_score(aa_scores_raw, True)
     assert peptide_score == pytest.approx(0.25)
+
+    aa_scores_batch = np.array([[0.5, 0.8, 0.0], [0.9, 0.7, 0.6]])
+    lengths_batch = np.array([2, 3])
+
+    peptide_scores = _peptide_score(aa_scores_batch, True, lengths_batch)
+    expected_scores = np.array([0.5 * 0.8, 0.9 * 0.7 * 0.6])
+    assert np.allclose(peptide_scores, expected_scores)
+
+    peptide_scores_no_fit = _peptide_score(
+        aa_scores_batch, False, lengths_batch
+    )
+    assert np.allclose(peptide_scores_no_fit, expected_scores - 1)
+
+    fits_array = np.array([True, False])
+    peptide_scores_mixed_fit = _peptide_score(
+        aa_scores_batch, fits_array, lengths_batch
+    )
+    expected_mixed_scores = expected_scores.copy()
+    expected_mixed_scores[~fits_array] -= 1
+    assert np.allclose(peptide_scores_mixed_fit, expected_mixed_scores)
+
+    with pytest.raises(
+        ValueError, match="`lengths` must be provided for batched input."
+    ):
+        _peptide_score(aa_scores_batch, True, None)
 
 
 def test_peptide_generator_errors(tiny_fasta_file):
@@ -1073,7 +1099,11 @@ def test_psm_batches(tiny_config):
         "peak_file": ["one.mgf", "two.mgf", "three.mgf"],
         "scan_id": [1, 2, 3],
     }
-
+    fake_cache = {
+        "memory": torch.zeros(3, 1, 1),
+        "mem_masks": torch.ones(3, 1, dtype=torch.bool),
+        "precursors_all": torch.zeros(3, 3),
+    }
     expected_batch_all = {
         "precursor_mz": torch.Tensor([42.0] * 12 + [84.0] * 12),
         "precursor_charge": torch.Tensor([1] * 12 + [2] * 12),
@@ -1083,7 +1113,7 @@ def test_psm_batches(tiny_config):
     }
 
     num_spectra = 0
-    for psm_batch in db_model._psm_batches(mock_batch):
+    for psm_batch in db_model._psm_batches(mock_batch, enc_cache=fake_cache):
         batch_size = len(psm_batch["peak_file"])
         end_idx = min(
             num_spectra + batch_size, len(expected_batch_all["peak_file"])
@@ -1483,7 +1513,24 @@ def test_n_term_scores_db(tiny_config, monkeypatch):
             ]
 
         mnk.setattr(denovo.model, "_calc_match_score", _mock_calc_match_score)
-        model.on_predict_batch_end(model.predict_step(None))
+        B = 2
+        P = 4
+        mnk.setattr(
+            type(model.encoder),
+            "forward",
+            lambda self, mz, it: (
+                torch.zeros(B, 1, 1),
+                torch.ones(B, 1, dtype=torch.bool),
+            ),
+        )
+
+        dummy_batch = {
+            "mz_array": torch.zeros(B, P),
+            "intensity_array": torch.zeros(B, P),
+            "precursor_mz": torch.tensor([42.0, 42.0]),
+            "precursor_charge": torch.tensor([1.0, 1.0]),
+        }
+        model.on_predict_batch_end(model.predict_step(dummy_batch))
 
     assert len(out_writer.psms) == 2
     assert np.allclose(out_writer.psms[0].aa_scores, np.array([0.4]))
@@ -1638,6 +1685,122 @@ def test_run_map(mgf_small):
     assert os.path.abspath(mgf_small.name) not in out_writer._run_map
 
 
+def test_get_mod_string():
+    # UNIMOD Oxidation on M (pos=4)
+    mod = types.SimpleNamespace(
+        position=3,
+        source=[
+            types.SimpleNamespace(name="Oxidation", accession="UNIMOD:35")
+        ],
+        mass=None,
+    )
+    s = psm.PepSpecMatch._get_mod_string(mod, "ACDMK")
+    assert s == "4-Oxidation (M):UNIMOD:35"
+
+    # Phospho on S (pos=7)
+    mod = types.SimpleNamespace(
+        position=6,
+        source=[types.SimpleNamespace(name="Phospho", accession="MOD:00696")],
+        mass=None,
+    )
+    s = psm.PepSpecMatch._get_mod_string(mod, "PEPTIDSX")
+    assert s == "7-Phospho (S):MOD:00696"
+
+    # Mass-only positive
+    mod = types.SimpleNamespace(position=3, source=None, mass=15.994915)
+    s = psm.PepSpecMatch._get_mod_string(mod, "ACDMK")
+    assert s == "4-[+15.9949]"
+
+    # Mass-only negative
+    mod = types.SimpleNamespace(position=4, source=None, mass=-17.026549)
+    s = psm.PepSpecMatch._get_mod_string(mod, "PEPTI")
+    assert s == "5-[-17.0265]"
+
+
+def test_proteoform_caching():
+    mock_proteoform_1 = unittest.mock.MagicMock(sequence="ACDE")
+    mock_proteoform_2 = unittest.mock.MagicMock(sequence="ACDEK")
+
+    patch_path = f"{psm.PepSpecMatch.__module__}.spectrum_utils.proforma.parse"
+    with unittest.mock.patch(patch_path) as mock_parse:
+        mock_parse.side_effect = [[mock_proteoform_1], [mock_proteoform_2]]
+
+        pep = psm.PepSpecMatch(
+            sequence="ACDE",
+            spectrum_id=("file", "idx"),
+            peptide_score=42.0,
+            charge=2,
+            calc_mz=123.45,
+            exp_mz=123.46,
+            aa_scores=[0.1, 0.2, 0.3, 0.4],
+        )
+
+        # First access should trigger parse()
+        p1 = pep._proteoform
+        assert p1 is mock_proteoform_1
+        mock_parse.assert_called_once_with("ACDE")
+
+        # Second access with same sequence should use cache
+        p2 = pep._proteoform
+        assert p2 is p1
+        mock_parse.assert_called_once()
+
+        # Changed sequence should trigger new parse
+        pep.sequence = "ACDEK"
+        p3 = pep._proteoform
+        assert p3 is mock_proteoform_2
+        assert mock_parse.call_count == 2
+
+
+def test_parse_sequence():
+    # Default args for PepSpecMatch
+    psm_args = [
+        "spectrum_id",
+        "peptide_score",
+        "charge",
+        "calc_mz",
+        "exp_mz",
+        "aa_scores",
+    ]
+    default_args = {arg: None for arg in psm_args}
+
+    # No mod
+    match = psm.PepSpecMatch(sequence="ACDMK", **default_args)
+    assert match.aa_sequence == "ACDMK"
+    assert match.modifications == "null"
+
+    # Single internal mod
+    match = psm.PepSpecMatch(sequence="ACDM[Oxidation]K", **default_args)
+    assert match.aa_sequence == "ACDMK"
+    assert match.modifications == "4-Oxidation (M):UNIMOD:35"
+
+    # Multiple internal mods
+    match = psm.PepSpecMatch(
+        sequence="ACDM[Oxidation]KC[Carbamidomethyl]", **default_args
+    )
+    assert match.aa_sequence == "ACDMKC"
+    assert (
+        match.modifications
+        == "4-Oxidation (M):UNIMOD:35; 6-Carbamidomethyl (C):UNIMOD:4"
+    )
+
+    # N-terminal mod
+    match = psm.PepSpecMatch(sequence="[Acetyl]-PEPTIDE", **default_args)
+    assert match.aa_sequence == "PEPTIDE"
+    assert match.modifications == "0-Acetyl (N-term):UNIMOD:1"
+
+    # N-terminal mod and multiple internal mods
+    match = psm.PepSpecMatch(
+        sequence="[Acetyl]-ACDM[Oxidation]KC[Carbamidomethyl]", **default_args
+    )
+    assert match.aa_sequence == "ACDMKC"
+    assert match.modifications == (
+        "0-Acetyl (N-term):UNIMOD:1; "
+        "4-Oxidation (M):UNIMOD:35; "
+        "6-Carbamidomethyl (C):UNIMOD:4"
+    )
+
+
 def test_check_dir(tmp_path):
     exists_path = tmp_path / "exists-1234.ckpt"
     exists_pattern = "exists-*.ckpt"
@@ -1762,13 +1925,12 @@ def test_beam_search_decode(tiny_config):
             residues=config.residues
         ),
     )
-    model.tokenizer.reverse = False  # For simplicity
+    model.tokenizer.reverse = False
 
-    # Sizes
-    batch = 1  # B
-    length = model.max_peptide_len + 1  # L
-    vocab = len(model.tokenizer) + 1  # V
-    beam = model.n_beams  # S
+    batch = 1
+    length = model.max_peptide_len + 1
+    vocab = len(model.tokenizer) + 1
+    beam = model.n_beams
     step = 3
     device = model.device
 
@@ -2074,16 +2236,16 @@ def test_beam_search_decode(tiny_config):
         )
 
         # Sizes and other variables
-        batch = 2  # B
-        beam = model.n_beams  # S
+        batch = 2
+        beam = model.n_beams
 
         # Initialize attributes
         model._batch_size = batch
         model._beam_size = beam
         model._cumulative_masses = torch.zeros(batch * beam, device=device)
 
-        length = model.max_peptide_len + 1  # L
-        vocab = len(model.tokenizer) + 1  # V
+        length = model.max_peptide_len + 1
+        vocab = len(model.tokenizer) + 1
         step = 4
 
         # Initialize dummy scores and tokens
@@ -2163,8 +2325,8 @@ def test_beam_search_decode(tiny_config):
         model._cumulative_masses = torch.zeros(2 * 1, device=device)
 
         batch = 2  # B
-        beam = model.n_beams  # S
-        length = model.max_peptide_len + 1  # L
+        beam = model.n_beams
+        length = model.max_peptide_len + 1
         vocab = len(model.tokenizer) + 1  # V
         step = 4
 
@@ -2276,14 +2438,12 @@ def test_precursor_rescue():
     )
     STEP = 0
 
-    # New model should stay alive
     new_model = _build_model(tok)
     finished, _, _ = new_model._finish_beams(TOKENS, PRECURSOR, STEP)
     assert (
         not finished.item()
     ), "New logic failed and beam terminated unexpectedly!"
 
-    # Old-logic sentinel should kill
     class PrematureSpec2Pep(Spec2Pep):
         """
         Mimic the legacy behaviour, abort immediately if ppm > tol,
@@ -2307,3 +2467,30 @@ def test_precursor_rescue():
     assert (
         finished_old.item()
     ), "Old logic was expected to terminate the beam but did not"
+
+
+def test_db_spec2pep_forward_no_cache(tiny_config):
+    """Test the DbSpec2Pep forward method without a cache."""
+    tokenizer = depthcharge.tokenizers.peptides.PeptideTokenizer(
+        residues=Config(tiny_config).residues
+    )
+    db_model = DbSpec2Pep(tokenizer=tokenizer)
+
+    # Mock the _forward_step method to confirm it's called
+    db_model._forward_step = unittest.mock.MagicMock(
+        return_value=(torch.zeros(1, 5, 25), torch.zeros(1, 4))
+    )
+
+    # Create a batch without pre-computed encoder outputs
+    mock_batch = {
+        "mz_array": torch.zeros((1, 10)),
+        "intensity_array": torch.zeros((1, 10)),
+        "precursor_mz": torch.tensor([42.0]),
+        "precursor_charge": torch.tensor([1]),
+        "seq": torch.randint(1, 20, (1, 8)),
+    }
+
+    db_model.forward(mock_batch)
+
+    # Assert that the non-cached path was taken
+    db_model._forward_step.assert_called_once()
