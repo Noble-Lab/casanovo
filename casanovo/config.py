@@ -10,7 +10,6 @@ import yaml
 
 from . import utils
 
-
 logger = logging.getLogger("casanovo")
 
 
@@ -83,6 +82,7 @@ class Config:
         dim_feedforward=int,
         n_layers=int,
         dropout=float,
+        dim_intensity=int,
         warmup_iters=int,
         cosine_schedule_period_iters=int,
         learning_rate=float,
