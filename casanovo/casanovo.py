@@ -63,7 +63,7 @@ class _SharedFileIOParams(click.RichCommand):
             click.Option(
                 ("-o", "--output_root"),
                 help="The root name for all output files.",
-                type=click.Path(dir_okay=False),
+                type=str,
             ),
             click.Option(
                 ("-f", "--force_overwrite"),
@@ -180,7 +180,7 @@ def sequence(
     start_time = time.time()
     utils.log_system_info()
 
-    utils.check_dir_file_exists(output_path, f"{output_root}.mztab")
+    utils.check_dir_file_exists(output_path, f"{output_root_name}.mztab")
     config, model = setup_model(
         model, config, output_path, output_root_name, False
     )
@@ -219,6 +219,16 @@ def sequence(
     nargs=1,
     type=click.Path(exists=True, dir_okay=False),
 )
+@click.option(
+    "--export",
+    is_flag=True,
+    default=False,
+    help="""
+    Dumps peptides digested from data for debugging.
+    Contains mass of peptide, sequence, and proteins 
+    it is associated with
+    """,
+)
 def db_search(
     peak_path: Tuple[str],
     fasta_path: str,
@@ -226,6 +236,7 @@ def db_search(
     config: Optional[str],
     output_dir: Optional[str],
     output_root: Optional[str],
+    export: Optional[bool],
     verbosity: str,
     force_overwrite: bool,
 ) -> None:
@@ -241,7 +252,7 @@ def db_search(
     start_time = time.time()
     utils.log_system_info()
 
-    utils.check_dir_file_exists(output_path, f"{output_root}.mztab")
+    utils.check_dir_file_exists(output_path, f"{output_root_name}.mztab")
     config, model = setup_model(
         model, config, output_path, output_root_name, False
     )
@@ -262,6 +273,12 @@ def db_search(
 
         results_path = output_path / f"{output_root_name}.mztab"
         runner.db_search(peak_path, fasta_path, str(results_path))
+        if export:
+            if not force_overwrite:
+                utils.check_dir_file_exists(
+                    output_path, f"{output_root_name}.tsv"
+                )
+            runner.model.protein_database.export(output_path, output_root_name)
         utils.log_annotate_report(
             runner.writer.psms, start_time=start_time, end_time=time.time()
         )
