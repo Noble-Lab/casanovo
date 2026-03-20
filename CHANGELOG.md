@@ -6,15 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
-- Updated model weights loading for resuming training to load all model states if --load_all_states flag provided 
-- Upgraded minimum Lightning version to 2.6
-
 ### Added
 
 - A TSV file with all candidate peptides can be exported during database searching with the `--export` flag.
+- Added `--load_all_states` flag to load all model states when resuming training.
 
 ### Changed
 
+- Upgraded minimum Lightning version to 2.6.
 - Increased minimum Python version from 3.8 to 3.10.
 - DepthCharge is upgraded to the latest version 0.4.9.
 - A more descriptive error message is logged for some annotated spectrum file parsing failure cases.

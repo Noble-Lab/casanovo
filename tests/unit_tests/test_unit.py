@@ -265,16 +265,28 @@ def test_version():
 
 
 @pytest.mark.parametrize(
-    "model_file,expectation",
+    ("model_file", "expectation", "log_message"),
     [
-        (None, pytest.warns(UserWarning)),
-        ("https://github.com/Noble-Lab/casanovo", pytest.raises(ValueError)),
-        ("nonexistent_file.ckpt", pytest.raises(ValueError)),
+        (None, None, "must also be provided"),
+        (
+            "https://github.com/Noble-Lab/casanovo",
+            pytest.raises(ValueError, match="cannot be loaded from a URL"),
+            None,
+        ),
+        (
+            "nonexistent_file.ckpt",
+            pytest.raises(ValueError, match="must point to an existing file"),
+            None,
+        ),
     ],
 )
-def test_is_invalid_model(model_file, expectation):
-    with expectation:
-        casanovo._warn_if_invalid(model_file, load_all_states=True)
+def test_is_valid_model(model_file, expectation, log_message, caplog):
+    if expectation is None:
+        casanovo._is_valid_model(model_file, load_all_states=True)
+        assert log_message in caplog.text
+    else:
+        with expectation:
+            casanovo._is_valid_model(model_file, load_all_states=True)
 
 
 @pytest.mark.skip(reason="Skipping due to Linux deadlock issue")

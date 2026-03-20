@@ -402,8 +402,21 @@ def configure(
 
 def _is_valid_model(model: Optional[str], load_all_states: bool) -> None:
     """
-    Raises warning if invalid model formats are provided if all states
-    are to be loaded
+    Validate the model argument when --load_all_states is specified.
+
+    Parameters
+    ----------
+    model : Optional[str]
+        The model path or URL.
+    load_all_states : bool
+        Whether to load all model states for resuming training.
+
+    Raises
+    ------
+    ValueError
+        If load_all_states is True and model is a URL or non-existent file.
+    UserWarning
+        If load_all_states is True but model is not provided
     """
     if load_all_states:
         if model is None:
@@ -416,12 +429,10 @@ def _is_valid_model(model: Optional[str], load_all_states: bool) -> None:
             raise ValueError(
                 "Full model state cannot be loaded from a URL. "
                 "Please provide a local file path when --load_all_states is True.",
-                stacklevel=2,
             )
         elif not Path(model).is_file():
             raise ValueError(
                 "When --load_all_states is True, the model path must point to an existing file.",
-                stacklevel=2,
             )
 
 
