@@ -45,23 +45,17 @@ def test_version():
     assert casanovo.__version__ is not None
 
 
-def test_warn_if_invalid():
-    with pytest.warns(UserWarning, match="--model must also be provided"):
-        casanovo._warn_if_invalid(None, load_all_states=True)
-
-    with pytest.warns(
-        UserWarning, match="Full model state cannot be loaded from a URL"
-    ):
-        casanovo._warn_if_invalid(
-            "https://github.com/Noble-Lab/casanovo", load_all_states=True
-        )
-
-    with pytest.warns(
-        UserWarning, match="model path must point to an existing file"
-    ):
-        casanovo._warn_if_invalid(
-            "nonexistent_file.ckpt", load_all_states=True
-        )
+@pytest.mark.parametrize(
+    "model_file,expectation",
+    [
+        (None, pytest.warns(UserWarning)),
+        ("https://github.com/Noble-Lab/casanovo", pytest.raises(ValueError)),
+        ("nonexistent_file.ckpt", pytest.raises(ValueError)),
+    ],
+)
+def test_is_invalid_model(model_file, expectation):
+    with expectation:
+        casanovo._warn_if_invalid(model_file, load_all_states=True)
 
 
 @pytest.mark.skip(reason="Skipping due to Linux deadlock issue")

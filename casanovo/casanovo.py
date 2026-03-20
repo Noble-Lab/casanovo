@@ -313,7 +313,7 @@ def train(
     model.
     """
 
-    _warn_if_invalid(model, load_all_states)
+    _is_valid_model(model, load_all_states)
 
     output_path, output_root_name = _setup_output(
         output_dir, output_root, force_overwrite, verbosity
@@ -344,12 +344,11 @@ def train(
         for peak_file in validation_peak_path:
             logger.info("  %s", peak_file)
 
-        if load_all_states:
-            runner.train(
-                train_peak_path, validation_peak_path, ckpt_path=model
-            )
-        else:
-            runner.train(train_peak_path, validation_peak_path)
+        runner.train(
+            train_peak_path,
+            validation_peak_path,
+            model if load_all_states else None,
+        )
 
         utils.log_run_report(start_time=start_time, end_time=time.time())
 
@@ -384,22 +383,26 @@ def configure(
     logger.info(f"Wrote {config_path}")
 
 
-def _warn_if_invalid(model: Optional[str], load_all_states: bool):
+def _is_valid_model(model: Optional[str], load_all_states: bool) -> None:
+    """
+    Raises warning if invalid model formats are provided if all states
+    are to be loaded
+    """
     if load_all_states:
         if model is None:
-            warnings.warn(
-                "When --load_all_states is specified, --model must also be provided."
-                "Training will resume without model information.",
+            logger.warning(
+                "When --load_all_states is specified, --model must also be provided. "
+                "Training will start from scratch without a provided model.",
                 stacklevel=2,
             )
         elif _is_valid_url(model):
-            warnings.warn(
+            raise ValueError(
                 "Full model state cannot be loaded from a URL. "
                 "Please provide a local file path when --load_all_states is True.",
                 stacklevel=2,
             )
         elif not Path(model).is_file():
-            warnings.warn(
+            raise ValueError(
                 "When --load_all_states is True, the model path must point to an existing file.",
                 stacklevel=2,
             )

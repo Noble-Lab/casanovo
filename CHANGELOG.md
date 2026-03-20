@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+- Updated model weights loading for resuming training to load all model states if --load_all_states flag provided 
+
 ## [5.1.2] - 2025-12-11
 
 ### Changed
