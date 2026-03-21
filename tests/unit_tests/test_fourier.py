@@ -161,8 +161,25 @@ class TestFourierPeakEncoder:
     def test_concatenation_architecture(self):
         """Test that the encoder uses concatenation (not sum)."""
         encoder = FourierPeakEncoder(64, m_min=0.1, m_max=5.0)
-        # Check that fourier_encoder and raw_ffn produce different dims
-        # that must be concatenated
         assert hasattr(encoder, "fourier_encoder")
         assert hasattr(encoder, "raw_ffn")
         assert hasattr(encoder, "output_proj")
+
+        # Verify intermediate dimensions sum to output_proj.in_features
+        d_fourier_out = encoder.fourier_encoder.ffn[-1].out_features
+        d_raw_out = encoder.raw_ffn[-1].out_features
+        assert encoder.output_proj.in_features == d_fourier_out + d_raw_out
+
+        # Verify forward pass actually concatenates (not sums)
+        encoder.eval()
+        mz = torch.randn(2, 5)
+        intensity = torch.randn(2, 5)
+        with torch.no_grad():
+            fourier_out = encoder.fourier_encoder(mz)
+            raw_input = torch.stack([mz.float(), intensity.float()], dim=-1)
+            raw_out = encoder.raw_ffn(raw_input)
+            expected = encoder.output_proj(
+                torch.cat([fourier_out, raw_out], dim=-1)
+            )
+            actual = encoder(mz, intensity)
+        assert torch.allclose(actual, expected)

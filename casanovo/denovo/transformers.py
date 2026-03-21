@@ -77,6 +77,12 @@ class PeptideDecoder(AnalyteTransformerDecoder):
         )
 
         self.charge_encoder = torch.nn.Embedding(max_charge, d_model)
+        _VALID_ENCODING_TYPES = {"sinusoidal", "fourier"}
+        if encoding_type not in _VALID_ENCODING_TYPES:
+            raise ValueError(
+                f"Invalid encoding_type '{encoding_type}'. "
+                f"Must be one of: {_VALID_ENCODING_TYPES}"
+            )
         if encoding_type == "fourier":
             self.mass_encoder = FourierEncoder(d_model)
         else:
@@ -164,6 +170,12 @@ class SpectrumEncoder(SpectrumTransformerEncoder):
         encoding_type: str = "sinusoidal",
     ):
         """Initialize a SpectrumEncoder."""
+        _VALID_ENCODING_TYPES = {"sinusoidal", "fourier"}
+        if encoding_type not in _VALID_ENCODING_TYPES:
+            raise ValueError(
+                f"Invalid encoding_type '{encoding_type}'. "
+                f"Must be one of: {_VALID_ENCODING_TYPES}"
+            )
         if encoding_type == "fourier":
             peak_encoder = FourierPeakEncoder(d_model)
         super().__init__(

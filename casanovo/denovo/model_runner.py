@@ -525,10 +525,14 @@ class ModelRunner:
                 loaded_model_params.keys()
             )
             for param in architecture_params:
-                if model_params[param] != self.model.hparams[param]:
+                checkpoint_value = self.model.hparams.get(param)
+                if checkpoint_value is None:
+                    # New param not in old checkpoint; use config value.
+                    continue
+                if model_params[param] != checkpoint_value:
                     warnings.warn(
                         f"Mismatching {param} parameter in "
-                        f"model checkpoint ({self.model.hparams[param]}) "
+                        f"model checkpoint ({checkpoint_value}) "
                         f"vs config file ({model_params[param]}); "
                         "using the checkpoint."
                     )
