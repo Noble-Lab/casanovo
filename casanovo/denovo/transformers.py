@@ -10,6 +10,8 @@ from depthcharge.transformers import (
     SpectrumTransformerEncoder,
 )
 
+from .fourier import FourierEncoder, FourierPeakEncoder
+
 
 class PeptideDecoder(AnalyteTransformerDecoder):
     """
@@ -42,6 +44,10 @@ class PeptideDecoder(AnalyteTransformerDecoder):
         Required only if ``n_tokens`` was provided as an ``int``.
     max_charge : int, optional
         The maximum charge state for peptide sequences.
+    encoding_type : str, optional
+        The type of positional encoding to use. ``"sinusoidal"`` uses
+        the default fixed sinusoidal encoding. ``"fourier"`` uses
+        learnable Fourier embeddings.
     """
 
     def __init__(
@@ -55,6 +61,7 @@ class PeptideDecoder(AnalyteTransformerDecoder):
         positional_encoder: PositionalEncoder | bool = True,
         padding_int: int | None = None,
         max_charge: int = 4,
+        encoding_type: str = "sinusoidal",
     ) -> None:
         """Initialize a PeptideDecoder."""
 
@@ -70,7 +77,10 @@ class PeptideDecoder(AnalyteTransformerDecoder):
         )
 
         self.charge_encoder = torch.nn.Embedding(max_charge, d_model)
-        self.mass_encoder = FloatEncoder(d_model)
+        if encoding_type == "fourier":
+            self.mass_encoder = FourierEncoder(d_model)
+        else:
+            self.mass_encoder = FloatEncoder(d_model)
 
         # Override the output layer to have +1 in the second dimension
         # compared to the AnalyteTransformerDecoder to account for
@@ -137,6 +147,10 @@ class SpectrumEncoder(SpectrumTransformerEncoder):
         The function to encode the (m/z, intensity) tuples of each mass
         spectrum. `True` uses the default sinusoidal encoding and `False`
         instead performs a 1 to `d_model` learned linear projection.
+    encoding_type : str, optional
+        The type of positional encoding to use. ``"sinusoidal"`` uses
+        the default sinusoidal encoding. ``"fourier"`` uses learnable
+        Fourier embeddings for the peak encoder.
     """
 
     def __init__(
@@ -147,8 +161,11 @@ class SpectrumEncoder(SpectrumTransformerEncoder):
         n_layers: int = 1,
         dropout: float = 0,
         peak_encoder: PeakEncoder | Callable | bool = True,
+        encoding_type: str = "sinusoidal",
     ):
         """Initialize a SpectrumEncoder."""
+        if encoding_type == "fourier":
+            peak_encoder = FourierPeakEncoder(d_model)
         super().__init__(
             d_model, n_head, dim_feedforward, n_layers, dropout, peak_encoder
         )

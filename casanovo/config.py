@@ -84,6 +84,7 @@ class Config:
         dim_feedforward=int,
         n_layers=int,
         dropout=float,
+        encoding_type=str,
         dim_intensity=int,
         warmup_iters=int,
         cosine_schedule_period_iters=int,

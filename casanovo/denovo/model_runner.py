@@ -463,6 +463,7 @@ class ModelRunner:
             calculate_precision=self.config.calculate_precision,
             out_writer=self.writer,
             tokenizer=tokenizer,
+            encoding_type=self.config.encoding_type,
         )
 
         # Reconfigurable non-architecture related parameters for a

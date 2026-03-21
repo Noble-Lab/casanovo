@@ -91,6 +91,10 @@ class Spec2Pep(pl.LightningModule):
         This is expensive.
     tokenizer: PeptideTokenizer | None
         Tokenizer object to process peptide sequences.
+    encoding_type : str, optional
+        The type of positional encoding to use. ``"sinusoidal"`` uses
+        the default fixed sinusoidal encoding. ``"fourier"`` uses
+        learnable Fourier embeddings.
     **kwargs : Dict
         Additional keyword arguments passed to the Adam optimizer.
     """
@@ -117,6 +121,7 @@ class Spec2Pep(pl.LightningModule):
         out_writer: Optional[ms_io.MztabWriter] = None,
         calculate_precision: bool = False,
         tokenizer: PeptideTokenizer | None = None,
+        encoding_type: str = "sinusoidal",
         **kwargs: Dict,
     ):
         super().__init__()
@@ -131,6 +136,7 @@ class Spec2Pep(pl.LightningModule):
             dim_feedforward=dim_feedforward,
             n_layers=n_layers,
             dropout=dropout,
+            encoding_type=encoding_type,
         )
         self.decoder = PeptideDecoder(
             n_tokens=self.tokenizer,
@@ -140,6 +146,7 @@ class Spec2Pep(pl.LightningModule):
             n_layers=n_layers,
             dropout=dropout,
             max_charge=max_charge,
+            encoding_type=encoding_type,
         )
         self.softmax = torch.nn.Softmax(2)
         ignore_index = 0
