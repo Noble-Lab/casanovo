@@ -222,6 +222,7 @@ class MztabWriter:
             for row in self.metadata:
                 writer.writerow(["MTD", *row])
             # Write PSMs.
+            include_scan_col = bool(self._mgf_scan_index)
             writer.writerow(
                 [
                     "PSH",
@@ -245,7 +246,11 @@ class MztabWriter:
                     "end",
                     "opt_ms_run[1]_aa_scores",
                     "opt_ms_run[1]_proforma",
-                    "opt_global_cv_MS:1003057_scan_number",
+                    *(
+                        ["opt_global_cv_MS:1003057_scan_number"]
+                        if include_scan_col
+                        else []
+                    ),
                 ]
             )
             by_id = operator.attrgetter("spectrum_id")
@@ -265,34 +270,34 @@ class MztabWriter:
                     if scan_num:
                         scan_col = f"ms_run[{run_idx}]:scan={scan_num}"
 
-                writer.writerow(
-                    [
-                        "PSM",
-                        psm.aa_sequence,  # sequence
-                        i,  # PSM_ID
-                        psm.protein,  # accession
-                        "null",  # unique
-                        "null",  # database
-                        "null",  # database_version
-                        f"[MS, MS:1003281, Casanovo, {__version__}]",
-                        psm.peptide_score,  # search_engine_score[1]
-                        # FIXME: Modifications should be specified as
-                        #  controlled vocabulary terms.
-                        psm.modifications,  # modifications
-                        # FIXME: Can we get the retention time from the data
-                        #  loader?
-                        "null",  # retention_time
-                        psm.charge,  # charge
-                        psm.exp_mz,  # exp_mass_to_charge
-                        psm.calc_mz,  # calc_mass_to_charge
-                        f"ms_run[{run_idx}]:{idx}",
-                        "null",  # pre
-                        "null",  # post
-                        "null",  # start
-                        "null",  # end
-                        # opt_ms_run[1]_aa_scores
-                        ",".join(list(map("{:.5f}".format, psm.aa_scores))),
-                        psm.sequence,  # opt_ms_run[1]_proforma
-                        scan_col,  # opt_global_cv_MS:1003057_scan_number
-                    ]
-                )
+                row = [
+                    "PSM",
+                    psm.aa_sequence,  # sequence
+                    i,  # PSM_ID
+                    psm.protein,  # accession
+                    "null",  # unique
+                    "null",  # database
+                    "null",  # database_version
+                    f"[MS, MS:1003281, Casanovo, {__version__}]",
+                    psm.peptide_score,  # search_engine_score[1]
+                    # FIXME: Modifications should be specified as
+                    #  controlled vocabulary terms.
+                    psm.modifications,  # modifications
+                    # FIXME: Can we get the retention time from the data
+                    #  loader?
+                    "null",  # retention_time
+                    psm.charge,  # charge
+                    psm.exp_mz,  # exp_mass_to_charge
+                    psm.calc_mz,  # calc_mass_to_charge
+                    f"ms_run[{run_idx}]:{idx}",
+                    "null",  # pre
+                    "null",  # post
+                    "null",  # start
+                    "null",  # end
+                    # opt_ms_run[1]_aa_scores
+                    ",".join(list(map("{:.5f}".format, psm.aa_scores))),
+                    psm.sequence,  # opt_ms_run[1]_proforma
+                ]
+                if include_scan_col:
+                    row.append(scan_col)
+                writer.writerow(row)
