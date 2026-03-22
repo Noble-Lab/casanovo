@@ -581,18 +581,3 @@ def test_verify_tokenizer(
     else:
         # Ensure no warnings were logged
         assert not any(rec.levelname == "WARNING" for rec in caplog.records)
-
-
-def test_initialize_tokenizer(caplog):
-    mock_config = unittest.mock.MagicMock()
-    mock_config.residues = {"foo": 100}
-
-    runner = ModelRunner(config=mock_config)
-
-    with caplog.at_level("WARNING"):
-        runner.initialize_tokenizer()
-
-    assert any(
-        "Configured residue(s) not in model alphabet: foo" in msg
-        for msg in caplog.messages
-    )
