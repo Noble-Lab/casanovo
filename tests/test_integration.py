@@ -49,12 +49,17 @@ def test_train_and_run(
     assert model_file.exists()
     assert best_model.exists()
 
+    # Resume training from previous checkpoint.
     with tiny_config.open("r") as f:
         config_data = yaml.safe_load(f)
     original_max_epochs = config_data.get("max_epochs")
 
     try:
-        config_data["max_epochs"] = 40
+        # max_epochs needs to be increased to train further.
+        if original_max_epochs is not None:
+            config_data["max_epochs"] = original_max_epochs + 10
+        else:
+            config_data["max_epochs"] = 10
         with tiny_config.open("w") as f:
             yaml.dump(config_data, f)
 
