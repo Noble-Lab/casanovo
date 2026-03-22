@@ -1390,7 +1390,7 @@ def test_isoleucine_match(tiny_config):
     db_model = DbSpec2Pep(tokenizer=tokenizer)
     peptides = [["PEPTLDEK"], ["PEPTIDEK"]]
 
-    def mock_get_candidates(_, precursor_charge):
+    def mock_get_candidates(_, precursor_charge) -> pd.Series:
         return pd.Series(peptides[precursor_charge - 1])
 
     db_model = DbSpec2Pep(tokenizer=tokenizer)
@@ -2528,8 +2528,8 @@ def test_shared_file_io_params_validation(tmp_path, args, should_fail):
 
 def test_mgf_scan_index_built_correctly(mgf_small_with_scans):
     """
-    _build_mgf_scan_index must return a dict mapping spectrum index
-    strings to the SCANS field values written into the MGF file.
+    _build_mgf_scan_index must yield `(spectrum_ref_id, scan_number)`
+    pairs for SCANS values written into the MGF file.
     """
     from casanovo.data.ms_io import _build_mgf_scan_index
 
@@ -2716,7 +2716,9 @@ def test_mixed_mgf_mzml_scan_number_column(mzml_small, tmp_path):
     assert "opt_global_cv_MS:1003057_scan_number" in psms.columns
     # MGF row must carry the scan value.
     mgf_row = psms[psms["spectra_ref"].str.contains("index=0")].iloc[0]
-    assert mgf_row["opt_global_cv_MS:1003057_scan_number"] == "ms_run[1]:scan=99"
+    assert (
+        mgf_row["opt_global_cv_MS:1003057_scan_number"] == "ms_run[1]:scan=99"
+    )
     # mzML row must be null.
     mzml_row = psms[psms["spectra_ref"].str.contains("scan=17")].iloc[0]
     assert pd.isna(mzml_row["opt_global_cv_MS:1003057_scan_number"])
