@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+### Fixed
+
+- Resolved an issue where the output file overwrite protection incorrectly checked for `None.mztab` when `--output_root` was not specified.
+
 ## [5.1.2] - 2025-12-11
 
 ### Changed
