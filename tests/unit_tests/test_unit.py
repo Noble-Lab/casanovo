@@ -2580,7 +2580,7 @@ def test_mgf_scan_alias_scan_id_field(tmp_path):
 
 def test_scan_num_in_mztab_spectra_ref(tmp_path):
     """
-    After set_mgf_scan_index is called, MztabWriter must embed the scan
+    After set_ms_run is called, MztabWriter must embed the scan
     number in a new opt_global_cv_MS:1003057_scan_number column.
     """
     # Create a minimal MGF with SCANS=17 for the first spectrum.
@@ -2671,3 +2671,52 @@ def test_mzml_spectra_ref_unaffected_by_scan_num_feature(mzml_small, tmp_path):
     psms = mztab.spectrum_match_table
     assert psms.loc[1, "spectra_ref"] == "ms_run[1]:scan=17"
     assert "opt_global_cv_MS:1003057_scan_number" not in psms.columns
+
+
+def test_mixed_mgf_mzml_scan_number_column(mzml_small, tmp_path):
+    """
+    When MGF and mzML files are processed together and the MGF contains
+    scan numbers, the opt_global_cv_MS:1003057_scan_number column must be
+    present for the whole mzTab. The MGF row must carry the scan value and
+    the mzML row must be null.
+    """
+    mgf_file = tmp_path / "mixed.mgf"
+    mgf_file.write_text(
+        "BEGIN IONS\nSCANS=99\nPEPMASS=400.2\nCHARGE=2+\n200.0 1.0\nEND IONS\n"
+    )
+
+    results_path = str(tmp_path / "results_mixed.mztab")
+    writer = ms_io.MztabWriter(results_path)
+    writer.set_ms_run([str(mgf_file), str(mzml_small)])
+    writer.psms = [
+        psm.PepSpecMatch(
+            sequence="PEPTIDE",
+            spectrum_id=("mixed.mgf", "index=0"),
+            peptide_score=0.9,
+            charge=2,
+            calc_mz=400.2,
+            exp_mz=400.2,
+            aa_scores=[0.9] * 7,
+        ),
+        psm.PepSpecMatch(
+            sequence="PEPTIDE",
+            spectrum_id=("small.mzml", "scan=17"),
+            peptide_score=0.9,
+            charge=2,
+            calc_mz=400.2,
+            exp_mz=400.2,
+            aa_scores=[0.9] * 7,
+        ),
+    ]
+    writer.save()
+
+    mztab = pyteomics.mztab.MzTab(results_path)
+    psms = mztab.spectrum_match_table
+    # Column must be present because the MGF file has scan numbers.
+    assert "opt_global_cv_MS:1003057_scan_number" in psms.columns
+    # MGF row must carry the scan value.
+    mgf_row = psms[psms["spectra_ref"].str.contains("index=0")].iloc[0]
+    assert mgf_row["opt_global_cv_MS:1003057_scan_number"] == "ms_run[1]:scan=99"
+    # mzML row must be null.
+    mzml_row = psms[psms["spectra_ref"].str.contains("scan=17")].iloc[0]
+    assert pd.isna(mzml_row["opt_global_cv_MS:1003057_scan_number"])

@@ -212,12 +212,15 @@ When processing MGF files that contain instrument-assigned scan numbers in a
 `SCANS`, `SCAN`, or `SCAN ID` header field, Casanovo will additionally export
 an optional `opt_global_cv_MS:1003057_scan_number` column in the PSM section.
 This column preserves the native scan number from the instrument and takes the
-form `ms_run[FILE_INDEX]:scan=SCAN_NUMBER`, for example
-`ms_run[1]:scan=17`. This column is separate from the `spectra_ref` column and
-does not replace the index-based spectrum reference. It is only present in the
-output when at least one MGF input file contains scan number header fields;
-mzML and mzXML files, and MGF files without scan number headers, leave this
-column absent.
+form `ms_run[FILE_INDEX]:scan=SCAN_NUMBER`, for example `ms_run[1]:scan=17`.
+This column is separate from the `spectra_ref` column and does not replace the
+index-based spectrum reference.
+The column is global to the entire mzTab file: it is added whenever at least
+one MGF input file contains scan number header fields.
+In mixed-input runs (e.g. both MGF and mzML files), the column is present for
+the whole file, but rows originating from mzML, mzXML, or MGF spectra without
+scan number headers will have a null value in this column.
+If no input file contains scan number headers the column is omitted entirely.
 
 ```{note}
 The PSM identifier in the `PSM_ID` column is not necessarily identical to the spectrum index in the `spectra_ref` column, even for MGF files.
