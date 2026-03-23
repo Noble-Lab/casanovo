@@ -48,7 +48,7 @@ def test_mztab_save(tiny_config, tmp_path):
     writer.set_ms_run(["test.mgf"])
 
     psm_test = psm.PepSpecMatch(
-        sequenc="AAAA",
+        sequence="AAAA",
         spectrum_id=("test.mgf", "0"),
         peptide_score=1.0,
         charge=3,
