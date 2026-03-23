@@ -40,16 +40,16 @@ from casanovo.denovo.model import (
 )
 
 
-def test_mztab_save(tiny_config, tmp_path, mgf_small):
+def test_mztab_save(tiny_config, tmp_path):
     file = tmp_path / "test.mztab"
     writer = ms_io.MztabWriter(file)
     tiny_config = Config(tiny_config)
     writer.set_metadata(tiny_config)
-    writer.set_ms_run([mgf_small])
+    writer.set_ms_run(["test.mgf"])
 
     psm_test = psm.PepSpecMatch(
         sequence="AAAA",
-        spectrum_id=("small.mgf", "0"),
+        spectrum_id=("test.mgf", "0"),
         peptide_score=1.0,
         charge=3,
         calc_mz=100.0,
@@ -63,6 +63,7 @@ def test_mztab_save(tiny_config, tmp_path, mgf_small):
     assert file.is_file()
 
     content = file.read_text()
+    print(content)
     assert "index=0" in content
 
 
