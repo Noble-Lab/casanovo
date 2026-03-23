@@ -59,7 +59,7 @@ docs = [
 ]
 dev = [
     "pre-commit>=2.7.1",
-    "black>=19.10b0",
+    "black>=26.3.0",
     "ppx",
     "psims",
     "pyteomics",
