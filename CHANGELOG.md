@@ -13,8 +13,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Hotfix to ensure compatibility with PyTorch v2.6 when loading weights files.
 - Upgraded minimum Lightning version to 2.6
 - Changed default value for gradient_clip_val to be 1.0 
-- Changed default algorithm gradient_clip_algorithm to be "norm", and added more specific description to algorithm descriptions 
-- Updated batch_size to appropriately reflect per-batch computation
+- Changed default gradient_clip_algorithm to "norm", and clarified algorithm descriptions
+- Updated train_batch_size documentation to reflect per-device/effective batch computation
 
 ## [5.1.1] - 2025-11-27
 
