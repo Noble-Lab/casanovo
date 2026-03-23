@@ -40,6 +40,31 @@ from casanovo.denovo.model import (
 )
 
 
+def test_mztab_save(tiny_config, tmp_path):
+    file = tmp_path / "test.mztab"
+    writer = ms_io.MztabWriter(file)
+
+    writer.set_metadata(tiny_config)
+    writer.set_ms_run(["test.mgf"])
+
+    psm = psm.PepSpecMatch(
+        sequenc="AAAA",
+        spectrum_id=("test.mgf", "0"),
+        peptide_score=1.0,
+        charge=3,
+        calc_mz=100.0,
+        exp_mz=100.0,
+        aa_scores=[0.5, 0.5, 0.5, 0.5],
+    )
+
+    writer.psms = [psm]
+    writer.save()
+
+    assert file.is_file()
+    content = file.read_text()
+    assert "index=0" in content
+
+
 def test_version():
     """Check that the version is not None."""
     assert casanovo.__version__ is not None
