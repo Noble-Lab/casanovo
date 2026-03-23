@@ -79,7 +79,7 @@ exclude = ["docs", "tests", "sample_data"]
 
 [tool.black]
 line-length = 79
-target-version = ['py10']
+target-version = ['py38']
 include = '\.pyi?$'
 exclude = '''
 
