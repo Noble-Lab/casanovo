@@ -62,9 +62,8 @@ def test_mztab_save(tiny_config, tmp_path):
 
     assert file.is_file()
 
-    content = file.read_text()
-    print(content)
-    assert "index=0" in content
+    content = file.read_text().splitlines()
+    assert "index=0" in content[-1]
 
 
 def test_version():
