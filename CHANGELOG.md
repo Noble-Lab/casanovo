@@ -15,6 +15,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Changed default value for gradient_clip_val to be 1.0 
 - Changed default gradient_clip_algorithm to "norm", and clarified algorithm descriptions
 - Updated train_batch_size documentation to reflect per-device/effective batch computation
+- Black version upgraded for python 3.10
 
 ## [5.1.1] - 2025-11-27
 
