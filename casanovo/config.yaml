@@ -9,15 +9,6 @@
 # parameters when running Casanovo in database search mode.
 ###
 
-# Max absolute difference allowed with respect to observed precursor m/z.
-# de novo: Predictions outside the tolerance range are assigned a negative
-# peptide score.
-# database search: Select candidate peptides within the specified precursor m/z
-# tolerance.
-# Set to "inf" (with quotation marks) to disable the filter entirely.
-precursor_mass_tol: 50  # ppm
-# Isotopes to consider when comparing predicted and observed precursor m/z's.
-isotope_error_range: [0, 1]
 # The minimum length of considered peptides.
 min_peptide_len: 6
 # The maximum length of considered peptides.
@@ -46,6 +37,13 @@ n_beams: 1
 ###
 # The following parameters are unique to Casanovo's database search mode.
 ###
+
+# Max absolute difference allowed with respect to observed precursor m/z.
+# Only peptides within the specified precursor m/z tolerance are considered.
+precursor_mass_tol: 50 
+
+# Isotopes to consider when comparing predicted and observed precursor m/z's.
+isotope_error_range: [0, 1]
 
 # Enzyme for in silico digestion, used to generate candidate peptides.
 # See pyteomics.parser.expasy_rules for valid enzymes.
