@@ -81,7 +81,7 @@ def _create_mgf(
     entries = [
         _create_mgf_entry(
             p,
-            str(i),
+            i,
             rng.choice([2, 3]),
             mod_aa_mass=mod_aa_mass,
             annotate=annotate,
