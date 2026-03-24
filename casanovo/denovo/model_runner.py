@@ -173,6 +173,7 @@ class ModelRunner:
         self,
         train_peak_path: Iterable[str],
         valid_peak_path: Iterable[str],
+        ckpt_path: Optional[str] = None,
     ) -> None:
         """
         Train the Casanovo model.
@@ -183,6 +184,10 @@ class ModelRunner:
             The path to the MS data files for training.
         valid_peak_path : iterable of str
             The path to the MS data files for validation.
+        ckpt_path : str, optional
+            Path to a checkpoint file to resume training from. When provided,
+            training will resume from the saved optimizer state, learning rate
+            scheduler, and epoch. If None, training starts fresh (default).
         """
         self.initialize_trainer(train=True)
         self.initialize_tokenizer()
@@ -193,11 +198,20 @@ class ModelRunner:
         self.initialize_data_module(train_paths, valid_paths)
         self.loaders.setup()
 
-        self.trainer.fit(
-            self.model,
-            self.loaders.train_dataloader(),
-            self.loaders.val_dataloader(),
-        )
+        if ckpt_path is None:
+            self.trainer.fit(
+                self.model,
+                self.loaders.train_dataloader(),
+                self.loaders.val_dataloader(),
+            )
+        else:
+            self.trainer.fit(
+                self.model,
+                self.loaders.train_dataloader(),
+                self.loaders.val_dataloader(),
+                ckpt_path=ckpt_path,
+                weights_only=False,
+            )
 
     def log_metrics(self, test_dataloader: DataLoader) -> None:
         """
@@ -407,15 +421,6 @@ class ModelRunner:
         else:
             tokenizer_clss = PeptideTokenizer
 
-        missing_aa = list(
-            set(self.config.residues) - set(tokenizer_clss.residues)
-        )
-        if missing_aa:
-            logger.warning(
-                "Configured residue(s) not in model alphabet: %s",
-                ", ".join(missing_aa),
-            )
-
         self.tokenizer = tokenizer_clss(
             residues=self.config.residues,
             replace_isoleucine_with_leucine=self.config.replace_isoleucine_with_leucine,
@@ -443,8 +448,6 @@ class ModelRunner:
             )
 
         model_params = dict(
-            precursor_mass_tol=self.config.precursor_mass_tol,
-            isotope_error_range=self.config.isotope_error_range,
             min_peptide_len=self.config.min_peptide_len,
             top_match=self.config.top_match,
             n_beams=self.config.n_beams,
@@ -468,8 +471,6 @@ class ModelRunner:
         # Reconfigurable non-architecture related parameters for a
         # loaded model.
         loaded_model_params = dict(
-            precursor_mass_tol=self.config.precursor_mass_tol,
-            isotope_error_range=self.config.isotope_error_range,
             min_peptide_len=self.config.min_peptide_len,
             max_peptide_len=self.config.max_peptide_len,
             top_match=self.config.top_match,
