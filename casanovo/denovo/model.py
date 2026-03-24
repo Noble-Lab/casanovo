@@ -5,7 +5,6 @@ import heapq
 import itertools
 import logging
 from numbers import Integral
-from numbers import Integral
 import warnings
 from typing import Any, Dict, Generator, Iterable, List, Optional, Tuple, Union
 
@@ -67,8 +66,6 @@ class Spec2Pep(pl.LightningModule):
     top_match : int
         Number of PSMs to return for each spectrum.
     train_check_interval : int
-        The number of training steps between logging messages. Must be
-        greater than zero.
         The number of training steps between logging messages. Must be
         greater than zero.
     train_label_smoothing : float
