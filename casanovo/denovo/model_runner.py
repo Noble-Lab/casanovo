@@ -700,22 +700,35 @@ class ModelRunner:
             return "auto"
 
     def _validate_vocab_compatibility(self) -> None:
-        """Check that the model vocabulary is compatible with the tokenizer.
+        """
+        Check that the model vocabulary is compatible with the tokenizer.
 
         Raises
         ------
         ValueError
-            If the model vocabulary size exceeds the tokenizer vocabulary
-            size.
+            If the model checkpoint tokenizer does not exactly match the
+            current config tokenizer, or if vocab sizes differ.
         """
+        checkpoint_tokenizer = self.model.hparams.get("tokenizer")
+        if checkpoint_tokenizer is not None and (
+            checkpoint_tokenizer.residues != self.tokenizer.residues
+            or checkpoint_tokenizer.index != self.tokenizer.index
+        ):
+            raise ValueError(
+                "The model checkpoint tokenizer does not match the current "
+                "config tokenizer. Ensure your config's `residues` and token "
+                "ordering exactly match those used during training."
+            )
+
         model_vocab_size = self.model.vocab_size
         tokenizer_vocab_size = len(self.tokenizer) + 1
-        if model_vocab_size > tokenizer_vocab_size:
+        if model_vocab_size != tokenizer_vocab_size:
             raise ValueError(
                 "The model was trained with a vocabulary of size "
-                f"{model_vocab_size}, but the current config only defines "
+                f"{model_vocab_size}, but the current config defines "
                 f"a vocabulary of size {tokenizer_vocab_size}. Ensure your "
-                "config's `residues` match those used during training."
+                "config's `residues` and token ordering match those used "
+                "during training."
             )
 
 

@@ -599,28 +599,37 @@ def test_initialize_tokenizer(caplog):
 
 
 def test_validate_vocab_compatibility():
-    """Test ModelRunner._validate_vocab_compatibility raises or passes correctly."""
+    """Test ModelRunner._validate_vocab_compatibility strict checks."""
     config = Config()
     runner = ModelRunner(config=config)
     runner.model = unittest.mock.MagicMock()
 
     # Set up a mock tokenizer on the runner.
-    tokenizer = unittest.mock.MagicMock()
-    tokenizer.__len__ = unittest.mock.Mock(return_value=5)
-    runner.tokenizer = tokenizer
+    runner_tokenizer = unittest.mock.MagicMock()
+    runner_tokenizer.__len__ = unittest.mock.Mock(return_value=5)
+    runner_tokenizer.residues = {"A": 71.03711, "C": 103.00919}
+    runner_tokenizer.index = {"A": 1, "C": 2}
+    runner.tokenizer = runner_tokenizer
 
-    # Should raise ValueError when model vocab > tokenizer vocab.
-    runner.model.vocab_size = 10  # 10 > 5 + 1 = 6
+    checkpoint_tokenizer = unittest.mock.MagicMock()
+    checkpoint_tokenizer.residues = {"A": 71.03711, "C": 103.00919}
+    checkpoint_tokenizer.index = {"A": 1, "C": 2}
+    runner.model.hparams = {"tokenizer": checkpoint_tokenizer}
+
+    # Should raise ValueError when vocab sizes differ.
+    runner.model.vocab_size = 10
     with pytest.raises(ValueError, match="vocabulary of size"):
         runner._validate_vocab_compatibility()
 
-    # Should pass silently when model vocab == tokenizer vocab.
-    runner.model.vocab_size = 6  # 6 == 5 + 1
+    # Should pass silently when vocab sizes match and tokenizers match.
+    runner.model.vocab_size = 6
     runner._validate_vocab_compatibility()  # no exception
 
-    # Should pass silently when model vocab < tokenizer vocab.
-    runner.model.vocab_size = 3  # 3 < 5 + 1 = 6
-    runner._validate_vocab_compatibility()  # no exception
+    # Should raise even when sizes match if tokenizer vocab differs.
+    checkpoint_tokenizer.residues = {"A": 71.03711, "B": 114.04293}
+    checkpoint_tokenizer.index = {"A": 1, "B": 2}
+    with pytest.raises(ValueError, match="checkpoint tokenizer"):
+        runner._validate_vocab_compatibility()
 
 
 def test_initialize_model_calls_validate_vocab_compatibility(
