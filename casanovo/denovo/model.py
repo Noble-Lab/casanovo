@@ -142,11 +142,13 @@ class Spec2Pep(pl.LightningModule):
         # unrecognized arguments, including deprecated ones. Remove the
         # deprecated ones.
         for k in config._config_deprecated:
-            kwargs.pop(k, None)
-            warnings.warn(
-                f"Deprecated hyperparameter '{k}' removed from the model.",
-                DeprecationWarning,
-            )
+            if k in kwargs:
+                kwargs.pop(k)
+                warnings.warn(
+                    f"Deprecated hyperparameter '{k}' removed from the model.",
+                    DeprecationWarning,
+                )
+        kwargs.pop("n_log", None)
         self.opt_kwargs = kwargs
 
         # Data properties.
