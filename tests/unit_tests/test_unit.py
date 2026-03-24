@@ -1673,6 +1673,19 @@ def test_n_term_scores(tiny_config):
     assert np.allclose(out_writer.psms[1].aa_scores, np.array([0.5, 0.8]))
 
 
+@pytest.mark.parametrize("bad_interval", [0, -1, 1.5, True])
+def test_train_check_interval_validation(tiny_config, bad_interval):
+    with pytest.raises(
+        ValueError, match="train_check_interval must be a positive integer"
+    ):
+        Spec2Pep(
+            train_check_interval=bad_interval,
+            tokenizer=depthcharge.tokenizers.peptides.PeptideTokenizer(
+                residues=Config(tiny_config).residues
+            ),
+        )
+
+
 def test_n_term_scores_db(tiny_config, monkeypatch):
     out_writer = unittest.mock.MagicMock()
     out_writer.psms = list()

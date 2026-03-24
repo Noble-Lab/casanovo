@@ -4,6 +4,7 @@ import collections
 import heapq
 import itertools
 import logging
+from numbers import Integral
 import warnings
 from typing import Any, Dict, Generator, Iterable, List, Optional, Tuple, Union
 
@@ -65,7 +66,8 @@ class Spec2Pep(pl.LightningModule):
     top_match : int
         Number of PSMs to return for each spectrum.
     train_check_interval : int
-        The number of training steps between logging messages.
+        The number of training steps between logging messages. Must be
+        greater than zero.
     train_label_smoothing : float
         Smoothing factor when calculating the training loss.
     warmup_iters : int
@@ -108,6 +110,14 @@ class Spec2Pep(pl.LightningModule):
         **kwargs: Dict,
     ):
         super().__init__()
+        if (
+            not isinstance(train_check_interval, Integral)
+            or isinstance(train_check_interval, bool)
+            or train_check_interval <= 0
+        ):
+            raise ValueError(
+                "train_check_interval must be a positive integer"
+            )
         self.save_hyperparameters()
 
         self.tokenizer = tokenizer or PeptideTokenizer()
