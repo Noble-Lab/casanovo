@@ -194,6 +194,10 @@ class DeNovoDataModule(pl.LightningDataModule):
         torch.utils.data.Dataset
             A PyTorch Dataset for the given peak files.
         """
+        # Lazy import to avoid circular dependency with chimera.py.
+        from .chimera import ChimeraAnnotatedSpectrumDataset, ChimeraTokenizer
+
+        is_chimera = isinstance(self.tokenizer, ChimeraTokenizer)
         custom_fields = [self.custom_field_anno] if annotated else []
         lance_path = pathlib.Path(f"{self.lance_dir}/{mode}.lance")
 
@@ -216,7 +220,10 @@ class DeNovoDataModule(pl.LightningDataModule):
         )
 
         if annotated:
-            Dataset, params = AnnotatedSpectrumDataset, anno_dataset_params
+            if is_chimera:
+                Dataset, params = ChimeraAnnotatedSpectrumDataset, anno_dataset_params
+            else:
+                Dataset, params = AnnotatedSpectrumDataset, anno_dataset_params
         else:
             Dataset, params = SpectrumDataset, dataset_params
 

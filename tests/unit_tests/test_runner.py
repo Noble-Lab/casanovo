@@ -75,11 +75,11 @@ def test_initialize_model(tmp_path, mgf_small):
         runner.initialize_model(train=False)
 
 
-def test_no_model(tiny_config_db, mgf_small, tiny_fasta_file):
+def test_no_model(tmp_path, tiny_config_db, mgf_small, tiny_fasta_file):
     """Test running a model with no weights"""
     config = Config(tiny_config_db)
     with ModelRunner(config=config) as runner:
-        results_path = "test.mztab"
+        results_path = tmp_path / "test.mztab"
         with pytest.raises(
             ValueError, match="A model file must be provided for DB search"
         ):
@@ -229,7 +229,7 @@ def test_save_final_model(tmp_path, mgf_small, tiny_config):
     # Test checkpoint saving when val_check_interval is greater than training steps
     config = Config(tiny_config)
     config.val_check_interval = 50
-    model_file = tmp_path / "epoch=19-step=20.ckpt"
+    model_file = tmp_path / "epoch=49-step=50.ckpt"
     with ModelRunner(config, output_dir=tmp_path) as runner:
         runner.train([mgf_small], [mgf_small])
 
@@ -246,7 +246,7 @@ def test_save_final_model(tmp_path, mgf_small, tiny_config):
     # Test checkpoint saving when val_check_interval is not a factor of training steps
     config.val_check_interval = 15
     validation_file = tmp_path / "foobar.best.ckpt"
-    model_file = tmp_path / "foobar.epoch=19-step=20.ckpt"
+    model_file = tmp_path / "foobar.epoch=49-step=50.ckpt"
     with ModelRunner(
         config, output_dir=tmp_path, output_rootname="foobar"
     ) as runner:

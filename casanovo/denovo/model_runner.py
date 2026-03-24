@@ -13,7 +13,8 @@ import lightning.pytorch as pl
 import lightning.pytorch.loggers
 import torch
 from depthcharge.tokenizers import PeptideTokenizer
-from depthcharge.tokenizers.peptides import MskbPeptideTokenizer
+
+from .chimera import ChimeraTokenizer, MskbChimeraTokenizer
 from lightning.pytorch.callbacks import LearningRateMonitor, ModelCheckpoint
 from lightning.pytorch.strategies import DDPStrategy
 from torch.utils.data import DataLoader
@@ -401,10 +402,11 @@ class ModelRunner:
 
     def initialize_tokenizer(self) -> None:
         """Initialize the peptide tokenizer."""
-        if self.config.massivekb_tokenizer:
-            tokenizer_clss = MskbPeptideTokenizer
-        else:
-            tokenizer_clss = PeptideTokenizer
+        tokenizer_clss = (
+            MskbChimeraTokenizer
+            if self.config.massivekb_tokenizer
+            else ChimeraTokenizer
+        )
 
         missing_aa = list(
             set(self.config.residues) - set(tokenizer_clss.residues)
