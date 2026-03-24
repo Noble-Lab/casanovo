@@ -162,6 +162,7 @@ class ModelRunner:
             self.config.allowed_var_mods,
             self.model.tokenizer,
         )
+        self.writer.set_database(fasta_path)
         test_paths = self._get_input_paths(peak_path, False, "test")
         self.writer.set_ms_run(test_paths)
         self.initialize_data_module(test_paths=test_paths)

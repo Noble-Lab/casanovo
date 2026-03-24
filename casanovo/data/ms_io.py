@@ -128,6 +128,20 @@ class MztabWriter:
                     (f"software[1]-setting[{i}]", f"{key} = {value}")
                 )
 
+    def set_database(self, fasta_path: str) -> None:
+        """
+        Add the protein database to the mzTab metadata section
+
+        Parameters
+        ----------
+        fasta_path : str
+            The path to the FASTA file used for database search
+        """
+        fasta_path = os.path.abspath(fasta_path)
+        self.metadata.append(
+            ("database[1]", Path(fasta_path).as_uri()),
+        )
+
     def set_ms_run(self, peak_filenames: List[str]) -> None:
         """
         Add input peak files to the mzTab metadata section.

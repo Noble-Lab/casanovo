@@ -15,6 +15,7 @@ from depthcharge.tokenizers import PeptideTokenizer
 
 from .. import config
 from ..data import ms_io, psm
+from ..data.db_utils import PROTON
 from ..denovo.transformers import PeptideDecoder, SpectrumEncoder
 from . import evaluate
 
@@ -1161,6 +1162,8 @@ class DbSpec2Pep(Spec2Pep):
             The predicted PSMs for the processed batch.
         """
         predictions = collections.defaultdict(list)
+        n_spectra = batch["precursor_charge"].shape[0]
+        n_candidates_scored = 0
 
         with torch.inference_mode():
             # Pre-compute encoder outputs for the entire batch.
@@ -1173,6 +1176,7 @@ class DbSpec2Pep(Spec2Pep):
             }
 
             for psm_batch in self._psm_batches(batch, enc_cache=enc_cache):
+                n_candidates_scored += len(psm_batch["original_seq_str"])
                 pred_logits, truth = self.forward(psm_batch)
                 peptide_scores, aa_scores_all = _calc_match_score(
                     pred_logits, truth
@@ -1201,17 +1205,28 @@ class DbSpec2Pep(Spec2Pep):
                         curr_aa_scores = curr_aa_scores[::-1]
 
                     spectrum_id = (filename, scan)
+                    charge_int = int(precursor_charge)
+                    calc_mass = self.protein_database.db_peptides.loc[
+                        peptide, "calc_mass"
+                    ]
+                    calc_mz = float(calc_mass) / charge_int + PROTON
                     predictions[spectrum_id].append(
                         psm.PepSpecMatch(
                             sequence=peptide,
                             spectrum_id=spectrum_id,
                             peptide_score=peptide_score,
-                            charge=int(precursor_charge),
-                            calc_mz=np.nan,
+                            charge=charge_int,
+                            calc_mz=calc_mz,
                             exp_mz=precursor_mz.item(),
                             aa_scores=curr_aa_scores,
                         )
                     )
+
+        logger.debug(
+            "Scored %d candidates for %d spectra.",
+            n_candidates_scored,
+            n_spectra,
+        )
 
         # Filter the top-scoring prediction for each spectrum.
         predictions = list(
@@ -1293,10 +1308,18 @@ class DbSpec2Pep(Spec2Pep):
         for i, (precursor_charge, precursor_mz) in enumerate(
             zip(charge_iter, mz_iter)
         ):
-            for cand in self.protein_database.get_candidates(
+            spec_cands = self.protein_database.get_candidates(
                 precursor_mz, precursor_charge
-            ):
+            )
+            for cand in spec_cands:
                 candidates.append((i, cand))
+
+            logger.debug(
+                "Spectrum %d/%d: %d candidates found.",
+                i + 1,
+                batch_size,
+                len(spec_cands),
+            )
 
             # Yield a batch if sufficient candidates are found or all spectra have been processed.
             while len(candidates) >= batch_size or (
