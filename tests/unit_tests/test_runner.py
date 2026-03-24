@@ -583,19 +583,29 @@ def test_verify_tokenizer(
         assert not any(rec.levelname == "WARNING" for rec in caplog.records)
 
 
-def test_initialize_tokenizer(caplog):
+def test_initialize_tokenizer():
     mock_config = unittest.mock.MagicMock()
+    mock_config.massivekb_tokenizer = True
     mock_config.residues = {"foo": 100}
+    mock_config.replace_isoleucine_with_leucine = True
 
     runner = ModelRunner(config=mock_config)
 
-    with caplog.at_level("WARNING"):
+    with unittest.mock.patch(
+        "casanovo.denovo.model_runner.MskbPeptideTokenizer"
+    ) as mock_tokenizer_cls:
+        mock_tokenizer = unittest.mock.MagicMock()
+        mock_tokenizer_cls.return_value = mock_tokenizer
         runner.initialize_tokenizer()
 
-    assert any(
-        "Configured residue(s) not in model alphabet: foo" in msg
-        for msg in caplog.messages
+    mock_tokenizer_cls.assert_called_once_with(
+        residues=mock_config.residues,
+        replace_isoleucine_with_leucine=True,
+        reverse=True,
+        start_token=None,
+        stop_token="$",
     )
+    assert runner.tokenizer is mock_tokenizer
 
 
 def test_validate_vocab_compatibility():
