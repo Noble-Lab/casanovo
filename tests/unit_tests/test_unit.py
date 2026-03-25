@@ -1609,10 +1609,10 @@ def test_spectrum_id_mgf(mgf_small, tmp_path):
     ]:
         for i, (filename, scan_id) in enumerate(
             [
-                (mgf_small, "0"),
-                (mgf_small, "1"),
-                (mgf_small2, "0"),
-                (mgf_small2, "1"),
+                (mgf_small, "index=0"),
+                (mgf_small, "index=1"),
+                (mgf_small2, "index=0"),
+                (mgf_small2, "index=1"),
             ]
         ):
             assert dataset[i]["peak_file"][0] == filename.name
