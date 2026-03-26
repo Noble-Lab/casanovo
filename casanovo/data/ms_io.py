@@ -17,6 +17,11 @@ from .psm import PepSpecMatch
 
 logger = logging.getLogger("casanovo")
 
+# MGF spectrum block delimiters and scan-number header prefixes.
+_MGF_BEGIN = "BEGIN IONS"
+_MGF_END = "END IONS"
+_MGF_SCAN_PREFIXES = ("SCANS=", "SCAN=", "SCAN ID=")
+
 
 def _build_mgf_scan_index(mgf_path: str) -> Iterator[tuple[str, str]]:
     """
@@ -47,16 +52,16 @@ def _build_mgf_scan_index(mgf_path: str) -> Iterator[tuple[str, str]]:
             for line in fh:
                 stripped = line.strip()
                 upper = stripped.upper()
-                if upper == "BEGIN IONS":
+                if upper == _MGF_BEGIN:
                     in_ions = True
                     current_scan = None
-                elif upper == "END IONS":
+                elif upper == _MGF_END:
                     if current_scan is not None:
                         yield f"index={index}", current_scan
                     index += 1
                     in_ions = False
                 elif in_ions:
-                    for prefix in ("SCANS=", "SCAN=", "SCAN ID="):
+                    for prefix in _MGF_SCAN_PREFIXES:
                         if upper.startswith(prefix):
                             scan_value = stripped.split("=", 1)[1].strip()
                             if re.fullmatch(r"\d+", scan_value):

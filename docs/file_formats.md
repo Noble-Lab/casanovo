@@ -221,6 +221,9 @@ In mixed-input runs (e.g. both MGF and mzML files), the column is present for
 the whole file, but rows originating from mzML, mzXML, or MGF spectra without
 scan number headers will have a null value in this column.
 If no input file contains scan number headers the column is omitted entirely.
+Note that only purely numeric scan values are exported; MGF files that use
+composite or non-numeric scan identifiers in these fields will have a null
+value in this column, and a warning will be logged.
 
 ```{note}
 The PSM identifier in the `PSM_ID` column is not necessarily identical to the spectrum index in the `spectra_ref` column, even for MGF files.
