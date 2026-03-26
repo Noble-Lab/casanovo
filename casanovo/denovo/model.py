@@ -172,7 +172,8 @@ class Spec2Pep(pl.LightningModule):
         self.train_check_interval = train_check_interval
         self._history = []
         self._history_header_emitted = False
-        self._last_logged_step = None
+        self._last_logged_step_train = None
+        self._last_logged_step_val = None
 
         # Output writer during predicting.
         self.out_writer = out_writer
@@ -965,12 +966,12 @@ class Spec2Pep(pl.LightningModule):
         """
         current_step = self.trainer.global_step
         if (
-            current_step == self._last_logged_step
+            current_step == self._last_logged_step_train
             or current_step % self.train_check_interval != 0
         ):
             return
 
-        self._last_logged_step = current_step
+        self._last_logged_step_train = current_step
         if "train_CELoss" in self.trainer.callback_metrics:
             train_loss = (
                 self.trainer.callback_metrics["train_CELoss"].detach().item()
@@ -986,10 +987,10 @@ class Spec2Pep(pl.LightningModule):
         Log the validation metrics at the end of each epoch.
         """
         current_step = self.trainer.global_step
-        if current_step == self._last_logged_step:
+        if current_step == self._last_logged_step_val:
             return
 
-        self._last_logged_step = current_step
+        self._last_logged_step_val = current_step
         callback_metrics = self.trainer.callback_metrics
         metrics = {
             "step": current_step,
@@ -1061,7 +1062,18 @@ class Spec2Pep(pl.LightningModule):
             logger.info(header)
             self._history_header_emitted = True
         metrics = self._history[-1]
-        if metrics["step"] % self.train_check_interval == 0:
+
+        val_check_interval = getattr(self.trainer, "val_check_interval", None)
+        is_val_log = (
+            isinstance(val_check_interval, int)
+            and metrics["step"] % val_check_interval == 0
+        )
+
+        if (
+            metrics["step"] % self.train_check_interval == 0
+            or is_val_log
+            or "valid" in metrics
+        ):
             msg = "%i\t%.6f\t%.6f"
             vals = [
                 metrics["step"],
