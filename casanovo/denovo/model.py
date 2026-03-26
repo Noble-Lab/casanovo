@@ -171,6 +171,8 @@ class Spec2Pep(pl.LightningModule):
         self.calculate_precision = calculate_precision
         self.train_check_interval = train_check_interval
         self._history = []
+        self._history_header_emitted = False
+        self._last_logged_step = None
 
         # Output writer during predicting.
         self.out_writer = out_writer
@@ -957,29 +959,40 @@ class Spec2Pep(pl.LightningModule):
 
         return predictions
 
-    def on_train_batch_end(self, outputs, batch, batch_idx) -> None:
+    def on_train_batch_end(self, *args, **kwargs) -> None:
         """
         Log the training loss at the end of each training step.
         """
-        if self.trainer.global_step % self.train_check_interval != 0:
+        current_step = self.trainer.global_step
+        if (
+            current_step == self._last_logged_step
+            or current_step % self.train_check_interval != 0
+        ):
             return
+
+        self._last_logged_step = current_step
         if "train_CELoss" in self.trainer.callback_metrics:
             train_loss = (
                 self.trainer.callback_metrics["train_CELoss"].detach().item()
             )
         else:
             train_loss = np.nan
-        metrics = {"step": self.trainer.global_step, "train": train_loss}
-        self._history.append(metrics)
+        metrics = {"step": current_step, "train": train_loss}
+        self._history = [metrics]
         self._log_history()
 
     def on_validation_epoch_end(self) -> None:
         """
         Log the validation metrics at the end of each epoch.
         """
+        current_step = self.trainer.global_step
+        if current_step == self._last_logged_step:
+            return
+
+        self._last_logged_step = current_step
         callback_metrics = self.trainer.callback_metrics
         metrics = {
-            "step": self.trainer.global_step,
+            "step": current_step,
             "valid": callback_metrics["valid_CELoss"].detach().item(),
         }
 
@@ -990,7 +1003,7 @@ class Spec2Pep(pl.LightningModule):
             metrics["valid_pep_precision"] = (
                 callback_metrics["pep_precision"].detach().item()
             )
-        self._history.append(metrics)
+        self._history = [metrics]
         self._log_history()
 
     def on_predict_batch_end(
@@ -1040,12 +1053,13 @@ class Spec2Pep(pl.LightningModule):
         # Log only if all output for the current epoch is recorded.
         if len(self._history) == 0:
             return
-        if len(self._history) == 1:
+        if not self._history_header_emitted:
             header = "Step\tTrain loss\tValid loss\t"
             if self.calculate_precision:
                 header += "Peptide precision\tAA precision"
 
             logger.info(header)
+            self._history_header_emitted = True
         metrics = self._history[-1]
         if metrics["step"] % self.train_check_interval == 0:
             msg = "%i\t%.6f\t%.6f"
