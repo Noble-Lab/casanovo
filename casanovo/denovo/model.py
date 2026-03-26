@@ -96,7 +96,7 @@ class Spec2Pep(pl.LightningModule):
         be a :class:`~casanovo.denovo.chimera.ChimeraTokenizer`, the training
         data must contain ``"seq_compliment"`` batches (provided automatically
         by :class:`~casanovo.denovo.chimera.ChimeraAnnotatedSpectrumDataset`),
-        and the loss is computed as a soft-minimum over the two possible
+        and the loss is computed as a hard-minimum over the two possible
         peptide orderings.  During prediction, the separator token is used to
         split predictions into two :class:`~casanovo.data.psm.PepSpecMatch`
         objects per spectrum.
@@ -373,22 +373,25 @@ class Spec2Pep(pl.LightningModule):
 
         if self.chimera and "seq_compliment" in batch:
             # Chimera hard-min loss: pick the peptide ordering with lower
-            # per-sequence mean CE, then average across the batch.
+            # mask-normalised per-sequence CE, then average raw token losses
+            # across the batch (consistent with the non-chimeric path).
             # Because the NAR decoder always receives zero tokens, a single
             # forward pass produces logits that can be scored against both
             # peptide orderings without a second decoder call.
             truth_comp = batch["seq_compliment"][:, :seq_len]
-            loss_a = (
-                loss_fun(pred_flat, truth.flatten())
-                .reshape(batch_size, seq_len)
-                .mean(dim=1)
+            mask = (truth != 0).float()
+            n_real = mask.sum(dim=1).clamp(min=1)
+            raw_a = (
+                loss_fun(pred_flat, truth.flatten()).reshape(batch_size, seq_len)
             )
-            loss_b = (
-                loss_fun(pred_flat, truth_comp.flatten())
-                .reshape(batch_size, seq_len)
-                .mean(dim=1)
+            raw_b = (
+                loss_fun(pred_flat, truth_comp.flatten()).reshape(batch_size, seq_len)
             )
-            loss = torch.min(torch.stack([loss_a, loss_b], dim=1), dim=1).values.mean()
+            # Mask-normalised loss used only for ordering selection.
+            loss_a_norm = (raw_a * mask).sum(dim=1) / n_real
+            loss_b_norm = (raw_b * mask).sum(dim=1) / n_real
+            winner = (loss_b_norm < loss_a_norm).float().unsqueeze(1)
+            loss = (raw_a * (1 - winner) + raw_b * winner).mean()
         else:
             loss = loss_fun(pred_flat, truth.flatten()).mean()
         self.log(
