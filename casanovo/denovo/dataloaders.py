@@ -21,7 +21,6 @@ from depthcharge.tokenizers import PeptideTokenizer
 from torch.utils.data import DataLoader
 from torch.utils.data.datapipes.iter.combinatorics import ShufflerIterDataPipe
 
-
 logger = logging.getLogger("casanovo")
 
 
@@ -128,7 +127,6 @@ class DeNovoDataModule(pl.LightningDataModule):
         self.custom_field_anno = CustomField(
             "seq", lambda x: x["params"]["seq"], pa.string()
         )
-
         self.train_dataset = None
         self.valid_dataset = None
         self.test_dataset = None

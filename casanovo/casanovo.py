@@ -63,7 +63,7 @@ class _SharedFileIOParams(click.RichCommand):
             click.Option(
                 ("-o", "--output_root"),
                 help="The root name for all output files.",
-                type=click.Path(dir_okay=False),
+                type=str,
             ),
             click.Option(
                 ("-f", "--force_overwrite"),
@@ -180,7 +180,7 @@ def sequence(
     start_time = time.time()
     utils.log_system_info()
 
-    utils.check_dir_file_exists(output_path, f"{output_root}.mztab")
+    utils.check_dir_file_exists(output_path, f"{output_root_name}.mztab")
     config, model = setup_model(
         model, config, output_path, output_root_name, False
     )
@@ -219,6 +219,16 @@ def sequence(
     nargs=1,
     type=click.Path(exists=True, dir_okay=False),
 )
+@click.option(
+    "--export",
+    is_flag=True,
+    default=False,
+    help="""
+    Dumps peptides digested from data for debugging.
+    Contains mass of peptide, sequence, and proteins 
+    it is associated with
+    """,
+)
 def db_search(
     peak_path: Tuple[str],
     fasta_path: str,
@@ -226,6 +236,7 @@ def db_search(
     config: Optional[str],
     output_dir: Optional[str],
     output_root: Optional[str],
+    export: Optional[bool],
     verbosity: str,
     force_overwrite: bool,
 ) -> None:
@@ -241,7 +252,7 @@ def db_search(
     start_time = time.time()
     utils.log_system_info()
 
-    utils.check_dir_file_exists(output_path, f"{output_root}.mztab")
+    utils.check_dir_file_exists(output_path, f"{output_root_name}.mztab")
     config, model = setup_model(
         model, config, output_path, output_root_name, False
     )
@@ -262,6 +273,12 @@ def db_search(
 
         results_path = output_path / f"{output_root_name}.mztab"
         runner.db_search(peak_path, fasta_path, str(results_path))
+        if export:
+            if not force_overwrite:
+                utils.check_dir_file_exists(
+                    output_path, f"{output_root_name}.tsv"
+                )
+            runner.model.protein_database.export(output_path, output_root_name)
         utils.log_annotate_report(
             runner.writer.psms, start_time=start_time, end_time=time.time()
         )
@@ -285,6 +302,16 @@ def db_search(
     multiple=True,
     type=click.Path(exists=True, dir_okay=True),
 )
+@click.option(
+    "--load_all_states",
+    help="""
+    Flag to indicate whether all states are loaded when re-starting 
+    training, or only the weights. Defaults to False.
+    """,
+    required=False,
+    default=False,
+    is_flag=True,
+)
 def train(
     train_peak_path: Tuple[str],
     validation_peak_path: Optional[Tuple[str]],
@@ -294,6 +321,7 @@ def train(
     output_root: Optional[str],
     verbosity: str,
     force_overwrite: bool,
+    load_all_states: bool,
 ) -> None:
     """Train a Casanovo model on your own data.
 
@@ -301,6 +329,9 @@ def train(
     those provided by MassIVE-KB, from which to train a new Casnovo
     model.
     """
+
+    _is_valid_model(model, load_all_states)
+
     output_path, output_root_name = _setup_output(
         output_dir, output_root, force_overwrite, verbosity
     )
@@ -330,7 +361,12 @@ def train(
         for peak_file in validation_peak_path:
             logger.info("  %s", peak_file)
 
-        runner.train(train_peak_path, validation_peak_path)
+        runner.train(
+            train_peak_path,
+            validation_peak_path,
+            model if load_all_states else None,
+        )
+
         utils.log_run_report(start_time=start_time, end_time=time.time())
 
 
@@ -362,6 +398,42 @@ def configure(
     config_path = str(output_path / config_fname)
     Config.copy_default(config_path)
     logger.info(f"Wrote {config_path}")
+
+
+def _is_valid_model(model: Optional[str], load_all_states: bool) -> None:
+    """
+    Validate the model argument when --load_all_states is specified.
+
+    Parameters
+    ----------
+    model : Optional[str]
+        The model path or URL.
+    load_all_states : bool
+        Whether to load all model states for resuming training.
+
+    Raises
+    ------
+    ValueError
+        If load_all_states is True and model is a URL or non-existent file.
+    UserWarning
+        If load_all_states is True but model is not provided
+    """
+    if load_all_states:
+        if model is None:
+            logger.warning(
+                "When --load_all_states is specified, --model must also be provided. "
+                "Training will start from scratch without a provided model.",
+                stacklevel=2,
+            )
+        elif _is_valid_url(model):
+            raise ValueError(
+                "Full model state cannot be loaded from a URL. "
+                "Please provide a local file path when --load_all_states is True.",
+            )
+        elif not Path(model).is_file():
+            raise ValueError(
+                "When --load_all_states is True, the model path must point to an existing file.",
+            )
 
 
 def setup_logging(
