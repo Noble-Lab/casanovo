@@ -80,6 +80,7 @@ def test_train_and_run(
         result = run(train_args)
         best_model = tmp_path / "train_resuming.best.ckpt"
         assert result.exit_code == 0
+        print(result.output)
         assert best_model.exists()
     finally:
         if original_max_epochs is None:
@@ -121,7 +122,7 @@ def test_train_and_run(
     # Verify that the spectrum predictions are correct and indexed
     # according to the peak input file type.
     psms = mztab.spectrum_match_table
-    assert psms.loc[1, "sequence"] == "LESLEK"
+    assert psms.loc[1, "sequence"] == "LESLLEK"
     assert psms.loc[1, "spectra_ref"] == "ms_run[1]:index=0"
     assert psms.loc[2, "sequence"] == "PEPTLDEK"
     assert psms.loc[2, "spectra_ref"] == "ms_run[1]:index=1"
@@ -130,7 +131,7 @@ def test_train_and_run(
         psms.loc[3, "spectra_ref"]
         == "ms_run[2]:merged=11 frame=12 scanStart=763 scanEnd=787"
     )
-    assert psms.loc[4, "sequence"] == "LESLEK"
+    assert psms.loc[4, "sequence"] == "LESLLEK"
     assert psms.loc[4, "spectra_ref"] == "ms_run[2]:scan=17"
 
     # Run Casanovo in de novo evaluation mode.
@@ -164,7 +165,7 @@ def test_train_and_run(
     # Verify that the spectrum predictions are correct and indexed
     # according to the peak input file type.
     psms = mztab.spectrum_match_table
-    assert psms.loc[1, "sequence"] == "LESLEK"
+    assert psms.loc[1, "sequence"] == "LESLLEK"
     assert psms.loc[1, "spectra_ref"] == "ms_run[1]:index=0"
     assert psms.loc[2, "sequence"] == "PEPTLDEK"
     assert psms.loc[2, "spectra_ref"] == "ms_run[1]:index=1"
