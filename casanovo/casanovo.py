@@ -830,9 +830,12 @@ def _download_weights(file_url: str, download_path: Path) -> None:
         response.raw.read, decode_content=True
     )
 
-    with tqdm.tqdm.wrapattr(
-        response.raw, "read", total=file_size, desc=desc
-    ) as r_raw, open(download_path, "wb") as file:
+    with (
+        tqdm.tqdm.wrapattr(
+            response.raw, "read", total=file_size, desc=desc
+        ) as r_raw,
+        open(download_path, "wb") as file,
+    ):
         shutil.copyfileobj(r_raw, file)
 
 

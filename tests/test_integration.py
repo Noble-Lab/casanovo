@@ -80,7 +80,6 @@ def test_train_and_run(
         result = run(train_args)
         best_model = tmp_path / "train_resuming.best.ckpt"
         assert result.exit_code == 0
-        print(result.output)
         assert best_model.exists()
     finally:
         if original_max_epochs is None:

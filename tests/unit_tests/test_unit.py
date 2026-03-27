@@ -439,7 +439,10 @@ def test_setup_model(monkeypatch):
     version = "3.0.0"
 
     # Test model is none when not training
-    with monkeypatch.context() as mnk, tempfile.TemporaryDirectory() as tmp_dir:
+    with (
+        monkeypatch.context() as mnk,
+        tempfile.TemporaryDirectory() as tmp_dir,
+    ):
         mnk.setattr(casanovo, "__version__", version)
         mnk.setattr("appdirs.user_cache_dir", lambda n, a, opinion: tmp_dir)
         mnk.setattr(github, "Github", mock_github)
@@ -459,7 +462,10 @@ def test_setup_model(monkeypatch):
         assert not filename.is_file()
         assert mock_get.request_counter == 1
 
-    with monkeypatch.context() as mnk, tempfile.TemporaryDirectory() as tmp_dir:
+    with (
+        monkeypatch.context() as mnk,
+        tempfile.TemporaryDirectory() as tmp_dir,
+    ):
         mnk.setattr(casanovo, "__version__", version)
         mnk.setattr("appdirs.user_cache_dir", lambda n, a, opinion: tmp_dir)
         mnk.setattr(github, "Github", mock_github)
@@ -490,9 +496,11 @@ def test_setup_model(monkeypatch):
         assert mock_get.request_counter == 3
 
     # Test model is file
-    with monkeypatch.context() as mnk, tempfile.NamedTemporaryFile(
-        suffix=".ckpt"
-    ) as temp_file, tempfile.TemporaryDirectory() as tmp_dir:
+    with (
+        monkeypatch.context() as mnk,
+        tempfile.NamedTemporaryFile(suffix=".ckpt") as temp_file,
+        tempfile.TemporaryDirectory() as tmp_dir,
+    ):
         mnk.setattr(casanovo, "__version__", version)
         mnk.setattr("appdirs.user_cache_dir", lambda n, a, opinion: tmp_dir)
         mnk.setattr(github, "Github", mock_github)
@@ -512,7 +520,10 @@ def test_setup_model(monkeypatch):
         assert result == temp_file_path
 
     # Test model is neither a URL or File
-    with monkeypatch.context() as mnk, tempfile.TemporaryDirectory() as tmp_dir:
+    with (
+        monkeypatch.context() as mnk,
+        tempfile.TemporaryDirectory() as tmp_dir,
+    ):
         mnk.setattr(casanovo, "__version__", version)
         mnk.setattr("appdirs.user_cache_dir", lambda n, a, opinion: tmp_dir)
         mnk.setattr(github, "Github", mock_github)
@@ -541,7 +552,10 @@ def test_get_model_weights(monkeypatch):
     mock_github = functools.partial(MockGithub, test_releases)
 
     for version in test_releases:
-        with monkeypatch.context() as mnk, tempfile.TemporaryDirectory() as tmp_dir:
+        with (
+            monkeypatch.context() as mnk,
+            tempfile.TemporaryDirectory() as tmp_dir,
+        ):
             mnk.setattr(casanovo, "__version__", version)
             mnk.setattr(
                 "appdirs.user_cache_dir", lambda n, a, opinion: tmp_dir
@@ -561,7 +575,10 @@ def test_get_model_weights(monkeypatch):
     # Impossible to find model weights for (i) full version mismatch and (ii)
     # major version mismatch.
     for version in ["999.999.999", "999.0.0"]:
-        with monkeypatch.context() as mnk, tempfile.TemporaryDirectory() as tmp_dir:
+        with (
+            monkeypatch.context() as mnk,
+            tempfile.TemporaryDirectory() as tmp_dir,
+        ):
             mnk.setattr(casanovo, "__version__", version)
             mnk.setattr(github, "Github", mock_github)
             mnk.setattr(requests, "get", mock_get)
@@ -574,7 +591,10 @@ def test_get_model_weights(monkeypatch):
             403, "API rate limit exceeded", None
         )
 
-    with monkeypatch.context() as mnk, tempfile.TemporaryDirectory() as tmp_dir:
+    with (
+        monkeypatch.context() as mnk,
+        tempfile.TemporaryDirectory() as tmp_dir,
+    ):
         mnk.setattr("appdirs.user_cache_dir", lambda n, a, opinion: tmp_dir)
         mnk.setattr("github.Requester.Requester.requestJsonAndCheck", request)
         mnk.setattr(requests, "get", mock_get)
@@ -588,7 +608,10 @@ def test_get_model_weights(monkeypatch):
 def test_get_weights_from_url(monkeypatch):
     file_url = "http://example.com/model_weights.ckpt"
 
-    with monkeypatch.context() as mnk, tempfile.TemporaryDirectory() as tmp_dir:
+    with (
+        monkeypatch.context() as mnk,
+        tempfile.TemporaryDirectory() as tmp_dir,
+    ):
         mock_get = MockResponseGet()
         mock_head = MockResponseHead()
         mnk.setattr(requests, "get", mock_get)
