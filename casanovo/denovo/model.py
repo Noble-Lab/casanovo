@@ -4,7 +4,6 @@ import collections
 import heapq
 import itertools
 import logging
-from numbers import Integral
 import warnings
 from typing import Any, Dict, Generator, Iterable, List, Optional, Tuple, Union
 
@@ -110,12 +109,6 @@ class Spec2Pep(pl.LightningModule):
         **kwargs: Dict,
     ):
         super().__init__()
-        if (
-            not isinstance(train_check_interval, Integral)
-            or isinstance(train_check_interval, bool)
-            or train_check_interval <= 0
-        ):
-            raise ValueError("train_check_interval must be a positive integer")
         self.save_hyperparameters()
 
         self.tokenizer = tokenizer or PeptideTokenizer()
@@ -146,9 +139,7 @@ class Spec2Pep(pl.LightningModule):
         # Optimizer settings.
         self.warmup_iters = warmup_iters
         self.cosine_schedule_period_iters = cosine_schedule_period_iters
-        # `kwargs` will contain additional arguments as well as
-        # unrecognized arguments, including deprecated ones. Remove the
-        # deprecated ones.
+        # Remove kwargs that are not accepted by the model constructor.
         for k in config._config_deprecated:
             if k in kwargs:
                 kwargs.pop(k)
@@ -156,7 +147,6 @@ class Spec2Pep(pl.LightningModule):
                     f"Deprecated hyperparameter '{k}' removed from the model.",
                     DeprecationWarning,
                 )
-        kwargs.pop("n_log", None)
         self.opt_kwargs = kwargs
 
         # Data properties.

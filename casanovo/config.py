@@ -20,6 +20,7 @@ _config_deprecated = dict(
     every_n_train_steps="val_check_interval",
     max_iters="cosine_schedule_period_iters",
     max_length="max_peptide_len",
+    n_log=None,
     save_top_k=None,
     model_save_folder_path=None,
     reverse_peptides=None,
@@ -65,7 +66,6 @@ class Config:
         allowed_fixed_mods=str,
         allowed_var_mods=str,
         random_seed=int,
-        n_log=int,
         tb_summarywriter=bool,
         log_metrics=bool,
         log_every_n_steps=int,
@@ -121,16 +121,10 @@ class Config:
                     if old in self._user_config:
                         if new is not None:
                             self._user_config[new] = self._user_config.pop(old)
-                            warning_msg = (
-                                f"Deprecated config option '{old}' "
-                                f"remapped to '{new}'"
-                            )
+                            warning_msg = f"Deprecated config option '{old}' remapped to '{new}'"
                         else:
                             del self._user_config[old]
-                            warning_msg = (
-                                f"Deprecated config option '{old}' "
-                                "is no longer in use"
-                            )
+                            warning_msg = f"Deprecated config option '{old}' is no longer in use"
 
                         warnings.warn(warning_msg, DeprecationWarning)
                 # Check for missing entries in config file.
@@ -144,12 +138,12 @@ class Config:
                 config_unknown = self._user_config.keys() - self._params.keys()
                 if len(config_unknown) > 0:
                     raise KeyError(
-                        "Unrecognized config option(s): "
-                        f"{', '.join(config_unknown)}"
+                        f"Unrecognized config option(s): {', '.join(config_unknown)}"
                     )
         # Validate.
         for key, val in self._config_types.items():
             self.validate_param(key, val)
+        self.validate_values()
 
         self._params["n_workers"] = utils.n_workers()
 
@@ -202,6 +196,19 @@ class Config:
             raise TypeError(
                 f"Incorrect type for configuration value {param}: {err}"
             )
+
+    def validate_values(self) -> None:
+        """Verify that parameter values satisfy semantic constraints."""
+        raw_train_check_interval = self._user_config.get(
+            "train_check_interval", self._params["train_check_interval"]
+        )
+        if (
+            not isinstance(self._params["train_check_interval"], int)
+            or isinstance(raw_train_check_interval, bool)
+            or isinstance(raw_train_check_interval, float)
+            or self._params["train_check_interval"] <= 0
+        ):
+            raise ValueError("train_check_interval must be a positive integer")
 
     def items(self) -> Tuple[str, ...]:
         """Return the parameters."""

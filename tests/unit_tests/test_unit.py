@@ -490,9 +490,11 @@ def test_setup_model(monkeypatch):
         assert mock_get.request_counter == 3
 
     # Test model is file
-    with monkeypatch.context() as mnk, tempfile.NamedTemporaryFile(
-        suffix=".ckpt"
-    ) as temp_file, tempfile.TemporaryDirectory() as tmp_dir:
+    with (
+        monkeypatch.context() as mnk,
+        tempfile.NamedTemporaryFile(suffix=".ckpt") as temp_file,
+        tempfile.TemporaryDirectory() as tmp_dir,
+    ):
         mnk.setattr(casanovo, "__version__", version)
         mnk.setattr("appdirs.user_cache_dir", lambda n, a, opinion: tmp_dir)
         mnk.setattr(github, "Github", mock_github)
@@ -1673,19 +1675,6 @@ def test_n_term_scores(tiny_config):
     assert len(out_writer.psms) == 2
     assert np.allclose(out_writer.psms[0].aa_scores, np.array([0.4]))
     assert np.allclose(out_writer.psms[1].aa_scores, np.array([0.5, 0.8]))
-
-
-@pytest.mark.parametrize("bad_interval", [0, -1, 1.5, True])
-def test_train_check_interval_validation(tiny_config, bad_interval):
-    with pytest.raises(
-        ValueError, match="train_check_interval must be a positive integer"
-    ):
-        Spec2Pep(
-            train_check_interval=bad_interval,
-            tokenizer=depthcharge.tokenizers.peptides.PeptideTokenizer(
-                residues=Config(tiny_config).residues
-            ),
-        )
 
 
 def test_n_term_scores_db(tiny_config, monkeypatch):
