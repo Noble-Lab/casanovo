@@ -264,6 +264,31 @@ def test_version():
     assert casanovo.__version__ is not None
 
 
+@pytest.mark.parametrize(
+    ("model_file", "expectation", "log_message"),
+    [
+        (None, None, "must also be provided"),
+        (
+            "https://github.com/Noble-Lab/casanovo",
+            pytest.raises(ValueError, match="cannot be loaded from a URL"),
+            None,
+        ),
+        (
+            "nonexistent_file.ckpt",
+            pytest.raises(ValueError, match="must point to an existing file"),
+            None,
+        ),
+    ],
+)
+def test_is_valid_model(model_file, expectation, log_message, caplog):
+    if expectation is None:
+        casanovo._is_valid_model(model_file, load_all_states=True)
+        assert log_message in caplog.text
+    else:
+        with expectation:
+            casanovo._is_valid_model(model_file, load_all_states=True)
+
+
 @pytest.mark.skip(reason="Skipping due to Linux deadlock issue")
 def test_n_workers(monkeypatch):
     """Check that n_workers is correct without a GPU."""

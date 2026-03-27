@@ -244,8 +244,8 @@ class MztabWriter:
                     "post",
                     "start",
                     "end",
-                    "opt_ms_run[1]_aa_scores",
-                    "opt_ms_run[1]_proforma",
+                    "opt_global_aa_scores",
+                    "opt_global_cv_MS:1003169_proforma_peptidoform_sequence",
                     *(
                         ["opt_global_cv_MS:1003057_scan_number"]
                         if include_scan_col
@@ -290,9 +290,9 @@ class MztabWriter:
                     "null",  # post
                     "null",  # start
                     "null",  # end
-                    # opt_ms_run[1]_aa_scores
+                    # opt_global_aa_scores
                     ",".join(list(map("{:.5f}".format, psm.aa_scores))),
-                    psm.sequence,  # opt_ms_run[1]_proforma
+                    psm.sequence,  # opt_global_cv_MS:1003169_proforma_peptidoform_sequence
                 ]
                 if include_scan_col:
                     scan_num = self._mgf_scan_index.get((filename, idx), "null")

@@ -8,15 +8,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Added
 
+- Added `--load_all_states` flag to load all model states when resuming training.
 - A TSV file with all candidate peptides can be exported during database searching with the `--export` flag.
 - Track instrument-assigned scan numbers from MGF `SCANS`, `SCAN`, and `SCAN ID` header fields in a new `opt_global_cv_MS:1003057_scan_number` mzTab column.
 
 ### Changed
 
+- Upgraded minimum Lightning version to 2.6.
 - Increased minimum Python version from 3.8 to 3.10.
 - DepthCharge is upgraded to the latest version 0.4.9.
 - A more descriptive error message is logged for some annotated spectrum file parsing failure cases.
 - The precursor mass filter is no longer applied in *de novo* mode, and correspondingly peptide-level scores are no longer penalized based on the precursor mass. The config options `precursor_mass_tol` and `isotope_error_range` now only apply to database search mode.
+- The amino acid scores and ProForma columns in the output mzTab files have been renamed to `opt_global_aa_scores` and `opt_global_cv_MS:1003169_proforma_peptidoform_sequence`, according to the mzTab specification.
 
 ### Fixed
 
