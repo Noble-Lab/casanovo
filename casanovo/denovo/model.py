@@ -300,7 +300,7 @@ class Spec2Pep(pl.LightningModule):
             memory=memories,
             memory_key_padding_mask=mem_masks,
             precursors=precursors,
-        )
+        ).to(scores.dtype)
         top_indices = torch.topk(pred[:, 0, :], beam, dim=1)[1]
         tokens[:, 0, :] = top_indices
         scores[:, :1, :, :] = einops.repeat(pred, "B L V -> B L V S", S=beam)
@@ -357,7 +357,7 @@ class Spec2Pep(pl.LightningModule):
                         precursors=active_precursors,
                         memory=active_memories,
                         memory_key_padding_mask=active_mem_masks,
-                    )
+                    ).to(scores.dtype)
 
                     scores[active_beams, : step + 2, :] = active_scores
 

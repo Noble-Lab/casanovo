@@ -127,7 +127,6 @@ class DeNovoDataModule(pl.LightningDataModule):
         self.custom_field_anno = CustomField(
             "seq", lambda x: x["params"]["seq"], pa.string()
         )
-
         self.train_dataset = None
         self.valid_dataset = None
         self.test_dataset = None
