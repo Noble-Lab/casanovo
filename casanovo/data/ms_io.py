@@ -29,7 +29,7 @@ def _build_mgf_scan_index(mgf_path: str) -> Iterator[tuple[str, str]]:
     that contain a SCANS, SCAN, or SCAN ID header field.
 
     Reads only the header lines of each spectrum entry (never the peak
-    data), so this is very fast even for large files.
+    data), so this is fast even for large files.
 
     Parameters
     ----------
@@ -40,21 +40,16 @@ def _build_mgf_scan_index(mgf_path: str) -> Iterator[tuple[str, str]]:
     ------
     tuple[str, str]
         A ``(spectrum_ref_id, scan_number)`` pair where
-        *spectrum_ref_id* uses the ``index=N`` nativeID format required
-        by the mzTab multiple-peak-list nativeID specification
-        (MS:1000774).
+        *spectrum_ref_id* uses the ``index=N`` zero-based index for
+        MGF files according to the mzTab specification.
     """
-    index = 0
-    current_scan = None
-    in_ions = False
+    index, current_scan, in_ions = 0, None, False
     try:
         with open(mgf_path, errors="replace") as fh:
             for line in fh:
-                stripped = line.strip()
-                upper = stripped.upper()
+                upper = line.strip().upper()
                 if upper == _MGF_BEGIN:
-                    in_ions = True
-                    current_scan = None
+                    in_ions, current_scan = True, None
                 elif upper == _MGF_END:
                     if current_scan is not None:
                         yield f"index={index}", current_scan
@@ -63,8 +58,8 @@ def _build_mgf_scan_index(mgf_path: str) -> Iterator[tuple[str, str]]:
                 elif in_ions:
                     for prefix in _MGF_SCAN_PREFIXES:
                         if upper.startswith(prefix):
-                            scan_value = stripped.split("=", 1)[1].strip()
-                            if re.fullmatch(r"\d+", scan_value):
+                            scan_value = upper.split("=", 1)[1].strip()
+                            if scan_value.isnumeric():
                                 current_scan = scan_value
                             else:
                                 logger.warning(
@@ -265,15 +260,11 @@ class MztabWriter:
             ):
                 filename, idx = psm.spectrum_id
                 run_idx = self._run_map[filename]
-                scan_col = "null"
                 if Path(filename).suffix.lower() == ".mgf":
                     # Normalize idx to "index=N" format, handling both
                     # bare numeric IDs ("0") and prefixed IDs ("index=0").
                     if idx.isnumeric():
                         idx = f"index={idx}"
-                    scan_num = self._mgf_scan_index.get((filename, idx))
-                    if scan_num:
-                        scan_col = f"ms_run[{run_idx}]:scan={scan_num}"
 
                 row = [
                     "PSM",
@@ -304,5 +295,6 @@ class MztabWriter:
                     psm.sequence,  # opt_ms_run[1]_proforma
                 ]
                 if include_scan_col:
-                    row.append(scan_col)
+                    scan_num = self._mgf_scan_index.get((filename, idx), "null")
+                    row.append(f"ms_run[{run_idx}]:scan={scan_num}")
                 writer.writerow(row)
