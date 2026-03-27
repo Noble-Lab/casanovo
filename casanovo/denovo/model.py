@@ -563,7 +563,7 @@ class Spec2Pep(pl.LightningModule):
                     heapadd = heapq.heappush
                 else:
                     heapadd = heapq.heappushpop
-                
+
                 heapadd(pred_cache[spec_idx], peptide_entry)
 
     def _get_topk_beams(
