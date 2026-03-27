@@ -542,17 +542,18 @@ class Spec2Pep(pl.LightningModule):
             # Omit the stop token from the amino acid-level scores.
             aa_scores = aa_scores[:-1]
 
-            # Check for duplicate predictions and update with highest score.
             pred_peptide_cpu = pred_peptide.cpu()
+            peptide_entry = (
+                peptide_score,
+                np.random.random_sample(),
+                aa_scores,
+                torch.clone(pred_peptide_cpu),
+            )
+            # Check for duplicate predictions and update with highest score.
             for j, pred_cached in enumerate(pred_cache[spec_idx]):
                 if torch.equal(pred_cached[-1], pred_peptide_cpu):
                     if peptide_score > pred_cached[0]:
-                        pred_cache[spec_idx][j] = (
-                            peptide_score,
-                            np.random.random_sample(),
-                            aa_scores,
-                            torch.clone(pred_peptide_cpu),
-                        )
+                        pred_cache[spec_idx][j] = peptide_entry
                         heapq.heapify(pred_cache[spec_idx])
                     break
             else:
@@ -562,16 +563,8 @@ class Spec2Pep(pl.LightningModule):
                     heapadd = heapq.heappush
                 else:
                     heapadd = heapq.heappushpop
-
-                heapadd(
-                    pred_cache[spec_idx],
-                    (
-                        peptide_score,
-                        np.random.random_sample(),
-                        aa_scores,
-                        torch.clone(pred_peptide_cpu),
-                    ),
-                )
+                
+                heapadd(pred_cache[spec_idx], peptide_entry)
 
     def _get_topk_beams(
         self,
