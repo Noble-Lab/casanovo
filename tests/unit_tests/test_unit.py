@@ -5,7 +5,6 @@ import functools
 import hashlib
 import heapq
 import io
-import math
 import os
 import pathlib
 import platform
@@ -28,6 +27,7 @@ import pandas as pd
 import pytest
 import requests
 import torch
+import pyteomics.mztab
 
 from casanovo import casanovo, denovo, utils
 from casanovo.casanovo import _SharedFileIOParams
@@ -293,7 +293,9 @@ def test_is_valid_model(model_file, expectation, log_message, caplog):
 def test_n_workers(monkeypatch):
     """Check that n_workers is correct without a GPU."""
     monkeypatch.setattr("torch.cuda.is_available", lambda: False)
-    cpu_fun = lambda x: ["foo"] * 31
+
+    def cpu_fun(_: object) -> list[str]:
+        return ["foo"] * 31
 
     with monkeypatch.context() as mnk:
         mnk.setattr("psutil.Process.cpu_affinity", cpu_fun, raising=False)
@@ -1412,9 +1414,9 @@ def test_isoleucine_match(tiny_config):
     )
     db_model = DbSpec2Pep(tokenizer=tokenizer)
     peptides = [["PEPTLDEK"], ["PEPTIDEK"]]
-    mock_get_candidates = lambda _, precursor_charge: pd.Series(
-        peptides[precursor_charge - 1]
-    )
+
+    def mock_get_candidates(_, precursor_charge) -> pd.Series:
+        return pd.Series(peptides[precursor_charge - 1])
 
     db_model = DbSpec2Pep(tokenizer=tokenizer)
     db_model.protein_database = unittest.mock.MagicMock()
@@ -2547,3 +2549,201 @@ def test_shared_file_io_params_validation(tmp_path, args, should_fail):
         assert res.exit_code == 0
         assert "Error" not in res.stderr
         assert "ok" in res.stdout
+
+
+def test_mgf_scan_index_built_correctly(mgf_small_with_scans):
+    """
+    _build_mgf_scan_index must yield `(spectrum_ref_id, scan_number)`
+    pairs for SCANS values written into the MGF file.
+    """
+    from casanovo.data.ms_io import _build_mgf_scan_index
+
+    result = dict(_build_mgf_scan_index(str(mgf_small_with_scans)))
+    assert result == {"index=0": "17", "index=1": "42"}
+
+
+def test_mgf_without_scans_gives_empty_index(mgf_small):
+    """
+    An MGF file without any SCANS fields must produce an empty index
+    (not crash and not map anything).
+    """
+    from casanovo.data.ms_io import _build_mgf_scan_index
+
+    result = dict(_build_mgf_scan_index(str(mgf_small)))
+    assert result == {}
+
+
+def test_mgf_scan_alias_scan_field(tmp_path):
+    """
+    _build_mgf_scan_index must recognise the SCAN= header alias
+    in addition to SCANS=.
+    """
+    from casanovo.data.ms_io import _build_mgf_scan_index
+
+    mgf_file = tmp_path / "alias_scan.mgf"
+    mgf_file.write_text(
+        "BEGIN IONS\nSCAN=99\nPEPMASS=400.2\nCHARGE=2+\n200.0 1.0\nEND IONS\n"
+    )
+    result = dict(_build_mgf_scan_index(str(mgf_file)))
+    assert result == {"index=0": "99"}
+
+
+def test_mgf_scan_alias_scan_id_field(tmp_path):
+    """
+    _build_mgf_scan_index must recognise the SCAN ID= header alias
+    in addition to SCANS=.
+    """
+    from casanovo.data.ms_io import _build_mgf_scan_index
+
+    mgf_file = tmp_path / "alias_scan_id.mgf"
+    mgf_file.write_text(
+        "BEGIN IONS\nSCAN ID=42\nPEPMASS=400.2\nCHARGE=2+\n200.0 1.0\nEND IONS\n"
+    )
+    result = dict(_build_mgf_scan_index(str(mgf_file)))
+    assert result == {"index=0": "42"}
+
+
+def test_scan_num_in_mztab_spectra_ref(tmp_path):
+    """
+    After set_ms_run is called, MztabWriter must embed the scan
+    number in a new opt_global_cv_MS:1003057_scan_number column.
+    """
+    # Create a minimal MGF with SCANS=17 for the first spectrum.
+    mgf_file = tmp_path / "test.mgf"
+    mgf_file.write_text(
+        "BEGIN IONS\nSCANS=17\nPEPMASS=400.2\nCHARGE=2+\n200.0 1.0\nEND IONS\n"
+    )
+
+    results_path = str(tmp_path / "results.mztab")
+    writer = ms_io.MztabWriter(results_path)
+    writer.set_ms_run([str(mgf_file)])
+    writer.psms = [
+        psm.PepSpecMatch(
+            sequence="PEPTIDE",
+            spectrum_id=("test.mgf", "index=0"),
+            peptide_score=0.9,
+            charge=2,
+            calc_mz=400.2,
+            exp_mz=400.2,
+            aa_scores=[0.9] * 7,
+        )
+    ]
+    writer.save()
+
+    mztab = pyteomics.mztab.MzTab(results_path)
+    psms = mztab.spectrum_match_table
+    assert psms.loc[1, "spectra_ref"] == "ms_run[1]:index=0"
+    assert (
+        psms.loc[1, "opt_global_cv_MS:1003057_scan_number"]
+        == "ms_run[1]:scan=17"
+    )
+
+
+def test_no_scan_num_keeps_index_only_spectra_ref(tmp_path):
+    """
+    An MGF without SCANS must produce 'ms_run[1]:index=0' only,
+    preserving backward compatibility.
+    """
+    mgf_file = tmp_path / "test_no_scan.mgf"
+    mgf_file.write_text(
+        "BEGIN IONS\nPEPMASS=400.2\nCHARGE=2+\n200.0 1.0\nEND IONS\n"
+    )
+
+    results_path = str(tmp_path / "results_no_scan.mztab")
+    writer = ms_io.MztabWriter(results_path)
+    writer.set_ms_run([str(mgf_file)])
+    writer.psms = [
+        psm.PepSpecMatch(
+            sequence="PEPTIDE",
+            spectrum_id=("test_no_scan.mgf", "index=0"),
+            peptide_score=0.9,
+            charge=2,
+            calc_mz=400.2,
+            exp_mz=400.2,
+            aa_scores=[0.9] * 7,
+        )
+    ]
+    writer.save()
+
+    mztab = pyteomics.mztab.MzTab(results_path)
+    psms = mztab.spectrum_match_table
+    assert psms.loc[1, "spectra_ref"] == "ms_run[1]:index=0"
+    assert "opt_global_cv_MS:1003057_scan_number" not in psms.columns
+
+
+def test_mzml_spectra_ref_unaffected_by_scan_num_feature(mzml_small, tmp_path):
+    """
+    mzML spectra use their native scan ID and must be unchanged even
+    when set_ms_run is called (mzML files are silently ignored).
+    """
+    results_path = str(tmp_path / "results_mzml.mztab")
+    writer = ms_io.MztabWriter(results_path)
+    writer.set_ms_run([str(mzml_small)])
+    writer.psms = [
+        psm.PepSpecMatch(
+            sequence="PEPTIDE",
+            spectrum_id=("small.mzml", "scan=17"),
+            peptide_score=0.9,
+            charge=2,
+            calc_mz=400.2,
+            exp_mz=400.2,
+            aa_scores=[0.9] * 7,
+        )
+    ]
+    writer.save()
+
+    mztab = pyteomics.mztab.MzTab(results_path)
+    psms = mztab.spectrum_match_table
+    assert psms.loc[1, "spectra_ref"] == "ms_run[1]:scan=17"
+    assert "opt_global_cv_MS:1003057_scan_number" not in psms.columns
+
+
+def test_mixed_mgf_mzml_scan_number_column(mzml_small, tmp_path):
+    """
+    When MGF and mzML files are processed together and the MGF contains
+    scan numbers, the opt_global_cv_MS:1003057_scan_number column must be
+    present for the whole mzTab. The MGF row must carry the scan value and
+    the mzML row must be null.
+    """
+    mgf_file = tmp_path / "mixed.mgf"
+    mgf_file.write_text(
+        "BEGIN IONS\nSCANS=99\nPEPMASS=400.2\nCHARGE=2+\n200.0 1.0\nEND IONS\n"
+    )
+
+    results_path = str(tmp_path / "results_mixed.mztab")
+    writer = ms_io.MztabWriter(results_path)
+    writer.set_ms_run([str(mgf_file), str(mzml_small)])
+    writer.psms = [
+        psm.PepSpecMatch(
+            sequence="PEPTIDE",
+            spectrum_id=("mixed.mgf", "index=0"),
+            peptide_score=0.9,
+            charge=2,
+            calc_mz=400.2,
+            exp_mz=400.2,
+            aa_scores=[0.9] * 7,
+        ),
+        psm.PepSpecMatch(
+            sequence="PEPTIDE",
+            spectrum_id=("small.mzml", "scan=17"),
+            peptide_score=0.9,
+            charge=2,
+            calc_mz=400.2,
+            exp_mz=400.2,
+            aa_scores=[0.9] * 7,
+        ),
+    ]
+    writer.save()
+
+    mztab = pyteomics.mztab.MzTab(results_path)
+    psms = mztab.spectrum_match_table
+    # Column must be present because the MGF file has scan numbers.
+    assert "opt_global_cv_MS:1003057_scan_number" in psms.columns
+    # MGF row must carry the scan value.
+    mgf_row = psms[psms["spectra_ref"].str.contains("index=0")].iloc[0]
+    assert (
+        mgf_row["opt_global_cv_MS:1003057_scan_number"] == "ms_run[1]:scan=99"
+    )
+    # mzML row must be null.
+    mzml_row = psms[psms["spectra_ref"].str.contains("scan=17")].iloc[0]
+    assert pd.isna(mzml_row["opt_global_cv_MS:1003057_scan_number"])
