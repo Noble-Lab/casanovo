@@ -134,9 +134,11 @@ train_label_smoothing: 0.01
 
 # TRAINING/INFERENCE OPTIONS
 # Number of spectra in one training batch.
-# Per-device micro-batch is train_batch_size // n on n GPUs.
+# Per-device micro-batch is train_batch_size // n on n devices.
 # Effective optimization batch size is:
 # (per-device micro-batch) * n * accumulate_grad_batches.
+# `train_batch_size` should be >= n and preferably divisible by n; otherwise
+# floor division drops the remainder.
 train_batch_size: 32
 # Max number of training epochs.
 max_epochs: 30
@@ -152,7 +154,8 @@ calculate_precision: false
 
 # Accumulates gradients over `k` batches before stepping the optimizer.
 accumulate_grad_batches: 1
-# The value at which to clip gradients. `None` disables gradient clipping.
+# The value at which to clip gradients. Leave blank / set to `None` to disable
+# gradient clipping.
 gradient_clip_val: 1.0 
 # The gradient clipping algorithm to use.
 # Must be one of: "value", "norm", or `None`.
