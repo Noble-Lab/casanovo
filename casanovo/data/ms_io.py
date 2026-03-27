@@ -295,6 +295,10 @@ class MztabWriter:
                     psm.sequence,  # opt_global_cv_MS:1003169_proforma_peptidoform_sequence
                 ]
                 if include_scan_col:
-                    scan_num = self._mgf_scan_index.get((filename, idx), "null")
-                    row.append(f"ms_run[{run_idx}]:scan={scan_num}")
+                    scan_num = self._mgf_scan_index.get((filename, idx))
+                    row.append(
+                        f"ms_run[{run_idx}]:scan={scan_num}"
+                        if scan_num
+                        else "null"
+                    )
                 writer.writerow(row)
