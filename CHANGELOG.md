@@ -8,17 +8,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Added
 
-- Track instrument-assigned scan numbers from MGF `SCANS`, `SCAN`, and `SCAN ID` header fields in a new `opt_global_cv_MS:1003057_scan_number` mzTab column.
-
-## [5.1.2] - 2025-12-11
-
-### Changed
-
-- Hotfix to ensure compatibility with PyTorch v2.6 when loading weights files.
-
-### Added
-
 - A TSV file with all candidate peptides can be exported during database searching with the `--export` flag.
+- Track instrument-assigned scan numbers from MGF `SCANS`, `SCAN`, and `SCAN ID` header fields in a new `opt_global_cv_MS:1003057_scan_number` mzTab column.
 
 ### Changed
 
@@ -34,6 +25,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Fixed an issue which led the reported peptide precision to be 0 during evaluation mode.
 - Peptide predictions failing the minimum peptide length are not reported, irrespective of whether they match or exceed the precursor mass.
 - Setting `--output_root` to a directory will no longer cause an error.
+
+## [5.1.2] - 2025-12-11
+
+### Changed
+
+- Hotfix to ensure compatibility with PyTorch v2.6 when loading weights files.
 
 ## [5.1.1] - 2025-11-27
 
