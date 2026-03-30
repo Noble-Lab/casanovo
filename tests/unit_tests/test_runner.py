@@ -37,11 +37,10 @@ def test_loading_timstof_folders(tmp_path, monkeypatch):
     # (should raise FileNotFoundError and RuntimeWarning)
     fake_path = tmp_path / "test.hi"
     fake_path.mkdir()
-    with pytest.warns(RuntimeWarning):
-        with pytest.raises(FileNotFoundError):
-            runner._get_input_paths(
-                peak_path=(str(fake_path),), annotated=False, mode="validation"
-            )
+    with pytest.warns(RuntimeWarning), pytest.raises(FileNotFoundError):
+        runner._get_input_paths(
+            peak_path=(str(fake_path),), annotated=False, mode="validation"
+        )
 
 
 def test_initialize_model(tmp_path, mgf_small):
