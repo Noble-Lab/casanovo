@@ -63,7 +63,7 @@ class _SharedFileIOParams(click.RichCommand):
             click.Option(
                 ("-o", "--output_root"),
                 help="The root name for all output files.",
-                type=click.Path(dir_okay=False),
+                type=str,
             ),
             click.Option(
                 ("-f", "--force_overwrite"),
@@ -181,9 +181,7 @@ def sequence(
     utils.log_system_info()
 
     utils.check_dir_file_exists(output_path, f"{output_root}.mztab")
-    config, model = setup_model(
-        model, config, output_path, output_root_name, False
-    )
+    config, model = setup_model(model, config, output_path, output_root_name, False)
 
     with ModelRunner(
         config,
@@ -242,9 +240,7 @@ def db_search(
     utils.log_system_info()
 
     utils.check_dir_file_exists(output_path, f"{output_root}.mztab")
-    config, model = setup_model(
-        model, config, output_path, output_root_name, False
-    )
+    config, model = setup_model(model, config, output_path, output_root_name, False)
 
     with ModelRunner(
         config,
@@ -308,9 +304,7 @@ def train(
     start_time = time.time()
     utils.log_system_info()
 
-    config, model = setup_model(
-        model, config, output_path, output_root_name, True
-    )
+    config, model = setup_model(model, config, output_path, output_root_name, True)
 
     with ModelRunner(
         config,
@@ -351,9 +345,7 @@ def configure(
     The Casanovo configuration file is in the YAML format.
     """
     utils.log_system_info()
-    output_path, _ = _setup_output(
-        output_dir, output_root, force_overwrite, verbosity
-    )
+    output_path, _ = _setup_output(output_dir, output_root, force_overwrite, verbosity)
     config_fname = output_root if output_root is not None else "casanovo"
     config_fname = Path(config_fname).with_suffix(".yaml")
     if not force_overwrite:
@@ -396,8 +388,7 @@ def setup_logging(
     # Formatters for file vs console:
     console_formatter = logging.Formatter("{levelname}: {message}", style="{")
     log_formatter = logging.Formatter(
-        "{asctime} {levelname} [{name}/{processName}] {module}.{funcName} : "
-        "{message}",
+        "{asctime} {levelname} [{name}/{processName}] {module}.{funcName} : {message}",
         style="{",
     )
 
@@ -412,9 +403,7 @@ def setup_logging(
     warnings_logger.addHandler(file_handler)
 
     # Disable dependency non-critical log messages.
-    logging.getLogger("depthcharge").setLevel(
-        logging_levels[verbosity.lower()]
-    )
+    logging.getLogger("depthcharge").setLevel(logging_levels[verbosity.lower()])
     logging.getLogger("fsspec").setLevel(logging.WARNING)
     logging.getLogger("github").setLevel(logging.WARNING)
     logging.getLogger("h5py").setLevel(logging.WARNING)
@@ -560,10 +549,7 @@ def _get_model_weights(cache_dir: Path) -> Path:
         # Find the best matching release with model weights provided as asset.
         for release in repo.get_releases():
             rel_version = tuple(
-                g
-                for g in re.match(
-                    r"v(\d+)\.(\d+)\.(\d+)", release.tag_name
-                ).groups()
+                g for g in re.match(r"v(\d+)\.(\d+)\.(\d+)", release.tag_name).groups()
             )
             match = (
                 sum(m)
@@ -633,9 +619,7 @@ def _setup_output(
         for output files.
     """
     if output_root is None:
-        output_root = (
-            f"casanovo_{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}"
-        )
+        output_root = f"casanovo_{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}"
 
     if output_dir is None:
         output_path = Path.cwd()
@@ -644,8 +628,7 @@ def _setup_output(
         if not output_path.is_dir():
             output_path.mkdir(parents=True)
             logger.warning(
-                "Target output directory %s does not exists, so it will be "
-                "created.",
+                "Target output directory %s does not exists, so it will be created.",
                 output_path,
             )
 
@@ -717,15 +700,12 @@ def _get_weights_from_url(
             requests.TooManyRedirects,
         ):
             logger.warning(
-                "Failed to reach %s to get remote last modified time—using "
-                "cached file",
+                "Failed to reach %s to get remote last modified time—using cached file",
                 file_url,
             )
 
         if cache_time.st_mtime > url_last_modified:
-            logger.info(
-                "Model weights %s retrieved from local cache", file_url
-            )
+            logger.info("Model weights %s retrieved from local cache", file_url)
             return cache_file_path
 
     _download_weights(file_url, cache_file_path)
@@ -754,9 +734,7 @@ def _download_weights(file_url: str, download_path: Path) -> None:
     response.raise_for_status()
     file_size = int(response.headers.get("Content-Length", 0))
     desc = "(Unknown total file size)" if file_size == 0 else ""
-    response.raw.read = functools.partial(
-        response.raw.read, decode_content=True
-    )
+    response.raw.read = functools.partial(response.raw.read, decode_content=True)
 
     with tqdm.tqdm.wrapattr(
         response.raw, "read", total=file_size, desc=desc
