@@ -157,6 +157,8 @@ class Spec2Pep(pl.LightningModule):
         self.use_muon = use_muon
         self.muon_lr = muon_lr
         self.muon_momentum = muon_momentum
+        if use_muon:
+            self.automatic_optimization = False
         # `kwargs` will contain additional arguments as well as
         # unrecognized arguments, including deprecated ones. Remove the
         # deprecated ones.
@@ -1095,6 +1097,18 @@ class Spec2Pep(pl.LightningModule):
             sync_dist=True,
             batch_size=pred.shape[0],
         )
+
+        if self.use_muon and mode == "train":
+            opts = self.optimizers()
+            for opt in opts:
+                opt.zero_grad()
+            self.manual_backward(loss)
+            for opt in opts:
+                opt.step()
+            scheds = self.lr_schedulers()
+            for sched in scheds:
+                sched.step()
+
         return loss
 
     def validation_step(
