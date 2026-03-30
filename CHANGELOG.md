@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Added
 
+- Support timsTOF files (as .d folders) as spectra input files.
 - Added `--load_all_states` flag to load all model states when resuming training.
 - A TSV file with all candidate peptides can be exported during database searching with the `--export` flag.
 - Track instrument-assigned scan numbers from MGF `SCANS`, `SCAN`, and `SCAN ID` header fields in a new `opt_global_cv_MS:1003057_scan_number` mzTab column.

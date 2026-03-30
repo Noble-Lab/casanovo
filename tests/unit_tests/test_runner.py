@@ -14,6 +14,35 @@ from casanovo.data.psm import PepSpecMatch
 from casanovo.denovo.model_runner import ModelRunner
 
 
+def test_loading_timstof_folders(tmp_path, monkeypatch):
+    # Mocking constructor of ModelRunner
+    def minimal_init(self):
+        pass
+
+    monkeypatch.setattr(ModelRunner, "__init__", minimal_init)
+    runner = ModelRunner()
+
+    # Testing real path
+    real_path = tmp_path / "sample.d"
+    real_path.mkdir()
+
+    paths = runner._get_input_paths(
+        peak_path=(str(real_path),), annotated=False, mode="validation"
+    )
+
+    assert len(paths) == 1
+    assert Path(paths[0]).name == "sample.d"
+
+    # Testing unsupported extension (but directory is real)
+    # (should raise FileNotFoundError and RuntimeWarning)
+    fake_path = tmp_path / "test.hi"
+    fake_path.mkdir()
+    with pytest.warns(RuntimeWarning), pytest.raises(FileNotFoundError):
+        runner._get_input_paths(
+            peak_path=(str(fake_path),), annotated=False, mode="validation"
+        )
+
+
 def test_initialize_model(tmp_path, mgf_small):
     """Test initializing a new or existing model."""
     config = Config()

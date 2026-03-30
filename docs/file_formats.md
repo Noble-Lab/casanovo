@@ -9,8 +9,9 @@ When you are ready to use Casanovo, you can input your MS/MS spectra in one of t
 - **[mzML](https://doi.org/10.1074/mcp.R110.000133)**: XML-based mass spectrometry community standard file format developed by the Proteomics Standards Initiative (PSI).
 - **[mzXML](https://doi.org/10.1038/nbt1031)**: XML-based predecessor of mzML. Although supported by Casanovo, mzML should typically be preferred instead.
 - **[MGF](https://www.matrixscience.com/help/data_file_help.html)**: A simple text-based peak file, though not as rich in detail as mzML.
+- **D**: A proprietary binary file format used by Bruker instruments.
 
-All three of the above file formats can be used as input to Casanovo for *de novo* peptide sequencing and database searching.
+All four of the above file formats can be used as input to Casanovo for *de novo* peptide sequencing and database searching.
 As the official PSI standard format containing the complete information from a mass spectrometry run, mzML should typically be preferred.
 
 ### FASTA (optional)

@@ -661,7 +661,7 @@ class ModelRunner:
         """
         ext = (".mgf", ".lance")
         if not annotated:
-            ext += (".mzml", ".mzxml")
+            ext += (".mzml", ".mzxml", ".d")
 
         filenames = _get_peak_filenames(peak_path, ext)
         if not filenames:
