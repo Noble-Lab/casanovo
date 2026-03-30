@@ -1,6 +1,7 @@
 """Test configuration loading"""
 
 import logging
+
 import pytest
 import yaml
 
