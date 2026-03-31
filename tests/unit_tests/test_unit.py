@@ -852,6 +852,51 @@ def test_calc_match_score():
     )
     assert np.allclose(np.array([1.0]), aa_scores[4])
 
+    # Reverse direction.
+    flipped_batch_all_aa_scores = torch.flip(batch_all_aa_scores, dims=[1])
+    flipped_true_aas = torch.flip(true_aas, dims=[1])
+    pep_scores_reversed, aa_scores_reversed = _calc_match_score(
+        flipped_batch_all_aa_scores, flipped_true_aas
+    )
+
+    assert all([pytest.approx(0.0) == x for x in pep_scores_reversed])
+    assert all(
+        [
+            np.allclose(np.array([0.0, 0.0, 0.0]), x)
+            for x in aa_scores_reversed[:4]
+        ]
+    )
+    assert np.allclose(np.array([0.0]), aa_scores_reversed[4])
+
+
+def test_peptide_generator_unknown_amino_acids(tmp_path):
+    valid_aa = set("ARNDCEQGHILKMFPSTWYV")
+    fasta_path = tmp_path / "tiny.fasta"
+    fasta_path.write_text(">foo\nME\n>corrupted\nMEX\n", encoding="utf-8")
+
+    non_specific = list(
+        db_utils._peptide_generator(
+            str(fasta_path), "N/A", "non-specific", 0, 1, 10, valid_aa
+        )
+    )
+    assert sorted(non_specific) == sorted(
+        [
+            ("M", "foo"),
+            ("ME", "foo"),
+            ("E", "foo"),
+            ("M", "corrupted"),
+            ("ME", "corrupted"),
+            ("E", "corrupted"),
+        ]
+    )
+
+    enzymatic = list(
+        db_utils._peptide_generator(
+            str(fasta_path), "trypsin", "full", 0, 1, 10, valid_aa
+        )
+    )
+    assert enzymatic == [("ME", "foo")]
+
 
 def test_digest_fasta_cleave(tiny_fasta_file):
     # No missed cleavages

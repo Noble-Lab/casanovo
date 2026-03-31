@@ -61,7 +61,7 @@ def test_train_and_run(
         else:
             config_data["max_epochs"] = 10
         with tiny_config.open("w") as f:
-            yaml.dump(config_data, f)
+            yaml.safe_dump(config_data, f, sort_keys=False)
 
         train_args = [
             "train",
@@ -88,7 +88,7 @@ def test_train_and_run(
             config_data["max_epochs"] = original_max_epochs
 
         with tiny_config.open("w") as f:
-            yaml.dump(config_data, f)
+            yaml.safe_dump(config_data, f, sort_keys=False)
 
     # Run Casanovo in de novo prediction mode.
     output_rootname = "test"
@@ -199,6 +199,13 @@ def test_train_and_run(
     output_rootname = "db"
     output_filename = (tmp_path / output_rootname).with_suffix(".mztab")
     output_db_file = (tmp_path / output_rootname).with_suffix(".tsv")
+
+    # Keep tokenizer settings compatible with the trained checkpoint.
+    with tiny_config_db.open("r") as f:
+        db_config_data = yaml.safe_load(f)
+    db_config_data["replace_isoleucine_with_leucine"] = True
+    with tiny_config_db.open("w") as f:
+        yaml.safe_dump(db_config_data, f, sort_keys=False)
 
     search_args = [
         "db-search",

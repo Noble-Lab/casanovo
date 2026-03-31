@@ -522,6 +522,7 @@ class ModelRunner:
             # Use tokenizer initialized from config file instead of loaded
             # from checkpoint file.
             self.model.tokenizer = tokenizer
+
             architecture_params = set(model_params.keys()) - set(
                 loaded_model_params.keys()
             )
@@ -550,11 +551,14 @@ class ModelRunner:
                     **model_params,
                 )
                 self.model.tokenizer = tokenizer
+
             except RuntimeError:
                 raise RuntimeError(
                     "Weights file incompatible with the current version of "
                     "Casanovo."
                 )
+
+        self._validate_vocab_compatibility()
 
     def initialize_data_module(
         self,
@@ -695,6 +699,38 @@ class ModelRunner:
             return DDPStrategy(find_unused_parameters=False, static_graph=True)
         else:
             return "auto"
+
+    def _validate_vocab_compatibility(self) -> None:
+        """
+        Check that the model vocabulary is compatible with the tokenizer.
+
+        Raises
+        ------
+        ValueError
+            If the model checkpoint tokenizer does not exactly match the
+            current config tokenizer, or if vocab sizes differ.
+        """
+        checkpoint_tokenizer = self.model.hparams.get("tokenizer")
+        if checkpoint_tokenizer is not None and (
+            checkpoint_tokenizer.residues != self.tokenizer.residues
+            or checkpoint_tokenizer.index != self.tokenizer.index
+        ):
+            raise ValueError(
+                "The model checkpoint tokenizer does not match the current "
+                "config tokenizer. Ensure your config's `residues` and token "
+                "ordering exactly match those used during training."
+            )
+
+        model_vocab_size = self.model.vocab_size
+        tokenizer_vocab_size = len(self.tokenizer) + 1
+        if model_vocab_size != tokenizer_vocab_size:
+            raise ValueError(
+                "The model was trained with a vocabulary of size "
+                f"{model_vocab_size}, but the current config defines "
+                f"a vocabulary of size {tokenizer_vocab_size}. Ensure your "
+                "config's `residues` and token ordering match those used "
+                "during training."
+            )
 
 
 def _get_peak_filenames(

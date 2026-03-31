@@ -104,17 +104,16 @@ def test_initialize_model(tmp_path, mgf_small):
         runner.initialize_model(train=False)
 
 
-def test_no_model(tiny_config_db, mgf_small, tiny_fasta_file):
-    """Test running a model with no weights"""
+def test_db_search_no_model_raises(tiny_config_db, mgf_small, tiny_fasta_file):
+    """DB search must require an explicit model file."""
     config = Config(tiny_config_db)
-    with ModelRunner(config=config) as runner:
-        results_path = "test.mztab"
-        with pytest.raises(
+    with (
+        ModelRunner(config=config) as runner,
+        pytest.raises(
             ValueError, match="A model file must be provided for DB search"
-        ):
-            runner.db_search(
-                (str(mgf_small),), str(tiny_fasta_file), str(results_path)
-            )
+        ),
+    ):
+        runner.db_search((str(mgf_small),), str(tiny_fasta_file), "test.mztab")
 
 
 def test_save_and_load_weights(tmp_path, mgf_small, tiny_config):
@@ -610,3 +609,100 @@ def test_verify_tokenizer(
     else:
         # Ensure no warnings were logged
         assert not any(rec.levelname == "WARNING" for rec in caplog.records)
+
+
+def test_initialize_tokenizer():
+    mock_config = unittest.mock.MagicMock()
+    mock_config.massivekb_tokenizer = True
+    mock_config.residues = {"foo": 100}
+    mock_config.replace_isoleucine_with_leucine = True
+
+    runner = ModelRunner(config=mock_config)
+
+    with unittest.mock.patch(
+        "casanovo.denovo.model_runner.MskbPeptideTokenizer"
+    ) as mock_tokenizer_cls:
+        mock_tokenizer = unittest.mock.MagicMock()
+        mock_tokenizer_cls.return_value = mock_tokenizer
+        runner.initialize_tokenizer()
+
+    mock_tokenizer_cls.assert_called_once_with(
+        residues=mock_config.residues,
+        replace_isoleucine_with_leucine=True,
+        reverse=True,
+        start_token=None,
+        stop_token="$",
+    )
+    assert runner.tokenizer is mock_tokenizer
+
+
+def test_validate_vocab_compatibility():
+    """Test ModelRunner._validate_vocab_compatibility strict checks."""
+    config = Config()
+    runner = ModelRunner(config=config)
+    runner.model = unittest.mock.MagicMock()
+
+    # Set up a mock tokenizer on the runner.
+    runner_tokenizer = unittest.mock.MagicMock()
+    runner_tokenizer.__len__ = unittest.mock.Mock(return_value=5)
+    runner_tokenizer.residues = {"A": 71.03711, "C": 103.00919}
+    runner_tokenizer.index = {"A": 1, "C": 2}
+    runner.tokenizer = runner_tokenizer
+
+    checkpoint_tokenizer = unittest.mock.MagicMock()
+    checkpoint_tokenizer.residues = {"A": 71.03711, "C": 103.00919}
+    checkpoint_tokenizer.index = {"A": 1, "C": 2}
+    runner.model.hparams = {"tokenizer": checkpoint_tokenizer}
+
+    # Should raise ValueError when vocab sizes differ.
+    runner.model.vocab_size = 10
+    with pytest.raises(ValueError, match="vocabulary of size"):
+        runner._validate_vocab_compatibility()
+
+    # Should pass silently when vocab sizes match and tokenizers match.
+    runner.model.vocab_size = 6
+    runner._validate_vocab_compatibility()  # no exception
+
+    # Should raise even when sizes match if tokenizer vocab differs.
+    checkpoint_tokenizer.residues = {"A": 71.03711, "B": 114.04293}
+    checkpoint_tokenizer.index = {"A": 1, "B": 2}
+    with pytest.raises(ValueError, match="checkpoint tokenizer"):
+        runner._validate_vocab_compatibility()
+
+
+def test_initialize_model_calls_validate_vocab_compatibility(
+    tmp_path, mgf_small, tiny_config
+):
+    """Test that initialize_model calls _validate_vocab_compatibility when loading
+    from a checkpoint."""
+    config = Config(tiny_config)
+    config.max_epochs = 1
+    config.n_layers = 1
+    ckpt = tmp_path / "test.ckpt"
+
+    # Train a quick model and save a checkpoint.
+    with ModelRunner(config=config, output_dir=tmp_path) as runner:
+        runner.train([mgf_small], [mgf_small])
+        runner.trainer.save_checkpoint(ckpt)
+
+    # Loading from checkpoint should call _validate_vocab_compatibility.
+    runner = ModelRunner(config=config, model_filename=str(ckpt))
+    runner.initialize_tokenizer()
+    with unittest.mock.patch.object(
+        ModelRunner,
+        "_validate_vocab_compatibility",
+        autospec=True,
+    ) as mock_validate:
+        runner.initialize_model(train=False)
+        mock_validate.assert_called_once()
+
+    # Same check during training (resume from checkpoint).
+    runner = ModelRunner(config=config, model_filename=str(ckpt))
+    runner.initialize_tokenizer()
+    with unittest.mock.patch.object(
+        ModelRunner,
+        "_validate_vocab_compatibility",
+        autospec=True,
+    ) as mock_validate:
+        runner.initialize_model(train=True)
+        mock_validate.assert_called_once()

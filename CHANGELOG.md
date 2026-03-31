@@ -29,6 +29,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Fixed an issue which led the reported peptide precision to be 0 during evaluation mode.
 - Peptide predictions failing the minimum peptide length are not reported, irrespective of whether they match or exceed the precursor mass.
 - Setting `--output_root` to a directory will no longer cause an error.
+- Fixed an issue where some predictions that are one residue less than the configured minimum peptide length are reported.
 
 ## [5.1.2] - 2025-12-11
 
