@@ -399,7 +399,7 @@ class Spec2Pep(pl.LightningModule):
         self.log(
             f"{mode}_CELoss",
             loss.detach(),
-            on_step=(mode == "train"),  # per-step logging for debugging
+            on_step=False,
             on_epoch=True,
             sync_dist=True,
             batch_size=pred_flat.shape[0],
