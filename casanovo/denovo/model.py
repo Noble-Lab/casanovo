@@ -818,16 +818,6 @@ class Spec2Pep(pl.LightningModule):
 
         return results
 
-    def on_train_batch_end(self, outputs, batch, batch_idx) -> None:
-        step = self.trainer.global_step
-        if step % self.n_log == 0:
-            loss_key = "train_CELoss_step"
-            if loss_key in self.trainer.callback_metrics:
-                loss = self.trainer.callback_metrics[loss_key].detach().item()
-            else:
-                loss = float("nan")  # mirrors on_train_epoch_end's np.nan pattern
-            logger.debug("Step %i\tTrain loss: %.6f", step, loss)
-
     def on_train_epoch_end(self) -> None:
         """
         Log the training loss at the end of each epoch.
