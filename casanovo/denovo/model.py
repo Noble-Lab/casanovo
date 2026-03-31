@@ -13,6 +13,7 @@ import numpy as np
 import torch
 from depthcharge.tokenizers import PeptideTokenizer
 
+from .chimera import ChimeraTokenizer
 from .. import config
 from ..data import ms_io, psm
 from ..denovo.transformers import PeptideDecoder, SpectrumEncoder
@@ -183,9 +184,6 @@ class Spec2Pep(pl.LightningModule):
         self.n_beams = n_beams
         self.top_match = top_match
         self.stop_token = self.tokenizer.stop_int
-
-        # Chimera settings: auto-detected from the tokenizer type.
-        from .chimera import ChimeraTokenizer
 
         self.chimera = isinstance(self.tokenizer, ChimeraTokenizer)
         if self.chimera:
@@ -391,13 +389,17 @@ class Spec2Pep(pl.LightningModule):
             loss_a_norm = (raw_a * mask).sum(dim=1) / n_real
             loss_b_norm = (raw_b * mask).sum(dim=1) / n_real
             winner = (loss_b_norm < loss_a_norm).float().unsqueeze(1)
-            loss = (raw_a * (1 - winner) + raw_b * winner).mean()
+            # Divide by real tokens only to avoid padding dilution.
+            n_real_total = mask.sum().clamp(min=1)
+            loss = (raw_a * (1 - winner) + raw_b * winner).sum() / n_real_total
         else:
-            loss = loss_fun(pred_flat, truth.flatten()).mean()
+            raw = loss_fun(pred_flat, truth.flatten())
+            n_real_total = (truth.flatten() != 0).float().sum().clamp(min=1)
+            loss = raw.sum() / n_real_total
         self.log(
             f"{mode}_CELoss",
             loss.detach(),
-            on_step=False,
+            on_step=(mode == "train"),  # per-step logging for debugging
             on_epoch=True,
             sync_dist=True,
             batch_size=pred_flat.shape[0],
@@ -815,6 +817,16 @@ class Spec2Pep(pl.LightningModule):
             )
 
         return results
+
+    def on_train_batch_end(self, outputs, batch, batch_idx) -> None:
+        step = self.trainer.global_step
+        if step % self.n_log == 0:
+            loss_key = "train_CELoss_step"
+            if loss_key in self.trainer.callback_metrics:
+                loss = self.trainer.callback_metrics[loss_key].detach().item()
+            else:
+                loss = float("nan")  # mirrors on_train_epoch_end's np.nan pattern
+            logger.debug("Step %i\tTrain loss: %.6f", step, loss)
 
     def on_train_epoch_end(self) -> None:
         """
