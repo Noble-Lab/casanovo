@@ -6,9 +6,30 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+### Added
+
+- Support timsTOF files (as .d folders) as spectra input files.
+- Added `--load_all_states` flag to load all model states when resuming training.
+- A TSV file with all candidate peptides can be exported during database searching with the `--export` flag.
+- Track instrument-assigned scan numbers from MGF `SCANS`, `SCAN`, and `SCAN ID` header fields in a new `opt_global_cv_MS:1003057_scan_number` mzTab column.
+
+### Changed
+
+- Upgraded minimum Lightning version to 2.6.
+- Increased minimum Python version from 3.8 to 3.10.
+- DepthCharge is upgraded to the latest version 0.4.9.
+- A more descriptive error message is logged for some annotated spectrum file parsing failure cases.
+- The precursor mass filter is no longer applied in *de novo* mode, and correspondingly peptide-level scores are no longer penalized based on the precursor mass. The config options `precursor_mass_tol` and `isotope_error_range` now only apply to database search mode.
+- The amino acid scores and ProForma columns in the output mzTab files have been renamed to `opt_global_aa_scores` and `opt_global_cv_MS:1003169_proforma_peptidoform_sequence`, according to the mzTab specification.
+
 ### Fixed
 
-- Resolved an issue where the output file overwrite protection incorrectly checked for `None.mztab` when `--output_root` was not specified.
+- A mismatching parameter error will now only be triggered for the tokenizer if the config and checkpoint tokenizers do not have equivalent vocabularies.
+- Fixed `0` peptide precision during evaluation mode.
+- Peptide predictions failing the minimum peptide length are not reported, irrespective of whether they match or exceed the precursor mass.
+- Fixed an issue where some predictions that are one residue less than the configured minimum peptide length are reported.
+- Setting `--output_root` to a directory will no longer cause an error.
+- Correctly check for output file overwrite protection when `--output_root` is not specified.
 
 ## [5.1.2] - 2025-12-11
 
@@ -328,7 +349,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Initial Casanovo version.
 
 [Unreleased]: https://github.com/Noble-Lab/casanovo/compare/v5.1.2...HEAD
-[5.1.1]: https://github.com/Noble-Lab/casanovo/compare/v5.1.1...v5.1.2
+[5.1.2]: https://github.com/Noble-Lab/casanovo/compare/v5.1.1...v5.1.2
 [5.1.1]: https://github.com/Noble-Lab/casanovo/compare/v5.1.0...v5.1.1
 [5.1.0]: https://github.com/Noble-Lab/casanovo/compare/v5.0.0...v5.1.0
 [5.0.0]: https://github.com/Noble-Lab/casanovo/compare/v4.3.0...v5.0.0

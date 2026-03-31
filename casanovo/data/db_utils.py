@@ -5,6 +5,7 @@ import logging
 import os
 import re
 import string
+from pathlib import Path
 from typing import Dict, Iterator, Pattern, Set, Tuple
 
 import depthcharge.constants
@@ -168,6 +169,28 @@ class ProteinDatabase:
             "Digestion complete. %s peptides generated.", f"{len(peptides):,d}"
         )
         return peptides
+
+    def export(self, output_path: Path, output_root: str) -> None:
+        """
+        Dumps the peptide database to a tsv file
+
+        The file has the following columns:
+        - protein (list of associated proteins to peptide)
+        - peptide (peptide sequence)
+        - calc_mass (calculated mass of the peptide)
+
+        Parameters
+        ----------
+        output_path: Path
+            Path that the tsv file will be stored
+        output_root: str
+           Name of the root directory of the file
+        """
+        self.db_peptides.to_csv(
+            output_path / f"{output_root}.tsv",
+            sep="\t",
+            index=True,
+        )
 
     def _calc_pep_mass(self, pep: str) -> float:
         """
