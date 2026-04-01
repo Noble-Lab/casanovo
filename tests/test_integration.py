@@ -70,20 +70,6 @@ def test_train_and_run(
     assert result.exit_code == 0
     assert output_filename.is_file()
 
-    # Force-overwrite test
-    predict_args = [
-        "sequence",
-        "--model",
-        str(model_file),
-        "--config",
-        tiny_config,
-        "--output_dir",
-        str(tmp_path),
-        "--output_root",
-        output_rootname,
-        str(mgf_small),
-        str(mzml_small),
-    ]
     with pytest.raises(FileExistsError):
         result = run(predict_args)
 
@@ -193,21 +179,6 @@ def test_train_and_run(
 
     assert result.exit_code == 0
     assert output_filename.exists()
-
-    # Force overwrite test
-    search_args = [
-        "db-search",
-        "--model",
-        str(model_file),
-        "--config",
-        tiny_config_db,
-        "--output_dir",
-        str(tmp_path),
-        "--output_root",
-        output_rootname,
-        str(mgf_medium),
-        str(tiny_fasta_file),
-    ]
 
     with pytest.raises(FileExistsError):
         result = run(search_args)
