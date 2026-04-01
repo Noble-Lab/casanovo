@@ -181,7 +181,7 @@ def sequence(
     utils.log_system_info()
 
     if not force_overwrite:
-        utils.check_dir_file_exists(output_path, f"{output_root}.mztab")
+        utils.check_dir_file_exists(output_path, f"{output_root_name}.mztab")
 
     config, model = setup_model(
         model, config, output_path, output_root_name, False
@@ -244,7 +244,7 @@ def db_search(
     utils.log_system_info()
 
     if not force_overwrite:
-        utils.check_dir_file_exists(output_path, f"{output_root}.mztab")
+        utils.check_dir_file_exists(output_path, f"{output_root_name}.mztab")
 
     config, model = setup_model(
         model, config, output_path, output_root_name, False
