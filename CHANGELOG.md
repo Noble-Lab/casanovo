@@ -11,6 +11,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ### Changed
 
 - Hotfix to ensure compatibility with PyTorch v2.6 when loading weights files.
+- Changed force_overwrite behavior to also overwrite mztab files
 
 ## [5.1.1] - 2025-11-27
 
