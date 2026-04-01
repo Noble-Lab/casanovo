@@ -1066,6 +1066,9 @@ class Spec2Pep(pl.LightningModule):
             The initialized Adam optimizer and its learning rate
             scheduler.
         """
+        warnings.warn(
+            f"{self.opt_kwargs} THIS IS THE OPTIMIZATION KWARGS. CHECK THIS"
+        )
         optimizer = torch.optim.Adam(self.parameters(), **self.opt_kwargs)
         # Apply learning rate scheduler per step.
         lr_scheduler = CosineWarmupScheduler(
