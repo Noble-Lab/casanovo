@@ -320,7 +320,7 @@ def _get_config_file(file_path, file_name, additional_cfg=None):
         "weight_decay": 1e-5,
         "train_label_smoothing": 0.01,
         "train_batch_size": 32,
-        "max_epochs": 20,
+        "max_epochs": 30,
         "shuffle": False,
         "shuffle_buffer_size": 64,
         "num_sanity_val_steps": 0,
