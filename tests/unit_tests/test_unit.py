@@ -5,6 +5,7 @@ import functools
 import hashlib
 import heapq
 import io
+import logging
 import os
 import pathlib
 import platform
@@ -462,7 +463,10 @@ def test_setup_model(monkeypatch):
     version = "3.0.0"
 
     # Test model is none when not training
-    with monkeypatch.context() as mnk, tempfile.TemporaryDirectory() as tmp_dir:
+    with (
+        monkeypatch.context() as mnk,
+        tempfile.TemporaryDirectory() as tmp_dir,
+    ):
         mnk.setattr(casanovo, "__version__", version)
         mnk.setattr("appdirs.user_cache_dir", lambda n, a, opinion: tmp_dir)
         mnk.setattr(github, "Github", mock_github)
@@ -482,7 +486,10 @@ def test_setup_model(monkeypatch):
         assert not filename.is_file()
         assert mock_get.request_counter == 1
 
-    with monkeypatch.context() as mnk, tempfile.TemporaryDirectory() as tmp_dir:
+    with (
+        monkeypatch.context() as mnk,
+        tempfile.TemporaryDirectory() as tmp_dir,
+    ):
         mnk.setattr(casanovo, "__version__", version)
         mnk.setattr("appdirs.user_cache_dir", lambda n, a, opinion: tmp_dir)
         mnk.setattr(github, "Github", mock_github)
@@ -537,7 +544,10 @@ def test_setup_model(monkeypatch):
         assert result == temp_file_path
 
     # Test model is neither a URL or File
-    with monkeypatch.context() as mnk, tempfile.TemporaryDirectory() as tmp_dir:
+    with (
+        monkeypatch.context() as mnk,
+        tempfile.TemporaryDirectory() as tmp_dir,
+    ):
         mnk.setattr(casanovo, "__version__", version)
         mnk.setattr("appdirs.user_cache_dir", lambda n, a, opinion: tmp_dir)
         mnk.setattr(github, "Github", mock_github)
@@ -566,7 +576,10 @@ def test_get_model_weights(monkeypatch):
     mock_github = functools.partial(MockGithub, test_releases)
 
     for version in test_releases:
-        with monkeypatch.context() as mnk, tempfile.TemporaryDirectory() as tmp_dir:
+        with (
+            monkeypatch.context() as mnk,
+            tempfile.TemporaryDirectory() as tmp_dir,
+        ):
             mnk.setattr(casanovo, "__version__", version)
             mnk.setattr(
                 "appdirs.user_cache_dir", lambda n, a, opinion: tmp_dir
@@ -586,7 +599,10 @@ def test_get_model_weights(monkeypatch):
     # Impossible to find model weights for (i) full version mismatch and (ii)
     # major version mismatch.
     for version in ["999.999.999", "999.0.0"]:
-        with monkeypatch.context() as mnk, tempfile.TemporaryDirectory() as tmp_dir:
+        with (
+            monkeypatch.context() as mnk,
+            tempfile.TemporaryDirectory() as tmp_dir,
+        ):
             mnk.setattr(casanovo, "__version__", version)
             mnk.setattr(github, "Github", mock_github)
             mnk.setattr(requests, "get", mock_get)
@@ -599,7 +615,10 @@ def test_get_model_weights(monkeypatch):
             403, "API rate limit exceeded", None
         )
 
-    with monkeypatch.context() as mnk, tempfile.TemporaryDirectory() as tmp_dir:
+    with (
+        monkeypatch.context() as mnk,
+        tempfile.TemporaryDirectory() as tmp_dir,
+    ):
         mnk.setattr("appdirs.user_cache_dir", lambda n, a, opinion: tmp_dir)
         mnk.setattr("github.Requester.Requester.requestJsonAndCheck", request)
         mnk.setattr(requests, "get", mock_get)
@@ -613,7 +632,10 @@ def test_get_model_weights(monkeypatch):
 def test_get_weights_from_url(monkeypatch):
     file_url = "http://example.com/model_weights.ckpt"
 
-    with monkeypatch.context() as mnk, tempfile.TemporaryDirectory() as tmp_dir:
+    with (
+        monkeypatch.context() as mnk,
+        tempfile.TemporaryDirectory() as tmp_dir,
+    ):
         mock_get = MockResponseGet()
         mock_head = MockResponseHead()
         mnk.setattr(requests, "get", mock_get)
@@ -1889,6 +1911,54 @@ def test_spectrum_id_mgf(mgf_small, tmp_path):
         ):
             assert dataset[i]["peak_file"][0] == filename.name
             assert dataset[i]["scan_id"][0] == f"index={scan_id}"
+
+
+def test_log_training_set_size(mgf_small, tmp_path, caplog):
+    """Test that the number of training and validation spectra is logged."""
+    mgf_small2 = tmp_path / "mgf_small2.mgf"
+    shutil.copy(mgf_small, mgf_small2)
+    data_module = DeNovoDataModule(
+        lance_dir=tmp_path.name,
+        train_paths=[mgf_small, mgf_small2],
+        valid_paths=[mgf_small],
+        min_peaks=0,
+        shuffle=False,
+    )
+    with caplog.at_level(logging.INFO, logger="casanovo"):
+        data_module.setup()
+
+    assert any(
+        msg == "Training dataset contains 4 spectra."
+        for msg in caplog.messages
+    )
+    assert any(
+        msg == "Validation dataset contains 2 spectra."
+        for msg in caplog.messages
+    )
+
+
+def test_log_training_set_size_shuffled(mgf_small, tmp_path, caplog):
+    """Test spectra count logging when shuffle=True (ShufflerIterDataPipe)."""
+    mgf_small2 = tmp_path / "mgf_small2.mgf"
+    shutil.copy(mgf_small, mgf_small2)
+    data_module = DeNovoDataModule(
+        lance_dir=tmp_path.name,
+        train_paths=[mgf_small, mgf_small2],
+        valid_paths=[mgf_small],
+        min_peaks=0,
+        shuffle=True,
+    )
+    with caplog.at_level(logging.INFO, logger="casanovo"):
+        data_module.setup()
+
+    assert any(
+        msg == "Training dataset contains 4 spectra."
+        for msg in caplog.messages
+    )
+    assert any(
+        msg == "Validation dataset contains 2 spectra."
+        for msg in caplog.messages
+    )
 
 
 def test_spectrum_id_mzml(mzml_small, tmp_path):

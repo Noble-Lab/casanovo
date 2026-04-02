@@ -59,7 +59,7 @@ docs = [
 ]
 dev = [
     "pre-commit>=2.7.1",
-    "black>=19.10b0",
+    "black>=26.3.0",
     "ppx",
     "psims",
     "pyteomics",
@@ -79,7 +79,7 @@ exclude = ["docs", "tests", "sample_data"]
 
 [tool.black]
 line-length = 79
-target-version = ['py38']
+target-version = ['py310']
 include = '\.pyi?$'
 exclude = '''
 
