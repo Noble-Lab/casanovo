@@ -96,3 +96,16 @@ def test_override_mps(monkeypatch, tiny_config, tmp_path, caplog):
             "overwritten to 'cpu' on Apple Silicon" in rec.getMessage()
             for rec in caplog.records
         )
+
+
+def test_invalid_train_batch_size(tmp_path, tiny_config):
+    """Test that a non-positive train_batch_size raises a ValueError."""
+    for bad_value in [0, -1]:
+        filename = str(tmp_path / f"config_bad_batch_{bad_value}.yml")
+        with open(tiny_config, "r") as f_in, open(filename, "w") as f_out:
+            cfg = yaml.safe_load(f_in)
+            cfg["train_batch_size"] = bad_value
+            yaml.safe_dump(cfg, f_out)
+
+        with pytest.raises(ValueError, match="train_batch_size"):
+            Config(filename)
