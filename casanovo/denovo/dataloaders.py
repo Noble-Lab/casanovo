@@ -264,8 +264,11 @@ class DeNovoDataModule(pl.LightningDataModule):
             )
 
         if shuffle:
+            buffer_batches = max(
+                1, self.shuffle_buffer_size // self.train_batch_size
+            )
             dataset = ShufflerIterDataPipe(
-                dataset, buffer_size=self.shuffle_buffer_size
+                dataset, buffer_size=buffer_batches
             )
 
         return dataset
