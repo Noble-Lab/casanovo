@@ -195,9 +195,9 @@ def test_train_and_run(
     with pytest.raises(FileExistsError):
         result = run(search_args)
 
-    force_predict_args = predict_args.copy()
-    force_predict_args.insert(1, "--force_overwrite")
-    result = run(force_predict_args)
+    force_search_args = search_args.copy()
+    force_search_args.insert(1, "--force_overwrite")
+    result = run(force_search_args)
     assert result.exit_code == 0
     assert output_filename.is_file()
 
