@@ -163,6 +163,9 @@ def test_train_and_run(
     assert result.exit_code == 0
     assert output_filename.is_file()
 
+    with pytest.raises(FileExistsError):
+        result = run(eval_args)
+
     force_eval_args = eval_args.copy()
     force_eval_args.insert(1, "--force_overwrite")
     result = run(force_eval_args)
