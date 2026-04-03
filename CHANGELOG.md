@@ -20,7 +20,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Black version upgraded for Python 3.10.
 - Upgraded minimum DepthCharge version to 0.4.9.
 - Changed default gradient clipping to a norm of 1.0.
-- Updated train_batch_size documentation to reflect per-device/effective batch computation.
+- Updated `train_batch_size` documentation to reflect per-device/effective batch computation.
 - A more descriptive error message is logged for some annotated spectrum file parsing failure cases.
 - The precursor mass filter is no longer applied in *de novo* mode, and correspondingly peptide-level scores are no longer penalized based on the precursor mass. The config options `precursor_mass_tol` and `isotope_error_range` now only apply to database search mode.
 - The amino acid scores and ProForma columns in the output mzTab files have been renamed to `opt_global_aa_scores` and `opt_global_cv_MS:1003169_proforma_peptidoform_sequence`, according to the mzTab specification.
@@ -32,6 +32,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Fixed an issue which led the reported peptide precision to be 0 during evaluation mode.
 - Peptide predictions failing the minimum peptide length are not reported, irrespective of whether they match or exceed the precursor mass.
 - Setting `--output_root` to a directory will no longer cause an error.
+- The `--force_overwrite` flag now also checks whether mzTab output files would be overwritten.
 - Fixed an issue where some predictions that are one residue less than the configured minimum peptide length are reported.
 
 ## [5.1.2] - 2025-12-11
