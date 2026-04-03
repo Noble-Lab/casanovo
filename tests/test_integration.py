@@ -73,6 +73,12 @@ def test_train_and_run(
     with pytest.raises(FileExistsError):
         result = run(predict_args)
 
+    force_predict_args = predict_args.copy()
+    force_predict_args.insert(1, "--force_overwrite")
+    result = run(force_predict_args)
+    assert result.exit_code == 0
+    assert output_filename.is_file()
+
     # Verify that the output file is correct.
     mztab = pyteomics.mztab.MzTab(str(output_filename))
     # Verify that both input peak files are listed in the metadata.
@@ -113,6 +119,12 @@ def test_train_and_run(
     ]
 
     result = run(eval_args)
+    assert result.exit_code == 0
+    assert output_filename.is_file()
+
+    force_eval_args = eval_args.copy()
+    force_eval_args.insert(1, "--force_overwrite")
+    result = run(force_eval_args)
     assert result.exit_code == 0
     assert output_filename.is_file()
 
@@ -182,6 +194,12 @@ def test_train_and_run(
 
     with pytest.raises(FileExistsError):
         result = run(search_args)
+
+    force_predict_args = predict_args.copy()
+    force_predict_args.insert(1, "--force_overwrite")
+    result = run(force_predict_args)
+    assert result.exit_code == 0
+    assert output_filename.is_file()
 
     # Verify that the output file is correct.
     mztab = pyteomics.mztab.MzTab(str(output_filename))
