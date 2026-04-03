@@ -397,6 +397,7 @@ class ModelRunner:
 
             additional_cfg = dict(
                 devices=devices,
+                log_every_n_steps=self.config.train_check_interval,
                 val_check_interval=self.config.val_check_interval,
                 max_epochs=self.config.max_epochs,
                 num_sanity_val_steps=self.config.num_sanity_val_steps,
@@ -451,7 +452,7 @@ class ModelRunner:
             min_peptide_len=self.config.min_peptide_len,
             top_match=self.config.top_match,
             n_beams=self.config.n_beams,
-            n_log=self.config.n_log,
+            train_check_interval=self.config.train_check_interval,
             max_charge=self.config.max_charge,
             dim_model=self.config.dim_model,
             n_head=self.config.n_head,
@@ -475,7 +476,7 @@ class ModelRunner:
             max_peptide_len=self.config.max_peptide_len,
             top_match=self.config.top_match,
             n_beams=self.config.n_beams,
-            n_log=self.config.n_log,
+            train_check_interval=self.config.train_check_interval,
             warmup_iters=self.config.warmup_iters,
             cosine_schedule_period_iters=self.config.cosine_schedule_period_iters,
             lr=self.config.learning_rate,

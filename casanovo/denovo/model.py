@@ -64,8 +64,9 @@ class Spec2Pep(pl.LightningModule):
         Number of beams used during beam search decoding.
     top_match : int
         Number of PSMs to return for each spectrum.
-    n_log : int
-        The number of epochs to wait between logging messages.
+    train_check_interval : int
+        The number of training steps between logging messages. Must be
+        greater than zero.
     train_label_smoothing : float
         Smoothing factor when calculating the training loss.
     warmup_iters : int
@@ -98,7 +99,7 @@ class Spec2Pep(pl.LightningModule):
         min_peptide_len: int = 6,
         n_beams: int = 1,
         top_match: int = 1,
-        n_log: int = 10,
+        train_check_interval: int = 50_000,
         train_label_smoothing: float = 0.01,
         warmup_iters: int = 100_000,
         cosine_schedule_period_iters: int = 600_000,
@@ -138,15 +139,14 @@ class Spec2Pep(pl.LightningModule):
         # Optimizer settings.
         self.warmup_iters = warmup_iters
         self.cosine_schedule_period_iters = cosine_schedule_period_iters
-        # `kwargs` will contain additional arguments as well as
-        # unrecognized arguments, including deprecated ones. Remove the
-        # deprecated ones.
+        # Remove kwargs that are not accepted by the model constructor.
         for k in config._config_deprecated:
-            kwargs.pop(k, None)
-            warnings.warn(
-                f"Deprecated hyperparameter '{k}' removed from the model.",
-                DeprecationWarning,
-            )
+            if k in kwargs:
+                kwargs.pop(k)
+                warnings.warn(
+                    f"Deprecated hyperparameter '{k}' removed from the model.",
+                    DeprecationWarning,
+                )
         self.opt_kwargs = kwargs
 
         # Data properties.
@@ -159,8 +159,11 @@ class Spec2Pep(pl.LightningModule):
 
         # Logging.
         self.calculate_precision = calculate_precision
-        self.n_log = n_log
+        self.train_check_interval = train_check_interval
         self._history = []
+        self._history_header_emitted = False
+        self._last_logged_step_train = None
+        self._last_logged_step_val = None
 
         # Output writer during predicting.
         self.out_writer = out_writer
@@ -829,8 +832,8 @@ class Spec2Pep(pl.LightningModule):
         self.log(
             f"{mode}_CELoss",
             loss.detach(),
-            on_step=False,
-            on_epoch=True,
+            on_step=(mode == "train"),
+            on_epoch=(mode != "train"),
             sync_dist=True,
             batch_size=pred.shape[0],
         )
@@ -935,27 +938,40 @@ class Spec2Pep(pl.LightningModule):
 
         return predictions
 
-    def on_train_epoch_end(self) -> None:
+    def on_train_batch_end(self, *args, **kwargs) -> None:
         """
-        Log the training loss at the end of each epoch.
+        Log the training loss at the end of each training step.
         """
+        current_step = self.trainer.global_step
+        if (
+            current_step == self._last_logged_step_train
+            or current_step % self.train_check_interval != 0
+        ):
+            return
+
+        self._last_logged_step_train = current_step
         if "train_CELoss" in self.trainer.callback_metrics:
             train_loss = (
                 self.trainer.callback_metrics["train_CELoss"].detach().item()
             )
         else:
             train_loss = np.nan
-        metrics = {"step": self.trainer.global_step, "train": train_loss}
-        self._history.append(metrics)
+        metrics = {"step": current_step, "train": train_loss}
+        self._history = [metrics]
         self._log_history()
 
     def on_validation_epoch_end(self) -> None:
         """
         Log the validation metrics at the end of each epoch.
         """
+        current_step = self.trainer.global_step
+        if current_step == self._last_logged_step_val:
+            return
+
+        self._last_logged_step_val = current_step
         callback_metrics = self.trainer.callback_metrics
         metrics = {
-            "step": self.trainer.global_step,
+            "step": current_step,
             "valid": callback_metrics["valid_CELoss"].detach().item(),
         }
 
@@ -966,7 +982,7 @@ class Spec2Pep(pl.LightningModule):
             metrics["valid_pep_precision"] = (
                 callback_metrics["pep_precision"].detach().item()
             )
-        self._history.append(metrics)
+        self._history = [metrics]
         self._log_history()
 
     def on_predict_batch_end(
@@ -1016,14 +1032,26 @@ class Spec2Pep(pl.LightningModule):
         # Log only if all output for the current epoch is recorded.
         if len(self._history) == 0:
             return
-        if len(self._history) == 1:
+        if not self._history_header_emitted:
             header = "Step\tTrain loss\tValid loss\t"
             if self.calculate_precision:
                 header += "Peptide precision\tAA precision"
 
             logger.info(header)
+            self._history_header_emitted = True
         metrics = self._history[-1]
-        if metrics["step"] % self.n_log == 0:
+
+        val_check_interval = getattr(self.trainer, "val_check_interval", None)
+        is_val_log = (
+            isinstance(val_check_interval, int)
+            and metrics["step"] % val_check_interval == 0
+        )
+
+        if (
+            metrics["step"] % self.train_check_interval == 0
+            or is_val_log
+            or "valid" in metrics
+        ):
             msg = "%i\t%.6f\t%.6f"
             vals = [
                 metrics["step"],

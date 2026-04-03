@@ -96,3 +96,17 @@ def test_override_mps(monkeypatch, tiny_config, tmp_path, caplog):
             "overwritten to 'cpu' on Apple Silicon" in rec.getMessage()
             for rec in caplog.records
         )
+
+
+@pytest.mark.parametrize("bad_interval", [0, -1, 1.5, True])
+def test_train_check_interval_validation(tmp_path, tiny_config, bad_interval):
+    filename = str(tmp_path / "config_bad_train_check_interval.yml")
+    with open(tiny_config, "r") as f_in, open(filename, "w") as f_out:
+        cfg = yaml.safe_load(f_in)
+        cfg["train_check_interval"] = bad_interval
+        yaml.safe_dump(cfg, f_out)
+
+    with pytest.raises(
+        ValueError, match="train_check_interval must be a positive integer"
+    ):
+        Config(filename)

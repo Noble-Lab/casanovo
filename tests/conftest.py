@@ -295,11 +295,11 @@ def _get_config_file(file_path, file_name, additional_cfg=None):
             "nterm:[+25.980265]-"
         ),
         "random_seed": 454,
-        "n_log": 1,
         "tb_summarywriter": False,
         "log_metrics": False,
         "log_every_n_steps": 50,
         "lance_dir": None,
+        "train_check_interval": 50,
         "val_check_interval": 1,
         "min_peaks": 10,
         "max_peaks": 150,
