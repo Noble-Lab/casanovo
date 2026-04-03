@@ -289,6 +289,15 @@ class ModelRunner:
         self.initialize_model(train=False)
         self.model.out_writer = self.writer
 
+        if "max_peaks" in self.model.hparams:
+            ckpt_max_peaks = self.model.hparams["max_peaks"]
+            if self.config.max_peaks != ckpt_max_peaks:
+                logger.warning(
+                    f"Overriding config max_peaks ({self.config.max_peaks}) "
+                    f"with checkpoint max_peaks ({ckpt_max_peaks})"
+                )
+            self.config.max_peaks = ckpt_max_peaks
+
         test_paths = self._get_input_paths(peak_path, False, "test")
         self.writer.set_ms_run(test_paths)
         self.initialize_data_module(test_paths=test_paths)

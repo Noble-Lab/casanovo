@@ -465,10 +465,28 @@ def setup_model(
     # Download model weights if these were not specified (except when
     # training).
     cache_dir = Path(appdirs.user_cache_dir("casanovo", False, opinion=False))
-    if model is None:
+    if model.lower() == "tims" or model.lower() == "timstof":
+        # get the timstof model
         if not is_train:
             try:
-                model = _get_model_weights(cache_dir)
+                model = _get_model_weights(cache_dir, is_timstof=True)
+            except github.RateLimitExceededException:
+                logger.error(
+                    "GitHub API rate limit exceeded while trying to download "
+                    "the model weights. Please download compatible model "
+                    "weights manually from the official Casanovo code website "
+                    "(https://github.com/Noble-Lab/casanovo) and specify "
+                    "these explicitly using the `--model` parameter when "
+                    "running Casanovo."
+                )
+                raise PermissionError(
+                    "GitHub API rate limit exceeded while trying to download "
+                    "the model weights"
+                ) from None
+    elif model.lower() == "orbitrap" or model.lower() == "orbi":
+        if not is_train:
+            try:
+                model = _get_model_weights(cache_dir, is_timstof=False)
             except github.RateLimitExceededException:
                 logger.error(
                     "GitHub API rate limit exceeded while trying to download "
@@ -505,7 +523,7 @@ def setup_model(
     return config, model
 
 
-def _get_model_weights(cache_dir: Path) -> Path:
+def _get_model_weights(cache_dir: Path, is_timstof: bool) -> Path:
     """
     Use cached model weights or download them from GitHub.
 
@@ -536,7 +554,9 @@ def _get_model_weights(cache_dir: Path) -> Path:
     # Try to find suitable model weights in the local cache.
     for filename in os.listdir(cache_dir):
         root, ext = os.path.splitext(filename)
-        if ext == ".ckpt":
+        if ext == ".ckpt" and (
+            ("timstof" in filename.lower()) if is_timstof else True
+        ):
             file_version = tuple(
                 g for g in re.match(r".*_v(\d+)_(\d+)_(\d+)", root).groups()
             )
@@ -573,7 +593,9 @@ def _get_model_weights(cache_dir: Path) -> Path:
             if match > version_match[2]:
                 for release_asset in release.get_assets():
                     fn, ext = os.path.splitext(release_asset.name)
-                    if ext == ".ckpt":
+                    if ext == ".ckpt" and (
+                        ("timstof" in filename.lower()) if is_timstof else True
+                    ):
                         version_match = (
                             os.path.join(
                                 cache_dir,
