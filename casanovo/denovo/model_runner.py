@@ -12,7 +12,6 @@ from typing import Iterable, List, Optional, Sequence, Union
 import lightning.pytorch as pl
 import lightning.pytorch.loggers
 import torch
-import torch.utils.data
 from depthcharge.tokenizers import PeptideTokenizer
 from depthcharge.tokenizers.peptides import MskbPeptideTokenizer
 from lightning.pytorch.callbacks import LearningRateMonitor, ModelCheckpoint
@@ -25,7 +24,6 @@ from ..data import db_utils, ms_io
 from ..denovo.dataloaders import DeNovoDataModule
 from ..denovo.evaluate import aa_match_batch, aa_match_metrics
 from ..denovo.model import DbSpec2Pep, Spec2Pep
-
 
 logger = logging.getLogger("casanovo")
 
@@ -175,6 +173,7 @@ class ModelRunner:
         self,
         train_peak_path: Iterable[str],
         valid_peak_path: Iterable[str],
+        ckpt_path: Optional[str] = None,
     ) -> None:
         """
         Train the Casanovo model.
@@ -185,6 +184,10 @@ class ModelRunner:
             The path to the MS data files for training.
         valid_peak_path : iterable of str
             The path to the MS data files for validation.
+        ckpt_path : str, optional
+            Path to a checkpoint file to resume training from. When provided,
+            training will resume from the saved optimizer state, learning rate
+            scheduler, and epoch. If None, training starts fresh (default).
         """
         self.initialize_trainer(train=True)
         self.initialize_tokenizer()
@@ -195,11 +198,20 @@ class ModelRunner:
         self.initialize_data_module(train_paths, valid_paths)
         self.loaders.setup()
 
-        self.trainer.fit(
-            self.model,
-            self.loaders.train_dataloader(),
-            self.loaders.val_dataloader(),
-        )
+        if ckpt_path is None:
+            self.trainer.fit(
+                self.model,
+                self.loaders.train_dataloader(),
+                self.loaders.val_dataloader(),
+            )
+        else:
+            self.trainer.fit(
+                self.model,
+                self.loaders.train_dataloader(),
+                self.loaders.val_dataloader(),
+                ckpt_path=ckpt_path,
+                weights_only=False,
+            )
 
     def log_metrics(self, test_dataloader: DataLoader) -> None:
         """
@@ -218,27 +230,27 @@ class ModelRunner:
 
         for batch in test_dataloader:
             for peak_file, scan_id, true_seq in zip(
-                batch["peak_file"], batch["scan_id"], batch["seq"]
+                batch["peak_file"],
+                batch["scan_id"],
+                self.tokenizer.detokenize(batch["seq"], join=False),
             ):
-                true_seqs.append(true_seq.cpu().detach().numpy())
+                true_seqs.append(true_seq)
                 if pred_i < len(self.writer.psms) and self.writer.psms[
                     pred_i
                 ].spectrum_id == (peak_file, scan_id):
-                    pred_tokens = self.model.tokenizer.tokenize(
-                        self.writer.psms[pred_i].sequence
-                    ).squeeze(0)
-                    pred_seqs.append(pred_tokens.cpu().detach().numpy())
+                    curr_pred = self.tokenizer.tokenize(
+                        self.writer.psms[pred_i].sequence, to_strings=True
+                    )[0]
+                    if self.tokenizer.reverse:
+                        curr_pred = curr_pred[::-1]
+
+                    pred_seqs.append(curr_pred)
                     pred_i += 1
                 else:
                     pred_seqs.append(None)
 
-        aa_masses = {
-            aa_token: self.model.tokenizer.residues[aa]
-            for aa, aa_token in self.model.tokenizer.index.items()
-            if aa in self.model.tokenizer.residues
-        }
         aa_precision, aa_recall, pep_precision = aa_match_metrics(
-            *aa_match_batch(true_seqs, pred_seqs, aa_masses)
+            *aa_match_batch(true_seqs, pred_seqs, self.tokenizer.residues)
         )
 
         if self.config["top_match"] > 1:
@@ -295,12 +307,14 @@ class ModelRunner:
 
         try:
             self.loaders.setup(stage="test", annotated=evaluate)
-        except (KeyError, OSError) as e:
+        except (KeyError, OSError, TypeError) as e:
             if evaluate:
                 error_message = (
                     "Error creating annotated spectrum dataloaders. This may "
                     "be the result of having an unannotated peak file present "
-                    "in the validation peak file path list."
+                    "in the validation peak file path list. Check that the input "
+                    "spectrum files are annotated, and if they are that the "
+                    "format is correct."
                 )
 
                 logger.error(error_message)
@@ -407,15 +421,6 @@ class ModelRunner:
         else:
             tokenizer_clss = PeptideTokenizer
 
-        missing_aa = list(
-            set(self.config.residues) - set(tokenizer_clss.residues)
-        )
-        if missing_aa:
-            logger.warning(
-                "Configured residue(s) not in model alphabet: %s",
-                ", ".join(missing_aa),
-            )
-
         self.tokenizer = tokenizer_clss(
             residues=self.config.residues,
             replace_isoleucine_with_leucine=self.config.replace_isoleucine_with_leucine,
@@ -443,8 +448,6 @@ class ModelRunner:
             )
 
         model_params = dict(
-            precursor_mass_tol=self.config.precursor_mass_tol,
-            isotope_error_range=self.config.isotope_error_range,
             min_peptide_len=self.config.min_peptide_len,
             top_match=self.config.top_match,
             n_beams=self.config.n_beams,
@@ -468,8 +471,6 @@ class ModelRunner:
         # Reconfigurable non-architecture related parameters for a
         # loaded model.
         loaded_model_params = dict(
-            precursor_mass_tol=self.config.precursor_mass_tol,
-            isotope_error_range=self.config.isotope_error_range,
             min_peptide_len=self.config.min_peptide_len,
             max_peptide_len=self.config.max_peptide_len,
             top_match=self.config.top_match,
@@ -520,17 +521,24 @@ class ModelRunner:
             # Use tokenizer initialized from config file instead of loaded
             # from checkpoint file.
             self.model.tokenizer = tokenizer
+
             architecture_params = set(model_params.keys()) - set(
                 loaded_model_params.keys()
             )
             for param in architecture_params:
                 if model_params[param] != self.model.hparams[param]:
-                    warnings.warn(
-                        f"Mismatching {param} parameter in "
-                        f"model checkpoint ({self.model.hparams[param]}) "
-                        f"vs config file ({model_params[param]}); "
-                        "using the checkpoint."
-                    )
+                    if param == "tokenizer":
+                        self._verify_tokenizer(
+                            model_params[param], self.model.hparams[param]
+                        )
+                    else:
+                        logger.warning(
+                            "Mismatching %s parameter in model checkpoint (%s) vs"
+                            " config file (%s); using the checkpoint.",
+                            param,
+                            self.model.hparams[param],
+                            model_params[param],
+                        )
         except RuntimeError:
             # This only doesn't work if the weights are from an older
             # version.
@@ -542,11 +550,14 @@ class ModelRunner:
                     **model_params,
                 )
                 self.model.tokenizer = tokenizer
+
             except RuntimeError:
                 raise RuntimeError(
                     "Weights file incompatible with the current version of "
                     "Casanovo."
                 )
+
+        self._validate_vocab_compatibility()
 
     def initialize_data_module(
         self,
@@ -606,6 +617,24 @@ class ModelRunner:
             lance_dir=lance_dir,
         )
 
+    @staticmethod
+    def _verify_tokenizer(
+        checkpoint: PeptideTokenizer, config: PeptideTokenizer
+    ) -> None:
+        """Verify that two tokenizers are equivalent"""
+        if checkpoint.residues != config.residues:
+            mismatch_reason = "residues and/or residue masses"
+        elif checkpoint.index != config.index:
+            mismatch_reason = "residue indices"
+        else:
+            return
+
+        logger.warning(
+            "Mismatching %s in model checkpoint tokenizer vs config file tokenizer;"
+            " using the checkpoint tokenizer.",
+            mismatch_reason,
+        )
+
     def _get_input_paths(
         self,
         peak_path: Iterable[str],
@@ -632,7 +661,7 @@ class ModelRunner:
         """
         ext = (".mgf", ".lance")
         if not annotated:
-            ext += (".mzml", ".mzxml")
+            ext += (".mzml", ".mzxml", ".d")
 
         filenames = _get_peak_filenames(peak_path, ext)
         if not filenames:
@@ -669,6 +698,38 @@ class ModelRunner:
             return DDPStrategy(find_unused_parameters=False, static_graph=True)
         else:
             return "auto"
+
+    def _validate_vocab_compatibility(self) -> None:
+        """
+        Check that the model vocabulary is compatible with the tokenizer.
+
+        Raises
+        ------
+        ValueError
+            If the model checkpoint tokenizer does not exactly match the
+            current config tokenizer, or if vocab sizes differ.
+        """
+        checkpoint_tokenizer = self.model.hparams.get("tokenizer")
+        if checkpoint_tokenizer is not None and (
+            checkpoint_tokenizer.residues != self.tokenizer.residues
+            or checkpoint_tokenizer.index != self.tokenizer.index
+        ):
+            raise ValueError(
+                "The model checkpoint tokenizer does not match the current "
+                "config tokenizer. Ensure your config's `residues` and token "
+                "ordering exactly match those used during training."
+            )
+
+        model_vocab_size = self.model.vocab_size
+        tokenizer_vocab_size = len(self.tokenizer) + 1
+        if model_vocab_size != tokenizer_vocab_size:
+            raise ValueError(
+                "The model was trained with a vocabulary of size "
+                f"{model_vocab_size}, but the current config defines "
+                f"a vocabulary of size {tokenizer_vocab_size}. Ensure your "
+                "config's `residues` and token ordering match those used "
+                "during training."
+            )
 
 
 def _get_peak_filenames(
