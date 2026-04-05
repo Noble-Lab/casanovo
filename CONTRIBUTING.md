@@ -67,7 +67,7 @@ In addition, all PRs are automatically linted and tested.
 Your contribution must pass all tests and conform to the expected code style.
 Using `black` locally (see below) is strongly recommended to avoid unnecessary iteration.
 
-Only once all automated checks pass and CodeRabbit feedback has been addressed should you request a maintainer review.
+Only once all automated checks pass and CodeRabbit feedback has been addressed you should request a maintainer review.
 At that point, please tag **@bittremieux**.
 PRs that are not yet ready will not be reviewed.
 
@@ -117,7 +117,7 @@ However:
 **You are fully responsible for your contribution.**
 
 This includes ensuring that the code is correct, relevant, and consistent with the rest of the codebase.
-Contributions should not be unreviewed or blindly generated output.
+Contributions should not contain unreviewed code or blindly generated output.
 Submissions that do not meet basic quality standards may be rejected.
 
 ## Review process and etiquette
