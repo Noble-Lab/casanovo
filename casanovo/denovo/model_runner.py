@@ -471,6 +471,7 @@ class ModelRunner:
             calculate_precision=self.config.calculate_precision,
             out_writer=self.writer,
             tokenizer=tokenizer,
+            max_peaks=self.config.max_peaks,
         )
 
         # Reconfigurable non-architecture related parameters for a
