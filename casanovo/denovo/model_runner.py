@@ -490,6 +490,7 @@ class ModelRunner:
             train_label_smoothing=self.config.train_label_smoothing,
             calculate_precision=self.config.calculate_precision,
             out_writer=self.writer,
+            max_peaks=self.config.max_peaks,
         )
 
         if self.model_filename is None:
