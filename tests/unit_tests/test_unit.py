@@ -122,7 +122,7 @@ class MockRepo:
                 "casanovo_non-enzy.checkpt",
                 "v3.0.0.zip",
                 "v3.0.0.tar.gz",
-                "casanovo_timstof_v3_0_0.ckpt",
+                "casanovo_timstof.ckpt",
             ],
             "v3.1.0": ["v3.1.0.zip", "v3.1.0.tar.gz"],
             "v3.2.0": ["v3.2.0.zip", "v3.2.0.tar.gz"],
@@ -132,7 +132,7 @@ class MockRepo:
                 "casanovo_nontryptic.ckpt",
                 "v4.0.0.zip",
                 "v4.0.0.tar.gz",
-                "casanovo_timstof_v3_0_0.ckpt",
+                "casanovo_timstof.ckpt",
             ],
         },
     ):
@@ -1648,7 +1648,7 @@ def test_spectrum_id_mgf(mgf_small, tmp_path):
             ]
         ):
             assert dataset[i]["peak_file"][0] == filename.name
-            assert dataset[i]["scan_id"][0] == scan_id
+            assert dataset[i]["scan_id"][0] == f"index={scan_id}"
 
 
 def test_spectrum_id_mzml(mzml_small, tmp_path):
