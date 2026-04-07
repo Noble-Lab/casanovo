@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+### Changed 
+- Added separate model weights downloading for timstof data 
+- Added behavior to override the max_peaks with the max_peaks in the checkpoint 
+
 ## [5.1.2] - 2025-12-11
 
 ### Changed

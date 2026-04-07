@@ -329,10 +329,14 @@ def test_get_model_weights(monkeypatch):
             tmp_path = pathlib.Path(tmp_dir)
             filename = tmp_path / "casanovo_massivekb_v3_0_0.ckpt"
             assert not filename.is_file()
-            result_path = casanovo._get_model_weights(tmp_path)
+            result_path = casanovo._get_model_weights(
+                tmp_path, is_timstof=False
+            )
             assert result_path == filename
             assert filename.is_file()
-            result_path = casanovo._get_model_weights(tmp_path)
+            result_path = casanovo._get_model_weights(
+                tmp_path, is_timstof=False
+            )
             assert result_path == filename
 
     # Impossible to find model weights for (i) full version mismatch and (ii)
@@ -343,7 +347,9 @@ def test_get_model_weights(monkeypatch):
             mnk.setattr(github, "Github", mock_github)
             mnk.setattr(requests, "get", mock_get)
             with pytest.raises(ValueError):
-                casanovo._get_model_weights(pathlib.Path(tmp_dir))
+                casanovo._get_model_weights(
+                    pathlib.Path(tmp_dir), is_timstof=False
+                )
 
     # Test GitHub API rate limit.
     def request(self, *args, **kwargs):
@@ -357,7 +363,9 @@ def test_get_model_weights(monkeypatch):
         mnk.setattr(requests, "get", mock_get)
         mock_get.request_counter = 0
         with pytest.raises(github.RateLimitExceededException):
-            casanovo._get_model_weights(pathlib.Path(tmp_dir))
+            casanovo._get_model_weights(
+                pathlib.Path(tmp_dir), is_timstof=False
+            )
 
         assert mock_get.request_counter == 0
 

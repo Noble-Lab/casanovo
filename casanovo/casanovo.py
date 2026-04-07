@@ -466,36 +466,40 @@ def setup_model(
     # training).
     cache_dir = Path(appdirs.user_cache_dir("casanovo", False, opinion=False))
 
-    is_timstof = False
-    if model.lower() == "tims" or model.lower() == "timstof":
-        is_timstof = True
-
-    if not is_train:
-        try:
-            model = _get_model_weights(cache_dir, is_timstof=is_timstof)
-        except github.RateLimitExceededException:
-            logger.error(
-                "GitHub API rate limit exceeded while trying to download "
-                "the model weights. Please download compatible model "
-                "weights manually from the official Casanovo code website "
-                "(https://github.com/Noble-Lab/casanovo) and specify "
-                "these explicitly using the `--model` parameter when "
-                "running Casanovo."
-            )
-            raise PermissionError(
-                "GitHub API rate limit exceeded while trying to download "
-                "the model weights"
-            ) from None
-    else:
-        if _is_valid_url(model):
-            model = _get_weights_from_url(model, cache_dir)
-        elif not Path(model).is_file():
-            error_msg = (
-                f"{model} is not a valid URL or checkpoint file path, "
-                "--model argument must be a URL or checkpoint file path"
-            )
-            logger.error(error_msg)
-            raise ValueError(error_msg)
+    if model is None:
+        if not is_train:
+            try:
+                logger.warning(
+                    "Model type is not provided, will default to model",
+                    "trained on MassiveKB data.",
+                )
+                model = _get_model_weights(cache_dir, is_timstof=False)
+            except github.RateLimitExceededException:
+                logger.error(
+                    "GitHub API rate limit exceeded while trying to download "
+                    "the model weights. Please download compatible model "
+                    "weights manually from the official Casanovo code website "
+                    "(https://github.com/Noble-Lab/casanovo) and specify "
+                    "these explicitly using the `--model` parameter when "
+                    "running Casanovo."
+                )
+                raise PermissionError(
+                    "GitHub API rate limit exceeded while trying to download "
+                    "the model weights"
+                ) from None
+    elif _is_valid_url(model):
+        model = _get_weights_from_url(model, cache_dir)
+    elif "tims" in model.lower():
+        model = _get_model_weights(cache_dir, is_timstof=True)
+    elif not Path(model).is_file():
+        error_msg = (
+            f"{model} is not a valid URL, checkpoint file path, "
+            "or accepted model string."
+            "--model argument must be a URL, checkpoint file path, "
+            "or accepted model string."
+        )
+        logger.error(error_msg)
+        raise ValueError(error_msg)
 
     # Log the active configuration.
     logger.info("Casanovo version %s", str(__version__))
@@ -582,9 +586,9 @@ def _get_model_weights(cache_dir: Path, is_timstof: bool) -> Path:
                 for release_asset in release.get_assets():
                     fn, ext = os.path.splitext(release_asset.name)
                     if ext == ".ckpt" and (
-                        ("timstof" in filename.lower())
+                        ("timstof" in fn.lower())
                         if is_timstof
-                        else ("timstof" not in filename.lower())
+                        else ("timstof" not in fn.lower())
                     ):
                         version_match = (
                             os.path.join(
