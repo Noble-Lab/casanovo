@@ -288,15 +288,6 @@ class ModelRunner:
         self.initialize_model(train=False)
         self.model.out_writer = self.writer
 
-        if "max_peaks" in self.model.hparams:
-            ckpt_max_peaks = self.model.hparams["max_peaks"]
-            if self.config.max_peaks != ckpt_max_peaks:
-                logger.warning(
-                    f"Overriding config max_peaks ({self.config.max_peaks}) "
-                    f"with checkpoint max_peaks ({ckpt_max_peaks})"
-                )
-            self.config.max_peaks = ckpt_max_peaks
-
         test_paths = self._get_input_paths(peak_path, False, "test")
         self.writer.set_ms_run(test_paths)
         self.initialize_data_module(test_paths=test_paths)
@@ -471,7 +462,6 @@ class ModelRunner:
             calculate_precision=self.config.calculate_precision,
             out_writer=self.writer,
             tokenizer=tokenizer,
-            max_peaks=self.config.max_peaks,
         )
 
         # Reconfigurable non-architecture related parameters for a
@@ -491,7 +481,6 @@ class ModelRunner:
             train_label_smoothing=self.config.train_label_smoothing,
             calculate_precision=self.config.calculate_precision,
             out_writer=self.writer,
-            max_peaks=self.config.max_peaks,
         )
 
         if self.model_filename is None:
