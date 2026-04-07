@@ -122,7 +122,7 @@ class MockRepo:
                 "casanovo_non-enzy.checkpt",
                 "v3.0.0.zip",
                 "v3.0.0.tar.gz",
-                "casanovo_timstof.ckpt",
+                "casanovo_timstof_v3_0_0.ckpt",
             ],
             "v3.1.0": ["v3.1.0.zip", "v3.1.0.tar.gz"],
             "v3.2.0": ["v3.2.0.zip", "v3.2.0.tar.gz"],
@@ -132,7 +132,7 @@ class MockRepo:
                 "casanovo_nontryptic.ckpt",
                 "v4.0.0.zip",
                 "v4.0.0.tar.gz",
-                "casanovo_timstof.ckpt",
+                "casanovo_timstof_v3_0_0.ckpt",
             ],
         },
     ):
@@ -195,10 +195,11 @@ def test_timstof_model_loading(monkeypatch):
 
     with monkeypatch.context() as mnk, tempfile.TemporaryDirectory() as tmp_dir:
         mnk.setattr(casanovo, "__version__", "3.0.0")
+        mnk.setattr("appdirs.user_cache_dir", lambda n, a, opinion: tmp_dir)
         mnk.setattr(github, "Github", mock_github)
         mnk.setattr(requests, "get", mock_get)
 
-        filename = pathlib.Path(tmp_dir) / "casanovo_timstof.ckpt"
+        filename = pathlib.Path(tmp_dir) / "casanovo_timstof_v3_0_0.ckpt"
         assert not filename.is_file()
         _, result_path = casanovo.setup_model(
             "timstof", None, None, None, False

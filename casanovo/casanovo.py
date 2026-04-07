@@ -470,8 +470,8 @@ def setup_model(
         if not is_train:
             try:
                 logger.warning(
-                    "Model type is not provided, will default to model",
-                    "trained on MassiveKB data.",
+                    "Model type is not provided, will default to model "
+                    "trained on MassiveKB data."
                 )
                 model = _get_model_weights(cache_dir, is_timstof=False)
             except github.RateLimitExceededException:
@@ -489,7 +489,7 @@ def setup_model(
                 ) from None
     elif _is_valid_url(model):
         model = _get_weights_from_url(model, cache_dir)
-    elif "tims" in model.lower():
+    elif model.lower() == "timstof":
         model = _get_model_weights(cache_dir, is_timstof=True)
     elif not Path(model).is_file():
         error_msg = (
@@ -513,7 +513,7 @@ def setup_model(
     return config, model
 
 
-def _get_model_weights(cache_dir: Path, is_timstof: bool) -> Path:
+def _get_model_weights(cache_dir: Path, is_timstof: bool = False) -> Path:
     """
     Use cached model weights or download them from GitHub.
 
