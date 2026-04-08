@@ -144,6 +144,7 @@ class ModelRunner:
             model=str(self.model_filename),
             config_filename=self.config.file,
         )
+        self.writer.set_database(str(fasta_path))
         self.initialize_trainer(train=True)
         self.initialize_tokenizer()
         self.initialize_model(train=False, db_search=True)
