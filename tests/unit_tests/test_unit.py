@@ -193,7 +193,10 @@ def test_timstof_model_loading(monkeypatch):
     mock_get = MockResponseGet()
     mock_github = functools.partial(MockGithub, test_releases)
 
-    with monkeypatch.context() as mnk, tempfile.TemporaryDirectory() as tmp_dir:
+    with (
+        monkeypatch.context() as mnk,
+        tempfile.TemporaryDirectory() as tmp_dir,
+    ):
         mnk.setattr(casanovo, "__version__", "3.0.0")
         mnk.setattr("appdirs.user_cache_dir", lambda n, a, opinion: tmp_dir)
         mnk.setattr(github, "Github", mock_github)
