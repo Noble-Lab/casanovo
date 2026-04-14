@@ -544,9 +544,9 @@ def _get_model_weights(cache_dir: Path, is_timstof: bool = False) -> Path:
     for filename in os.listdir(cache_dir):
         root, ext = os.path.splitext(filename)
         if ext == ".ckpt" and (
-            ("timstof" in filename.lower())
+            ("timstof" in root.lower())
             if is_timstof
-            else ("timstof" not in filename.lower())
+            else ("timstof" not in root.lower())
         ):
             file_version = tuple(
                 g for g in re.match(r".*_v(\d+)_(\d+)_(\d+)", root).groups()
@@ -585,9 +585,9 @@ def _get_model_weights(cache_dir: Path, is_timstof: bool = False) -> Path:
                 for release_asset in release.get_assets():
                     fn, ext = os.path.splitext(release_asset.name)
                     if ext == ".ckpt" and (
-                        ("timstof" in filename.lower())
+                        ("timstof" in fn.lower())
                         if is_timstof
-                        else ("timstof" not in filename.lower())
+                        else ("timstof" not in fn.lower())
                     ):
                         version_match = (
                             os.path.join(
