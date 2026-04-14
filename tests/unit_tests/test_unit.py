@@ -122,6 +122,7 @@ class MockRepo:
                 "casanovo_non-enzy.checkpt",
                 "v3.0.0.zip",
                 "v3.0.0.tar.gz",
+                "casanovo_timstof.ckpt",
             ],
             "v3.1.0": ["v3.1.0.zip", "v3.1.0.tar.gz"],
             "v3.2.0": ["v3.2.0.zip", "v3.2.0.tar.gz"],
@@ -131,6 +132,7 @@ class MockRepo:
                 "casanovo_nontryptic.ckpt",
                 "v4.0.0.zip",
                 "v4.0.0.tar.gz",
+                "casanovo_timstof.ckpt",
             ],
         },
     ):
@@ -184,6 +186,31 @@ class MockResponseHead:
             response.headers["Last-Modified"] = self.last_modified
 
         return response
+
+
+def test_timstof_model_loading(monkeypatch):
+    test_releases = ["3.0.0", "3.0.999", "3.999.999"]
+    mock_get = MockResponseGet()
+    mock_github = functools.partial(MockGithub, test_releases)
+
+    with (
+        monkeypatch.context() as mnk,
+        tempfile.TemporaryDirectory() as tmp_dir,
+    ):
+        mnk.setattr(casanovo, "__version__", "3.0.0")
+        mnk.setattr("appdirs.user_cache_dir", lambda n, a, opinion: tmp_dir)
+        mnk.setattr(github, "Github", mock_github)
+        mnk.setattr(requests, "get", mock_get)
+
+        filename = pathlib.Path(tmp_dir) / "casanovo_timstof_v3_0_0.ckpt"
+        assert not filename.is_file()
+        _, result_path = casanovo.setup_model(
+            "timstof", None, None, None, False
+        )
+        assert result_path.resolve() == filename.resolve()
+        assert filename.is_file()
+        assert mock_get.request_counter == 1
+        os.remove(result_path)
 
 
 def test_setup_model(monkeypatch):
@@ -306,10 +333,14 @@ def test_get_model_weights(monkeypatch):
             tmp_path = pathlib.Path(tmp_dir)
             filename = tmp_path / "casanovo_massivekb_v3_0_0.ckpt"
             assert not filename.is_file()
-            result_path = casanovo._get_model_weights(tmp_path)
+            result_path = casanovo._get_model_weights(
+                tmp_path, is_timstof=False
+            )
             assert result_path == filename
             assert filename.is_file()
-            result_path = casanovo._get_model_weights(tmp_path)
+            result_path = casanovo._get_model_weights(
+                tmp_path, is_timstof=False
+            )
             assert result_path == filename
 
     # Impossible to find model weights for (i) full version mismatch and (ii)
@@ -320,7 +351,9 @@ def test_get_model_weights(monkeypatch):
             mnk.setattr(github, "Github", mock_github)
             mnk.setattr(requests, "get", mock_get)
             with pytest.raises(ValueError):
-                casanovo._get_model_weights(pathlib.Path(tmp_dir))
+                casanovo._get_model_weights(
+                    pathlib.Path(tmp_dir), is_timstof=False
+                )
 
     # Test GitHub API rate limit.
     def request(self, *args, **kwargs):
@@ -334,7 +367,9 @@ def test_get_model_weights(monkeypatch):
         mnk.setattr(requests, "get", mock_get)
         mock_get.request_counter = 0
         with pytest.raises(github.RateLimitExceededException):
-            casanovo._get_model_weights(pathlib.Path(tmp_dir))
+            casanovo._get_model_weights(
+                pathlib.Path(tmp_dir), is_timstof=False
+            )
 
         assert mock_get.request_counter == 0
 

@@ -468,6 +468,10 @@ def setup_model(
     if model is None:
         if not is_train:
             try:
+                logger.warning(
+                    "Model type is not provided, will default to model "
+                    "trained on MassiveKB data."
+                )
                 model = _get_model_weights(cache_dir)
             except github.RateLimitExceededException:
                 logger.error(
@@ -482,16 +486,19 @@ def setup_model(
                     "GitHub API rate limit exceeded while trying to download "
                     "the model weights"
                 ) from None
-    else:
-        if _is_valid_url(model):
-            model = _get_weights_from_url(model, cache_dir)
-        elif not Path(model).is_file():
-            error_msg = (
-                f"{model} is not a valid URL or checkpoint file path, "
-                "--model argument must be a URL or checkpoint file path"
-            )
-            logger.error(error_msg)
-            raise ValueError(error_msg)
+    elif _is_valid_url(model):
+        model = _get_weights_from_url(model, cache_dir)
+    elif model.lower() == "timstof":
+        model = _get_model_weights(cache_dir, is_timstof=True)
+    elif not Path(model).is_file():
+        error_msg = (
+            f"{model} is not a valid URL, checkpoint file path, "
+            "or accepted model string."
+            "--model argument must be a URL, checkpoint file path, "
+            "or accepted model string."
+        )
+        logger.error(error_msg)
+        raise ValueError(error_msg)
 
     # Log the active configuration.
     logger.info("Casanovo version %s", str(__version__))
@@ -505,7 +512,7 @@ def setup_model(
     return config, model
 
 
-def _get_model_weights(cache_dir: Path) -> Path:
+def _get_model_weights(cache_dir: Path, is_timstof: bool = False) -> Path:
     """
     Use cached model weights or download them from GitHub.
 
@@ -536,7 +543,11 @@ def _get_model_weights(cache_dir: Path) -> Path:
     # Try to find suitable model weights in the local cache.
     for filename in os.listdir(cache_dir):
         root, ext = os.path.splitext(filename)
-        if ext == ".ckpt":
+        if ext == ".ckpt" and (
+            ("timstof" in filename.lower())
+            if is_timstof
+            else ("timstof" not in filename.lower())
+        ):
             file_version = tuple(
                 g for g in re.match(r".*_v(\d+)_(\d+)_(\d+)", root).groups()
             )
@@ -573,7 +584,11 @@ def _get_model_weights(cache_dir: Path) -> Path:
             if match > version_match[2]:
                 for release_asset in release.get_assets():
                     fn, ext = os.path.splitext(release_asset.name)
-                    if ext == ".ckpt":
+                    if ext == ".ckpt" and (
+                        ("timstof" in filename.lower())
+                        if is_timstof
+                        else ("timstof" not in filename.lower())
+                    ):
                         version_match = (
                             os.path.join(
                                 cache_dir,
