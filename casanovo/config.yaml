@@ -9,15 +9,6 @@
 # parameters when running Casanovo in database search mode.
 ###
 
-# Max absolute difference allowed with respect to observed precursor m/z.
-# de novo: Predictions outside the tolerance range are assigned a negative
-# peptide score.
-# database search: Select candidate peptides within the specified precursor m/z
-# tolerance.
-# Set to "inf" (with quotation marks) to disable the filter entirely.
-precursor_mass_tol: 50  # ppm
-# Isotopes to consider when comparing predicted and observed precursor m/z's.
-isotope_error_range: [0, 1]
 # The minimum length of considered peptides.
 min_peptide_len: 6
 # The maximum length of considered peptides.
@@ -46,6 +37,13 @@ n_beams: 1
 ###
 # The following parameters are unique to Casanovo's database search mode.
 ###
+
+# Max absolute difference allowed with respect to observed precursor m/z.
+# Only peptides within the specified precursor m/z tolerance are considered.
+precursor_mass_tol: 50 
+
+# Isotopes to consider when comparing predicted and observed precursor m/z's.
+isotope_error_range: [0, 1]
 
 # Enzyme for in silico digestion, used to generate candidate peptides.
 # See pyteomics.parser.expasy_rules for valid enzymes.
@@ -136,6 +134,11 @@ train_label_smoothing: 0.01
 
 # TRAINING/INFERENCE OPTIONS
 # Number of spectra in one training batch.
+# Per-device micro-batch is train_batch_size // n on n devices.
+# Effective optimization batch size is:
+# (per-device micro-batch) * n * accumulate_grad_batches.
+# `train_batch_size` should be >= n and preferably divisible by n; otherwise
+# floor division drops the remainder.
 train_batch_size: 32
 # Max number of training epochs.
 max_epochs: 30
@@ -151,11 +154,15 @@ calculate_precision: false
 
 # Accumulates gradients over `k` batches before stepping the optimizer.
 accumulate_grad_batches: 1
-# The value at which to clip gradients. `None` disables gradient clipping.
-gradient_clip_val:
+# The value at which to clip gradients. Leave blank / set to `None` to disable
+# gradient clipping.
+gradient_clip_val: 1.0 
 # The gradient clipping algorithm to use.
 # Must be one of: "value", "norm", or `None`.
-gradient_clip_algorithm:
+# "value": The gradient values are clipped to the range [-gradient_clip_val, gradient_clip_val]
+# "norm": If the total L2 norm of the gradients exceeds gradient_clip_val, the gradients 
+#         are rescaled so the total L2 norm equals gradient_clip_val
+gradient_clip_algorithm: "norm"
 # Floating point precision.
 # Must be one of: "16-true", "16-mixed", "bf16-true", "bf16-mixed", "32-true",
 # "64-true", "64", "32", "16", or "bf16".

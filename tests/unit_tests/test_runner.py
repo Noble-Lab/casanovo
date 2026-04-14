@@ -14,6 +14,35 @@ from casanovo.data.psm import PepSpecMatch
 from casanovo.denovo.model_runner import ModelRunner
 
 
+def test_loading_timstof_folders(tmp_path, monkeypatch):
+    # Mocking constructor of ModelRunner
+    def minimal_init(self):
+        pass
+
+    monkeypatch.setattr(ModelRunner, "__init__", minimal_init)
+    runner = ModelRunner()
+
+    # Testing real path
+    real_path = tmp_path / "sample.d"
+    real_path.mkdir()
+
+    paths = runner._get_input_paths(
+        peak_path=(str(real_path),), annotated=False, mode="validation"
+    )
+
+    assert len(paths) == 1
+    assert Path(paths[0]).name == "sample.d"
+
+    # Testing unsupported extension (but directory is real)
+    # (should raise FileNotFoundError and RuntimeWarning)
+    fake_path = tmp_path / "test.hi"
+    fake_path.mkdir()
+    with pytest.warns(RuntimeWarning), pytest.raises(FileNotFoundError):
+        runner._get_input_paths(
+            peak_path=(str(fake_path),), annotated=False, mode="validation"
+        )
+
+
 def test_initialize_model(tmp_path, mgf_small):
     """Test initializing a new or existing model."""
     config = Config()
@@ -50,12 +79,20 @@ def test_initialize_model(tmp_path, mgf_small):
     # Resume training from previous model.
     runner = ModelRunner(config=config, model_filename=str(ckpt))
     runner.initialize_tokenizer()
-    runner.initialize_model(train=True)
+    with unittest.mock.patch.object(
+        ModelRunner, "_verify_tokenizer", wraps=ModelRunner._verify_tokenizer
+    ) as mock_verify:
+        runner.initialize_model(train=True)
+        mock_verify.assert_called_once()
 
     # Inference with previous model.
     runner = ModelRunner(config=config, model_filename=str(ckpt))
     runner.initialize_tokenizer()
-    runner.initialize_model(train=False)
+    with unittest.mock.patch.object(
+        ModelRunner, "_verify_tokenizer", wraps=ModelRunner._verify_tokenizer
+    ) as mock_verify:
+        runner.initialize_model(train=False)
+        mock_verify.assert_called_once()
 
     # If the model initialization throws and EOFError, then the Spec2Pep model
     # has tried to load the weights.
@@ -65,6 +102,18 @@ def test_initialize_model(tmp_path, mgf_small):
         runner = ModelRunner(config=config, model_filename=str(weights))
         runner.initialize_tokenizer()
         runner.initialize_model(train=False)
+
+
+def test_db_search_no_model_raises(tiny_config_db, mgf_small, tiny_fasta_file):
+    """DB search must require an explicit model file."""
+    config = Config(tiny_config_db)
+    with (
+        ModelRunner(config=config) as runner,
+        pytest.raises(
+            ValueError, match="A model file must be provided for DB search"
+        ),
+    ):
+        runner.db_search((str(mgf_small),), str(tiny_fasta_file), "test.mztab")
 
 
 def test_save_and_load_weights(tmp_path, mgf_small, tiny_config):
@@ -208,7 +257,7 @@ def test_save_final_model(tmp_path, mgf_small, tiny_config):
     # Test checkpoint saving when val_check_interval is greater than training steps
     config = Config(tiny_config)
     config.val_check_interval = 50
-    model_file = tmp_path / "epoch=19-step=20.ckpt"
+    model_file = tmp_path / "epoch=29-step=30.ckpt"
     with ModelRunner(config, output_dir=tmp_path) as runner:
         runner.train([mgf_small], [mgf_small])
 
@@ -225,7 +274,7 @@ def test_save_final_model(tmp_path, mgf_small, tiny_config):
     # Test checkpoint saving when val_check_interval is not a factor of training steps
     config.val_check_interval = 15
     validation_file = tmp_path / "foobar.best.ckpt"
-    model_file = tmp_path / "foobar.epoch=19-step=20.ckpt"
+    model_file = tmp_path / "foobar.epoch=29-step=30.ckpt"
     with ModelRunner(
         config, output_dir=tmp_path, output_rootname="foobar"
     ) as runner:
@@ -235,92 +284,120 @@ def test_save_final_model(tmp_path, mgf_small, tiny_config):
     assert validation_file.exists()
 
 
-def test_evaluate(
-    tmp_path, mgf_small, mzml_small, mgf_small_unannotated, tiny_config
-):
-    """Test model evaluation during sequencing"""
-    # Train tiny model
+def test_evaluate_success(tmp_path, mgf_small, tiny_config):
+    """Test successful model evaluation with annotated peak files."""
     config = Config(tiny_config)
     config.max_epochs = 1
+
     model_file = tmp_path / "epoch=0-step=1.ckpt"
+    result_file = tmp_path / "result.mztab"
+
     with ModelRunner(config, output_dir=tmp_path) as runner:
         runner.train([mgf_small], [mgf_small])
 
     assert model_file.is_file()
 
-    # Test evaluation with annotated peak file
-    result_file = tmp_path / "result.mztab"
     with ModelRunner(
         config, model_filename=str(model_file), overwrite_ckpt_check=False
     ) as runner:
         runner.predict([mgf_small], result_file, evaluate=True)
 
     assert result_file.is_file()
-    result_file.unlink()
 
+
+@pytest.mark.parametrize(
+    "input_files, expect_match",
+    [
+        pytest.param(
+            ["mzml_small"],
+            False,
+            id="mzml_only",
+        ),
+        pytest.param(
+            ["mgf_small_unannotated"],
+            True,
+            id="unannotated_mgf_only",
+        ),
+        pytest.param(
+            ["mgf_small_unannotated", "mzml_small"],
+            True,
+            id="unannotated_mgf_and_mzml",
+        ),
+        pytest.param(
+            ["mgf_small", "mzml_small"],
+            False,
+            id="annotated_mgf_and_mzml",
+        ),
+        pytest.param(
+            ["mgf_small", "mgf_small_unannotated"],
+            True,
+            id="annotated_and_unannotated_mgf",
+        ),
+        pytest.param(
+            ["mgf_small", "mgf_small_unannotated", "mzml_small"],
+            True,
+            id="annotated_unannotated_and_mzml",
+        ),
+        pytest.param(
+            ["improperly_annotated_file"],
+            True,
+            id="improperly_annotated_mgf_missing_seq",
+        ),
+    ],
+)
+def test_evaluate_failure_cases(
+    tmp_path,
+    mgf_small,
+    mzml_small,
+    mgf_small_unannotated,
+    tiny_config,
+    input_files,
+    expect_match,
+):
+    """Test all evaluation failure modes."""
     exception_string = (
         "Error creating annotated spectrum dataloaders. This may "
         "be the result of having an unannotated peak file present "
         "in the validation peak file path list."
     )
 
-    with pytest.raises(TypeError):
+    config = Config(tiny_config)
+    config.max_epochs = 1
+
+    model_file = tmp_path / "epoch=0-step=1.ckpt"
+    result_file = tmp_path / "result.mztab"
+
+    with ModelRunner(config, output_dir=tmp_path) as runner:
+        runner.train([mgf_small], [mgf_small])
+
+    assert model_file.is_file()
+
+    mgf_path = Path(mgf_small)
+    improperly_annotated_file = mgf_path.parent / "improperly_annotated.mgf"
+    improperly_annotated_file.write_text(
+        mgf_path.read_text().replace("SEQ=", "PEPTIDE=")
+    )
+
+    file_map = {
+        "mgf_small": mgf_small,
+        "mzml_small": mzml_small,
+        "mgf_small_unannotated": mgf_small_unannotated,
+        "improperly_annotated_file": improperly_annotated_file,
+    }
+
+    files = [file_map[name] for name in input_files]
+
+    with pytest.raises(
+        TypeError,
+        match=exception_string if expect_match else None,
+    ):
         with ModelRunner(
             config, model_filename=str(model_file), overwrite_ckpt_check=False
         ) as runner:
-            runner.predict([mzml_small], result_file, evaluate=True)
+            runner.predict(files, result_file, evaluate=True)
 
-    with pytest.raises(TypeError, match=exception_string):
-        with ModelRunner(
-            config, model_filename=str(model_file), overwrite_ckpt_check=False
-        ) as runner:
-            runner.predict([mgf_small_unannotated], result_file, evaluate=True)
-
-    with pytest.raises(TypeError, match=exception_string):
-        with ModelRunner(
-            config, model_filename=str(model_file), overwrite_ckpt_check=False
-        ) as runner:
-            runner.predict(
-                [mgf_small_unannotated, mzml_small], result_file, evaluate=True
-            )
-
-    # MzTab with just metadata is written in the case of FileNotFound
-    # or TypeError early exit
+    # Metadata-only MzTab should still be written
     assert result_file.is_file()
-    result_file.unlink()
-
-    # Test mix of annotated an unannotated peak files
-    with pytest.raises(TypeError):
-        with ModelRunner(
-            config, model_filename=str(model_file), overwrite_ckpt_check=False
-        ) as runner:
-            runner.predict([mgf_small, mzml_small], result_file, evaluate=True)
-
-    assert result_file.is_file()
-    result_file.unlink()
-
-    with pytest.raises(TypeError, match=exception_string):
-        with ModelRunner(
-            config, model_filename=str(model_file), overwrite_ckpt_check=False
-        ) as runner:
-            runner.predict(
-                [mgf_small, mgf_small_unannotated], result_file, evaluate=True
-            )
-
-    assert result_file.is_file()
-    result_file.unlink()
-
-    with pytest.raises(TypeError, match=exception_string):
-        with ModelRunner(
-            config, model_filename=str(model_file), overwrite_ckpt_check=False
-        ) as runner:
-            runner.predict(
-                [mgf_small, mgf_small_unannotated, mzml_small],
-                result_file,
-                evaluate=True,
-            )
-
-    result_file.unlink()
 
 
 def test_metrics_logging(tmp_path, mgf_small, tiny_config):
@@ -361,7 +438,73 @@ def test_metrics_logging(tmp_path, mgf_small, tiny_config):
     assert csv_path.is_dir()
 
 
-def test_log_metrics(monkeypatch, tiny_config):
+@pytest.mark.parametrize(
+    "true_psms,pred_psms,expected_pep,expected_aa_prec,expected_aa_rec",
+    [
+        # 100% peptide precision
+        (
+            [("PEP", 1), ("PET", 2)],
+            [("PEP", 1), ("PET", 2)],
+            100,
+            100,
+            100,
+        ),
+        # 50% peptide precision
+        (
+            [("PEP", 1), ("PET", 2)],
+            [("PEP", 1), ("PEP", 2)],
+            100 * (1 / 2),
+            100 * (5 / 6),
+            100 * (5 / 6),
+        ),
+        # skipped spectra (various cases)
+        (
+            [("PEP", 1), ("PET", 2), ("PEI", 3), ("PEG", 4), ("PEA", 5)],
+            [("PEP", 1), ("PET", 2), ("PEI", 3), ("PEA", 5)],
+            100 * (4 / 5),
+            100,
+            100 * (4 / 5),
+        ),
+        (
+            [("PEP", 1), ("PET", 2), ("PEI", 3), ("PEG", 4), ("PEA", 5)],
+            [("PEP", 1), ("PET", 2), ("PEI", 3), ("PEG", 4)],
+            100 * (4 / 5),
+            100,
+            100 * (4 / 5),
+        ),
+        (
+            [("PEP", 1), ("PET", 2), ("PEI", 3), ("PEG", 4), ("PEA", 5)],
+            [("PEP", 1), ("PEI", 3)],
+            100 * (2 / 5),
+            100,
+            100 * (2 / 5),
+        ),
+        (
+            [("PEP", 1), ("PET", 2), ("PEI", 3), ("PEG", 4), ("PEA", 5)],
+            [("PEP", 1), ("PEA", 5)],
+            100 * (2 / 5),
+            100,
+            100 * (2 / 5),
+        ),
+        # un-inferred spectra
+        (
+            [("PEP", 1), ("PET", 2), ("PEI", 3), ("PEG", 4)],
+            [("PE", 1), ("PE", 2), ("PE", 3), ("PE", 4), ("PE", 5)],
+            0,
+            100,
+            100 * (2 / 3),
+        ),
+    ],
+)
+def test_log_metrics(
+    monkeypatch,
+    tiny_config,
+    true_psms,
+    pred_psms,
+    expected_pep,
+    expected_aa_prec,
+    expected_aa_rec,
+):
     def get_mock_loader(psm_list, tokenizer):
         return [
             {
@@ -389,160 +532,177 @@ def test_log_metrics(monkeypatch, tiny_config):
         with ModelRunner(Config(tiny_config)) as runner:
             runner.writer = unittest.mock.MagicMock()
             runner.model = unittest.mock.MagicMock()
-            runner.model.tokenizer = (
-                depthcharge.tokenizers.peptides.MskbPeptideTokenizer()
+            runner.tokenizer = (
+                depthcharge.tokenizers.peptides.PeptideTokenizer()
             )
 
-            true_psms = [
-                get_mock_psm("PEP", ("foo", "index=1")),
-                get_mock_psm("PET", ("foo", "index=2")),
+            true_psms_objs = [
+                get_mock_psm(seq, ("foo", f"index={idx}"))
+                for seq, idx in true_psms
             ]
-            mock_index = get_mock_loader(true_psms, runner.model.tokenizer)
-
-            # Test 100% peptide precision.
-            pred_psms = [
-                get_mock_psm("PEP", ("foo", "index=1")),
-                get_mock_psm("PET", ("foo", "index=2")),
+            pred_psms_objs = [
+                get_mock_psm(seq, ("foo", f"index={idx}"))
+                for seq, idx in pred_psms
             ]
 
-            runner.writer.psms = pred_psms
+            runner.writer.psms = pred_psms_objs
+            mock_index = get_mock_loader(true_psms_objs, runner.tokenizer)
             runner.log_metrics(mock_index)
 
             pep_precision = mock_logger.info.call_args_list[-3][0][1]
             aa_precision = mock_logger.info.call_args_list[-2][0][1]
             aa_recall = mock_logger.info.call_args_list[-1][0][1]
-            assert pep_precision == pytest.approx(100)
-            assert aa_precision == pytest.approx(100)
-            assert aa_recall == pytest.approx(100)
 
-            # Test 50% peptide precision (one wrong).
-            pred_psms = [
-                get_mock_psm("PEP", ("foo", "index=1")),
-                get_mock_psm("PEP", ("foo", "index=2")),
-            ]
-
-            runner.writer.psms = pred_psms
-            runner.log_metrics(mock_index)
-
-            pep_precision = mock_logger.info.call_args_list[-3][0][1]
-            aa_precision = mock_logger.info.call_args_list[-2][0][1]
-            aa_recall = mock_logger.info.call_args_list[-1][0][1]
-            assert pep_precision == pytest.approx(100 * (1 / 2))
-            assert aa_precision == pytest.approx(100 * (5 / 6))
-            assert aa_recall == pytest.approx(100 * (5 / 6))
-
-            # Test skipped spectra.
-            true_psms = [
-                get_mock_psm("PEP", ("foo", "index=1")),
-                get_mock_psm("PET", ("foo", "index=2")),
-                get_mock_psm("PEI", ("foo", "index=3")),
-                get_mock_psm("PEG", ("foo", "index=4")),
-                get_mock_psm("PEA", ("foo", "index=5")),
-            ]
-
-            pred_psms = [
-                get_mock_psm("PEP", ("foo", "index=1")),
-                get_mock_psm("PET", ("foo", "index=2")),
-                get_mock_psm("PEI", ("foo", "index=3")),
-                get_mock_psm("PEA", ("foo", "index=5")),
-            ]
-
-            runner.writer.psms = pred_psms
-            mock_index = get_mock_loader(true_psms, runner.model.tokenizer)
-            runner.log_metrics(mock_index)
-
-            pep_precision = mock_logger.info.call_args_list[-3][0][1]
-            aa_precision = mock_logger.info.call_args_list[-2][0][1]
-            aa_recall = mock_logger.info.call_args_list[-1][0][1]
-            assert pep_precision == pytest.approx(100 * (4 / 5))
-            assert aa_precision == pytest.approx(100)
-            assert aa_recall == pytest.approx(100 * (4 / 5))
-
-            pred_psms = [
-                get_mock_psm("PEP", ("foo", "index=1")),
-                get_mock_psm("PET", ("foo", "index=2")),
-                get_mock_psm("PEI", ("foo", "index=3")),
-                get_mock_psm("PEG", ("foo", "index=4")),
-            ]
-
-            runner.writer.psms = pred_psms
-            runner.log_metrics(mock_index)
-
-            pep_precision = mock_logger.info.call_args_list[-3][0][1]
-            aa_precision = mock_logger.info.call_args_list[-2][0][1]
-            aa_recall = mock_logger.info.call_args_list[-1][0][1]
-            assert pep_precision == pytest.approx(100 * (4 / 5))
-            assert aa_precision == pytest.approx(100)
-            assert aa_recall == pytest.approx(100 * (4 / 5))
-
-            pred_psms = [
-                get_mock_psm("PEP", ("foo", "index=1")),
-                get_mock_psm("PEI", ("foo", "index=3")),
-            ]
-
-            runner.writer.psms = pred_psms
-            runner.log_metrics(mock_index)
-
-            pep_precision = mock_logger.info.call_args_list[-3][0][1]
-            aa_precision = mock_logger.info.call_args_list[-2][0][1]
-            aa_recall = mock_logger.info.call_args_list[-1][0][1]
-            assert pep_precision == pytest.approx(100 * (2 / 5))
-            assert aa_precision == pytest.approx(100)
-            assert aa_recall == pytest.approx(100 * (2 / 5))
-
-            pred_psms = [
-                get_mock_psm("PEP", ("foo", "index=1")),
-                get_mock_psm("PEA", ("foo", "index=5")),
-            ]
-
-            runner.writer.psms = pred_psms
-            runner.log_metrics(mock_index)
-
-            pep_precision = mock_logger.info.call_args_list[-3][0][1]
-            aa_precision = mock_logger.info.call_args_list[-2][0][1]
-            aa_recall = mock_logger.info.call_args_list[-1][0][1]
-            assert pep_precision == pytest.approx(100 * (2 / 5))
-            assert aa_precision == pytest.approx(100)
-            assert aa_recall == pytest.approx(100 * (2 / 5))
-
-            # Test un-inferred spectra.
-            true_psms = [
-                get_mock_psm("PEP", ("foo", "index=1")),
-                get_mock_psm("PET", ("foo", "index=2")),
-                get_mock_psm("PEI", ("foo", "index=3")),
-                get_mock_psm("PEG", ("foo", "index=4")),
-            ]
-
-            pred_psms = [
-                get_mock_psm("PE", ("foo", "index=1")),
-                get_mock_psm("PE", ("foo", "index=2")),
-                get_mock_psm("PE", ("foo", "index=3")),
-                get_mock_psm("PE", ("foo", "index=4")),
-                get_mock_psm("PE", ("foo", "index=5")),
-            ]
-
-            runner.writer.psms = pred_psms
-            mock_index = get_mock_loader(true_psms, runner.model.tokenizer)
-            runner.log_metrics(mock_index)
-
-            pep_precision = mock_logger.info.call_args_list[-3][0][1]
-            aa_precision = mock_logger.info.call_args_list[-2][0][1]
-            aa_recall = mock_logger.info.call_args_list[-1][0][1]
-            assert pep_precision == pytest.approx(0)
-            assert aa_precision == pytest.approx(100)
-            assert aa_recall == pytest.approx(100 * (2 / 3))
+            assert pep_precision == pytest.approx(expected_pep)
+            assert aa_precision == pytest.approx(expected_aa_prec)
+            assert aa_recall == pytest.approx(expected_aa_rec)
 
 
-def test_initialize_tokenizer(caplog):
+@pytest.mark.parametrize(
+    "checkpoint_attrs, config_attrs, expected_substring",
+    [
+        # residues differ: warning about residues/masses
+        (
+            {"residues": {"A": 42.0, "B": 43.0}, "index": {"A": 0, "B": 1}},
+            {"residues": {"A": 42.0, "C": 43.0}, "index": {"A": 0, "B": 1}},
+            "residues and/or residue masses",
+        ),
+        # Residue masses differ: warning about residues/masses
+        (
+            {"residues": {"A": 42.0, "B": 43.0}, "index": {"A": 0, "B": 1}},
+            {"residues": {"A": 42.0, "B": 42.0}, "index": {"A": 0, "B": 1}},
+            "residues and/or residue masses",
+        ),
+        # residues same but index differs: warning about indices
+        (
+            {"residues": {"A": 42.0, "B": 43.0}, "index": {"A": 0, "B": 1}},
+            {"residues": {"A": 42.0, "B": 43.0}, "index": {"A": 1, "B": 0}},
+            "residue indices",
+        ),
+        # identical: no warning
+        (
+            {"residues": {"A": 42.0, "B": 43.0}, "index": {"A": 0, "B": 1}},
+            {"residues": {"A": 42.0, "B": 43.0}, "index": {"A": 0, "B": 1}},
+            None,
+        ),
+    ],
+)
+def test_verify_tokenizer(
+    checkpoint_attrs, config_attrs, expected_substring, caplog
+):
+    """Test ModelRunner._verify_tokenizer for warning and non-warning behavior."""
+    checkpoint = unittest.mock.MagicMock(**checkpoint_attrs)
+    config = unittest.mock.MagicMock(**config_attrs)
+
+    with caplog.at_level("WARNING"):
+        ModelRunner._verify_tokenizer(checkpoint, config)
+
+    if expected_substring:
+        # Check that exactly one warning was logged
+        warnings_logged = [
+            rec for rec in caplog.records if rec.levelname == "WARNING"
+        ]
+        assert len(warnings_logged) == 1
+        msg = warnings_logged[0].getMessage()
+        assert expected_substring in msg
+        assert "model checkpoint tokenizer vs config file tokenizer;" in msg
+    else:
+        # Ensure no warnings were logged
+        assert not any(rec.levelname == "WARNING" for rec in caplog.records)
+
+
+def test_initialize_tokenizer():
     mock_config = unittest.mock.MagicMock()
+    mock_config.massivekb_tokenizer = True
     mock_config.residues = {"foo": 100}
+    mock_config.replace_isoleucine_with_leucine = True
 
     runner = ModelRunner(config=mock_config)
 
-    with caplog.at_level("WARNING"):
+    with unittest.mock.patch(
+        "casanovo.denovo.model_runner.MskbPeptideTokenizer"
+    ) as mock_tokenizer_cls:
+        mock_tokenizer = unittest.mock.MagicMock()
+        mock_tokenizer_cls.return_value = mock_tokenizer
         runner.initialize_tokenizer()
 
-    assert any(
-        "Configured residue(s) not in model alphabet: foo" in msg
-        for msg in caplog.messages
+    mock_tokenizer_cls.assert_called_once_with(
+        residues=mock_config.residues,
+        replace_isoleucine_with_leucine=True,
+        reverse=True,
+        start_token=None,
+        stop_token="$",
     )
+    assert runner.tokenizer is mock_tokenizer
+
+
+def test_validate_vocab_compatibility():
+    """Test ModelRunner._validate_vocab_compatibility strict checks."""
+    config = Config()
+    runner = ModelRunner(config=config)
+    runner.model = unittest.mock.MagicMock()
+
+    # Set up a mock tokenizer on the runner.
+    runner_tokenizer = unittest.mock.MagicMock()
+    runner_tokenizer.__len__ = unittest.mock.Mock(return_value=5)
+    runner_tokenizer.residues = {"A": 71.03711, "C": 103.00919}
+    runner_tokenizer.index = {"A": 1, "C": 2}
+    runner.tokenizer = runner_tokenizer
+
+    checkpoint_tokenizer = unittest.mock.MagicMock()
+    checkpoint_tokenizer.residues = {"A": 71.03711, "C": 103.00919}
+    checkpoint_tokenizer.index = {"A": 1, "C": 2}
+    runner.model.hparams = {"tokenizer": checkpoint_tokenizer}
+
+    # Should raise ValueError when vocab sizes differ.
+    runner.model.vocab_size = 10
+    with pytest.raises(ValueError, match="vocabulary of size"):
+        runner._validate_vocab_compatibility()
+
+    # Should pass silently when vocab sizes match and tokenizers match.
+    runner.model.vocab_size = 6
+    runner._validate_vocab_compatibility()  # no exception
+
+    # Should raise even when sizes match if tokenizer vocab differs.
+    checkpoint_tokenizer.residues = {"A": 71.03711, "B": 114.04293}
+    checkpoint_tokenizer.index = {"A": 1, "B": 2}
+    with pytest.raises(ValueError, match="checkpoint tokenizer"):
+        runner._validate_vocab_compatibility()
+
+
+def test_initialize_model_calls_validate_vocab_compatibility(
+    tmp_path, mgf_small, tiny_config
+):
+    """Test that initialize_model calls _validate_vocab_compatibility when loading
+    from a checkpoint."""
+    config = Config(tiny_config)
+    config.max_epochs = 1
+    config.n_layers = 1
+    ckpt = tmp_path / "test.ckpt"
+
+    # Train a quick model and save a checkpoint.
+    with ModelRunner(config=config, output_dir=tmp_path) as runner:
+        runner.train([mgf_small], [mgf_small])
+        runner.trainer.save_checkpoint(ckpt)
+
+    # Loading from checkpoint should call _validate_vocab_compatibility.
+    runner = ModelRunner(config=config, model_filename=str(ckpt))
+    runner.initialize_tokenizer()
+    with unittest.mock.patch.object(
+        ModelRunner,
+        "_validate_vocab_compatibility",
+        autospec=True,
+    ) as mock_validate:
+        runner.initialize_model(train=False)
+        mock_validate.assert_called_once()
+
+    # Same check during training (resume from checkpoint).
+    runner = ModelRunner(config=config, model_filename=str(ckpt))
+    runner.initialize_tokenizer()
+    with unittest.mock.patch.object(
+        ModelRunner,
+        "_validate_vocab_compatibility",
+        autospec=True,
+    ) as mock_validate:
+        runner.initialize_model(train=True)
+        mock_validate.assert_called_once()
