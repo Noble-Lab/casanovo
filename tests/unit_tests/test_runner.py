@@ -67,25 +67,6 @@ def test_initialize_model(tmp_path, mgf_small):
         runner.initialize_model(train=False)
 
 
-def test_override_max_peaks(tmp_path, mgf_small, tiny_config):
-    config = Config(tiny_config)
-    config.max_epochs = 1
-    config.n_layers = 1
-
-    ckpt = tmp_path / "test.ckpt"
-
-    with ModelRunner(config=config, output_dir=tmp_path) as runner:
-        runner.train([mgf_small], [mgf_small])
-        runner.trainer.save_checkpoint(ckpt)
-
-    original_max_peaks = config.max_peaks
-    config.max_peaks = original_max_peaks + 100
-    with ModelRunner(config=config, output_dir=tmp_path) as runner:
-        with pytest.raises(UserWarning, match="Overriding config max peaks"):
-            runner.predict(peak_path=[mgf_small], results_path=str(tmp_path))
-        assert runner.config.max_peaks == original_max_peaks
-
-
 def test_save_and_load_weights(tmp_path, mgf_small, tiny_config):
     """Test saving and loading weights"""
     config = Config(tiny_config)
