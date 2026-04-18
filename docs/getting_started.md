@@ -79,10 +79,10 @@ Parameters in the second section will not have an effect unless you are training
 ### Download Model Weights
 
 Using Casanovo to sequence peptides from new mass spectra, Casanovo needs compatible pretrained model weights to make its predictions.
-By default, Casanovo will try to download the latest compatible model weights from GitHub when it is run.
-It first looks for an exact version match (major, minor, patch), then falls back to a matching major+minor version, and finally to a matching major version only.
-Downloaded weights are cached in `~/.cache/casanovo/` (Linux/Mac) so that subsequent runs do not require a re-download.
-If a cached file becomes corrupted, delete it from that directory and Casanovo will re-download it on the next run.
+By default, Casanovo first checks for compatible cached weights before attempting to download from GitHub.
+Weights are cached in `~/.cache/casanovo/` on Linux and `~/Library/Caches/casanovo/` on macOS (using platform-specific conventions from `appdirs`).
+If no compatible weights are found in the cache, Casanovo downloads them from GitHub, matching first on exact version (major, minor, patch), then falling back to major+minor, and finally to major version only.
+If a cached file becomes corrupted, delete it from the cache directory and Casanovo will re-download it on the next run.
 
 ```{note}
 The GitHub API used for auto-download is rate-limited to 60 requests per IP per hour.
@@ -135,6 +135,7 @@ To evaluate _de novo_ sequencing performance based on known mass spectrum annota
 ```sh
 casanovo sequence annotated_spectra.mgf --evaluate
 ```
+
 ![`casanovo sequence --evaluate --help`](images/evaluate-help.svg)
 
 To evaluate the peptide predictions, ground truth peptide labels must to be provided as an annotated MGF file where the peptide sequence is denoted in the `SEQ` field. 
