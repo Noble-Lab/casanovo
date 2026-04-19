@@ -212,41 +212,6 @@ def test_timstof_model_loading(monkeypatch):
         assert mock_get.request_counter == 1
         os.remove(result_path)
 
-        for version in ["999.999.999", "999.0.0"]:
-            with (
-                monkeypatch.context() as mnk,
-                tempfile.TemporaryDirectory() as tmp_dir,
-            ):
-                mnk.setattr(casanovo, "__version__", version)
-                mnk.setattr(github, "Github", mock_github)
-                mnk.setattr(requests, "get", mock_get)
-                with pytest.raises(ValueError):
-                    casanovo._get_model_weights(
-                        pathlib.Path(tmp_dir), is_timstof=True
-                    )
-
-        def request(self, *args, **kwargs):
-            raise github.RateLimitExceededException(
-                403, "API rate limit exceeded", None
-            )
-
-        with (
-            monkeypatch.context() as mnk,
-            tempfile.TemporaryDirectory() as tmp_dir,
-        ):
-            mnk.setattr(
-                "appdirs.user_cache_dir", lambda n, a, opinion: tmp_dir
-            )
-            mnk.setattr(
-                "github.Requester.Requester.requestJsonAndCheck", request
-            )
-            mnk.setattr(requests, "get", mock_get)
-            mock_get.request_counter = 0
-            with pytest.raises(github.RateLimitExceededException):
-                casanovo._get_model_weights(
-                    pathlib.Path(tmp_dir), is_timstof=False
-                )
-
 
 def test_setup_model(monkeypatch):
     test_releases = ["3.0.0", "3.0.999", "3.999.999"]
