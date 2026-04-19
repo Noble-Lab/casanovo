@@ -607,10 +607,7 @@ def _get_model_weights(cache_dir: Path, *, is_timstof: bool = False) -> Path:
             if match > version_match[2]:
                 for release_asset in release.get_assets():
                     fn, ext = os.path.splitext(release_asset.name)
-                    if (
-                        ext == ".ckpt"
-                        and _is_timstof_asset(root) == is_timstof
-                    ):
+                    if ext == ".ckpt" and _is_timstof_asset(fn) == is_timstof:
                         version_match = (
                             os.path.join(
                                 cache_dir,
