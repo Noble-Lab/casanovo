@@ -188,31 +188,6 @@ class MockResponseHead:
         return response
 
 
-def test_timstof_model_loading(monkeypatch):
-    test_releases = ["3.0.0", "3.0.999", "3.999.999"]
-    mock_get = MockResponseGet()
-    mock_github = functools.partial(MockGithub, test_releases)
-
-    with (
-        monkeypatch.context() as mnk,
-        tempfile.TemporaryDirectory() as tmp_dir,
-    ):
-        mnk.setattr(casanovo, "__version__", "3.0.0")
-        mnk.setattr("appdirs.user_cache_dir", lambda n, a, opinion: tmp_dir)
-        mnk.setattr(github, "Github", mock_github)
-        mnk.setattr(requests, "get", mock_get)
-
-        filename = pathlib.Path(tmp_dir) / "casanovo_timstof_v3_0_0.ckpt"
-        assert not filename.is_file()
-        _, result_path = casanovo.setup_model(
-            "timstof", None, None, None, False
-        )
-        assert result_path.resolve() == filename.resolve()
-        assert filename.is_file()
-        assert mock_get.request_counter == 1
-        os.remove(result_path)
-
-
 def test_setup_model(monkeypatch):
     test_releases = ["3.0.0", "3.0.999", "3.999.999"]
     mock_get = MockResponseGet()
@@ -310,7 +285,14 @@ def test_setup_model(monkeypatch):
         assert mock_get.request_counter == 3
 
 
-def test_get_model_weights(monkeypatch):
+@pytest.mark.parametrize(
+    "is_timstof, expected_filename",
+    [
+        (False, "casanovo_massivekb_v3_0_0.ckpt"),
+        (True, "casanovo_timstof_v3_0_0.ckpt"),
+    ],
+)
+def test_get_model_weights(monkeypatch, is_timstof, expected_filename):
     """
     Test that model weights can be downloaded from GitHub or used from the
     cache.
@@ -331,15 +313,15 @@ def test_get_model_weights(monkeypatch):
             mnk.setattr(requests, "get", mock_get)
 
             tmp_path = pathlib.Path(tmp_dir)
-            filename = tmp_path / "casanovo_massivekb_v3_0_0.ckpt"
+            filename = tmp_path / expected_filename
             assert not filename.is_file()
             result_path = casanovo._get_model_weights(
-                tmp_path, is_timstof=False
+                tmp_path, is_timstof=is_timstof
             )
             assert result_path == filename
             assert filename.is_file()
             result_path = casanovo._get_model_weights(
-                tmp_path, is_timstof=False
+                tmp_path, is_timstof=is_timstof
             )
             assert result_path == filename
 
