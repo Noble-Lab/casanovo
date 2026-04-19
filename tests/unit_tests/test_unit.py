@@ -213,7 +213,10 @@ def test_timstof_model_loading(monkeypatch):
         os.remove(result_path)
 
         for version in ["999.999.999", "999.0.0"]:
-            with monkeypatch.context() as mnk, tempfile.TemporaryDirectory() as tmp_dir:
+            with (
+                monkeypatch.context() as mnk,
+                tempfile.TemporaryDirectory() as tmp_dir,
+            ):
                 mnk.setattr(casanovo, "__version__", version)
                 mnk.setattr(github, "Github", mock_github)
                 mnk.setattr(requests, "get", mock_get)
@@ -227,7 +230,10 @@ def test_timstof_model_loading(monkeypatch):
                 403, "API rate limit exceeded", None
             )
 
-        with monkeypatch.context() as mnk, tempfile.TemporaryDirectory() as tmp_dir:
+        with (
+            monkeypatch.context() as mnk,
+            tempfile.TemporaryDirectory() as tmp_dir,
+        ):
             mnk.setattr(
                 "appdirs.user_cache_dir", lambda n, a, opinion: tmp_dir
             )
