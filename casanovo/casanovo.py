@@ -285,9 +285,20 @@ def db_search(
     multiple=True,
     type=click.Path(exists=True, dir_okay=True),
 )
+@click.option(
+    "-a",
+    "--annotation_path",
+    help="""
+    An TSV file of annotations for DIA training of Casanovo.
+    """,
+    required=False,
+    multiple=True,
+    type=click.Path(exists=True, dir_okay=True),
+)
 def train(
     train_peak_path: Tuple[str],
     validation_peak_path: Optional[Tuple[str]],
+    annotation_path: Optional[Tuple[str]],
     model: Optional[str],
     config: Optional[str],
     output_dir: Optional[str],
@@ -326,11 +337,17 @@ def train(
         if len(validation_peak_path) == 0:
             validation_peak_path = train_peak_path
 
+        if len(annotation_path) != 0:
+            logger.info("Proceeding with DIA training")
+            logger.info("Using the following annotation files:")
+            for ann_file in annotation_path:
+                logger.info("   %s", ann_file)
+
         logger.info("Using the following validation files:")
         for peak_file in validation_peak_path:
             logger.info("  %s", peak_file)
 
-        runner.train(train_peak_path, validation_peak_path)
+        runner.train(train_peak_path, validation_peak_path, annotation_path)
         utils.log_run_report(start_time=start_time, end_time=time.time())
 
 

@@ -175,6 +175,7 @@ class ModelRunner:
         self,
         train_peak_path: Iterable[str],
         valid_peak_path: Iterable[str],
+        annotation_path: Iterable[str],
     ) -> None:
         """
         Train the Casanovo model.
@@ -185,20 +186,28 @@ class ModelRunner:
             The path to the MS data files for training.
         valid_peak_path : iterable of str
             The path to the MS data files for validation.
+        annotation_path : iterable of str
+            The path to the annotation file paths.
         """
         self.initialize_trainer(train=True)
         self.initialize_tokenizer()
         self.initialize_model(train=True)
 
+        # Need to pass in here? idk yet tbh
         train_paths = self._get_input_paths(train_peak_path, True, "train")
         valid_paths = self._get_input_paths(valid_peak_path, True, "valid")
-        self.initialize_data_module(train_paths, valid_paths)
+        annotation_paths = self._get_input_paths(
+            annotation_path, True, "annotations"
+        )
+
+        self.initialize_data_module(train_paths, valid_paths, annotation_paths)
         self.loaders.setup()
 
         self.trainer.fit(
             self.model,
             self.loaders.train_dataloader(),
             self.loaders.val_dataloader(),
+            self.loaders.annotations_dataloader(),
         )
 
     def log_metrics(self, test_dataloader: DataLoader) -> None:
@@ -553,6 +562,7 @@ class ModelRunner:
         train_paths: Sequence[str] | None = None,
         valid_paths: Sequence[str] | None = None,
         test_paths: Sequence[str] | None = None,
+        annotation_paths: Sequence[str] | None = None,
     ) -> None:
         """Initialize the data module.
 
@@ -590,6 +600,7 @@ class ModelRunner:
             train_paths=train_paths,
             valid_paths=valid_paths,
             test_paths=test_paths,
+            annotation_paths=annotation_paths,
             train_batch_size=train_batch_size,
             eval_batch_size=eval_batch_size,
             min_peaks=self.config.min_peaks,
@@ -630,7 +641,7 @@ class ModelRunner:
         List[str]
             The input spectrum paths for the specified mode.
         """
-        ext = (".mgf", ".lance")
+        ext = (".mgf", ".lance", ".tsv")
         if not annotated:
             ext += (".mzml", ".mzxml")
 

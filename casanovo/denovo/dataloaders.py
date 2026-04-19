@@ -39,6 +39,8 @@ class DeNovoDataModule(pl.LightningDataModule):
         Spectrum Lance path(s) for validation.
     test_paths : Sequence[str], optional
         Spectrum Lance path(s) for evaluation or inference.
+    annotation_paths : Sequence[str], optional
+        Annotation file paths for DIA training
     train_batch_size : int
         The batch size to use for training.
     eval_batch_size : int
@@ -80,6 +82,7 @@ class DeNovoDataModule(pl.LightningDataModule):
         train_paths: Optional[Sequence[str]] = None,
         valid_paths: Optional[Sequence[str]] = None,
         test_paths: Optional[Sequence[str]] = None,
+        annotation_paths: Optional[Sequence[str]] = None,
         train_batch_size: int = 128,
         eval_batch_size: int = 1028,
         min_peaks: Optional[int] = 20,
@@ -101,6 +104,7 @@ class DeNovoDataModule(pl.LightningDataModule):
         self.train_paths = train_paths
         self.valid_paths = valid_paths
         self.test_paths = test_paths
+        self.annotation_paths = annotation_paths
 
         self.train_batch_size = train_batch_size
         self.eval_batch_size = eval_batch_size
@@ -151,6 +155,7 @@ class DeNovoDataModule(pl.LightningDataModule):
             if self.train_paths is not None:
                 self.train_dataset = self._make_dataset(
                     self.train_paths,
+                    self.annotation_paths,
                     annotated=True,
                     mode="train",
                     shuffle=self.shuffle,
@@ -162,6 +167,7 @@ class DeNovoDataModule(pl.LightningDataModule):
                     mode="valid",
                     shuffle=False,
                 )
+
         if stage in (None, "test"):
             if self.test_paths is not None:
                 self.test_dataset = self._make_dataset(
@@ -194,6 +200,7 @@ class DeNovoDataModule(pl.LightningDataModule):
         torch.utils.data.Dataset
             A PyTorch Dataset for the given peak files.
         """
+        # Need to modify hella here and align
         custom_fields = [self.custom_field_anno] if annotated else []
         lance_path = pathlib.Path(f"{self.lance_dir}/{mode}.lance")
 
