@@ -493,7 +493,7 @@ def setup_model(
     elif not Path(model).is_file():
         error_msg = (
             f"{model} is not a valid URL, checkpoint file path, "
-            "or accepted model string."
+            "or accepted model string. "
             "--model argument must be a URL, checkpoint file path, "
             "or accepted model string."
         )
@@ -531,6 +531,8 @@ def _get_model_weights(cache_dir: Path, is_timstof: bool = False) -> Path:
     ----------
     cache_dir : Path
         Model weights cache directory path.
+    is_timstof : bool
+        Flag to indicate whether we are loading timsTOF weights
 
     Returns
     -------
