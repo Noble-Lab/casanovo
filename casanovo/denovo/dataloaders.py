@@ -21,7 +21,6 @@ from depthcharge.tokenizers import PeptideTokenizer
 from torch.utils.data import DataLoader
 from torch.utils.data.datapipes.iter.combinatorics import ShufflerIterDataPipe
 
-
 logger = logging.getLogger("casanovo")
 
 
@@ -128,7 +127,6 @@ class DeNovoDataModule(pl.LightningDataModule):
         self.custom_field_anno = CustomField(
             "seq", lambda x: x["params"]["seq"], pa.string()
         )
-
         self.train_dataset = None
         self.valid_dataset = None
         self.test_dataset = None
@@ -155,12 +153,20 @@ class DeNovoDataModule(pl.LightningDataModule):
                     mode="train",
                     shuffle=self.shuffle,
                 )
+                logger.info(
+                    "Training dataset contains %d spectra.",
+                    self._get_n_spectra(self.train_dataset),
+                )
             if self.valid_paths is not None:
                 self.valid_dataset = self._make_dataset(
                     self.valid_paths,
                     annotated=True,
                     mode="valid",
                     shuffle=False,
+                )
+                logger.info(
+                    "Validation dataset contains %d spectra.",
+                    self._get_n_spectra(self.valid_dataset),
                 )
         if stage in (None, "test"):
             if self.test_paths is not None:
@@ -170,6 +176,30 @@ class DeNovoDataModule(pl.LightningDataModule):
                     mode="test",
                     shuffle=False,
                 )
+                logger.info(
+                    "Test dataset contains %d spectra.",
+                    self._get_n_spectra(self.test_dataset),
+                )
+
+    @staticmethod
+    def _get_n_spectra(dataset: torch.utils.data.Dataset) -> int:
+        """
+        Get the number of spectra in a dataset.
+
+        Parameters
+        ----------
+        dataset : torch.utils.data.Dataset
+            The dataset from which to get the number of spectra. This
+            may be wrapped in a ShufflerIterDataPipe.
+
+        Returns
+        -------
+        int
+            The number of spectra in the dataset.
+        """
+        if isinstance(dataset, ShufflerIterDataPipe):
+            dataset = dataset.datapipe
+        return dataset.n_spectra
 
     def _make_dataset(
         self, paths, annotated, mode, shuffle

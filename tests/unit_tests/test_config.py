@@ -1,15 +1,19 @@
 """Test configuration loading"""
 
 import logging
+
 import pytest
 import yaml
 
 from casanovo.config import Config
 
 
-def test_default():
+def test_default(monkeypatch):
     """Test that loading the default works"""
-    config = Config()
+    with monkeypatch.context() as ctx:
+        ctx.setattr("platform.machine", lambda: "x86-64")
+        config = Config()
+
     assert config.random_seed == 454
     assert config["random_seed"] == 454
     assert config.accelerator == "auto"
