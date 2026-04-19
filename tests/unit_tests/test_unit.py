@@ -188,26 +188,41 @@ class MockResponseHead:
         return response
 
 
-def test_setup_model(monkeypatch):
+@pytest.mark.parametrize(
+    "model_arg, expected_filename",
+    [
+        (None, "casanovo_massivekb_v3_0_0.ckpt"),
+        ("timstof", "casanovo_timstof_v3_0_0.ckpt"),
+    ],
+)
+def test_setup_model(monkeypatch, model_arg, expected_filename):
     test_releases = ["3.0.0", "3.0.999", "3.999.999"]
     mock_get = MockResponseGet()
     mock_github = functools.partial(MockGithub, test_releases)
     version = "3.0.0"
 
-    # Test model is none when not training
     with monkeypatch.context() as mnk, tempfile.TemporaryDirectory() as tmp_dir:
         mnk.setattr(casanovo, "__version__", version)
         mnk.setattr("appdirs.user_cache_dir", lambda n, a, opinion: tmp_dir)
         mnk.setattr(github, "Github", mock_github)
         mnk.setattr(requests, "get", mock_get)
-        filename = pathlib.Path(tmp_dir) / "casanovo_massivekb_v3_0_0.ckpt"
+        filename = pathlib.Path(tmp_dir) / expected_filename
 
         assert not filename.is_file()
-        _, result_path = casanovo.setup_model(None, None, None, None, False)
+        _, result_path = casanovo.setup_model(
+            model_arg, None, None, None, False
+        )
         assert result_path.resolve() == filename.resolve()
         assert filename.is_file()
         assert mock_get.request_counter == 1
         os.remove(result_path)
+
+        if model_arg is None:
+            assert not filename.is_file()
+            _, result = casanovo.setup_model(None, None, None, None, True)
+            assert result is None
+            assert not filename.is_file()
+            assert mock_get.request_counter == 1
 
         assert not filename.is_file()
         _, result = casanovo.setup_model(None, None, None, None, True)
@@ -283,6 +298,25 @@ def test_setup_model(monkeypatch):
             casanovo.setup_model("FooBar", None, None, None, False)
 
         assert mock_get.request_counter == 3
+
+
+@pytest.mark.parametrize("model_arg", [None, "timstof"])
+def test_rate_limit_exception(monkeypatch, model_arg):
+    def mock_get_model_weights(cache_dir, is_timstof=False):
+        raise github.RateLimitExceededException(403, "rate limit exceeded", {})
+
+    with (
+        monkeypatch.context() as mnk,
+        tempfile.TemporaryDirectory() as tmp_dir,
+    ):
+        mnk.setattr(casanovo, "__version__", "3.0.0")
+        mnk.setattr("appdirs.user_cache_dir", lambda n, a, opinion: tmp_dir)
+        mnk.setattr(casanovo, "_get_model_weights", mock_get_model_weights)
+
+        with pytest.raises(
+            PermissionError, match="GitHub API rate limit exceeded"
+        ):
+            casanovo.setup_model(model_arg, None, None, None, False)
 
 
 @pytest.mark.parametrize(

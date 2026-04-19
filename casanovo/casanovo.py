@@ -433,13 +433,12 @@ def setup_model(
 ) -> Tuple[Config, Path | None]:
     """
     Set up Casanovo config and resolve model weights (.ckpt) path.
-
     Parameters
     ----------
     model : str | None
         May be a file system path, a URL pointing to a .ckpt file, or
-        None. If `model` is a URL the weights will be downloaded and
-        cached from `model`. If `model` is `None` the weights from the
+        None. If model is a URL the weights will be downloaded and
+        cached from model. If model is None the weights from the
         latest matching official release will be used (downloaded and
         cached).
     config : str | None
@@ -451,28 +450,41 @@ def setup_model(
     is_train : bool
         Are we training? If not, we need to retrieve weights when the
         model is None.
-
     Return
     ------
     Tuple[Config, Path]
         Initialized Casanovo config, local path to model weights if any
-        (may be `None` if training using random starting weights).
+        (may be None if training using random starting weights).
     """
     # Read parameters from the config file.
     config = Config(config)
     seed_everything(seed=config["random_seed"], workers=True)
-
     # Download model weights if these were not specified (except when
     # training).
     cache_dir = Path(appdirs.user_cache_dir("casanovo", False, opinion=False))
     if model is None:
         if not is_train:
             try:
-                logger.warning(
-                    "No --model specified; defaulting to weights trained "
-                    "on MassIVE-KB."
-                )
                 model = _get_model_weights(cache_dir)
+            except github.RateLimitExceededException:
+                logger.error(
+                    "GitHub API rate limit exceeded while trying to download "
+                    "the model weights. Please download compatible model "
+                    "weights manually from the official Casanovo code website "
+                    "(https://github.com/Noble-Lab/casanovo) and specify "
+                    "these explicitly using the --model parameter when "
+                    "running Casanovo."
+                )
+                raise PermissionError(
+                    "GitHub API rate limit exceeded while trying to download "
+                    "the model weights"
+                ) from None
+    else:
+        if _is_valid_url(model):
+            model = _get_weights_from_url(model, cache_dir)
+        elif model.lower() == "timstof":
+            try:
+                model = _get_model_weights(cache_dir, is_timstof=True)
             except github.RateLimitExceededException:
                 logger.error(
                     "GitHub API rate limit exceeded while trying to download "
@@ -486,33 +498,13 @@ def setup_model(
                     "GitHub API rate limit exceeded while trying to download "
                     "the model weights"
                 ) from None
-    elif _is_valid_url(model):
-        model = _get_weights_from_url(model, cache_dir)
-    elif model.lower() == "timstof":
-        try:
-            model = _get_model_weights(cache_dir, is_timstof=True)
-        except github.RateLimitExceededException:
-            logger.error(
-                "GitHub API rate limit exceeded while trying to download "
-                "the model weights. Please download compatible model "
-                "weights manually from the official Casanovo code website "
-                "(https://github.com/Noble-Lab/casanovo) and specify "
-                "these explicitly using the `--model` parameter when "
-                "running Casanovo."
+        elif not Path(model).is_file():
+            error_msg = (
+                f"{model} is not a valid URL or checkpoint file path, "
+                "--model argument must be a URL or checkpoint file path"
             )
-            raise PermissionError(
-                "GitHub API rate limit exceeded while trying to download "
-                "the model weights"
-            ) from None
-    elif not Path(model).is_file():
-        error_msg = (
-            f"{model} is not a valid URL, checkpoint file path, "
-            "or accepted model string. "
-            "--model argument must be a URL, checkpoint file path, "
-            "or accepted model string."
-        )
-        logger.error(error_msg)
-        raise ValueError(error_msg)
+            logger.error(error_msg)
+            raise ValueError(error_msg)
 
     # Log the active configuration.
     logger.info("Casanovo version %s", str(__version__))
@@ -522,7 +514,6 @@ def setup_model(
     logger.debug("output root name = %s", output_root_name)
     for key, value in config.items():
         logger.debug("%s = %s", str(key), str(value))
-
     return config, model
 
 
