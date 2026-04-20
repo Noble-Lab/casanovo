@@ -89,7 +89,7 @@ The GitHub API used for auto-download is rate-limited to 60 requests per IP per 
 If you hit this limit, download the weights manually from the [Releases page](https://github.com/Noble-Lab/casanovo/releases) and specify the file with `--model`.
 ```
 
-However, our model weights are uploaded with new Casanovo versions on the [Releases page](https://github.com/Noble-Lab/casanovo/releases) under the "Assets" for each release (file extension: `.ckpt`).
+Our model weights are uploaded with new Casanovo versions on the [Releases page](https://github.com/Noble-Lab/casanovo/releases) under the "Assets" for each release (file extension: `.ckpt`).
 This model file or a custom one can then be specified using the `--model` command-line parameter when executing Casanovo.
 
 Not all releases will have a model file included on the [Releases page](https://github.com/Noble-Lab/casanovo/releases), in which case model weights for alternative releases with the same major version number can be used.
