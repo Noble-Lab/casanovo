@@ -462,7 +462,7 @@ def benchmark(
 
     header = (
         f"{'batch_size':>12} {'n_beams':>8} {'spectra/s':>12} "
-        f"{'ms/spectrum':>13} {'peak_gpu_mb':>12}"
+        f"{'ms/spectrum':>13} {'peak_gpu_mib':>13}"
     )
     divider = "-" * len(header)
     click.echo(header)
@@ -471,35 +471,36 @@ def benchmark(
     for batch_size in parsed_batch_sizes:
         for n_beams in parsed_beams:
             cfg = Config.__new__(Config)
-            cfg.file = base_config.file
+            cfg.__dict__.update(base_config.__dict__)
             cfg._params = dict(base_config._params)
-            cfg._user_config = base_config._user_config
             cfg._params["predict_batch_size"] = batch_size
             cfg._params["n_beams"] = n_beams
 
             throughputs = []
-            peak_mem_mb = 0
+            peak_mem_mib = 0
 
             total_iters = warmup + n_iter
-            for i in range(total_iters):
-                is_timed = i >= warmup
-                if is_timed and torch.cuda.is_available():
-                    torch.cuda.reset_peak_memory_stats()
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                with ModelRunner(
+                    cfg, model_path, output_path, None, False
+                ) as runner:
+                    for i in range(total_iters):
+                        is_timed = i >= warmup
+                        if is_timed and torch.cuda.is_available():
+                            torch.cuda.reset_peak_memory_stats()
 
-                with tempfile.TemporaryDirectory() as tmp_dir:
-                    results_path = os.path.join(tmp_dir, "bench.mztab")
-                    with ModelRunner(
-                        cfg, model_path, output_path, None, False
-                    ) as runner:
+                        results_path = os.path.join(
+                            tmp_dir, f"bench_{i}.mztab"
+                        )
                         tput = runner.predict_timed(peak_path, results_path)
 
-                if is_timed:
-                    throughputs.append(tput)
-                    if torch.cuda.is_available():
-                        peak_mem_mb = max(
-                            peak_mem_mb,
-                            torch.cuda.max_memory_allocated() >> 20,
-                        )
+                        if is_timed:
+                            throughputs.append(tput)
+                            if torch.cuda.is_available():
+                                peak_mem_mib = max(
+                                    peak_mem_mib,
+                                    torch.cuda.max_memory_allocated() >> 20,
+                                )
 
             if throughputs:
                 mean_tput = statistics.mean(throughputs)
@@ -511,7 +512,7 @@ def benchmark(
 
             row = (
                 f"{batch_size:>12} {n_beams:>8} {mean_tput:>12.1f} "
-                f"{ms_per_spec:>13.2f} {peak_mem_mb:>12}"
+                f"{ms_per_spec:>13.2f} {peak_mem_mib:>13}"
             )
             click.echo(row)
 

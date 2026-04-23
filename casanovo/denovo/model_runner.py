@@ -362,9 +362,11 @@ class ModelRunner:
         results_path: str,
     ) -> float:
         """Run inference and return spectra/second throughput."""
-        self.initialize_trainer(train=False)
-        self.initialize_tokenizer()
-        self.initialize_model(train=False)
+        if self.trainer is None:
+            self.initialize_trainer(train=False)
+        if self.model is None:
+            self.initialize_tokenizer()
+            self.initialize_model(train=False)
         self.writer = ms_io.MztabWriter(results_path)
         self.writer.set_metadata(
             self.config,
