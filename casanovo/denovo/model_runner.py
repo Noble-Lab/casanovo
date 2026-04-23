@@ -1,17 +1,20 @@
 """Training and testing functionality for the de novo peptide sequencing
 model."""
 
+import contextlib
 import glob
 import logging
 import os
 import tempfile
 import warnings
 from pathlib import Path
-from typing import Iterable, List, Optional, Sequence, Union
+from typing import Dict, Iterable, List, Optional, Sequence, Union
 
 import lightning.pytorch as pl
 import lightning.pytorch.loggers
 import torch
+import torch.utils.data
+from torch.profiler import ProfilerActivity
 from depthcharge.tokenizers import PeptideTokenizer
 from depthcharge.tokenizers.peptides import MskbPeptideTokenizer
 from lightning.pytorch.callbacks import LearningRateMonitor, ModelCheckpoint
@@ -269,7 +272,8 @@ class ModelRunner:
         peak_path: Iterable[str],
         results_path: str,
         evaluate: bool = False,
-    ) -> None:
+        profile_output: Optional[str] = None,
+    ) -> Dict[str, float]:
         """
         Predict peptide sequences with a trained Casanovo model.
 
@@ -288,6 +292,8 @@ class ModelRunner:
             Note: peak_path must point to annotated MS data files when
             running model evaluation. Files that are not an annotated
             peak file format will be ignored if evaluate is set to true.
+        profile_output : str, optional
+            If set, write a PyTorch Profiler Chrome trace to this path.
         """
         self.writer = ms_io.MztabWriter(results_path)
         self.writer.set_metadata(
@@ -303,30 +309,91 @@ class ModelRunner:
 
         test_paths = self._get_input_paths(peak_path, False, "test")
         self.writer.set_ms_run(test_paths)
-        self.initialize_data_module(test_paths=test_paths)
 
-        try:
-            self.loaders.setup(stage="test", annotated=evaluate)
-        except (KeyError, OSError, TypeError) as e:
-            if evaluate:
-                error_message = (
-                    "Error creating annotated spectrum dataloaders. This may "
-                    "be the result of having an unannotated peak file present "
-                    "in the validation peak file path list. Check that the input "
-                    "spectrum files are annotated, and if they are that the "
-                    "format is correct."
-                )
+        stage_times: Dict[str, float] = {}
 
-                logger.error(error_message)
-                raise TypeError(error_message) from e
-
-            raise
+        with utils.stage_timer("data_loading", stage_times):
+            self.initialize_data_module(test_paths=test_paths)
+            try:
+                self.loaders.setup(stage="test", annotated=evaluate)
+            except (KeyError, OSError, TypeError) as e:
+                if evaluate:
+                    error_message = (
+                        "Error creating annotated spectrum dataloaders. This "
+                        "may be the result of having an unannotated peak file "
+                        "present in the validation peak file path list. Check "
+                        "that the input spectrum files are annotated, and if "
+                        "they are that the format is correct."
+                    )
+                    logger.error(error_message)
+                    raise TypeError(error_message) from e
+                raise
 
         predict_dataloader = self.loaders.predict_dataloader()
-        self.trainer.predict(self.model, predict_dataloader)
+
+        if profile_output is not None:
+            profiler_ctx = torch.profiler.profile(
+                activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA],
+                record_shapes=True,
+                profile_memory=True,
+                with_stack=False,
+            )
+        else:
+            profiler_ctx = contextlib.nullcontext()
+
+        with utils.stage_timer("inference", stage_times):
+            with profiler_ctx as prof:
+                self.trainer.predict(self.model, predict_dataloader)
+            if torch.cuda.is_available():
+                torch.cuda.synchronize()
+
+        if profile_output is not None and prof is not None:
+            prof.export_chrome_trace(profile_output)
+            logger.info("Profiler trace written to %s", profile_output)
 
         if evaluate:
             self.log_metrics(predict_dataloader)
+
+        return stage_times
+
+    def predict_timed(
+        self,
+        peak_path: Iterable[str],
+        results_path: str,
+    ) -> float:
+        """Run inference and return spectra/second throughput."""
+        self.initialize_trainer(train=False)
+        self.initialize_tokenizer()
+        self.initialize_model(train=False)
+        self.writer = ms_io.MztabWriter(results_path)
+        self.writer.set_metadata(
+            self.config,
+            model=str(self.model_filename),
+            config_filename=self.config.file,
+        )
+        self.model.out_writer = self.writer
+
+        test_paths = self._get_input_paths(peak_path, False, "test")
+        self.writer.set_ms_run(test_paths)
+        self.initialize_data_module(test_paths=test_paths)
+        self.loaders.setup(stage="test", annotated=False)
+
+        predict_dataloader = self.loaders.predict_dataloader()
+        try:
+            n_spectra = len(predict_dataloader.dataset)
+        except TypeError:
+            n_spectra = sum(1 for _ in predict_dataloader.dataset)
+
+        stage_times: Dict[str, float] = {}
+        with utils.stage_timer("inference", stage_times):
+            self.trainer.predict(self.model, predict_dataloader)
+            if torch.cuda.is_available():
+                torch.cuda.synchronize()
+
+        elapsed = stage_times.get("inference", 0.0)
+        if elapsed > 0 and n_spectra > 0:
+            return n_spectra / elapsed
+        return 0.0
 
     def initialize_trainer(self, train: bool) -> None:
         """

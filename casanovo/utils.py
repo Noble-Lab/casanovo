@@ -7,6 +7,8 @@ import platform
 import re
 import socket
 import sys
+import time
+from contextlib import contextmanager
 from datetime import datetime
 from typing import Dict, Iterable, List, Optional, Tuple
 
@@ -22,6 +24,16 @@ from .data.psm import PepSpecMatch
 SCORE_BINS = (0.0, 0.5, 0.9, 0.95, 0.99)
 
 logger = logging.getLogger("casanovo")
+
+
+@contextmanager
+def stage_timer(label: str, timings: Dict[str, float]):
+    """Record wall-clock time for a named stage into a shared dict."""
+    t0 = time.perf_counter()
+    try:
+        yield
+    finally:
+        timings[label] = time.perf_counter() - t0
 
 
 def n_workers() -> int:
@@ -143,7 +155,9 @@ def log_system_info() -> None:
 
 
 def log_run_report(
-    start_time: Optional[float] = None, end_time: Optional[float] = None
+    start_time: Optional[float] = None,
+    end_time: Optional[float] = None,
+    stage_times: Optional[Dict[str, float]] = None,
 ) -> None:
     """
     Log general run report.
@@ -154,6 +168,8 @@ def log_run_report(
         The start time of the sequencing run in seconds since the epoch.
     end_time : Optional[float], default=None
         The end time of the sequencing run in seconds since the epoch.
+    stage_times : Optional[Dict[str, float]], default=None
+        Per-stage timings to include in the report.
     """
     logger.info("======= End of Run Report =======")
     if start_time is not None and end_time is not None:
@@ -169,6 +185,11 @@ def log_run_report(
         )
         logger.info("Time Elapsed: %s", delta_datetime)
 
+    if stage_times:
+        logger.info("Stage timings:")
+        for stage, elapsed in stage_times.items():
+            logger.info("  %s: %.3f s", stage, elapsed)
+
     if torch.cuda.is_available():
         gpu_util = torch.cuda.max_memory_allocated()
         logger.info("Max GPU Memory Utilization: %d MiB", gpu_util >> 20)
@@ -179,6 +200,7 @@ def log_annotate_report(
     start_time: Optional[float] = None,
     end_time: Optional[float] = None,
     score_bins: Iterable[float] = SCORE_BINS,
+    stage_times: Optional[Dict[str, float]] = None,
 ) -> None:
     """
     Log run annotation report.
@@ -193,8 +215,12 @@ def log_annotate_report(
         The end time of the sequencing run in seconds since the epoch.
     score_bins: Iterable[float], Optional
         Confidence scores for creating confidence score distribution.
+    stage_times : Optional[Dict[str, float]], default=None
+        Per-stage timings to include in the report.
     """
-    log_run_report(start_time=start_time, end_time=end_time)
+    log_run_report(
+        start_time=start_time, end_time=end_time, stage_times=stage_times
+    )
     run_report = _get_report_dict(
         pd.DataFrame(
             {

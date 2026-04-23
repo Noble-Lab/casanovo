@@ -35,6 +35,7 @@ import appdirs
 import github
 import requests
 import rich_click as click
+import torch
 import tqdm
 from lightning.pytorch import seed_everything
 
@@ -151,11 +152,18 @@ def main() -> None:
     is_flag=True,
     default=False,
     help="""
-    Run in evaluation mode. When this flag is set the peptide and amino acid  
-    precision will be calculated and logged at the end of the sequencing run. 
-    All input files must be annotated MGF files if running in evaluation 
+    Run in evaluation mode. When this flag is set the peptide and amino acid
+    precision will be calculated and logged at the end of the sequencing run.
+    All input files must be annotated MGF files if running in evaluation
     mode.
     """,
+)
+@click.option(
+    "--profile",
+    "profile_output",
+    default=None,
+    type=click.Path(dir_okay=False, writable=True),
+    help="Write a PyTorch Profiler Chrome trace to this path after inference.",
 )
 def sequence(
     peak_path: Tuple[str],
@@ -166,6 +174,7 @@ def sequence(
     verbosity: str,
     force_overwrite: bool,
     evaluate: bool,
+    profile_output: Optional[str],
 ) -> None:
     """De novo sequence peptides from tandem mass spectra.
 
@@ -202,9 +211,17 @@ def sequence(
             logger.info("  %s", peak_file)
 
         results_path = output_path / f"{output_root_name}.mztab"
-        runner.predict(peak_path, str(results_path), evaluate=evaluate)
+        stage_times = runner.predict(
+            peak_path,
+            str(results_path),
+            evaluate=evaluate,
+            profile_output=profile_output,
+        )
         utils.log_annotate_report(
-            runner.writer.psms, start_time=start_time, end_time=time.time()
+            runner.writer.psms,
+            start_time=start_time,
+            end_time=time.time(),
+            stage_times=stage_times,
         )
 
 
@@ -372,6 +389,131 @@ def train(
         )
 
         utils.log_run_report(start_time=start_time, end_time=time.time())
+
+
+@main.command(cls=_SharedParams)
+@click.argument(
+    "peak_path",
+    required=True,
+    nargs=-1,
+    type=click.Path(exists=True, dir_okay=True),
+)
+@click.option(
+    "--n_iter",
+    default=3,
+    show_default=True,
+    type=int,
+    help="Number of timed benchmark iterations (excluding warmup).",
+)
+@click.option(
+    "--warmup",
+    default=1,
+    show_default=True,
+    type=int,
+    help="Number of untimed warmup iterations before benchmarking.",
+)
+@click.option(
+    "--batch_sizes",
+    default="256,512,1024",
+    show_default=True,
+    help="Comma-separated list of predict batch sizes to sweep.",
+)
+@click.option(
+    "--n_beams_list",
+    default="1",
+    show_default=True,
+    help="Comma-separated list of beam widths to sweep.",
+)
+def benchmark(
+    peak_path: Tuple[str],
+    model: Optional[str],
+    config: Optional[str],
+    output_dir: Optional[str],
+    output_root: Optional[str],
+    verbosity: str,
+    force_overwrite: bool,
+    n_iter: int,
+    warmup: int,
+    batch_sizes: str,
+    n_beams_list: str,
+) -> None:
+    """Benchmark inference throughput across a configuration matrix.
+
+    Sweeps over combinations of batch size and beam width, measuring
+    spectra/second, ms/spectrum, and peak GPU memory. Results are printed
+    as a table to stdout and logged.
+
+    PEAK_PATH must be one or more mzML, mzXML, or MGF files.
+    """
+    import statistics
+    import tempfile
+
+    output_path, output_root_name = _setup_output(
+        output_dir, output_root, force_overwrite, verbosity
+    )
+    utils.log_system_info()
+
+    parsed_batch_sizes = [int(b.strip()) for b in batch_sizes.split(",")]
+    parsed_beams = [int(b.strip()) for b in n_beams_list.split(",")]
+
+    base_config, model_path = setup_model(
+        model, config, output_path, output_root_name, False
+    )
+
+    header = (
+        f"{'batch_size':>12} {'n_beams':>8} {'spectra/s':>12} "
+        f"{'ms/spectrum':>13} {'peak_gpu_mb':>12}"
+    )
+    divider = "-" * len(header)
+    click.echo(header)
+    click.echo(divider)
+
+    for batch_size in parsed_batch_sizes:
+        for n_beams in parsed_beams:
+            cfg = Config.__new__(Config)
+            cfg.file = base_config.file
+            cfg._params = dict(base_config._params)
+            cfg._user_config = base_config._user_config
+            cfg._params["predict_batch_size"] = batch_size
+            cfg._params["n_beams"] = n_beams
+
+            throughputs = []
+            peak_mem_mb = 0
+
+            total_iters = warmup + n_iter
+            for i in range(total_iters):
+                is_timed = i >= warmup
+                if is_timed and torch.cuda.is_available():
+                    torch.cuda.reset_peak_memory_stats()
+
+                with tempfile.TemporaryDirectory() as tmp_dir:
+                    results_path = os.path.join(tmp_dir, "bench.mztab")
+                    with ModelRunner(
+                        cfg, model_path, output_path, None, False
+                    ) as runner:
+                        tput = runner.predict_timed(peak_path, results_path)
+
+                if is_timed:
+                    throughputs.append(tput)
+                    if torch.cuda.is_available():
+                        peak_mem_mb = max(
+                            peak_mem_mb,
+                            torch.cuda.max_memory_allocated() >> 20,
+                        )
+
+            if throughputs:
+                mean_tput = statistics.mean(throughputs)
+                ms_per_spec = (
+                    (1000.0 / mean_tput) if mean_tput > 0 else float("inf")
+                )
+            else:
+                mean_tput, ms_per_spec = 0.0, float("inf")
+
+            row = (
+                f"{batch_size:>12} {n_beams:>8} {mean_tput:>12.1f} "
+                f"{ms_per_spec:>13.2f} {peak_mem_mb:>12}"
+            )
+            click.echo(row)
 
 
 @main.command()

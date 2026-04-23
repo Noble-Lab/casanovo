@@ -231,7 +231,8 @@ class Spec2Pep(pl.LightningModule):
             sequence.
         """
         mzs, ints, precursors, _ = self._process_batch(batch)
-        return self.beam_search_decode(mzs, ints, precursors)
+        with torch.profiler.record_function("casanovo::forward"):
+            return self.beam_search_decode(mzs, ints, precursors)
 
     def beam_search_decode(
         self,
@@ -268,7 +269,8 @@ class Spec2Pep(pl.LightningModule):
             score, the amino acid scores, and the predicted peptide
             sequence.
         """
-        memories, mem_masks = self.encoder(mzs, intensities)
+        with torch.profiler.record_function("casanovo::encoder"):
+            memories, mem_masks = self.encoder(mzs, intensities)
 
         # Get device from self for consistent placement
         device = self.device
