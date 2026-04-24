@@ -63,6 +63,7 @@ After installation, test that it was successful by viewing the Casanovo command 
 ```sh
 casanovo --help
 ```
+
 ![`casanovo --help`](images/help.svg)
 
 
@@ -71,6 +72,7 @@ To generate a YAML file containing the current Casanovo defaults, run:
 ```sh
 casanovo configure
 ```
+
 ![`casanovo configure --help`](images/configure-help.svg)
 
 When using Casanovo to sequence peptides from mass spectra or evaluate a previous model's performance, you can change some of the parameters in the first section of this file.
@@ -107,6 +109,7 @@ To *de novo* sequence your own mass spectra with Casanovo, use the `casanovo seq
 ```sh
 casanovo sequence spectra.mgf
 ```
+
 ![`casanovo sequence --help`](images/sequence-help.svg)
 
 Casanovo can predict peptide sequences for MS/MS spectra in mzML, mzXML, and MGF files.
@@ -133,6 +136,7 @@ casanovo sequence annotated_spectra.mgf --evaluate
 
 To evaluate the peptide predictions, ground truth peptide labels must to be provided as an annotated MGF file where the peptide sequence is denoted in the `SEQ` field. 
 Compatible MGF files are available from [MassIVE-KB](https://massive.ucsd.edu/ProteoSAFe/static/massive-kb-libraries.jsp).
+Note that the `--evaluate` flag requires that `top-match` is set to 1 in the configuration file.
 
 ### Database searching
 
@@ -141,6 +145,7 @@ To perform database search using Casanovo as a score function, use the `casanovo
 ```sh
 casanovo db-search spectra.mgf proteome.fasta
 ```
+
 ![`casanovo db-search --help`](images/db-search-help.svg)
 
 In this case, besides MS/MS spectra in mzML, mzXML, or MGF file(s), Casanovo needs as minimal input the protein database in the FASTA format.
@@ -200,6 +205,7 @@ However, if you have a large collection of annotated spectra and want to try tra
 ```sh
 casanovo train --validation_peak_path validation_spectra.mgf training_spectra.mgf
 ```
+
 ![`casanovo train --help`](images/train-help.svg)
 
 Training and validation MS/MS data need to be provided as annotated MGF files, where the peptide sequence is denoted in the `SEQ` field.
@@ -210,7 +216,7 @@ To do this fine-tuning, specify the starting model weights using `--model`.
 
 Note that you cannot (currently) fine-tune a model using a different amino acid alphabet.
 Hence, if you want to add new types of PTMs to Casanovo, you have to train from scratch.
-We are working on adding functionality to allow novel PTMs during fine-tuning, using the approach pioneered by [https://linkinghub.elsevier.com/retrieve/pii/S1535-9476(25)00600-0](Modanovo).
+We are working on adding functionality to allow novel PTMs during fine-tuning, using the approach pioneered by [Modanovo](https://linkinghub.elsevier.com/retrieve/pii/S1535-9476(25)00600-0).
 
 #### Lance file caching
 
