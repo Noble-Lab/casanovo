@@ -82,7 +82,7 @@ Parameters in the second section will not have an effect unless you are training
 
 Using Casanovo to sequence peptides from new mass spectra, Casanovo needs compatible pretrained model weights to make its predictions.
 By default, Casanovo first checks for compatible cached weights before attempting to download from GitHub.
-Weights are cached in `~/.cache/casanovo/` on Linux, `~/Library/Caches/casanovo/` on macOS, and `C:\Users\<username>\.cache\torch\hub\` on Windows (using platform-specific conventions from `appdirs`).
+Weights are cached in `~/.cache/casanovo/` on Linux, `~/Library/Caches/casanovo/` on macOS, and a platform-specific user cache directory on Windows (typically under `%LOCALAPPDATA%\casanovo\`).
 If no compatible weights are found in the cache, then Casanovo downloads them from GitHub, matching first on exact version (major, minor, patch), then falling back to major+minor, and finally to major version only.
 If a cached file becomes corrupted, delete it from the cache directory and Casanovo will re-download it on the next run.
 
