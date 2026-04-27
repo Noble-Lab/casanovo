@@ -27,6 +27,53 @@ _config_deprecated = dict(
 )
 
 
+def _parse_val_check_interval(value) -> Union[int, float]:
+    """Parse val_check_interval as either a float (0, 1] or a positive int.
+
+    PyTorch Lightning accepts:
+    - float in (0.0, 1.0]: fraction of epoch between validations
+    - int >= 1: number of training batches between validations
+
+    Parameters
+    ----------
+    value : int or float
+        The raw config value.
+
+    Returns
+    -------
+    Union[int, float]
+        The validated value.
+
+    Raises
+    ------
+    TypeError
+        If the value cannot be interpreted as a valid interval.
+    ValueError
+        If a float is outside (0, 1] or an int is less than 1.
+    """
+    try:
+        as_float = float(value)
+    except (TypeError, ValueError) as err:
+        raise TypeError(
+            f"val_check_interval must be an int >= 1 or a float in (0, 1], "
+            f"got {value!r}"
+        ) from err
+
+    # If the string / numeric value is an integer-like (e.g. 50000, "50000")
+    # keep it as int so Lightning treats it as a step count.
+    if as_float == int(as_float) and as_float >= 1:
+        return int(as_float)
+
+    # Float path: must be in (0, 1]
+    if 0.0 < as_float <= 1.0:
+        return as_float
+
+    raise ValueError(
+        f"val_check_interval must be an int >= 1 or a float in (0, 1], "
+        f"got {value!r}"
+    )
+
+
 class Config:
     """
     The Casanovo configuration options.
@@ -71,7 +118,7 @@ class Config:
         log_metrics=bool,
         log_every_n_steps=int,
         lance_dir=str,
-        val_check_interval=int,
+        val_check_interval=_parse_val_check_interval,  # int >= 1 or float in (0, 1]
         min_peaks=int,
         max_peaks=int,
         min_mz=float,
