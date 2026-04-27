@@ -28,11 +28,15 @@ _config_deprecated = dict(
 
 
 def _parse_val_check_interval(value) -> Union[int, float]:
-    """Parse val_check_interval as either a float (0, 1] or a positive int.
+    """Parse val_check_interval as either an int >= 1 or a float in (0, 1].
 
     PyTorch Lightning accepts:
-    - float in (0.0, 1.0]: fraction of epoch between validations
     - int >= 1: number of training batches between validations
+    - float in (0.0, 1.0]: fraction of epoch between validations
+
+    The original type is preserved so PyTorch Lightning's strict type
+    semantics are respected: ``int(1)`` stays ``int`` (one-batch interval),
+    while ``float(1.0)`` stays ``float`` (end-of-epoch fraction).
 
     Parameters
     ----------
@@ -47,10 +51,20 @@ def _parse_val_check_interval(value) -> Union[int, float]:
     Raises
     ------
     TypeError
-        If the value cannot be interpreted as a valid interval.
+        If the value is not numeric.
     ValueError
-        If a float is outside (0, 1] or an int is less than 1.
+        If the value is outside the valid range.
     """
+    # Check for a true Python int first (booleans are ints in Python,
+    # so exclude them explicitly).
+    if isinstance(value, int) and not isinstance(value, bool):
+        if value >= 1:
+            return value
+        raise ValueError(
+            f"val_check_interval as int must be >= 1, got {value!r}"
+        )
+
+    # For everything else, coerce to float.
     try:
         as_float = float(value)
     except (TypeError, ValueError) as err:
@@ -59,19 +73,19 @@ def _parse_val_check_interval(value) -> Union[int, float]:
             f"got {value!r}"
         ) from err
 
-    # If the string / numeric value is an integer-like (e.g. 50000, "50000")
-    # keep it as int so Lightning treats it as a step count.
-    if as_float == int(as_float) and as_float >= 1:
-        return int(as_float)
-
-    # Float path: must be in (0, 1]
+    # Float path: valid range is (0.0, 1.0]
     if 0.0 < as_float <= 1.0:
         return as_float
+
+    # Integer-valued strings (e.g. "50000") arrive here as float — coerce back.
+    if as_float == int(as_float) and as_float >= 1:
+        return int(as_float)
 
     raise ValueError(
         f"val_check_interval must be an int >= 1 or a float in (0, 1], "
         f"got {value!r}"
     )
+
 
 
 class Config:
