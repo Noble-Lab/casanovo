@@ -533,7 +533,13 @@ def test_log_metrics(monkeypatch, tiny_config):
             assert aa_recall == pytest.approx(100 * (2 / 3))
 
 
-def test_initialize_tokenizer(caplog):
+def test_initialize_tokenizer_does_not_warn_about_alphabet(caplog):
+    """initialize_tokenizer must not warn about residues missing from the
+    class-level default alphabet — when training from scratch the config
+    vocabulary IS the alphabet, so the warning is meaningless. The check
+    now lives in initialize_model where a checkpoint is actually being
+    loaded. Regression test for #629.
+    """
     mock_config = unittest.mock.MagicMock()
     mock_config.residues = {"foo": 100}
 
@@ -542,7 +548,35 @@ def test_initialize_tokenizer(caplog):
     with caplog.at_level("WARNING"):
         runner.initialize_tokenizer()
 
-    assert any(
-        "Configured residue(s) not in model alphabet: foo" in msg
+    assert not any(
+        "Configured residue(s) not in model alphabet" in msg
         for msg in caplog.messages
+    ), "the alphabet warning must not fire from initialize_tokenizer"
+
+
+def test_initialize_model_train_from_scratch_no_alphabet_warning(
+    tmp_path, caplog
+):
+    """initialize_model with model_filename=None and train=True must NOT
+    emit the 'Configured residue(s) not in model alphabet' warning, since
+    no checkpoint is being loaded and the config IS the alphabet (#629).
+    """
+    config = Config()
+    config.model_save_folder_path = tmp_path
+    # Add a modification token that's absent from the default alphabet.
+    config.residues = dict(config.residues)
+    config.residues["[Acetyl]-"] = 42.010565
+
+    runner = ModelRunner(config=config)
+    runner.initialize_tokenizer()
+
+    with caplog.at_level("WARNING"):
+        runner.initialize_model(train=True)
+
+    assert not any(
+        "Configured residue(s) not in model alphabet" in msg
+        for msg in caplog.messages
+    ), (
+        "training from scratch must not emit the alphabet warning — "
+        "there is no prior model alphabet to mismatch against"
     )

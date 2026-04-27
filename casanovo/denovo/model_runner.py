@@ -407,15 +407,6 @@ class ModelRunner:
         else:
             tokenizer_clss = PeptideTokenizer
 
-        missing_aa = list(
-            set(self.config.residues) - set(tokenizer_clss.residues)
-        )
-        if missing_aa:
-            logger.warning(
-                "Configured residue(s) not in model alphabet: %s",
-                ", ".join(missing_aa),
-            )
-
         self.tokenizer = tokenizer_clss(
             residues=self.config.residues,
             replace_isoleucine_with_leucine=self.config.replace_isoleucine_with_leucine,
@@ -498,6 +489,27 @@ class ModelRunner:
                 raise ValueError("A model file must be provided")
         # Else a model file is provided (to continue training or for
         # inference).
+
+        # The class-level `tokenizer_clss.residues` is the *default* alphabet
+        # (the 20 standard amino acids). It is only meaningful as a comparison
+        # baseline when a pre-trained checkpoint is being loaded and the
+        # checkpoint's tokenizer will replace the config's. When training
+        # from scratch the config vocabulary IS the alphabet, so the warning
+        # is meaningless and was firing spuriously for any config containing
+        # a modification token (issue #629). The check now lives here, where
+        # a checkpoint is actually being loaded.
+        if self.config.massivekb_tokenizer:
+            tokenizer_clss = MskbPeptideTokenizer
+        else:
+            tokenizer_clss = PeptideTokenizer
+        missing_aa = list(
+            set(self.config.residues) - set(tokenizer_clss.residues)
+        )
+        if missing_aa:
+            logger.warning(
+                "Configured residue(s) not in model alphabet: %s",
+                ", ".join(missing_aa),
+            )
 
         if not Path(self.model_filename).exists():
             logger.error(
