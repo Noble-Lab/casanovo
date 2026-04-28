@@ -381,16 +381,29 @@ class ModelRunner:
                             ),
                         )
 
+            # PyTorch Lightning interprets val_check_interval based on its
+            # type: an int means "every N training steps" (in which case
+            # check_val_every_n_epoch must be None to disable the
+            # epoch-based check), and a float in [0, 1] means "this
+            # fraction of every epoch" (in which case
+            # check_val_every_n_epoch must be a positive int — defaults
+            # to 1 in PL). Issue #627.
+            val_check_interval = self.config.val_check_interval
+            if isinstance(val_check_interval, float):
+                check_val_every_n_epoch = 1
+            else:
+                check_val_every_n_epoch = None
+
             additional_cfg = dict(
                 devices=devices,
-                val_check_interval=self.config.val_check_interval,
+                val_check_interval=val_check_interval,
                 max_epochs=self.config.max_epochs,
                 num_sanity_val_steps=self.config.num_sanity_val_steps,
                 accumulate_grad_batches=self.config.accumulate_grad_batches,
                 gradient_clip_val=self.config.gradient_clip_val,
                 gradient_clip_algorithm=self.config.gradient_clip_algorithm,
                 callbacks=self.callbacks,
-                check_val_every_n_epoch=None,
+                check_val_every_n_epoch=check_val_every_n_epoch,
                 enable_checkpointing=True,
                 logger=loggers,
                 strategy=self._get_strategy(),

@@ -16,6 +16,54 @@ logger = logging.getLogger("casanovo")
 
 # FIXME: This contains deprecated config options to be removed in the next
 #  major version update.
+def _coerce_val_check_interval(value):
+    """Accept ``val_check_interval`` as either an int or a float.
+
+    PyTorch Lightning's ``Trainer(val_check_interval=...)`` accepts
+    both, with different semantics:
+
+    * ``int`` — run validation every N training **steps** (batches).
+    * ``float`` in ``[0.0, 1.0]`` — run validation at that fraction of
+      each **epoch** (``1.0`` = once per epoch end).
+
+    Casanovo's config schema previously cast everything through
+    ``int``, which silently truncated a user-supplied ``0.5`` to ``0``
+    (equivalent to "validate every step" — almost certainly not what
+    the user wanted). Accept both shapes here, reject anything else,
+    and reject out-of-range floats up front so the error message
+    points at the config field rather than failing deep inside
+    PyTorch Lightning's trainer setup.
+
+    See https://github.com/Noble-Lab/casanovo/issues/627.
+    """
+    # ``bool`` is a subclass of ``int`` in Python — guard explicitly so
+    # ``val_check_interval: true`` is not silently coerced to 1.
+    if isinstance(value, bool):
+        raise TypeError(
+            "val_check_interval must be an int or a float in [0.0, 1.0], "
+            f"got bool ({value!r})"
+        )
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
+        if not 0.0 <= value <= 1.0:
+            raise ValueError(
+                "val_check_interval as a float must be in [0.0, 1.0] "
+                f"(fraction of epoch); got {value!r}"
+            )
+        return value
+    if isinstance(value, str):
+        # Prefer int over float when the string has no decimal point,
+        # so ``"50000"`` keeps step-count semantics.
+        if "." in value or "e" in value.lower():
+            return _coerce_val_check_interval(float(value))
+        return _coerce_val_check_interval(int(value))
+    raise TypeError(
+        "val_check_interval must be an int or a float in [0.0, 1.0], "
+        f"got {type(value).__name__} ({value!r})"
+    )
+
+
 _config_deprecated = dict(
     n_peaks="max_peaks",
     every_n_train_steps="val_check_interval",
@@ -71,7 +119,7 @@ class Config:
         log_metrics=bool,
         log_every_n_steps=int,
         lance_dir=str,
-        val_check_interval=int,
+        val_check_interval=lambda v: _coerce_val_check_interval(v),
         min_peaks=int,
         max_peaks=int,
         min_mz=float,

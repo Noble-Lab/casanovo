@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+### Changed
+
+- `val_check_interval` now accepts a float in `[0.0, 1.0]` (fraction of epoch) in addition to an int (training-step count), matching the PyTorch Lightning `Trainer` signature. The default in the bundled `config.yaml` changes from `50_000` (steps) to `1.0` (validate once per epoch end). `model_runner` automatically derives a compatible `check_val_every_n_epoch` from the supplied type. (#627)
+
 ## [5.1.2] - 2025-12-11
 
 ### Changed
