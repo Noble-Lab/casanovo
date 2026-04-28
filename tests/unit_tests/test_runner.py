@@ -533,16 +533,99 @@ def test_log_metrics(monkeypatch, tiny_config):
             assert aa_recall == pytest.approx(100 * (2 / 3))
 
 
-def test_initialize_tokenizer(caplog):
+def test_initialize_tokenizer_does_not_warn_about_missing_residues(caplog):
+    """Regression test for #629.
+
+    The "Configured residue(s) not in model alphabet" warning previously
+    fired from ``initialize_tokenizer``. Because that method runs before
+    the load-vs-train decision, the warning was unconditionally spurious
+    for any config with modifications when training a model from
+    scratch. The warning has moved to ``initialize_model``, where the
+    decision is actually made.
+    """
     mock_config = unittest.mock.MagicMock()
     mock_config.residues = {"foo": 100}
+    mock_config.massivekb_tokenizer = False
 
     runner = ModelRunner(config=mock_config)
 
     with caplog.at_level("WARNING"):
         runner.initialize_tokenizer()
 
-    assert any(
-        "Configured residue(s) not in model alphabet: foo" in msg
+    assert not any(
+        "Configured residue(s) not in model alphabet" in msg
         for msg in caplog.messages
+    ), (
+        "initialize_tokenizer must no longer emit the alphabet-mismatch "
+        f"warning; got: {caplog.messages!r}"
+    )
+
+
+def test_initialize_model_train_from_scratch_does_not_warn(tmp_path, caplog):
+    """Regression test for #629.
+
+    When training from scratch (``model_filename is None``) the config
+    residues *are* the alphabet — there is no prior alphabet to
+    mismatch against. The warning must stay silent.
+    """
+    config = Config()
+    config.model_save_folder_path = tmp_path
+    # Add a custom modification so the *old* code path would have
+    # warned. Use the same residues + a clearly synthetic addition so
+    # the rest of model construction still works.
+    config.residues = {**config.residues, "X[Synthetic]": 100.0}
+
+    runner = ModelRunner(config=config)
+    runner.initialize_tokenizer()
+
+    with caplog.at_level("WARNING"):
+        runner.initialize_model(train=True)
+
+    assert not any(
+        "Configured residue(s) not in model alphabet" in msg
+        for msg in caplog.messages
+    ), (
+        "training from scratch must not emit the alphabet-mismatch "
+        f"warning; got: {caplog.messages!r}"
+    )
+
+
+def test_initialize_model_warns_when_loading_checkpoint(
+    tmp_path, mgf_small, caplog
+):
+    """Regression test for #629.
+
+    The warning *should* fire when a checkpoint is being loaded and
+    the config introduces residues that the checkpoint's tokenizer
+    does not know about — that is the case the warning was originally
+    intended to surface.
+    """
+    config = Config()
+    config.model_save_folder_path = tmp_path
+    config.max_epochs = 1
+    config.n_layers = 1
+
+    # Train a tiny model with the *default* alphabet so the saved
+    # checkpoint's tokenizer does not include any custom residues.
+    ckpt = tmp_path / "existing.ckpt"
+    with ModelRunner(config=config, output_dir=tmp_path) as runner:
+        runner.train([mgf_small], [mgf_small])
+        runner.trainer.save_checkpoint(ckpt)
+
+    # Now load the checkpoint with a config that adds a residue not in
+    # the default alphabet. The warning is expected.
+    config.residues = {**config.residues, "X[Synthetic]": 100.0}
+    runner = ModelRunner(config=config, model_filename=str(ckpt))
+    runner.initialize_tokenizer()
+
+    with caplog.at_level("WARNING"):
+        runner.initialize_model(train=False)
+
+    assert any(
+        "Configured residue(s) not in model alphabet" in msg
+        and "X[Synthetic]" in msg
+        for msg in caplog.messages
+    ), (
+        "loading a checkpoint with a residue not in the model alphabet "
+        f"must emit the warning; got: {caplog.messages!r}"
     )

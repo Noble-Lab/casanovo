@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+### Fixed
+
+- Suppressed the spurious `Configured residue(s) not in model alphabet` warning when training a model from scratch with a custom residue vocabulary. The warning now fires only when a checkpoint is being loaded, where an alphabet mismatch is meaningful (#629).
+
 ## [5.1.2] - 2025-12-11
 
 ### Changed

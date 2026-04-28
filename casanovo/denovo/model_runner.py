@@ -407,14 +407,15 @@ class ModelRunner:
         else:
             tokenizer_clss = PeptideTokenizer
 
-        missing_aa = list(
-            set(self.config.residues) - set(tokenizer_clss.residues)
-        )
-        if missing_aa:
-            logger.warning(
-                "Configured residue(s) not in model alphabet: %s",
-                ", ".join(missing_aa),
-            )
+        # NOTE: the "Configured residue(s) not in model alphabet"
+        # warning previously lived here, but firing it from this
+        # method is incorrect: at this point we don't yet know whether
+        # a checkpoint will be loaded. When training from scratch the
+        # config residues *are* the alphabet, so the warning was
+        # unconditionally spurious for any config with modifications
+        # (issue #629). The warning has moved to ``initialize_model``,
+        # which is where the load-vs-train decision is made.
+        self._tokenizer_class_residues = set(tokenizer_clss.residues)
 
         self.tokenizer = tokenizer_clss(
             residues=self.config.residues,
@@ -498,6 +499,23 @@ class ModelRunner:
                 raise ValueError("A model file must be provided")
         # Else a model file is provided (to continue training or for
         # inference).
+
+        # A checkpoint is about to be loaded, so a mismatch between the
+        # config's residue alphabet and the checkpoint's tokenizer
+        # alphabet is now meaningful — the checkpoint's tokenizer will
+        # be used and any config-only residues will silently be ignored.
+        # ``initialize_tokenizer`` cached the class-level alphabet so we
+        # can compare without re-reading the tokenizer module here.
+        tokenizer_residues = getattr(
+            self, "_tokenizer_class_residues", None
+        )
+        if tokenizer_residues is not None:
+            missing_aa = list(set(self.config.residues) - tokenizer_residues)
+            if missing_aa:
+                logger.warning(
+                    "Configured residue(s) not in model alphabet: %s",
+                    ", ".join(missing_aa),
+                )
 
         if not Path(self.model_filename).exists():
             logger.error(
