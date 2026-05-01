@@ -472,7 +472,8 @@ class Spec2Pep(pl.LightningModule):
         step: int,
         beams_to_cache: torch.Tensor,
         pred_cache: Dict[
-            int, List[Tuple[float, float, np.ndarray, torch.Tensor]]
+            int,
+            List[Tuple[float, float, np.ndarray, np.ndarray, torch.Tensor]],
         ],
     ):
         """
@@ -536,11 +537,21 @@ class Spec2Pep(pl.LightningModule):
             # Omit the stop token from the amino acid-level scores.
             aa_scores = aa_scores[:-1]
 
+            # Get p(is_leucine | is_leucine or is_isoleucine)
+            leu_idx = self.tokenizer.index["L"]
+            ile_idx = self.tokenizer.index.get("I", leu_idx)
+
+            leu_scores = smx[0, : len(aa_scores), leu_idx]
+            ile_scores = smx[0, : len(aa_scores), ile_idx]
+            is_leucine_scores = leu_scores / (leu_scores + ile_scores)
+            is_leucine_scores = is_leucine_scores.cpu().numpy()
+
             pred_peptide_cpu = pred_peptide.cpu()
             peptide_entry = (
                 peptide_score,
                 np.random.random_sample(),
                 aa_scores,
+                is_leucine_scores,
                 torch.clone(pred_peptide_cpu),
             )
             # Check for duplicate predictions and update with highest score.
@@ -676,7 +687,7 @@ class Spec2Pep(pl.LightningModule):
         pred_cache: Dict[
             int, List[Tuple[float, float, np.ndarray, torch.Tensor]]
         ],
-    ) -> Iterable[List[Tuple[float, np.ndarray, str]]]:
+    ) -> Iterable[List[Tuple[float, np.ndarray, np.ndarray, str]]]:
         """
         Return the peptide with the highest confidence score for each
         spectrum.
@@ -709,11 +720,12 @@ class Spec2Pep(pl.LightningModule):
                             if self.tokenizer.reverse
                             else aa_scores
                         ),
+                        leucine_scores,
                         self.tokenizer.detokenize(
                             torch.unsqueeze(pred_tokens, 0)
                         )[0],
                     )
-                    for pep_score, _, aa_scores, pred_tokens in heapq.nlargest(
+                    for pep_score, _, aa_scores, leucine_scores, pred_tokens in heapq.nlargest(
                         self.top_match, peptides
                     )
                 ]
@@ -920,7 +932,12 @@ class Spec2Pep(pl.LightningModule):
             batch["precursor_mz"],
             self.forward(batch),
         ):
-            for peptide_score, aa_scores, peptide in spectrum_preds:
+            for (
+                peptide_score,
+                aa_scores,
+                leucine_scores,
+                peptide,
+            ) in spectrum_preds:
                 predictions.append(
                     psm.PepSpecMatch(
                         sequence=peptide,
@@ -930,6 +947,7 @@ class Spec2Pep(pl.LightningModule):
                         calc_mz=np.nan,
                         exp_mz=precursor_mz.item(),
                         aa_scores=aa_scores,
+                        leucine_scores=leucine_scores,
                     )
                 )
 
@@ -1198,6 +1216,7 @@ class DbSpec2Pep(Spec2Pep):
                             calc_mz=np.nan,
                             exp_mz=precursor_mz.item(),
                             aa_scores=curr_aa_scores,
+                            leucine_scores=[-1.0] * len(curr_aa_scores),
                         )
                     )
 

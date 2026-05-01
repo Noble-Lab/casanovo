@@ -44,6 +44,7 @@ class PepSpecMatch:
     calc_mz: float
     exp_mz: float
     aa_scores: Iterable[float]
+    leucine_scores: Iterable[float]
     protein: str = "null"
 
     # Private properties to handle proteoform caching

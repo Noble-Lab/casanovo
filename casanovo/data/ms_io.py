@@ -245,6 +245,7 @@ class MztabWriter:
                     "start",
                     "end",
                     "opt_global_aa_scores",
+                    "opt_global_leucine_scores",
                     "opt_global_cv_MS:1003169_proforma_peptidoform_sequence",
                     *(
                         ["opt_global_cv_MS:1003057_scan_number"]
@@ -292,6 +293,8 @@ class MztabWriter:
                     "null",  # end
                     # opt_global_aa_scores
                     ",".join(list(map("{:.5f}".format, psm.aa_scores))),
+                    # opt_global_leucine_scores
+                    ",".join(list(map("{:.5f}".format, psm.leucine_scores))),
                     psm.sequence,  # opt_global_cv_MS:1003169_proforma_peptidoform_sequence
                 ]
                 if include_scan_col:
