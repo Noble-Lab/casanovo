@@ -208,6 +208,8 @@ residues:
 
 # When fine-tuning from a checkpoint with a smaller vocabulary, map each new
 # token to an existing token whose weights should be used for initialization.
-# Example:  "K[Acetyl]": "K"
-# Leave empty ({}) when training from scratch or when vocabs already match.
+# Example:
+#   new_token_init:
+#     "K[Acetyl]": "K"
+# Leave empty when training from scratch or when vocabs already match.
 new_token_init: {}
