@@ -809,7 +809,7 @@ class ModelRunner:
             raise ValueError(
                 f"New tokens {sorted(missing_init)} have no initialization "
                 "source. Add entries to the 'new_token_init' config field, "
-                'e.g.  "K[+46.032751]": "K"'
+                'e.g.  "K[Acetyl]": "K"'
             )
 
         logger.info(
