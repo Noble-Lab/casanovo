@@ -451,107 +451,6 @@ class ModelRunner:
             stop_token="$",
         )
 
-    def _remap_decoder_vocab(
-        self,
-        ckpt_tokenizer: Optional[PeptideTokenizer],
-        new_tokenizer: PeptideTokenizer,
-    ) -> None:
-        """Remap the decoder embedding and output layers to a new vocabulary.
-
-        Called after loading a checkpoint whose tokenizer vocabulary differs
-        from the config tokenizer (e.g. when fine-tuning with additional PTM
-        tokens). Rows for tokens present in both vocabularies are copied by
-        name; rows for new tokens are initialized from ``config.new_token_init``
-        (a dict mapping new token -> existing token to copy from). After this
-        call the decoder layers and ``model.vocab_size`` reflect the new vocab.
-
-        Parameters
-        ----------
-        ckpt_tokenizer : PeptideTokenizer or None
-            The tokenizer stored in the checkpoint. If None the function
-            returns immediately.
-        new_tokenizer : PeptideTokenizer
-            The tokenizer built from the current config file.
-        """
-        if ckpt_tokenizer is None:
-            return
-        ckpt_vocab = ckpt_tokenizer.index
-        new_vocab = new_tokenizer.index
-        if set(ckpt_vocab) == set(new_vocab):
-            return
-
-        new_tokens = set(new_vocab) - set(ckpt_vocab)
-        removed_tokens = set(ckpt_vocab) - set(new_vocab)
-        if removed_tokens:
-            logger.warning(
-                "Checkpoint tokens absent from new config (dropped): %s",
-                sorted(removed_tokens),
-            )
-
-        new_token_init: dict = self.config.new_token_init or {}
-        missing_init = new_tokens - set(new_token_init)
-        if missing_init:
-            raise ValueError(
-                f"New tokens {sorted(missing_init)} have no initialization "
-                "source. Add entries to the 'new_token_init' config field, "
-                'e.g.  "K[+46.032751]": "K"'
-            )
-
-        logger.info(
-            "Remapping decoder vocabulary: %d -> %d tokens",
-            len(ckpt_vocab) + 1,
-            len(new_vocab) + 1,
-        )
-
-        def _remap_rows(old: torch.Tensor) -> torch.Tensor:
-            """Return a new tensor with rows remapped by token name."""
-            new_n = len(new_vocab) + 1
-            out = torch.zeros(
-                new_n, *old.shape[1:], dtype=old.dtype, device=old.device
-            )
-            out[0] = old[0]
-            for tok, new_idx in new_vocab.items():
-                if tok in ckpt_vocab:
-                    out[new_idx] = old[ckpt_vocab[tok]]
-                else:
-                    init_src = new_token_init[tok]
-                    if init_src not in ckpt_vocab:
-                        raise ValueError(
-                            f"Init source {init_src!r} for new token "
-                            f"{tok!r} is not in checkpoint vocabulary"
-                        )
-                    out[new_idx] = old[ckpt_vocab[init_src]]
-            return out
-
-        new_n_tokens = len(new_vocab) + 1
-        decoder = self.model.decoder
-
-        old_emb = decoder.token_encoder.weight.data
-        new_emb = _remap_rows(old_emb)
-        decoder.token_encoder = torch.nn.Embedding(
-            new_n_tokens,
-            old_emb.shape[1],
-            padding_idx=decoder.token_encoder.padding_idx,
-        ).to(old_emb.device)
-        decoder.token_encoder.weight.data.copy_(new_emb)
-
-        old_w = decoder.final.weight.data
-        old_b = (
-            decoder.final.bias.data.clone()
-            if decoder.final.bias is not None
-            else None
-        )
-        new_w = _remap_rows(old_w)
-        decoder.final = torch.nn.Linear(
-            old_w.shape[1], new_n_tokens, bias=old_b is not None
-        ).to(old_w.device)
-        decoder.final.weight.data.copy_(new_w)
-        if old_b is not None:
-            decoder.final.bias.data.copy_(_remap_rows(old_b))
-
-        self.model.vocab_size = new_n_tokens
-        self.model.hparams["tokenizer"] = new_tokenizer
-
     def initialize_model(self, train: bool, db_search: bool = False) -> None:
         """Initialize the Casanovo model.
 
@@ -863,6 +762,124 @@ class ModelRunner:
                 "config's `residues` and token ordering match those used "
                 "during training."
             )
+
+    def _remap_decoder_vocab(
+        self,
+        ckpt_tokenizer: Optional[PeptideTokenizer],
+        new_tokenizer: PeptideTokenizer,
+    ) -> None:
+        """Remap the decoder embedding and output layers to a new vocabulary.
+
+        Called after loading a checkpoint whose tokenizer vocabulary differs
+        from the config tokenizer (e.g. when fine-tuning with additional PTM
+        tokens). Rows for tokens present in both vocabularies are copied by
+        name; rows for new tokens are initialized from ``config.new_token_init``
+        (a dict mapping new token -> existing token to copy from). After this
+        call the decoder layers and ``model.vocab_size`` reflect the new vocab.
+
+        Parameters
+        ----------
+        ckpt_tokenizer : PeptideTokenizer or None
+            The tokenizer stored in the checkpoint. If None the function
+            returns immediately.
+        new_tokenizer : PeptideTokenizer
+            The tokenizer built from the current config file.
+        """
+        if ckpt_tokenizer is None:
+            return
+        # Build index dicts: token -> integer position in the embedding table.
+        ckpt_vocab = ckpt_tokenizer.index
+        new_vocab = new_tokenizer.index
+        if set(ckpt_vocab) == set(new_vocab):
+            return
+
+        # Identify which tokens are added or removed relative to the checkpoint.
+        new_tokens = set(new_vocab) - set(ckpt_vocab)
+        removed_tokens = set(ckpt_vocab) - set(new_vocab)
+        if removed_tokens:
+            logger.warning(
+                "Checkpoint tokens absent from new config (dropped): %s",
+                sorted(removed_tokens),
+            )
+
+        # Every new token must have an initialization source in the config.
+        new_token_init: dict = self.config.new_token_init or {}
+        missing_init = new_tokens - set(new_token_init)
+        if missing_init:
+            raise ValueError(
+                f"New tokens {sorted(missing_init)} have no initialization "
+                "source. Add entries to the 'new_token_init' config field, "
+                'e.g.  "K[+46.032751]": "K"'
+            )
+
+        logger.info(
+            "Remapping decoder vocabulary: %d -> %d tokens",
+            len(ckpt_vocab) + 1,
+            len(new_vocab) + 1,
+        )
+
+        def _remap_rows(old: torch.Tensor) -> torch.Tensor:
+            """Return a new tensor with rows remapped by token name.
+
+            Row 0 (padding) is preserved as-is. Every other row is either
+            copied from the matching checkpoint position (known token) or
+            copied from the initialization-source token (new token).
+            """
+            new_n = len(new_vocab) + 1
+            out = torch.zeros(
+                new_n, *old.shape[1:], dtype=old.dtype, device=old.device
+            )
+            # Row 0 is the padding embedding; keep it unchanged.
+            out[0] = old[0]
+            for tok, new_idx in new_vocab.items():
+                if tok in ckpt_vocab:
+                    out[new_idx] = old[ckpt_vocab[tok]]
+                else:
+                    # New token: copy weights from the configured source token.
+                    init_src = new_token_init[tok]
+                    if init_src not in ckpt_vocab:
+                        raise ValueError(
+                            f"Init source {init_src!r} for new token "
+                            f"{tok!r} is not in checkpoint vocabulary"
+                        )
+                    out[new_idx] = old[ckpt_vocab[init_src]]
+            return out
+
+        new_n_tokens = len(new_vocab) + 1
+        decoder = self.model.decoder
+
+        # Replace the input embedding table (token -> vector).
+        old_emb = decoder.token_encoder.weight.data
+        new_emb = _remap_rows(old_emb)
+        decoder.token_encoder = torch.nn.Embedding(
+            new_n_tokens,
+            old_emb.shape[1],
+            padding_idx=decoder.token_encoder.padding_idx,
+        ).to(old_emb.device)
+        decoder.token_encoder.weight.data.copy_(new_emb)
+
+        # Replace the output projection (vector -> logit per token).
+        # Capture bias BEFORE replacing the layer to avoid reading
+        # the new (zero-initialized) bias instead of the checkpoint bias.
+        old_w = decoder.final.weight.data
+        old_b = (
+            decoder.final.bias.data.clone()
+            if decoder.final.bias is not None
+            else None
+        )
+        new_w = _remap_rows(old_w)
+        decoder.final = torch.nn.Linear(
+            old_w.shape[1], new_n_tokens, bias=old_b is not None
+        ).to(old_w.device)
+        decoder.final.weight.data.copy_(new_w)
+        if old_b is not None:
+            decoder.final.bias.data.copy_(_remap_rows(old_b))
+
+        # Keep vocab_size and the checkpoint's hyperparameter record in sync
+        # with the new layers so downstream comparisons and checkpoint saves
+        # see the updated vocabulary.
+        self.model.vocab_size = new_n_tokens
+        self.model.hparams["tokenizer"] = new_tokenizer
 
 
 def _get_peak_filenames(
