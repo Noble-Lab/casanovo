@@ -280,7 +280,7 @@ def test_train_and_run(
         None,
         "27-Carbamidomethyl (C):UNIMOD:4",
     ]
-    for actual, expected in zip(mods, expected_mods):
+    for actual, expected in zip(mods, expected_mods, strict=True):
         if expected is None:
             assert pd.isna(actual)
         else:
