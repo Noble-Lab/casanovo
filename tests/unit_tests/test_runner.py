@@ -706,3 +706,41 @@ def test_initialize_model_calls_validate_vocab_compatibility(
     ) as mock_validate:
         runner.initialize_model(train=True)
         mock_validate.assert_called_once()
+
+
+def test_train_no_tracking_peak_path_backward_compat(
+    tmp_path, mgf_small, tiny_config
+):
+    """train() with no tracking_peak_path sets n_main_loaders == len(valid_paths)."""
+    config = Config(tiny_config)
+    config.max_epochs = 1
+    config.n_layers = 1
+
+    with ModelRunner(
+        config, output_dir=tmp_path, output_rootname="compat"
+    ) as runner:
+        runner.train([mgf_small], [mgf_small])
+        assert runner.model.n_main_loaders == 1
+        assert runner.model.val_stems == [Path(mgf_small).stem]
+
+
+def test_train_with_tracking_peak_path(tmp_path, mgf_small, tiny_config):
+    """train() with tracking_peak_path logs per-file metrics for tracking files."""
+    config = Config(tiny_config)
+    config.max_epochs = 1
+    config.n_layers = 1
+
+    mgf_track = tmp_path / "track.mgf"
+    shutil.copy(mgf_small, mgf_track)
+
+    with ModelRunner(
+        config, output_dir=tmp_path, output_rootname="track"
+    ) as runner:
+        runner.train([mgf_small], [mgf_small], tracking_peak_path=[mgf_track])
+        # main loader is mgf_small (index 0); tracking is mgf_track (index 1)
+        assert runner.model.n_main_loaders == 1
+        assert runner.model.val_stems[0] == Path(mgf_small).stem
+        assert runner.model.val_stems[1] == Path(mgf_track).stem
+        # Per-file key must appear in logged metrics history.
+        track_key = f"valid/{Path(mgf_track).stem}"
+        assert any(track_key in metrics for metrics in runner.model._history)

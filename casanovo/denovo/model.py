@@ -163,6 +163,9 @@ class Spec2Pep(pl.LightningModule):
         self.calculate_precision = calculate_precision
         self.n_log = n_log
         self._history = []
+        # Per-file validation metadata; set by ModelRunner.train() before fit.
+        self.val_stems: list = []
+        self.n_main_loaders: int = 0
 
         # Output writer during predicting.
         self.out_writer = out_writer
@@ -839,7 +842,10 @@ class Spec2Pep(pl.LightningModule):
         return loss
 
     def validation_step(
-        self, batch: Dict[str, torch.Tensor], *args
+        self,
+        batch: Dict[str, torch.Tensor],
+        batch_idx: int,
+        dataloader_idx: int = 0,
     ) -> torch.Tensor:
         """
         A single validation step.
@@ -848,24 +854,54 @@ class Spec2Pep(pl.LightningModule):
         ----------
         batch : Dict[str, torch.Tensor]
             A batch from the SpectrumDataset, which contains keys:
-            A batch from the SpectrumDataset, which contains keys:
             ``mz_array``, ``intensity_array``, ``precursor_mz``, and
             ``precursor_charge``, each pointing to tensors with the
             corresponding data. The ``seq`` key is optional and
             contains the peptide sequences for training.
+        batch_idx : int
+            Index of the current batch within its dataloader.
+        dataloader_idx : int
+            Index of the dataloader this batch comes from. Dataloaders
+            0..n_main_loaders-1 are "main" validation files that contribute
+            to the aggregate ``valid_CELoss`` used for checkpoint selection.
+            Higher indices are "tracking" files logged per-file only.
 
         Returns
         -------
         torch.Tensor
             The loss of the validation step.
         """
-        # Record the loss.
-        loss = self.training_step(batch, mode="valid")
-        if not self.calculate_precision:
+        pred, truth = self._forward_step(batch)
+        pred = pred[:, :-1, :].reshape(-1, self.vocab_size)
+        loss = self.val_celoss(pred, truth.flatten())
+
+        batch_size = pred.shape[0]
+        log_kwargs = dict(
+            add_dataloader_idx=False,
+            on_step=False,
+            on_epoch=True,
+            sync_dist=True,
+            batch_size=batch_size,
+        )
+
+        # Determine per-file stem and main/tracking classification.
+        n_main = self.n_main_loaders if self.n_main_loaders > 0 else 1
+        is_main = dataloader_idx < n_main
+
+        if self.val_stems and dataloader_idx < len(self.val_stems):
+            stem = self.val_stems[dataloader_idx]
+            self.log(f"valid_CELoss/{stem}", loss.detach(), **log_kwargs)
+
+        if is_main:
+            # Contributes to the aggregate ``valid_CELoss`` monitored by
+            # ModelCheckpoint for best-checkpoint selection.
+            self.log("valid_CELoss", loss.detach(), **log_kwargs)
+
+        if not self.calculate_precision or not is_main:
             return loss
 
         # Calculate and log amino acid and peptide match evaluation
-        # metrics from the predicted peptides.
+        # metrics from the predicted peptides (main files only).
         peptides_true = self.tokenizer.detokenize(batch["seq"])
         peptides_pred = [
             pred
@@ -879,7 +915,12 @@ class Spec2Pep(pl.LightningModule):
         )
 
         batch_size = len(peptides_true)
-        log_args = dict(on_step=False, on_epoch=True, sync_dist=True)
+        log_args = dict(
+            add_dataloader_idx=False,
+            on_step=False,
+            on_epoch=True,
+            sync_dist=True,
+        )
         self.log(
             "pep_precision", pep_precision, **log_args, batch_size=batch_size
         )
@@ -956,18 +997,27 @@ class Spec2Pep(pl.LightningModule):
         Log the validation metrics at the end of each epoch.
         """
         callback_metrics = self.trainer.callback_metrics
-        metrics = {
-            "step": self.trainer.global_step,
-            "valid": callback_metrics["valid_CELoss"].detach().item(),
-        }
+        metrics = {"step": self.trainer.global_step}
+
+        if "valid_CELoss" in callback_metrics:
+            metrics["valid"] = callback_metrics["valid_CELoss"].detach().item()
+
+        for stem in self.val_stems:
+            key = f"valid_CELoss/{stem}"
+            if key in callback_metrics:
+                metrics[f"valid/{stem}"] = (
+                    callback_metrics[key].detach().item()
+                )
 
         if self.calculate_precision:
-            metrics["valid_aa_precision"] = (
-                callback_metrics["aa_precision"].detach().item()
-            )
-            metrics["valid_pep_precision"] = (
-                callback_metrics["pep_precision"].detach().item()
-            )
+            if "aa_precision" in callback_metrics:
+                metrics["valid_aa_precision"] = (
+                    callback_metrics["aa_precision"].detach().item()
+                )
+            if "pep_precision" in callback_metrics:
+                metrics["valid_pep_precision"] = (
+                    callback_metrics["pep_precision"].detach().item()
+                )
         self._history.append(metrics)
         self._log_history()
 
