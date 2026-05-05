@@ -26,16 +26,20 @@ logger = logging.getLogger("casanovo")
 
 def _unique_stems(paths: list) -> list:
     """Return stems from *paths*, disambiguating duplicates with a suffix."""
-    counts: dict = {}
+    used: set = set()
     stems = []
     for p in paths:
         stem = pathlib.Path(p).stem
-        if stem in counts:
-            counts[stem] += 1
-            stems.append(f"{stem}_{counts[stem]}")
-        else:
-            counts[stem] = 0
+        if stem not in used:
+            used.add(stem)
             stems.append(stem)
+        else:
+            i = 1
+            while f"{stem}_{i}" in used:
+                i += 1
+            unique = f"{stem}_{i}"
+            used.add(unique)
+            stems.append(unique)
     return stems
 
 
