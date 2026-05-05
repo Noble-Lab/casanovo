@@ -123,9 +123,9 @@ class DeNovoDataModule(pl.LightningDataModule):
         self.lance_dir = lance_dir
 
         self.train_paths = train_paths
-        self.valid_paths = valid_paths
+        self.valid_paths = list(valid_paths or [])
         self.test_paths = test_paths
-        self.tracking_paths = tracking_paths or []
+        self.tracking_paths = list(tracking_paths or [])
 
         self.train_batch_size = train_batch_size
         self.eval_batch_size = eval_batch_size
@@ -213,7 +213,7 @@ class DeNovoDataModule(pl.LightningDataModule):
                 )
             self.n_main_loaders = len(self.valid_datasets)
             self.val_stems = _unique_stems(
-                (self.valid_paths or []) + (self.tracking_paths or [])
+                [*self.valid_paths, *self.tracking_paths]
             )
             if self.valid_datasets:
                 total = sum(
