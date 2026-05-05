@@ -24,6 +24,21 @@ from torch.utils.data.datapipes.iter.combinatorics import ShufflerIterDataPipe
 logger = logging.getLogger("casanovo")
 
 
+def _unique_stems(paths: list) -> list:
+    """Return stems from *paths*, disambiguating duplicates with a suffix."""
+    counts: dict = {}
+    stems = []
+    for p in paths:
+        stem = pathlib.Path(p).stem
+        if stem in counts:
+            counts[stem] += 1
+            stems.append(f"{stem}_{counts[stem]}")
+        else:
+            counts[stem] = 0
+            stems.append(stem)
+    return stems
+
+
 class DeNovoDataModule(pl.LightningDataModule):
     """
     Data loader to prepare MS/MS spectra for a Spec2Pep predictor.
@@ -193,9 +208,9 @@ class DeNovoDataModule(pl.LightningDataModule):
                     )
                 )
             self.n_main_loaders = len(self.valid_datasets)
-            self.val_stems = [
-                pathlib.Path(p).stem for p in (self.valid_paths or [])
-            ] + [pathlib.Path(p).stem for p in (self.tracking_paths or [])]
+            self.val_stems = _unique_stems(
+                (self.valid_paths or []) + (self.tracking_paths or [])
+            )
             if self.valid_datasets:
                 total = sum(
                     self._get_n_spectra(ds) for ds in self.valid_datasets

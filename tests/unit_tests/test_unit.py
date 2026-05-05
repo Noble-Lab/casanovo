@@ -2980,7 +2980,7 @@ def test_data_module_per_file_validation(mgf_small, tmp_path):
     assert data_module.val_stems == [
         mgf_small.stem,
         mgf_small2.stem,
-        mgf_small.stem,
+        f"{mgf_small.stem}_1",
     ]
     loaders = data_module.val_dataloader()
     assert len(loaders) == 3
