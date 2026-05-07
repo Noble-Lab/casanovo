@@ -537,13 +537,13 @@ class Spec2Pep(pl.LightningModule):
             # Omit the stop token from the amino acid-level scores.
             aa_scores = aa_scores[:-1]
 
-            # Get p(is_leucine | is_leucine or is_isoleucine)
+            # Get s(leucine) - s(isoleucine)
             leu_idx = self.tokenizer.index["L"]
             ile_idx = self.tokenizer.index.get("I", leu_idx)
 
-            leu_scores = smx[0, : len(aa_scores), leu_idx]
-            ile_scores = smx[0, : len(aa_scores), ile_idx]
-            is_leucine_scores = leu_scores / (leu_scores + ile_scores)
+            leu_scores = scores[i, : len(aa_scores), leu_idx]
+            ile_scores = scores[i, : len(aa_scores), ile_idx]
+            is_leucine_scores = leu_scores - ile_scores
             is_leucine_scores = is_leucine_scores.cpu().numpy()
 
             pred_peptide_cpu = pred_peptide.cpu()
@@ -1011,6 +1011,7 @@ class Spec2Pep(pl.LightningModule):
             ):
                 spec_match.aa_scores[1] *= spec_match.aa_scores[0]
                 spec_match.aa_scores = spec_match.aa_scores[1:]
+                spec_match.leucine_scores = spec_match.leucine_scores[1:]
 
             # Compute the precursor m/z of the predicted peptide.
             spec_match.calc_mz = self.tokenizer.calculate_precursor_ions(
