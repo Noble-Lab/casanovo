@@ -565,7 +565,7 @@ def test_initialize_model_train_from_scratch_does_not_warn(tmp_path, caplog):
     """Regression test for #629.
 
     When training from scratch (``model_filename is None``) the config
-    residues *are* the alphabet — there is no prior alphabet to
+    residues *are* the alphabet, there is no prior alphabet to
     mismatch against. The warning must stay silent.
     """
     config = Config()
@@ -597,7 +597,7 @@ def test_initialize_model_warns_when_loading_checkpoint(
 
     The warning *should* fire when a checkpoint is being loaded and
     the config introduces residues that the checkpoint's tokenizer
-    does not know about — that is the case the warning was originally
+    does not know about, that is the case the warning was originally
     intended to surface.
     """
     config = Config()

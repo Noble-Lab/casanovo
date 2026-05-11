@@ -502,7 +502,7 @@ class ModelRunner:
 
         # A checkpoint is about to be loaded, so a mismatch between the
         # config's residue alphabet and the checkpoint's tokenizer
-        # alphabet is now meaningful — the checkpoint's tokenizer will
+        # alphabet is now meaningful, the checkpoint's tokenizer will
         # be used and any config-only residues will silently be ignored.
         # ``initialize_tokenizer`` cached the class-level alphabet so we
         # can compare without re-reading the tokenizer module here.
