@@ -535,7 +535,7 @@ def test_log_metrics(monkeypatch, tiny_config):
 
 def test_initialize_tokenizer_does_not_warn_about_alphabet(caplog):
     """initialize_tokenizer must not warn about residues missing from the
-    class-level default alphabet — when training from scratch the config
+    class-level default alphabet, when training from scratch the config
     vocabulary IS the alphabet, so the warning is meaningless. The check
     now lives in initialize_model where a checkpoint is actually being
     loaded. Regression test for #629.
@@ -577,6 +577,6 @@ def test_initialize_model_train_from_scratch_no_alphabet_warning(
         "Configured residue(s) not in model alphabet" in msg
         for msg in caplog.messages
     ), (
-        "training from scratch must not emit the alphabet warning — "
+        "training from scratch must not emit the alphabet warning, "
         "there is no prior model alphabet to mismatch against"
     )
