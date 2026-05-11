@@ -386,7 +386,7 @@ class ModelRunner:
             # check_val_every_n_epoch must be None to disable the
             # epoch-based check), and a float in [0, 1] means "this
             # fraction of every epoch" (in which case
-            # check_val_every_n_epoch must be a positive int — defaults
+            # check_val_every_n_epoch must be a positive int, defaults
             # to 1 in PL). Issue #627.
             val_check_interval = self.config.val_check_interval
             if isinstance(val_check_interval, float):

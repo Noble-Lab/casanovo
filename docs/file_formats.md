@@ -47,7 +47,7 @@ After Casanovo processes your input file(s), it provides the results in an **[mz
 This file is divided into two main sections:
 
 1. **Metadata section**: This part describes general information about the file and the Casanovo task.
-2. **Peptide–spectrum match (PSM) section**: Details of the peptide sequences that Casanovo predicted for the MS/MS spectra.
+2. **Peptide-spectrum match (PSM) section**: Details of the peptide sequences that Casanovo predicted for the MS/MS spectra.
 
 mzTab files can contain additional sections to include protein identifications and quantification information as well.
 However, as these levels of information are not relevant for Casanovo, these are not included in its output mzTab files.
@@ -76,7 +76,7 @@ MTD	software[1]	[MS, MS:1003281, Casanovo, 4.0.1]
 ```
 
 This identifies this mzTab file with filename "my_example_output" as a summary-level identification file produced by Casanovo.
-On the final line you can see a typical key–value entry using information defined in the [PSI-MS controlled vocabulary](https://github.com/HUPO-PSI/psi-ms-CV/).
+On the final line you can see a typical key-value entry using information defined in the [PSI-MS controlled vocabulary](https://github.com/HUPO-PSI/psi-ms-CV/).
 In this case, the line indicates that the file is produced by the Casanovo software, which is recorded in the `MS` controlled vocabulary with accession number `MS:1003281`.
 The final element is the version number of Casanovo that produced this file.
 
@@ -261,7 +261,7 @@ Tips for using log files:
 ## For Advanced Users: Training Casanovo
 
 To train a new Casanovo model, the training and validation data must be provided as **annotated MGF files**.
-Annotated MGF files are similar to standard MGF files but include a `SEQ` key–value pair in the spectrum header, indicating the peptide sequence for the corresponding spectrum.
+Annotated MGF files are similar to standard MGF files but include a `SEQ` key-value pair in the spectrum header, indicating the peptide sequence for the corresponding spectrum.
 
 Example of an annotated MGF file entry:
 

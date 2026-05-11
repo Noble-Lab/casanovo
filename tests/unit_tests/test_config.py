@@ -146,7 +146,7 @@ def test_val_check_interval_rejects_float_below_zero(tmp_path, tiny_config):
 
 
 def test_val_check_interval_rejects_bool(tmp_path, tiny_config):
-    # bool is a subclass of int in Python — must not silently coerce
+    # bool is a subclass of int in Python, must not silently coerce
     # `true` / `false` into 1 / 0.
     filename = str(tmp_path / "vci_bool.yml")
     with open(tiny_config, "r") as f_in, open(filename, "w") as f_out:

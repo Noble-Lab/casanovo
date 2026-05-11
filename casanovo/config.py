@@ -22,13 +22,13 @@ def _coerce_val_check_interval(value):
     PyTorch Lightning's ``Trainer(val_check_interval=...)`` accepts
     both, with different semantics:
 
-    * ``int`` — run validation every N training **steps** (batches).
-    * ``float`` in ``[0.0, 1.0]`` — run validation at that fraction of
+    * ``int``, run validation every N training **steps** (batches).
+    * ``float`` in ``[0.0, 1.0]``, run validation at that fraction of
       each **epoch** (``1.0`` = once per epoch end).
 
     Casanovo's config schema previously cast everything through
     ``int``, which silently truncated a user-supplied ``0.5`` to ``0``
-    (equivalent to "validate every step" — almost certainly not what
+    (equivalent to "validate every step", almost certainly not what
     the user wanted). Accept both shapes here, reject anything else,
     and reject out-of-range floats up front so the error message
     points at the config field rather than failing deep inside
@@ -36,7 +36,7 @@ def _coerce_val_check_interval(value):
 
     See https://github.com/Noble-Lab/casanovo/issues/627.
     """
-    # ``bool`` is a subclass of ``int`` in Python — guard explicitly so
+    # ``bool`` is a subclass of ``int`` in Python, guard explicitly so
     # ``val_check_interval: true`` is not silently coerced to 1.
     if isinstance(value, bool):
         raise TypeError(
