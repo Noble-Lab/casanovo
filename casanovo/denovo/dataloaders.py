@@ -6,8 +6,10 @@ import os
 import pathlib
 from typing import Optional, Sequence
 
+import lance
 import lightning.pytorch as pl
 import numpy as np
+import pandas as pd
 import pyarrow as pa
 import spectrum_utils.spectrum as sus
 import torch.utils.data._utils.collate
@@ -167,6 +169,10 @@ class DeNovoDataModule(pl.LightningDataModule):
                     mode="valid",
                     shuffle=False,
                 )
+            if self.annotation_paths is None:
+                self.train_dataset = self._train_dia_align(
+                    annotation_paths=self.annotation_paths,
+                )
 
         if stage in (None, "test"):
             if self.test_paths is not None:
@@ -246,6 +252,44 @@ class DeNovoDataModule(pl.LightningDataModule):
             )
 
         return dataset
+
+    def _train_dia_align(self, annotation_paths):
+        annotation_frames = []
+        for path in annotation_paths:
+            df = pd.read_csv(path)
+            annotation_frames.append(df)
+
+        annotations = pd.concat(annotation_frames, ignore_index=True)
+
+        annotations["key"] = annotations["filename"].apply(
+            lambda p: os.path.splitext(os.path.basename(p))[0]
+        )
+
+        lance_df = self.train_dataset.to_table().to_pandas()
+
+        lance_df["key"] = lance_df["peak_file"].apply(
+            lambda p: os.path.splitext(os.path.basename(str(p)))[0]
+        )
+
+        merged = lance_df.merge(
+            annotations[["key", "scan_id", "sequence", "charge"]],
+            on=["key", "scan_id"],
+            how="left",
+        ).drop(columns=["key"])
+
+        for col in ["sequence", "charge"]:
+            if f"{col}_x" in merged.columns:
+                merged[col] = merged[f"{col}_y"].combine_first(
+                    merged[f"{col}_x"]
+                )
+                merged.drop(columns=[f"{col}_x", f"{col}_y"], inplace=True)
+
+        enriched_table = pa.Table.from_pandas(merged, preserve_index=False)
+        lance.write_dataset(
+            enriched_table,
+            path,
+            mode="overwrite",
+        )
 
     def _make_loader(
         self, dataset: torch.utils.data.Dataset, shuffle: bool = False
