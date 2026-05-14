@@ -521,15 +521,27 @@ class Spec2Pep(pl.LightningModule):
             pred_peptide = pred_tokens[:-1] if has_stop_token else pred_tokens
 
             # Calculate softmax scores directly with proper indexing
-            smx = self.softmax(scores[i : i + 1, : step + 1, :])
+            score_slice = scores[i : i + 1, : step + 1, :]
+            smx = self.softmax(score_slice)
 
             # Vectorized AA score extraction
             range_tensor = torch.arange(len(pred_tokens), device=device)
             aa_scores = smx[0, range_tensor, pred_tokens].cpu().numpy()
 
+            # Get s(leucine) - s(isoleucine)
+            leu_idx = self.tokenizer.index["L"]
+            ile_idx = self.tokenizer.index.get("I", leu_idx)
+
+            leu_scores = score_slice[0, range_tensor, leu_idx]
+            ile_scores = score_slice[0, range_tensor, ile_idx]
+            is_leucine_scores = leu_scores - ile_scores
+            is_leucine_scores = is_leucine_scores.cpu().numpy()
+
             # Add explicit score 0 for missing stop token
             if not has_stop_token:
                 aa_scores = np.append(aa_scores, 0)
+            else:
+                is_leucine_scores = is_leucine_scores[:-1]
 
             # Calculate the peptide score using the appropriate scoring function
             peptide_score = _peptide_score(aa_scores)
@@ -537,14 +549,8 @@ class Spec2Pep(pl.LightningModule):
             # Omit the stop token from the amino acid-level scores.
             aa_scores = aa_scores[:-1]
 
-            # Get s(leucine) - s(isoleucine)
-            leu_idx = self.tokenizer.index["L"]
-            ile_idx = self.tokenizer.index.get("I", leu_idx)
-
-            leu_scores = scores[i, : len(aa_scores), leu_idx]
-            ile_scores = scores[i, : len(aa_scores), ile_idx]
-            is_leucine_scores = leu_scores - ile_scores
-            is_leucine_scores = is_leucine_scores.cpu().numpy()
+            if self.tokenizer.reverse:
+                is_leucine_scores = is_leucine_scores[::-1]
 
             pred_peptide_cpu = pred_peptide.cpu()
             peptide_entry = (

@@ -345,3 +345,68 @@ def test_auxilliary_cli(tmp_path, mgf_small, monkeypatch):
 
     res = run("version")
     assert res.output
+
+
+def test_i_l_integration(
+    mgf_small,
+    mzml_small,
+    tiny_config,
+    tmp_path,
+    monkeypatch,
+):
+    # Replace I/L arg
+    with open(tiny_config) as f:
+        cfg = yaml.safe_load(f)
+
+    cfg["replace_isoleucine_with_leucine"] = False
+
+    with open(tiny_config, "w") as f:
+        cfg = yaml.dump(cfg, f)
+
+    # We can use this to explicitly test different versions.
+    monkeypatch.setattr(casanovo, "__version__", "3.0.1")
+
+    # Run a command.
+    run = functools.partial(
+        CliRunner().invoke, casanovo.main, catch_exceptions=False
+    )
+
+    # Run Casanovo to train a tiny model.
+    train_args = [
+        "train",
+        str(mgf_small),
+        "--config",
+        tiny_config,
+        "--output_dir",
+        str(tmp_path),
+        "--output_root",
+        "train",
+    ]
+
+    result = run(train_args)
+    model_file = tmp_path / "train.epoch=29-step=30.ckpt"
+    best_model = tmp_path / "train.best.ckpt"
+    assert result.exit_code == 0
+    assert model_file.exists()
+    assert best_model.exists()
+
+    # Run Casanovo in de novo prediction mode.
+    output_rootname = "test"
+    output_filename = (tmp_path / output_rootname).with_suffix(".mztab")
+    predict_args = [
+        "sequence",
+        "--model",
+        str(model_file),
+        "--config",
+        tiny_config,
+        "--output_dir",
+        str(tmp_path),
+        "--output_root",
+        output_rootname,
+        str(mgf_small),
+        str(mzml_small),
+    ]
+
+    result = run(predict_args)
+    assert result.exit_code == 0
+    assert output_filename.is_file()
