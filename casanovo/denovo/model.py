@@ -525,39 +525,33 @@ class Spec2Pep(pl.LightningModule):
             smx = self.softmax(score_slice)
 
             # Vectorized AA score extraction
+            leu_idx = self.tokenizer.index["L"]
+            ile_idx = self.tokenizer.index.get("I", leu_idx)
             range_tensor = torch.arange(len(pred_tokens), device=device)
             aa_scores = smx[0, range_tensor, pred_tokens].cpu().numpy()
 
-            # Get s(leucine) - s(isoleucine)
-            leu_idx = self.tokenizer.index["L"]
-            ile_idx = self.tokenizer.index.get("I", leu_idx)
-
-            leu_scores = score_slice[0, range_tensor, leu_idx]
-            ile_scores = score_slice[0, range_tensor, ile_idx]
-            is_leucine_scores = leu_scores - ile_scores
-            is_leucine_scores = is_leucine_scores.cpu().numpy()
+            leu_scores = smx[0, range_tensor, leu_idx].cpu().numpy()
+            ile_scores = smx[0, range_tensor, ile_idx].cpu().numpy()
+            is_leu_scores = leu_scores / (ile_scores + leu_scores)
 
             # Add explicit score 0 for missing stop token
             if not has_stop_token:
                 aa_scores = np.append(aa_scores, 0)
-            else:
-                is_leucine_scores = is_leucine_scores[:-1]
+                is_leu_scores = np.append(is_leu_scores, 0)
 
             # Calculate the peptide score using the appropriate scoring function
             peptide_score = _peptide_score(aa_scores)
 
             # Omit the stop token from the amino acid-level scores.
             aa_scores = aa_scores[:-1]
-
-            if self.tokenizer.reverse:
-                is_leucine_scores = is_leucine_scores[::-1]
+            is_leu_scores = is_leu_scores[:-1]
 
             pred_peptide_cpu = pred_peptide.cpu()
             peptide_entry = (
                 peptide_score,
                 np.random.random_sample(),
                 aa_scores,
-                is_leucine_scores,
+                is_leu_scores,
                 torch.clone(pred_peptide_cpu),
             )
             # Check for duplicate predictions and update with highest score.
@@ -726,7 +720,11 @@ class Spec2Pep(pl.LightningModule):
                             if self.tokenizer.reverse
                             else aa_scores
                         ),
-                        leucine_scores,
+                        (
+                            leucine_scores[::-1]
+                            if self.tokenizer.reverse
+                            else leucine_scores
+                        ),
                         self.tokenizer.detokenize(
                             torch.unsqueeze(pred_tokens, 0)
                         )[0],
@@ -1017,6 +1015,8 @@ class Spec2Pep(pl.LightningModule):
             ):
                 spec_match.aa_scores[1] *= spec_match.aa_scores[0]
                 spec_match.aa_scores = spec_match.aa_scores[1:]
+
+                # We don't want the first leucine score in this case either
                 spec_match.leucine_scores = spec_match.leucine_scores[1:]
 
             # Compute the precursor m/z of the predicted peptide.
