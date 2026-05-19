@@ -157,7 +157,7 @@ class DeNovoDataModule(pl.LightningDataModule):
             if self.train_paths is not None:
                 self.train_dataset = self._make_dataset(
                     self.train_paths,
-                    self.annotation_paths,
+                    train_annotation_paths=self.annotation_paths,
                     annotated=True,
                     mode="train",
                     shuffle=self.shuffle,
@@ -169,7 +169,7 @@ class DeNovoDataModule(pl.LightningDataModule):
                     mode="valid",
                     shuffle=False,
                 )
-            if self.annotation_paths is None:
+            if self.annotation_paths is not None:
                 self.train_dataset = self._train_dia_align(
                     annotation_paths=self.annotation_paths,
                 )
@@ -184,7 +184,7 @@ class DeNovoDataModule(pl.LightningDataModule):
                 )
 
     def _make_dataset(
-        self, paths, annotated, mode, shuffle
+        self, paths, annotated, mode, shuffle, train_annotation_paths=None
     ) -> torch.utils.data.Dataset:
         """
         Make spectrum datasets.
@@ -246,6 +246,9 @@ class DeNovoDataModule(pl.LightningDataModule):
                 **params,
             )
 
+        if train_annotation_paths is not None and mode is "train":
+            dataset = self._train_dia_align(train_annotation_paths)
+
         if shuffle:
             dataset = ShufflerIterDataPipe(
                 dataset, buffer_size=self.shuffle_buffer_size
@@ -256,7 +259,7 @@ class DeNovoDataModule(pl.LightningDataModule):
     def _train_dia_align(self, annotation_paths):
         annotation_frames = []
         for path in annotation_paths:
-            df = pd.read_csv(path)
+            df = pd.read_csv(path, sep="\t")
             annotation_frames.append(df)
 
         annotations = pd.concat(annotation_frames, ignore_index=True)
@@ -285,9 +288,9 @@ class DeNovoDataModule(pl.LightningDataModule):
                 merged.drop(columns=[f"{col}_x", f"{col}_y"], inplace=True)
 
         enriched_table = pa.Table.from_pandas(merged, preserve_index=False)
-        lance.write_dataset(
+        return lance.write_dataset(
             enriched_table,
-            path,
+            self.train_dataset.uri,
             mode="overwrite",
         )
 

@@ -295,6 +295,7 @@ def db_search(
     multiple=True,
     type=click.Path(exists=True, dir_okay=True),
 )
+@click
 def train(
     train_peak_path: Tuple[str],
     validation_peak_path: Optional[Tuple[str]],

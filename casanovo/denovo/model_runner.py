@@ -196,18 +196,25 @@ class ModelRunner:
         # Need to pass in here? idk yet tbh
         train_paths = self._get_input_paths(train_peak_path, True, "train")
         valid_paths = self._get_input_paths(valid_peak_path, True, "valid")
-        annotation_paths = self._get_input_paths(
-            annotation_path, True, "annotations"
+
+        annotation_paths = None
+        if annotation_path:
+            annotation_paths = self._get_input_paths(
+                annotation_path, True, "annotations"
+            )
+
+        self.initialize_data_module(
+            train_paths=train_paths,
+            valid_paths=valid_paths,
+            annotation_paths=annotation_paths,
         )
 
-        self.initialize_data_module(train_paths, valid_paths, annotation_paths)
         self.loaders.setup()
 
         self.trainer.fit(
             self.model,
             self.loaders.train_dataloader(),
             self.loaders.val_dataloader(),
-            self.loaders.annotations_dataloader(),
         )
 
     def log_metrics(self, test_dataloader: DataLoader) -> None:
