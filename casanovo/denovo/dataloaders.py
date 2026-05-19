@@ -246,7 +246,7 @@ class DeNovoDataModule(pl.LightningDataModule):
                 **params,
             )
 
-        if train_annotation_paths is not None and mode is "train":
+        if train_annotation_paths is not None and mode == "train":
             dataset = self._train_dia_align(train_annotation_paths)
 
         if shuffle:
