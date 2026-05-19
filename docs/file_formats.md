@@ -9,8 +9,9 @@ When you are ready to use Casanovo, you can input your MS/MS spectra in one of t
 - **[mzML](https://doi.org/10.1074/mcp.R110.000133)**: XML-based mass spectrometry community standard file format developed by the Proteomics Standards Initiative (PSI).
 - **[mzXML](https://doi.org/10.1038/nbt1031)**: XML-based predecessor of mzML. Although supported by Casanovo, mzML should typically be preferred instead.
 - **[MGF](https://www.matrixscience.com/help/data_file_help.html)**: A simple text-based peak file, though not as rich in detail as mzML.
+- **D**: A proprietary binary file format used by Bruker instruments.
 
-All three of the above file formats can be used as input to Casanovo for *de novo* peptide sequencing and database searching.
+All four of the above file formats can be used as input to Casanovo for *de novo* peptide sequencing and database searching.
 As the official PSI standard format containing the complete information from a mass spectrometry run, mzML should typically be preferred.
 
 ### FASTA (optional)
@@ -164,27 +165,28 @@ The PSM section in mzTab files starts with a header line, indicated by the `PSH`
 Next, the following lines each start with the `PSM` key and contain information for an individual PSM predicted by Casanovo.
 
 ```
-PSH	sequence	PSM_ID	accession	unique	database	database_version	search_engine	search_engine_score[1]	modifications	retention_time	charge	exp_mass_to_charge	calc_mass_to_charge	spectra_ref	pre	post	start	end	opt_ms_run[1]_aa_scores
-PSM	EPPTPLTYVAGAGSGVR	1	null	null	null	null	[MS, MS:1003281, Casanovo, 4.0.1]	0.968312939008077	null	null	2.0	836.439	836.4386613168799	ms_run[1]:index=0	null	null	null	null	0.96454,0.90841,0.97874,0.97979,0.97915,0.98254,0.98184,0.97898,0.86762,0.97782,0.97771,0.97899,0.97987,0.97788,0.97949,0.98074,0.97561
-PSM	VVHGFYNPAVSRVLEQ	2	null	null	null	null	[MS, MS:1003281, Casanovo, 4.0.1]	0.9652494998539195	null	null	3.0	605.6572	605.65644936688	ms_run[1]:index=1	null	null	null	null	0.96870,0.97701,0.85667,0.97274,0.97827,0.97790,0.97829,0.97706,0.97654,0.97725,0.97778,0.95544,0.95622,0.96240,0.96992,0.96909
-PSM	EPPTPLTYVAGGSLNR	3	null	null	null	null	[MS, MS:1003281, Casanovo, 4.0.1]	0.813004752730622	null	null	2.0	836.4398	836.4386608168799	ms_run[1]:index=2	null	null	null	null	0.78636,0.45168,0.64947,0.68432,0.89344,0.90091,0.90124,0.56938,0.89757,0.90204,0.90129,0.90190,0.80076,0.90097,0.90233,0.87599
-PSM	LERPFVHLM+15.995VFLGGSGR	4	null	null	null	null	[MS, MS:1003281, Casanovo, 4.0.1]	0.758128507890635	null	null	4.0	483.7627	483.51345739187997	ms_run[1]:index=3	null	null	null	null	0.86884,0.85508,0.87392,0.39732,0.87556,0.87291,0.69642,0.87083,0.79858,0.86588,0.86291,0.84178,0.45706,0.52835,0.85704,0.41526,0.83419
-PSM	GEYKLLPFNKLMLGEG	5	null	null	null	null	[MS, MS:1003281, Casanovo, 4.0.1]	-0.18260370983796959	null	null	3.0	602.99817	603.6586910335465	ms_run[1]:index=4	null	null	null	null	0.64453,0.77152,0.90248,0.84100,0.65059,0.89975,0.87886,0.82220,0.90324,0.90056,0.88657,0.86091,0.66978,0.63579,0.81815,0.90577
+PSH	sequence	PSM_ID	accession	unique	database	database_version	search_engine	search_engine_score[1]	modifications	retention_time	charge	exp_mass_to_charge	calc_mass_to_charge	spectra_ref	pre	post	start	end	opt_global_aa_scores    opt_global_cv_MS:1003169_proforma_peptidoform_sequence
+PSM	EPPTPLTYVAGAGSGVR	1	null	null	null	null	[MS, MS:1003281, Casanovo, 4.0.1]	0.968312939008077	null	null	2.0	836.439	836.4386613168799	ms_run[1]:index=0	null	null	null	null	0.96454,0.90841,0.97874,0.97979,0.97915,0.98254,0.98184,0.97898,0.86762,0.97782,0.97771,0.97899,0.97987,0.97788,0.97949,0.98074,0.97561    EPPTPLTYVAGAGSGVR
+PSM	VVHGFYNPAVSRVLEQ	2	null	null	null	null	[MS, MS:1003281, Casanovo, 4.0.1]	0.9652494998539195	null	null	3.0	605.6572	605.65644936688	ms_run[1]:index=1	null	null	null	null	0.96870,0.97701,0.85667,0.97274,0.97827,0.97790,0.97829,0.97706,0.97654,0.97725,0.97778,0.95544,0.95622,0.96240,0.96992,0.96909    VVHGFYNPAVSRVLEQ
+PSM	EPPTPLTYVAGGSLNR	3	null	null	null	null	[MS, MS:1003281, Casanovo, 4.0.1]	0.813004752730622	null	null	2.0	836.4398	836.4386608168799	ms_run[1]:index=2	null	null	null	null	0.78636,0.45168,0.64947,0.68432,0.89344,0.90091,0.90124,0.56938,0.89757,0.90204,0.90129,0.90190,0.80076,0.90097,0.90233,0.87599    EPPTPLTYVAGGSLNR
+PSM	LERPFVHLMVFLGGSGR	4	null	null	null	null	[MS, MS:1003281, Casanovo, 4.0.1]	0.758128507890635	null	null	4.0	483.7627	483.51345739187997	ms_run[1]:index=3	null	null	null	null	0.86884,0.85508,0.87392,0.39732,0.87556,0.87291,0.69642,0.87083,0.79858,0.86588,0.86291,0.84178,0.45706,0.52835,0.85704,0.41526,0.83419    LERPFVHLM[Oxidation]VFLGGSGR
+PSM	GEYKLLPFNKLMLGEG	5	null	null	null	null	[MS, MS:1003281, Casanovo, 4.0.1]	-0.18260370983796959	null	null	3.0	602.99817	603.6586910335465	ms_run[1]:index=4	null	null	null	null	0.64453,0.77152,0.90248,0.84100,0.65059,0.89975,0.87886,0.82220,0.90324,0.90056,0.88657,0.86091,0.66978,0.63579,0.81815,0.90577    GEYKLLPFNKLMLGEG
 ...
 ```
 
 Key information for each PSM is as follows:
-- `sequence`: The predicted peptide sequence.
+- `sequence`: The predicted unmodified peptide sequence.
 - `PSM_ID`: A monotonically increasing index, serving as a unique identifier for each PSM.
 - `search_engine_score[1]`: The score of this PSM.
 - `spectra_ref`: Unique identifier linking the prediction back to the original spectrum in the input file(s).
-- `opt_ms_run[1]_aa_scores`: Casanovo predicts peptides in an autoregressive fashion, one amino acid at a time. This column contains comma-separated scores of the individual amino acid predictions.
+- `opt_global_aa_scores`: Casanovo predicts peptides in an autoregressive fashion, one amino acid at a time. This column contains comma-separated scores of the individual amino acid predictions.
+- `opt_global_cv_MS:1003169_proforma_peptidoform_sequence`: The predicted modified peptide sequence in ProForma format.
 
 When running Casanovo in _database searching mode_ rather than *de novo* peptide sequencing mode, the PSM section will look slightly differently:
 
 ```
-PSH	sequence	PSM_ID	accession	unique	database	database_version	search_engine	search_engine_score[1]	modifications	retention_time	charge	exp_mass_to_charge	calc_mass_to_charge	spectra_ref	pre	post	start	end	opt_ms_run[1]_aa_scores
-PSM	THM+15.995ELGGK	1	sp|A5A616|MGTS_ECOLI	null	null	null	[MS, MS:1003281, Casanovo, 4.1.1.dev8+g258edb4.d20240329]	0.6994086	null	null	2	444.71582381688	444.7159	ms_run[1]:index=0	null	null	null	null	0.84454,0.81027,0.83296,0.56239,0.40844,0.83554,0.82437,0.84730,0.84514
+PSH	sequence	PSM_ID	accession	unique	database	database_version	search_engine	search_engine_score[1]	modifications	retention_time	charge	exp_mass_to_charge	calc_mass_to_charge	spectra_ref	pre	post	start	end	opt_global_aa_scores    opt_global_cv_MS:1003169_proforma_peptidoform_sequence
+PSM	THMELGGK	1	sp|A5A616|MGTS_ECOLI	null	null	null	[MS, MS:1003281, Casanovo, 4.1.1.dev8+g258edb4.d20240329]	0.6994086	null	null	2	444.71582381688	444.7159	ms_run[1]:index=0	null	null	null	null	0.84454,0.81027,0.83296,0.56239,0.40844,0.83554,0.82437,0.84730,0.84514    THM[Oxidation]ELGGK
 ...
 ```
 
@@ -208,6 +210,13 @@ This column consists of two parts: the run index and the spectrum reference, sep
 Be mindful of the input peak file format when linking Casanovo PSMs to their input spectra.
 Even when the same raw file is converted to both mzML and MGF, scan numbers in the mzML file will generally not match spectrum indices in the MGF file, as the former contains both MS and MS/MS spectra while the latter only contains MS/MS spectra.
 ```
+When processing MGF files that contain instrument-assigned scan numbers in a `SCANS`, `SCAN`, or `SCAN ID` header field, Casanovo will additionally export an optional `opt_global_cv_MS:1003057_scan_number` column in the PSM section.
+This column preserves the native scan number from the instrument and takes the form `ms_run[FILE_INDEX]:scan=SCAN_NUMBER`, for example `ms_run[1]:scan=17`.
+This column is separate from the `spectra_ref` column and does not replace the index-based spectrum reference.
+The column is global to the entire mzTab file: it is added whenever at least one MGF input file contains scan number header fields.
+In mixed-input runs (e.g. both MGF and mzML files), the column is present for the whole file, but rows originating from mzML, mzXML, or MGF spectra without scan number headers will have a "null" value in this column.
+If no input file contains scan number headers the column is omitted entirely.
+Note that only purely numeric scan values are exported; MGF files that use composite or non-numeric scan identifiers in these fields will have a "null" value in this column.
 
 ```{note}
 The PSM identifier in the `PSM_ID` column is not necessarily identical to the spectrum index in the `spectra_ref` column, even for MGF files.

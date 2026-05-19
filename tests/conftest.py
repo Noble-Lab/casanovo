@@ -54,7 +54,12 @@ def mgf_small_unannotated(tmp_path):
 
 
 def _create_mgf(
-    peptides, mgf_file, random_state=42, mod_aa_mass=None, annotate=True
+    peptides,
+    mgf_file,
+    random_state=42,
+    mod_aa_mass=None,
+    annotate=True,
+    scan_nums=None,
 ):
     """
     Create a fake MGF file from one or more peptides.
@@ -72,6 +77,9 @@ def _create_mgf(
         e.g. {"C": 160.030649} for carbamidomethylated C.
     annotate: bool, optional
         Whether to add peptide annotations to mgf file
+    scan_nums : list of int or None, optional
+        Optional scan numbers to embed as ``SCANS=<n>`` in each entry.
+        When ``None`` (default) no SCANS field is written.
 
     Returns
     -------
@@ -85,6 +93,7 @@ def _create_mgf(
             rng.choice([2, 3]),
             mod_aa_mass=mod_aa_mass,
             annotate=annotate,
+            scan_num=scan_nums[i] if scan_nums is not None else None,
         )
         for i, p in enumerate(peptides)
     ]
@@ -95,7 +104,7 @@ def _create_mgf(
 
 
 def _create_mgf_entry(
-    peptide, title, charge=2, mod_aa_mass=None, annotate=True
+    peptide, title, charge=2, mod_aa_mass=None, annotate=True, scan_num=None
 ):
     """
     Create a MassIVE-KB style MGF entry for a single PSM.
@@ -110,6 +119,8 @@ def _create_mgf_entry(
         A dictionary that specifies the modified masses of amino acids.
     annotate: bool, optional
         Whether to add peptide annotation to entry
+    scan_num : int or None, optional
+        If provided, a ``SCANS=<scan_num>`` line is added to the entry.
 
     Returns
     -------
@@ -134,6 +145,8 @@ def _create_mgf_entry(
         "END IONS",
     ]
 
+    if scan_num is not None:
+        mgf.insert(1, f"SCANS={scan_num}")
     if annotate:
         mgf.insert(1, f"SEQ={peptide}")
 
@@ -307,14 +320,14 @@ def _get_config_file(file_path, file_name, additional_cfg=None):
         "weight_decay": 1e-5,
         "train_label_smoothing": 0.01,
         "train_batch_size": 32,
-        "max_epochs": 20,
+        "max_epochs": 30,
         "shuffle": False,
         "shuffle_buffer_size": 64,
         "num_sanity_val_steps": 0,
         "calculate_precision": False,
         "accumulate_grad_batches": 1,
-        "gradient_clip_val": None,
-        "gradient_clip_algorithm": None,
+        "gradient_clip_val": 1.0,
+        "gradient_clip_algorithm": "norm",
         "precision": "32-true",
         "replace_isoleucine_with_leucine": True,
         "massivekb_tokenizer": True,
@@ -378,3 +391,19 @@ def tiny_config_db(tmp_path):
             "replace_isoleucine_with_leucine": False,
         },
     )
+
+
+@pytest.fixture
+def mgf_small_with_scans(tmp_path):
+    """An MGF file with 2 annotated spectra containing SCANS fields."""
+    peptides = ["LESLIEK", "PEPTIDEK"]
+    mgf_file = tmp_path / "small_with_scans.mgf"
+    return _create_mgf(peptides, mgf_file, scan_nums=[17, 42])
+
+
+@pytest.fixture
+def mgf_small_with_scans_unannotated(tmp_path):
+    """An MGF file with 2 unannotated spectra containing SCANS fields."""
+    peptides = ["LESLIEK", "PEPTIDEK"]
+    mgf_file = tmp_path / "small_with_scans_unannotated.mgf"
+    return _create_mgf(peptides, mgf_file, annotate=False, scan_nums=[17, 42])
