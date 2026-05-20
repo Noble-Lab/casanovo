@@ -1374,11 +1374,11 @@ def test_psm_batches(tiny_config):
 
     def mock_get_candidates(precursor_mz, precorsor_charge):
         if precorsor_charge == 1:
-            return pd.Series(peptides_one)
+            return pd.Index(peptides_one)
         elif precorsor_charge == 2:
-            return pd.Series(peptides_two)
+            return pd.Index(peptides_two)
         else:
-            return pd.Series()
+            return pd.Index([], dtype=str)
 
     tokenizer = depthcharge.tokenizers.peptides.PeptideTokenizer(
         residues=Config(tiny_config).residues
@@ -1468,9 +1468,9 @@ def test_db_stop_token(tiny_config):
 
     def mock_get_candidates(precursor_mz, precorsor_charge):
         if precorsor_charge == 1:
-            return pd.Series(peptides_one)
+            return pd.Index(peptides_one)
         else:
-            return pd.Series(peptides_two)
+            return pd.Index(peptides_two)
 
     tokenizer = depthcharge.tokenizers.peptides.PeptideTokenizer(
         residues=Config(tiny_config).residues
@@ -1507,8 +1507,8 @@ def test_isoleucine_match(tiny_config):
     db_model = DbSpec2Pep(tokenizer=tokenizer)
     peptides = [["PEPTLDEK"], ["PEPTIDEK"]]
 
-    def mock_get_candidates(_, precursor_charge) -> pd.Series:
-        return pd.Series(peptides[precursor_charge - 1])
+    def mock_get_candidates(_, precursor_charge) -> pd.Index:
+        return pd.Index(peptides[precursor_charge - 1])
 
     db_model = DbSpec2Pep(tokenizer=tokenizer)
     db_model.protein_database = unittest.mock.MagicMock()
@@ -1728,6 +1728,59 @@ def test_get_candidates_isotope_error(tiny_fasta_file):
     pdb.db_peptides = peptide_list
     candidates = pdb.get_candidates(precursor_mz=496.2, charge=2)
     assert expected_isotope0123 == list(candidates)
+
+
+def test_ptm_warning(tiny_fasta_file, caplog):
+    """Test that a warning is issued for unconfigured modified residues"""
+    import logging
+
+    # Use a tokenizer with modified residues
+    with caplog.at_level(logging.WARNING):
+        db_utils.ProteinDatabase(
+            fasta_path=str(tiny_fasta_file),
+            enzyme="trypsin",
+            digestion="full",
+            missed_cleavages=0,
+            min_peptide_len=6,
+            max_peptide_len=50,
+            max_mods=0,
+            precursor_tolerance=20,
+            isotope_error=[0, 0],
+            allowed_fixed_mods="C:C[Carbamidomethyl]",
+            allowed_var_mods="nterm:[Acetyl]-",
+            tokenizer=depthcharge.tokenizers.PeptideTokenizer.from_massivekb(),
+        )
+    assert any(
+        "is not specified as a fixed or variable modification"
+        in record.message
+        for record in caplog.records
+    )
+
+
+def test_psm_batches_empty_candidates(tiny_config):
+    """Test that _psm_batches returns nothing when no candidates exist."""
+    tokenizer = depthcharge.tokenizers.peptides.PeptideTokenizer(
+        residues=Config(tiny_config).residues
+    )
+    db_model = DbSpec2Pep(tokenizer=tokenizer)
+    db_model.protein_database = unittest.mock.MagicMock()
+    db_model.protein_database.get_candidates = lambda mz, charge: pd.Index(
+        [], dtype=str
+    )
+
+    mock_batch = {
+        "precursor_mz": torch.Tensor([42.0]),
+        "precursor_charge": torch.Tensor([2]),
+        "peak_file": ["test.mgf"],
+        "scan_id": [1],
+    }
+    fake_cache = {
+        "memory": torch.zeros(1, 1, 1),
+        "mem_masks": torch.ones(1, 1, dtype=torch.bool),
+        "precursors_all": torch.zeros(1, 3),
+    }
+    batches = list(db_model._psm_batches(mock_batch, enc_cache=fake_cache))
+    assert len(batches) == 0
 
 
 def test_n_term_scores(tiny_config):
@@ -2025,6 +2078,18 @@ def test_run_map(mgf_small):
     out_writer.set_ms_run([os.path.basename(mgf_small.name)])
     assert mgf_small.name in out_writer._run_map
     assert os.path.abspath(mgf_small.name) not in out_writer._run_map
+
+
+def test_set_database(tmp_path):
+    """Test that set_database populates PSM database columns."""
+    fasta = tmp_path / "test.fasta"
+    fasta.touch()
+    out_writer = ms_io.MztabWriter(str(tmp_path / "test.mztab"))
+    assert out_writer.database == "null"
+    assert out_writer.database_version == "null"
+    out_writer.set_database(str(fasta))
+    assert out_writer.database == "test"
+    assert out_writer.database_version == "null"
 
 
 def test_get_mod_string():

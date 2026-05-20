@@ -11,10 +11,12 @@ import einops
 import lightning.pytorch as pl
 import numpy as np
 import torch
+import tqdm
 from depthcharge.tokenizers import PeptideTokenizer
 
 from .. import config
 from ..data import ms_io, psm
+from ..data.db_utils import PROTON
 from ..denovo.transformers import PeptideDecoder, SpectrumEncoder
 from . import evaluate
 
@@ -994,10 +996,13 @@ class Spec2Pep(pl.LightningModule):
                 spec_match.aa_scores[1] *= spec_match.aa_scores[0]
                 spec_match.aa_scores = spec_match.aa_scores[1:]
 
-            # Compute the precursor m/z of the predicted peptide.
-            spec_match.calc_mz = self.tokenizer.calculate_precursor_ions(
-                spec_match.sequence, torch.tensor(spec_match.charge)
-            ).item()
+            # Compute the precursor m/z if not already set (e.g. from the
+            # peptide database in DB search mode).
+            if np.isnan(spec_match.calc_mz):
+                spec_match.calc_mz = self.tokenizer.calculate_precursor_ions(
+                    spec_match.sequence,
+                    torch.tensor(spec_match.charge),
+                ).item()
 
             self.out_writer.psms.append(spec_match)
 
@@ -1213,11 +1218,15 @@ class DbSpec2Pep(Spec2Pep):
             )
         )
 
-        # Determine the parent proteins only for the retained PSMs.
+        # Determine the parent proteins and calc_mz only for the retained PSMs.
         for pred in predictions:
             pred.protein = self.protein_database.get_associated_protein(
                 pred.sequence
             )
+            calc_mass = self.protein_database.db_peptides.loc[
+                pred.sequence, "calc_mass"
+            ]
+            pred.calc_mz = float(calc_mass) / pred.charge + PROTON
 
         return predictions
 
@@ -1264,8 +1273,8 @@ class DbSpec2Pep(Spec2Pep):
         batch_size = batch["precursor_charge"].shape[0]
 
         # Iterate precursor charges and m/z values per spectrum.
-        charge_iter = batch["precursor_charge"]  # tensor[B]
-        mz_iter = batch["precursor_mz"]  # tensor[B]
+        charge_iter = batch["precursor_charge"].detach().cpu().tolist()
+        mz_iter = batch["precursor_mz"].detach().cpu().tolist()
 
         # Use pre-computed encoder outputs if available; otherwise compute once here.
         if enc_cache is None:
@@ -1281,26 +1290,34 @@ class DbSpec2Pep(Spec2Pep):
         for i, (precursor_charge, precursor_mz) in enumerate(
             zip(charge_iter, mz_iter)
         ):
-            for cand in self.protein_database.get_candidates(
+            spec_cands = self.protein_database.get_candidates(
                 precursor_mz, precursor_charge
-            ):
-                candidates.append((i, cand))
+            )
+            candidates.extend((i, cand) for cand in spec_cands)
 
-            # Yield a batch if sufficient candidates are found or all spectra have been processed.
-            while len(candidates) >= batch_size or (
-                i == batch_size - 1 and len(candidates) > 0
-            ):
-                batch_candidates = candidates[:batch_size]
+        if len(candidates) == 0:
+            return
+
+        # Yield PSM sub-batches with a progress bar.
+        progress = tqdm.tqdm(
+            total=len(candidates),
+            desc="Scoring candidates",
+            unit="PSM",
+            leave=False,
+        )
+        try:
+            for start in range(0, len(candidates), batch_size):
+                batch_candidates = candidates[start : start + batch_size]
 
                 # Repeat the spectrum information for each candidate to be matched.
                 psm_batch = {key: [] for key in [*batch.keys(), "seq"]}
                 for spec_i, cand in batch_candidates:
-                    for key in batch.keys():
+                    for key in batch:
                         psm_batch[key].append(batch[key][spec_i])
                     psm_batch["seq"].append(cand)
 
                 # Convert tensor items to batched tensors on the correct device.
-                for key in psm_batch.keys():
+                for key in psm_batch:
                     if isinstance(psm_batch[key][0], torch.Tensor):
                         psm_batch[key] = torch.stack(psm_batch[key]).to(
                             self.decoder.device
@@ -1324,12 +1341,12 @@ class DbSpec2Pep(Spec2Pep):
                 psm_batch["precursors"] = precursors_all.index_select(
                     0, spec_idx
                 )
-
                 # Yield the PSM batch for processing.
                 yield psm_batch
 
-                # Remove the processed candidates and continue.
-                candidates = candidates[batch_size:]
+                progress.update(len(batch_candidates))
+        finally:
+            progress.close()
 
 
 def _calc_match_score(

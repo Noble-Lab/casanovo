@@ -107,6 +107,8 @@ class MztabWriter:
         self._run_map = {}
         self._mgf_scan_index = {}  # {(filename_base, index_str): scan_num_str}
         self.psms: list[PepSpecMatch] = []
+        self.database: str = "null"
+        self.database_version: str = "null"
 
     def set_metadata(self, config: Config, **kwargs) -> None:
         """
@@ -191,6 +193,18 @@ class MztabWriter:
                     (f"software[1]-setting[{i}]", f"{key} = {value}")
                 )
 
+    def set_database(self, fasta_path: str) -> None:
+        """
+        Set the database information for PSM rows.
+
+        Parameters
+        ----------
+        fasta_path : str
+            The path to the FASTA file used for database search.
+        """
+        self.database = Path(fasta_path).stem
+        self.database_version = "null"
+
     def set_ms_run(self, peak_filenames: list[str]) -> None:
         """
         Add input peak files to the mzTab metadata section and
@@ -272,8 +286,8 @@ class MztabWriter:
                     i,  # PSM_ID
                     psm.protein,  # accession
                     "null",  # unique
-                    "null",  # database
-                    "null",  # database_version
+                    self.database,  # database
+                    self.database_version,  # database_version
                     f"[MS, MS:1003281, Casanovo, {__version__}]",
                     psm.peptide_score,  # search_engine_score[1]
                     # FIXME: Modifications should be specified as
