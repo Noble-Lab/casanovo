@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+### Fixed
+
+- Write the mzTab output file with an explicit `utf-8` encoding so non-ASCII content is not corrupted on platforms whose default encoding is not UTF-8 (e.g. Windows cp1252).
+
 ## [5.1.2] - 2025-12-11
 
 ### Changed
