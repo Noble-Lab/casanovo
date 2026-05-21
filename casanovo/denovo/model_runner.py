@@ -144,6 +144,7 @@ class ModelRunner:
             model=str(self.model_filename),
             config_filename=self.config.file,
         )
+        self.writer.set_database(str(fasta_path))
         self.initialize_trainer(train=True)
         self.initialize_tokenizer()
         self.initialize_model(train=False, db_search=True)
@@ -174,6 +175,7 @@ class ModelRunner:
         train_peak_path: Iterable[str],
         valid_peak_path: Iterable[str],
         ckpt_path: Optional[str] = None,
+        tracking_peak_path: Iterable[str] = (),
     ) -> None:
         """
         Train the Casanovo model.
@@ -183,11 +185,18 @@ class ModelRunner:
         train_peak_path : iterable of str
             The path to the MS data files for training.
         valid_peak_path : iterable of str
-            The path to the MS data files for validation.
+            The path to the MS data files for validation. These files
+            contribute to the aggregate ``valid_CELoss`` used for
+            checkpoint selection.
         ckpt_path : str, optional
             Path to a checkpoint file to resume training from. When provided,
             training will resume from the saved optimizer state, learning rate
             scheduler, and epoch. If None, training starts fresh (default).
+        tracking_peak_path : iterable of str, optional
+            Additional MS data files whose loss is logged per-file for
+            monitoring purposes (e.g. detecting catastrophic forgetting)
+            but is excluded from the aggregate used for checkpoint
+            selection.
         """
         self.initialize_trainer(train=True)
         self.initialize_tokenizer()
@@ -195,8 +204,21 @@ class ModelRunner:
 
         train_paths = self._get_input_paths(train_peak_path, True, "train")
         valid_paths = self._get_input_paths(valid_peak_path, True, "valid")
-        self.initialize_data_module(train_paths, valid_paths)
+        tracking_paths = (
+            self._get_input_paths(tracking_peak_path, True, "tracking")
+            if tracking_peak_path
+            else []
+        )
+        self.initialize_data_module(
+            train_paths, valid_paths, tracking_paths=tracking_paths
+        )
         self.loaders.setup()
+
+        # Store per-file validation metadata on the model so validation_step
+        # can log per-file losses. trainer.datamodule is None when dataloaders
+        # are passed directly to trainer.fit(), so we attach metadata here.
+        self.model.val_stems = self.loaders.val_stems
+        self.model.n_main_loaders = self.loaders.n_main_loaders
 
         if ckpt_path is None:
             self.trainer.fit(
@@ -564,6 +586,7 @@ class ModelRunner:
         train_paths: Sequence[str] | None = None,
         valid_paths: Sequence[str] | None = None,
         test_paths: Sequence[str] | None = None,
+        tracking_paths: Sequence[str] | None = None,
     ) -> None:
         """Initialize the data module.
 
@@ -572,9 +595,13 @@ class ModelRunner:
         train_paths : str, optional
             Spectrum paths for model training.
         valid_paths : str, optional
-            Spectrum paths for validation.
+            Spectrum paths for validation (contribute to aggregate
+            ``valid_CELoss`` used for checkpoint selection).
         test_paths : str, optional
             Spectrum paths for evaluation or inference.
+        tracking_paths : str, optional
+            Additional validation paths logged per-file for monitoring
+            only; excluded from the aggregate ``valid_CELoss``.
         """
         try:
             n_devices = self.trainer.num_devices
@@ -601,6 +628,7 @@ class ModelRunner:
             train_paths=train_paths,
             valid_paths=valid_paths,
             test_paths=test_paths,
+            tracking_paths=tracking_paths,
             train_batch_size=train_batch_size,
             eval_batch_size=eval_batch_size,
             min_peaks=self.config.min_peaks,
