@@ -2,6 +2,7 @@
 
 import functools
 import logging
+import math
 import os
 import pathlib
 from typing import Optional, Sequence
@@ -334,9 +335,10 @@ class DeNovoDataModule(pl.LightningDataModule):
             )
 
         if shuffle:
-            dataset = ShufflerIterDataPipe(
-                dataset, buffer_size=self.shuffle_buffer_size
+            buffer_batches = max(
+                1, math.ceil(self.shuffle_buffer_size / self.train_batch_size)
             )
+            dataset = ShufflerIterDataPipe(dataset, buffer_size=buffer_batches)
 
         return dataset
 
