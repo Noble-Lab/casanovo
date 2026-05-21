@@ -803,7 +803,6 @@ class Spec2Pep(pl.LightningModule):
         self,
         batch: Dict[str, torch.Tensor],
         *args,
-        mode: str = "train",
     ) -> torch.Tensor:
         """
         A single training step.
@@ -816,8 +815,6 @@ class Spec2Pep(pl.LightningModule):
             ``precursor_charge``, each pointing to tensors with the
             corresponding data. The ``seq`` key is optional and
             contains the peptide sequences for training.
-        mode : str
-            Logging key to describe the current stage.
 
         Returns
         -------
@@ -826,13 +823,9 @@ class Spec2Pep(pl.LightningModule):
         """
         pred, truth = self._forward_step(batch)
         pred = pred[:, :-1, :].reshape(-1, self.vocab_size)
-
-        if mode == "train":
-            loss = self.celoss(pred, truth.flatten())
-        else:
-            loss = self.val_celoss(pred, truth.flatten())
+        loss = self.celoss(pred, truth.flatten())
         self.log(
-            f"{mode}_CELoss",
+            "train_CELoss",
             loss.detach(),
             on_step=False,
             on_epoch=True,

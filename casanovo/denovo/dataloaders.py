@@ -25,7 +25,25 @@ logger = logging.getLogger("casanovo")
 
 
 def _unique_stems(paths: list) -> list:
-    """Return stems from *paths*, disambiguating duplicates with a suffix."""
+    """Return unique file stems for a list of paths.
+
+    Extract the file stem from each path. When the same stem appears
+    more than once, subsequent occurrences are disambiguated with a
+    ``_1``, ``_2``, ... suffix. The suffix probe skips names that are
+    already in use (e.g. an organic ``data_1`` file will not collide
+    with a duplicate ``data``).
+
+    Parameters
+    ----------
+    paths : list
+        File paths (strings or Path objects) to extract stems from.
+
+    Returns
+    -------
+    list of str
+        Stems in the same order as *paths*, with duplicates
+        disambiguated.
+    """
     used: set = set()
     stems = []
     for p in paths:
@@ -192,7 +210,7 @@ class DeNovoDataModule(pl.LightningDataModule):
             # Build one dataset per validation file so each gets its own
             # DataLoader and its loss can be logged separately.
             self.valid_datasets = []
-            for i, path in enumerate(self.valid_paths or []):
+            for i, path in enumerate(self.valid_paths):
                 self.valid_datasets.append(
                     self._make_dataset(
                         [path],
@@ -202,7 +220,7 @@ class DeNovoDataModule(pl.LightningDataModule):
                     )
                 )
             self.tracking_datasets = []
-            for i, path in enumerate(self.tracking_paths or []):
+            for i, path in enumerate(self.tracking_paths):
                 self.tracking_datasets.append(
                     self._make_dataset(
                         [path],
@@ -353,7 +371,19 @@ class DeNovoDataModule(pl.LightningDataModule):
         return self._make_loader(self.train_dataset, shuffle=self.shuffle)
 
     def val_dataloader(self) -> list:
-        """Get validation DataLoaders — one per file, main first then tracking."""
+        """Get validation DataLoaders.
+
+        Returns one DataLoader per validation file, ordered with main
+        files first (indices ``0..n_main_loaders-1``) followed by
+        tracking-only files. Lightning dispatches each loader's
+        batches with a ``dataloader_idx`` that maps 1-to-1 to the
+        entries in ``val_stems``.
+
+        Returns
+        -------
+        list of torch.utils.data.DataLoader
+            One loader per validation and tracking file.
+        """
         return [
             self._make_loader(ds)
             for ds in self.valid_datasets + self.tracking_datasets
