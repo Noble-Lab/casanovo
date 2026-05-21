@@ -150,15 +150,6 @@ class Config:
         for key, val in self._config_types.items():
             self.validate_param(key, val)
 
-        if (
-            self._params["train_batch_size"] is not None
-            and self._params["train_batch_size"] <= 0
-        ):
-            raise ValueError(
-                f"train_batch_size must be a positive integer, "
-                f"got {self._params['train_batch_size']}."
-            )
-
         self._params["n_workers"] = utils.n_workers()
 
         if self._params["accelerator"] == "auto" and utils.is_apple_silicon():
