@@ -362,6 +362,7 @@ def _get_config_file(file_path, file_name, additional_cfg=None):
             "[Ammonia-loss]-": -17.026549,
             "[+25.980265]-": 25.980265,
         },
+        "new_token_init": {},
     }
 
     if additional_cfg is not None:
