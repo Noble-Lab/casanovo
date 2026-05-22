@@ -23,7 +23,10 @@ def test_default(monkeypatch):
 def test_override(tmp_path, tiny_config):
     # Test expected config option is missing.
     filename = str(tmp_path / "config_missing.yml")
-    with open(tiny_config, "r", encoding="utf-8") as f_in, open(filename, "w", encoding="utf-8") as f_out:
+    with (
+        open(tiny_config, "r", encoding="utf-8") as f_in,
+        open(filename, "w", encoding="utf-8") as f_out,
+    ):
         cfg = yaml.safe_load(f_in)
         # Remove config option.
         del cfg["random_seed"]
@@ -34,7 +37,10 @@ def test_override(tmp_path, tiny_config):
 
     # Test invalid config option is present.
     filename = str(tmp_path / "config_invalid.yml")
-    with open(tiny_config, "r", encoding="utf-8") as f_in, open(filename, "w", encoding="utf-8") as f_out:
+    with (
+        open(tiny_config, "r", encoding="utf-8") as f_in,
+        open(filename, "w", encoding="utf-8") as f_out,
+    ):
         cfg = yaml.safe_load(f_in)
         # Insert invalid config option.
         cfg["random_seed_"] = 354
@@ -46,7 +52,10 @@ def test_override(tmp_path, tiny_config):
 
 def test_deprecated(tmp_path, tiny_config):
     filename = str(tmp_path / "config_deprecated.yml")
-    with open(tiny_config, "r", encoding="utf-8") as f_in, open(filename, "w", encoding="utf-8") as f_out:
+    with (
+        open(tiny_config, "r", encoding="utf-8") as f_in,
+        open(filename, "w", encoding="utf-8") as f_out,
+    ):
         cfg = yaml.safe_load(f_in)
         # Insert remapped deprecated config option.
         cfg["max_iters"] = 1
@@ -55,7 +64,10 @@ def test_deprecated(tmp_path, tiny_config):
     with pytest.warns(DeprecationWarning):
         Config(filename)
 
-    with open(tiny_config, "r", encoding="utf-8") as f_in, open(filename, "w", encoding="utf-8") as f_out:
+    with (
+        open(tiny_config, "r", encoding="utf-8") as f_in,
+        open(filename, "w", encoding="utf-8") as f_out,
+    ):
         cfg = yaml.safe_load(f_in)
         # Insert non-remapped deprecated config option.
         cfg["save_top_k"] = 5
@@ -67,7 +79,10 @@ def test_deprecated(tmp_path, tiny_config):
 
 def test_override_mps(monkeypatch, tiny_config, tmp_path, caplog):
     filename = str(tmp_path / "config_auto.yml")
-    with open(tiny_config, "r", encoding="utf-8") as f_in, open(filename, "w", encoding="utf-8") as f_out:
+    with (
+        open(tiny_config, "r", encoding="utf-8") as f_in,
+        open(filename, "w", encoding="utf-8") as f_out,
+    ):
         cfg = yaml.safe_load(f_in)
         cfg["accelerator"] = "auto"
         yaml.safe_dump(cfg, f_out)

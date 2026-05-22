@@ -327,7 +327,10 @@ def test_auxilliary_cli(tmp_path, mgf_small, monkeypatch):
     with pytest.raises(FileExistsError):
         run(["configure", "-o", "test.yaml"])
 
-    with open("casanovo.yaml", encoding="utf-8") as f_in, open("small.yaml", "w", encoding="utf-8") as f_out:
+    with (
+        open("casanovo.yaml", encoding="utf-8") as f_in,
+        open("small.yaml", "w", encoding="utf-8") as f_out,
+    ):
         config = yaml.safe_load(f_in)
         config["max_epochs"] = 1
         config["n_layers"] = 1
