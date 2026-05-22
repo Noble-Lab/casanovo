@@ -790,12 +790,14 @@ class ModelRunner:
         # Build index dicts: token -> integer position in the embedding table.
         ckpt_vocab = ckpt_tokenizer.index
         new_vocab = new_tokenizer.index
-        if set(ckpt_vocab) == set(new_vocab):
+        ckpt_set = set(ckpt_vocab)
+        new_set = set(new_vocab)
+        if ckpt_set == new_set:
             return
 
         # Identify which tokens are added or removed relative to the checkpoint.
-        new_tokens = set(new_vocab) - set(ckpt_vocab)
-        removed_tokens = set(ckpt_vocab) - set(new_vocab)
+        new_tokens = new_set - ckpt_set
+        removed_tokens = ckpt_set - new_set
         if removed_tokens:
             logger.warning(
                 "Checkpoint tokens absent from new config (dropped): %s",
