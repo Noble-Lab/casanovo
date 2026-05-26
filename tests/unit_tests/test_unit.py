@@ -3029,7 +3029,14 @@ def test_train_cli_tracking_peak_path(tmp_path, mgf_small, monkeypatch):
 
     captured = {}
 
-    def fake_train(self, train_pp, valid_pp, ckpt=None, tracking_pp=()):
+    def fake_train(
+        self,
+        train_pp,
+        valid_pp,
+        annotation_path=None,
+        ckpt_path=None,
+        tracking_pp=(),
+    ):
         captured["tracking"] = tracking_pp
 
     monkeypatch.setattr(_ModelRunner, "train", fake_train)

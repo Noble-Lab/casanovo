@@ -233,10 +233,6 @@ class DeNovoDataModule(pl.LightningDataModule):
                     annotation_paths=self.annotation_paths,
                 )
 
-            logger.info(
-                "Validation dataset contains %d spectra.",
-                self._get_n_spectra(self.valid_dataset),
-            )
             self.tracking_datasets = []
             for i, path in enumerate(self.tracking_paths):
                 self.tracking_datasets.append(
@@ -251,6 +247,7 @@ class DeNovoDataModule(pl.LightningDataModule):
             self.val_stems = _unique_stems(
                 [*self.valid_paths, *self.tracking_paths]
             )
+
             if self.valid_datasets:
                 total = sum(
                     self._get_n_spectra(ds) for ds in self.valid_datasets

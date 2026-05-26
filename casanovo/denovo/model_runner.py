@@ -174,7 +174,7 @@ class ModelRunner:
         self,
         train_peak_path: Iterable[str],
         valid_peak_path: Iterable[str],
-        annotation_path: Iterable[str],
+        annotation_path: Iterable[str] | None = None,
         ckpt_path: Optional[str] = None,
         tracking_peak_path: Iterable[str] = (),
     ) -> None:
