@@ -330,7 +330,7 @@ def db_search(
     multiple=True,
     type=click.Path(exists=True, dir_okay=False),
 )
-@click(
+@click.option(
     "--load_all_states",
     help="""
     Flag to indicate whether all states are loaded when re-starting 
