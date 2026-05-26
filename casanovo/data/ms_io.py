@@ -2,17 +2,79 @@
 
 import collections
 import csv
+import logging
 import operator
 import os
 import re
+from collections.abc import Iterator
 from pathlib import Path
-from typing import List
 
 import natsort
 
 from .. import __version__
 from ..config import Config
 from .psm import PepSpecMatch
+
+logger = logging.getLogger("casanovo")
+
+# MGF spectrum block delimiters and scan-number header prefixes.
+_MGF_BEGIN = "BEGIN IONS"
+_MGF_END = "END IONS"
+_MGF_SCAN_PREFIXES = ("SCANS=", "SCAN=", "SCAN ID=")
+
+
+def _build_mgf_scan_index(mgf_path: str) -> Iterator[tuple[str, str]]:
+    """
+    Yield (spectrum_ref_id, scan_number) pairs for spectra in an MGF file
+    that contain a SCANS, SCAN, or SCAN ID header field.
+
+    Reads only the header lines of each spectrum entry (never the peak
+    data), so this is fast even for large files.
+
+    Parameters
+    ----------
+    mgf_path : str
+        Path to the MGF file.
+
+    Yields
+    ------
+    tuple[str, str]
+        A ``(spectrum_ref_id, scan_number)`` pair where
+        *spectrum_ref_id* uses the ``index=N`` zero-based index for
+        MGF files according to the mzTab specification.
+    """
+    index, current_scan, in_ions = 0, None, False
+    try:
+        with open(mgf_path, errors="replace") as fh:
+            for line in fh:
+                upper = line.strip().upper()
+                if upper == _MGF_BEGIN:
+                    in_ions, current_scan = True, None
+                elif upper == _MGF_END:
+                    if current_scan is not None:
+                        yield f"index={index}", current_scan
+                    index += 1
+                    in_ions = False
+                elif in_ions:
+                    for prefix in _MGF_SCAN_PREFIXES:
+                        if upper.startswith(prefix):
+                            scan_value = upper.split("=", 1)[1].strip()
+                            if scan_value.isnumeric():
+                                current_scan = scan_value
+                            else:
+                                logger.warning(
+                                    "Ignoring non-numeric %s value %r in %s",
+                                    prefix[:-1],
+                                    scan_value,
+                                    mgf_path,
+                                )
+                            break
+    except OSError as e:
+        logger.warning(
+            "Could not read MGF file %s to build scan index: %s",
+            mgf_path,
+            e,
+        )
 
 
 class MztabWriter:
@@ -43,7 +105,8 @@ class MztabWriter:
             ),
         ]
         self._run_map = {}
-        self.psms: List[PepSpecMatch] = []
+        self._mgf_scan_index = {}  # {(filename_base, index_str): scan_num_str}
+        self.psms: list[PepSpecMatch] = []
 
     def set_metadata(self, config: Config, **kwargs) -> None:
         """
@@ -128,13 +191,14 @@ class MztabWriter:
                     (f"software[1]-setting[{i}]", f"{key} = {value}")
                 )
 
-    def set_ms_run(self, peak_filenames: List[str]) -> None:
+    def set_ms_run(self, peak_filenames: list[str]) -> None:
         """
-        Add input peak files to the mzTab metadata section.
+        Add input peak files to the mzTab metadata section and
+        pre-compute the MGF scan number index for any MGF files.
 
         Parameters
         ----------
-        peak_filenames : List[str]
+        peak_filenames : list[str]
             The input peak file name(s).
         """
         for i, filename in enumerate(natsort.natsorted(peak_filenames), 1):
@@ -143,6 +207,10 @@ class MztabWriter:
                 (f"ms_run[{i}]-location", Path(filename).as_uri()),
             )
             self._run_map[Path(filename).name] = i
+            if Path(filename).suffix.lower() == ".mgf":
+                name = Path(filename).name
+                for ref_id, scan_num in _build_mgf_scan_index(filename):
+                    self._mgf_scan_index[(name, ref_id)] = scan_num
 
     def save(self) -> None:
         """
@@ -154,6 +222,7 @@ class MztabWriter:
             for row in self.metadata:
                 writer.writerow(["MTD", *row])
             # Write PSMs.
+            include_scan_col = bool(self._mgf_scan_index)
             writer.writerow(
                 [
                     "PSH",
@@ -175,8 +244,13 @@ class MztabWriter:
                     "post",
                     "start",
                     "end",
-                    "opt_ms_run[1]_aa_scores",
-                    "opt_ms_run[1]_proforma",
+                    "opt_global_aa_scores",
+                    "opt_global_cv_MS:1003169_proforma_peptidoform_sequence",
+                    *(
+                        ["opt_global_cv_MS:1003057_scan_number"]
+                        if include_scan_col
+                        else []
+                    ),
                 ]
             )
             by_id = operator.attrgetter("spectrum_id")
@@ -185,36 +259,46 @@ class MztabWriter:
                 1,
             ):
                 filename, idx = psm.spectrum_id
-                if Path(filename).suffix.lower() == ".mgf" and idx.isnumeric():
-                    idx = f"index={idx}"
+                run_idx = self._run_map[filename]
+                if Path(filename).suffix.lower() == ".mgf":
+                    # Normalize idx to "index=N" format, handling both
+                    # bare numeric IDs ("0") and prefixed IDs ("index=0").
+                    if idx.isnumeric():
+                        idx = f"index={idx}"
 
-                writer.writerow(
-                    [
-                        "PSM",
-                        psm.aa_sequence,  # sequence
-                        i,  # PSM_ID
-                        psm.protein,  # accession
-                        "null",  # unique
-                        "null",  # database
-                        "null",  # database_version
-                        f"[MS, MS:1003281, Casanovo, {__version__}]",
-                        psm.peptide_score,  # search_engine_score[1]
-                        # FIXME: Modifications should be specified as
-                        #  controlled vocabulary terms.
-                        psm.modifications,  # modifications
-                        # FIXME: Can we get the retention time from the data
-                        #  loader?
-                        "null",  # retention_time
-                        psm.charge,  # charge
-                        psm.exp_mz,  # exp_mass_to_charge
-                        psm.calc_mz,  # calc_mass_to_charge
-                        f"ms_run[{self._run_map[filename]}]:{idx}",
-                        "null",  # pre
-                        "null",  # post
-                        "null",  # start
-                        "null",  # end
-                        # opt_ms_run[1]_aa_scores
-                        ",".join(list(map("{:.5f}".format, psm.aa_scores))),
-                        psm.sequence,  # op_ms_run[1]_proforma
-                    ]
-                )
+                row = [
+                    "PSM",
+                    psm.aa_sequence,  # sequence
+                    i,  # PSM_ID
+                    psm.protein,  # accession
+                    "null",  # unique
+                    "null",  # database
+                    "null",  # database_version
+                    f"[MS, MS:1003281, Casanovo, {__version__}]",
+                    psm.peptide_score,  # search_engine_score[1]
+                    # FIXME: Modifications should be specified as
+                    #  controlled vocabulary terms.
+                    psm.modifications,  # modifications
+                    # FIXME: Can we get the retention time from the data
+                    #  loader?
+                    "null",  # retention_time
+                    psm.charge,  # charge
+                    psm.exp_mz,  # exp_mass_to_charge
+                    psm.calc_mz,  # calc_mass_to_charge
+                    f"ms_run[{run_idx}]:{idx}",
+                    "null",  # pre
+                    "null",  # post
+                    "null",  # start
+                    "null",  # end
+                    # opt_global_aa_scores
+                    ",".join(list(map("{:.5f}".format, psm.aa_scores))),
+                    psm.sequence,  # opt_global_cv_MS:1003169_proforma_peptidoform_sequence
+                ]
+                if include_scan_col:
+                    scan_num = self._mgf_scan_index.get((filename, idx))
+                    row.append(
+                        f"ms_run[{run_idx}]:scan={scan_num}"
+                        if scan_num
+                        else "null"
+                    )
+                writer.writerow(row)
