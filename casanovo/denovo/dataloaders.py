@@ -207,7 +207,7 @@ class DeNovoDataModule(pl.LightningDataModule):
                 self.train_dataset = self._make_dataset(
                     self.train_paths,
                     train_annotation_paths=self.annotation_paths,
-                    annotated=True,
+                    annotated=False,
                     mode="train",
                     shuffle=self.shuffle,
                 )
@@ -215,6 +215,7 @@ class DeNovoDataModule(pl.LightningDataModule):
                     "Training dataset contains %d spectra.",
                     self._get_n_spectra(self.train_dataset),
                 )
+
             # Build one dataset per validation file so each gets its own
             # DataLoader and its loss can be logged separately.
             self.valid_datasets = []
@@ -226,11 +227,6 @@ class DeNovoDataModule(pl.LightningDataModule):
                         mode=f"valid_{i}",
                         shuffle=False,
                     )
-                )
-
-            if self.annotation_paths is not None:
-                self.train_dataset = self._train_dia_align(
-                    annotation_paths=self.annotation_paths,
                 )
 
             self.tracking_datasets = []
@@ -303,14 +299,17 @@ class DeNovoDataModule(pl.LightningDataModule):
             The mode indicating name of lance instance
         shuffle: bool
             Shuffle the dataset or not.
+        train_annotation_paths: Iteratble[str]
+            Paths to the annotation files for the training data
 
         Returns
         -------
         torch.utils.data.Dataset
             A PyTorch Dataset for the given peak files.
         """
-        # Need to modify hella here and align
+
         custom_fields = [self.custom_field_anno] if annotated else []
+
         lance_path = pathlib.Path(f"{self.lance_dir}/{mode}.lance")
 
         parse_params = dict(
