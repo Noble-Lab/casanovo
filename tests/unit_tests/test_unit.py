@@ -44,6 +44,43 @@ from casanovo.denovo.model import (
 )
 
 
+def test_annotation_of_training(tmp_path, mzml_small):
+    data = {
+        "filename": ["annotations", "annotations"],
+        "scan_id": ["scan=17", "merged=11 frame=12 scanStart=763 scanEnd=787"],
+        "sequence": ["LESLIEKX", "PEPTIDEKX"],
+        "charge": [5, 5],
+    }
+    annotations_df = pd.DataFrame(data)
+    annotation_path = tmp_path / "annotations.csv"
+    annotations_df.to_csv(annotation_path, index=False)
+
+    dm = DeNovoDataModule(
+        lance_dir=str(tmp_path),
+        train_paths=[mzml_small],
+        valid_paths=[mzml_small],
+        test_paths=[mzml_small],
+        annotation_paths=[annotation_path],
+        min_peaks=0,
+        shuffle=False,
+    )
+
+    dm.setup()
+
+    item0 = dm.train_dataset[0]
+    item1 = dm.train_dataset[1]
+
+    assert item0["scan_id"][0] == "scan=17"
+    assert item0["sequence"] == "LESLIEKX"
+    assert item0["charge"] == 5
+
+    assert (
+        item1["scan_id"][0] == "merged=11 frame=12 scanStart=763 scanEnd=787"
+    )
+    assert item1["sequence"] == "PEPTIDEKX"
+    assert item1["charge"] == 5
+
+
 def test_forward_reverse():
     """Test forward and reverse peptide predictions"""
     score_A = [0.42, 1.0, 0.0, 0.0, 0.0]
