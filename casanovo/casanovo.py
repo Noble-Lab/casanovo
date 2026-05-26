@@ -300,7 +300,21 @@ def db_search(
     "--validation_peak_path",
     help="""
     An annotated MGF file for validation, like from MassIVE-KB. Use this
-    option multiple times to specify multiple files.
+    option multiple times to specify multiple files. Loss from these files
+    contributes to the aggregate valid_CELoss used for checkpoint selection.
+    """,
+    required=False,
+    multiple=True,
+    type=click.Path(exists=True, dir_okay=True),
+)
+@click.option(
+    "-t",
+    "--tracking_peak_path",
+    help="""
+    An annotated MGF file used to monitor validation loss during training
+    without influencing checkpoint selection (useful for detecting
+    catastrophic forgetting). Use this option multiple times to specify
+    multiple files.
     """,
     required=False,
     multiple=True,
@@ -330,6 +344,7 @@ def train(
     train_peak_path: Tuple[str],
     validation_peak_path: Optional[Tuple[str]],
     annotation_path: Optional[Tuple[str]],
+    tracking_peak_path: Optional[Tuple[str]],
     model: Optional[str],
     config: Optional[str],
     output_dir: Optional[str],
@@ -382,11 +397,17 @@ def train(
         for peak_file in validation_peak_path:
             logger.info("  %s", peak_file)
 
+        if tracking_peak_path:
+            logger.info("Using the following tracking-only validation files:")
+            for peak_file in tracking_peak_path:
+                logger.info("  %s", peak_file)
+
         runner.train(
             train_peak_path,
             validation_peak_path,
             annotation_path,
             model if load_all_states else None,
+            tracking_peak_path,
         )
 
         utils.log_run_report(start_time=start_time, end_time=time.time())

@@ -706,3 +706,234 @@ def test_initialize_model_calls_validate_vocab_compatibility(
     ) as mock_validate:
         runner.initialize_model(train=True)
         mock_validate.assert_called_once()
+
+
+def test_train_no_tracking_peak_path_backward_compat(
+    tmp_path, mgf_small, tiny_config
+):
+    """train() with no tracking_peak_path sets n_main_loaders == len(valid_paths)."""
+    config = Config(tiny_config)
+    config.max_epochs = 1
+    config.n_layers = 1
+
+    with ModelRunner(
+        config, output_dir=tmp_path, output_rootname="compat"
+    ) as runner:
+        runner.train([mgf_small], [mgf_small])
+        assert runner.model.n_main_loaders == 1
+        assert runner.model.val_stems == [Path(mgf_small).stem]
+
+
+def test_train_with_tracking_peak_path(tmp_path, mgf_small, tiny_config):
+    """train() with tracking_peak_path logs per-file metrics for tracking files."""
+    config = Config(tiny_config)
+    config.max_epochs = 1
+    config.n_layers = 1
+
+    mgf_track = tmp_path / "track.mgf"
+    shutil.copy(mgf_small, mgf_track)
+
+    with ModelRunner(
+        config, output_dir=tmp_path, output_rootname="track"
+    ) as runner:
+        runner.train([mgf_small], [mgf_small], tracking_peak_path=[mgf_track])
+        # main loader is mgf_small (index 0); tracking is mgf_track (index 1)
+        assert runner.model.n_main_loaders == 1
+        assert runner.model.val_stems[0] == Path(mgf_small).stem
+        assert runner.model.val_stems[1] == Path(mgf_track).stem
+        # Per-file key must appear in logged metrics history.
+        track_key = f"valid/{Path(mgf_track).stem}"
+        assert any(track_key in metrics for metrics in runner.model._history)
+
+
+def test_remap_decoder_vocab_no_change(tmp_path, mgf_small, tiny_config):
+    """Identical vocabs: weights unchanged and layers not rebuilt."""
+    config = Config(tiny_config)
+    config.max_epochs = 1
+    config.n_layers = 1
+
+    with ModelRunner(config=config, output_dir=tmp_path) as runner:
+        runner.train([mgf_small], [mgf_small])
+
+        old_emb = runner.model.decoder.token_encoder
+        old_final = runner.model.decoder.final
+        old_emb_data = old_emb.weight.data.clone()
+        old_final_data = old_final.weight.data.clone()
+
+        runner._remap_decoder_vocab(runner.tokenizer, runner.tokenizer)
+
+        assert runner.model.decoder.token_encoder is old_emb
+        assert runner.model.decoder.final is old_final
+        assert torch.equal(old_emb.weight.data, old_emb_data)
+        assert torch.equal(old_final.weight.data, old_final_data)
+
+
+def test_remap_decoder_vocab_extends(tmp_path, mgf_small, tiny_config):
+    """Extending vocab copies shared rows and inits new token from source."""
+    config = Config(tiny_config)
+    config.max_epochs = 1
+    config.n_layers = 1
+
+    with ModelRunner(config=config, output_dir=tmp_path) as runner:
+        runner.train([mgf_small], [mgf_small])
+        runner.trainer.save_checkpoint(tmp_path / "base.ckpt")
+
+    new_residues = dict(config.residues)
+    new_residues["K[Acetyl]"] = 128.094963 + 42.010565
+
+    ext_config = Config(tiny_config)
+    ext_config.residues = new_residues
+    ext_config.new_token_init = {"K[Acetyl]": "K"}
+    ext_config.n_layers = 1
+
+    runner = ModelRunner(
+        config=ext_config, model_filename=str(tmp_path / "base.ckpt")
+    )
+    runner.initialize_tokenizer()
+
+    from depthcharge.tokenizers import PeptideTokenizer
+
+    ckpt_tokenizer = PeptideTokenizer(
+        residues=config.residues,
+        replace_isoleucine_with_leucine=config.replace_isoleucine_with_leucine,
+        reverse=True,
+        start_token=None,
+        stop_token="$",
+    )
+    old_k_idx = ckpt_tokenizer.index["K"]
+    runner.initialize_model(train=True)
+
+    new_tokenizer = runner.tokenizer
+    new_k_mod_idx = new_tokenizer.index["K[Acetyl]"]
+    new_k_idx = new_tokenizer.index["K"]
+    new_n = len(new_tokenizer) + 1
+
+    assert runner.model.vocab_size == new_n
+    assert runner.model.hparams["tokenizer"] is new_tokenizer
+
+    emb_w = runner.model.decoder.token_encoder.weight.data
+    final_w = runner.model.decoder.final.weight.data
+    assert torch.equal(emb_w[new_k_mod_idx], emb_w[new_k_idx])
+    assert torch.equal(final_w[new_k_mod_idx], final_w[new_k_idx])
+
+
+def test_remap_decoder_vocab_missing_init_raises(
+    tmp_path, mgf_small, tiny_config
+):
+    """Extending vocab with no new_token_init entry raises ValueError."""
+    config = Config(tiny_config)
+    config.max_epochs = 1
+    config.n_layers = 1
+
+    with ModelRunner(config=config, output_dir=tmp_path) as runner:
+        runner.train([mgf_small], [mgf_small])
+        runner.trainer.save_checkpoint(tmp_path / "base.ckpt")
+
+    new_residues = dict(config.residues)
+    new_residues["K[Acetyl]"] = 128.094963 + 42.010565
+
+    ext_config = Config(tiny_config)
+    ext_config.residues = new_residues
+    ext_config.new_token_init = {}
+    ext_config.n_layers = 1
+
+    runner = ModelRunner(
+        config=ext_config, model_filename=str(tmp_path / "base.ckpt")
+    )
+    runner.initialize_tokenizer()
+    with pytest.raises(ValueError, match="no initialization source"):
+        runner.initialize_model(train=True)
+
+
+def test_remap_decoder_vocab_bad_init_source_raises(
+    tmp_path, mgf_small, tiny_config
+):
+    """Init source not in checkpoint vocab raises ValueError."""
+    config = Config(tiny_config)
+    config.max_epochs = 1
+    config.n_layers = 1
+
+    with ModelRunner(config=config, output_dir=tmp_path) as runner:
+        runner.train([mgf_small], [mgf_small])
+        runner.trainer.save_checkpoint(tmp_path / "base.ckpt")
+
+    new_residues = dict(config.residues)
+    new_residues["K[Acetyl]"] = 128.094963 + 42.010565
+
+    ext_config = Config(tiny_config)
+    ext_config.residues = new_residues
+    ext_config.new_token_init = {"K[Acetyl]": "NONEXISTENT"}
+    ext_config.n_layers = 1
+
+    runner = ModelRunner(
+        config=ext_config, model_filename=str(tmp_path / "base.ckpt")
+    )
+    runner.initialize_tokenizer()
+    with pytest.raises(ValueError, match="not in checkpoint vocabulary"):
+        runner.initialize_model(train=True)
+
+
+def test_remap_decoder_vocab_drops_token_warns(
+    tmp_path, mgf_small, tiny_config, caplog
+):
+    """Checkpoint token absent from new vocab logs a warning."""
+    config = Config(tiny_config)
+    config.max_epochs = 1
+    config.n_layers = 1
+
+    with ModelRunner(config=config, output_dir=tmp_path) as runner:
+        runner.train([mgf_small], [mgf_small])
+        runner.trainer.save_checkpoint(tmp_path / "base.ckpt")
+
+    reduced_residues = {
+        k: v for k, v in config.residues.items() if k != "M[Oxidation]"
+    }
+
+    red_config = Config(tiny_config)
+    red_config.residues = reduced_residues
+    red_config.n_layers = 1
+
+    runner = ModelRunner(
+        config=red_config, model_filename=str(tmp_path / "base.ckpt")
+    )
+    runner.initialize_tokenizer()
+    with caplog.at_level("WARNING"):
+        runner.initialize_model(train=True)
+
+    assert any("dropped" in rec.message.lower() for rec in caplog.records)
+
+
+def test_initialize_model_with_new_token_init_passes_validate(
+    tmp_path, mgf_small, tiny_config
+):
+    """End-to-end: load checkpoint with extended vocab passes validation."""
+    config = Config(tiny_config)
+    config.max_epochs = 1
+    config.n_layers = 1
+    ckpt = tmp_path / "base.ckpt"
+
+    with ModelRunner(config=config, output_dir=tmp_path) as runner:
+        runner.train([mgf_small], [mgf_small])
+        runner.trainer.save_checkpoint(ckpt)
+
+    orig_n = runner.model.vocab_size
+
+    new_residues = dict(config.residues)
+    new_residues["K[Acetyl]"] = 128.094963 + 42.010565
+
+    ext_config = Config(tiny_config)
+    ext_config.residues = new_residues
+    ext_config.new_token_init = {"K[Acetyl]": "K"}
+    ext_config.n_layers = 1
+
+    runner = ModelRunner(config=ext_config, model_filename=str(ckpt))
+    runner.initialize_tokenizer()
+    with unittest.mock.patch.object(
+        ModelRunner,
+        "_validate_vocab_compatibility",
+        wraps=runner._validate_vocab_compatibility,
+    ) as mock_validate:
+        runner.initialize_model(train=True)
+        mock_validate.assert_called_once()
+
+    assert runner.model.vocab_size == orig_n + 1
