@@ -362,40 +362,53 @@ class DeNovoDataModule(pl.LightningDataModule):
     def _train_dia_align(self, annotation_paths):
         annotation_frames = []
         for path in annotation_paths:
-            df = pd.read_csv(path, sep="\t")
+            df = pd.read_csv(path)
             annotation_frames.append(df)
 
         annotations = pd.concat(annotation_frames, ignore_index=True)
 
-        annotations["key"] = annotations["filename"].apply(
-            lambda p: os.path.splitext(os.path.basename(p))[0]
-        )
+        def make_key(p):
+            if pd.isna(p):
+                return None
+            return os.path.splitext(os.path.basename(str(p)))[0]
 
+        annotations["key"] = annotations["filename"].apply(make_key)
+        annotations = annotations[["key", "scan_id", "sequence", "charge"]]
         lance_df = self.train_dataset.to_table().to_pandas()
-
-        lance_df["key"] = lance_df["peak_file"].apply(
-            lambda p: os.path.splitext(os.path.basename(str(p)))[0]
-        )
+        lance_df["key"] = lance_df["peak_file"].apply(make_key)
 
         merged = lance_df.merge(
-            annotations[["key", "scan_id", "sequence", "charge"]],
+            annotations,
             on=["key", "scan_id"],
             how="left",
-        ).drop(columns=["key"])
-
-        for col in ["sequence", "charge"]:
-            if f"{col}_x" in merged.columns:
-                merged[col] = merged[f"{col}_y"].combine_first(
-                    merged[f"{col}_x"]
-                )
-                merged.drop(columns=[f"{col}_x", f"{col}_y"], inplace=True)
-
-        enriched_table = pa.Table.from_pandas(merged, preserve_index=False)
-        return lance.write_dataset(
-            enriched_table,
-            self.train_dataset.uri,
-            mode="overwrite",
+            suffixes=("_x", "_anno"),
         )
+
+        if "sequence_anno" in merged.columns:
+            merged["sequence"] = merged["sequence_anno"].combine_first(
+                merged.get("sequence_x")
+            )
+            merged.drop(columns=["sequence_x", "sequence_anno"], inplace=True)
+
+        if "charge_anno" in merged.columns:
+            merged["charge"] = merged["charge_anno"].combine_first(
+                merged.get("charge_x")
+            )
+            merged.drop(columns=["charge_x", "charge_anno"], inplace=True)
+
+        if "sequence" in merged.columns:
+            merged["sequence"] = merged["sequence"].astype("string")
+
+        if "charge" in merged.columns:
+            merged["charge"] = merged["charge"].astype("Int64")
+
+        merged["scan_id"] = merged["scan_id"].astype(str)
+
+        enriched_table = pa.Table.from_pandas(
+            merged, preserve_index=False, safe=False
+        )
+
+        return type(self.train_dataset).from_table(enriched_table)
 
     def _make_loader(
         self, dataset: torch.utils.data.Dataset, shuffle: bool = False
