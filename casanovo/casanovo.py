@@ -12,7 +12,7 @@ import time
 import urllib.parse
 import warnings
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import Optional, Tuple, List
 
 warnings.formatwarning = lambda message, category, *args, **kwargs: (
     f"{category.__name__}: {message}"
