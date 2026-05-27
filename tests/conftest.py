@@ -18,7 +18,7 @@ def mgf_small(tmp_path):
 @pytest.fixture
 def tiny_fasta_file(tmp_path):
     fasta_file = tmp_path / "tiny_fasta.fasta"
-    with fasta_file.open("w+") as fasta_ref:
+    with fasta_file.open("w+", encoding="utf-8") as fasta_ref:
         fasta_ref.write(
             (
                 ">foo\nMEAPAQLLFLLLLWLPDTTREIVMTQSPPTLSLSPGERVTLSCRASQSVSSSYLTWYQ"
@@ -97,7 +97,7 @@ def _create_mgf(
         )
         for i, p in enumerate(peptides)
     ]
-    with mgf_file.open("w+") as mgf_ref:
+    with mgf_file.open("w+", encoding="utf-8") as mgf_ref:
         mgf_ref.write("\n".join(entries))
 
     return mgf_file
@@ -362,13 +362,14 @@ def _get_config_file(file_path, file_name, additional_cfg=None):
             "[Ammonia-loss]-": -17.026549,
             "[+25.980265]-": 25.980265,
         },
+        "new_token_init": {},
     }
 
     if additional_cfg is not None:
         cfg.update(additional_cfg)
 
     cfg_file = file_path / file_name
-    with cfg_file.open("w+") as out_file:
+    with cfg_file.open("w+", encoding="utf-8") as out_file:
         yaml.dump(cfg, out_file)
 
     return cfg_file

@@ -11,10 +11,12 @@ import einops
 import lightning.pytorch as pl
 import numpy as np
 import torch
+import tqdm
 from depthcharge.tokenizers import PeptideTokenizer
 
 from .. import config
 from ..data import ms_io, psm
+from ..data.db_utils import PROTON
 from ..denovo.transformers import PeptideDecoder, SpectrumEncoder
 from . import evaluate
 
@@ -161,6 +163,9 @@ class Spec2Pep(pl.LightningModule):
         self.calculate_precision = calculate_precision
         self.n_log = n_log
         self._history = []
+        # Per-file validation metadata; set by ModelRunner.train() before fit.
+        self.val_stems: list = []
+        self.n_main_loaders: int = 0
 
         # Output writer during predicting.
         self.out_writer = out_writer
@@ -798,7 +803,6 @@ class Spec2Pep(pl.LightningModule):
         self,
         batch: Dict[str, torch.Tensor],
         *args,
-        mode: str = "train",
     ) -> torch.Tensor:
         """
         A single training step.
@@ -811,8 +815,6 @@ class Spec2Pep(pl.LightningModule):
             ``precursor_charge``, each pointing to tensors with the
             corresponding data. The ``seq`` key is optional and
             contains the peptide sequences for training.
-        mode : str
-            Logging key to describe the current stage.
 
         Returns
         -------
@@ -821,13 +823,9 @@ class Spec2Pep(pl.LightningModule):
         """
         pred, truth = self._forward_step(batch)
         pred = pred[:, :-1, :].reshape(-1, self.vocab_size)
-
-        if mode == "train":
-            loss = self.celoss(pred, truth.flatten())
-        else:
-            loss = self.val_celoss(pred, truth.flatten())
+        loss = self.celoss(pred, truth.flatten())
         self.log(
-            f"{mode}_CELoss",
+            "train_CELoss",
             loss.detach(),
             on_step=False,
             on_epoch=True,
@@ -837,7 +835,10 @@ class Spec2Pep(pl.LightningModule):
         return loss
 
     def validation_step(
-        self, batch: Dict[str, torch.Tensor], *args
+        self,
+        batch: Dict[str, torch.Tensor],
+        batch_idx: int,
+        dataloader_idx: int = 0,
     ) -> torch.Tensor:
         """
         A single validation step.
@@ -846,24 +847,54 @@ class Spec2Pep(pl.LightningModule):
         ----------
         batch : Dict[str, torch.Tensor]
             A batch from the SpectrumDataset, which contains keys:
-            A batch from the SpectrumDataset, which contains keys:
             ``mz_array``, ``intensity_array``, ``precursor_mz``, and
             ``precursor_charge``, each pointing to tensors with the
             corresponding data. The ``seq`` key is optional and
             contains the peptide sequences for training.
+        batch_idx : int
+            Index of the current batch within its dataloader.
+        dataloader_idx : int
+            Index of the dataloader this batch comes from. Dataloaders
+            0..n_main_loaders-1 are "main" validation files that contribute
+            to the aggregate ``valid_CELoss`` used for checkpoint selection.
+            Higher indices are "tracking" files logged per-file only.
 
         Returns
         -------
         torch.Tensor
             The loss of the validation step.
         """
-        # Record the loss.
-        loss = self.training_step(batch, mode="valid")
-        if not self.calculate_precision:
+        pred, truth = self._forward_step(batch)
+        pred = pred[:, :-1, :].reshape(-1, self.vocab_size)
+        loss = self.val_celoss(pred, truth.flatten())
+
+        batch_size = pred.shape[0]
+        log_kwargs = dict(
+            add_dataloader_idx=False,
+            on_step=False,
+            on_epoch=True,
+            sync_dist=True,
+            batch_size=batch_size,
+        )
+
+        # Determine per-file stem and main/tracking classification.
+        n_main = self.n_main_loaders if self.n_main_loaders > 0 else 1
+        is_main = dataloader_idx < n_main
+
+        if self.val_stems and dataloader_idx < len(self.val_stems):
+            stem = self.val_stems[dataloader_idx]
+            self.log(f"valid_CELoss/{stem}", loss.detach(), **log_kwargs)
+
+        if is_main:
+            # Contributes to the aggregate ``valid_CELoss`` monitored by
+            # ModelCheckpoint for best-checkpoint selection.
+            self.log("valid_CELoss", loss.detach(), **log_kwargs)
+
+        if not self.calculate_precision or not is_main:
             return loss
 
         # Calculate and log amino acid and peptide match evaluation
-        # metrics from the predicted peptides.
+        # metrics from the predicted peptides (main files only).
         peptides_true = self.tokenizer.detokenize(batch["seq"])
         peptides_pred = [
             pred
@@ -877,7 +908,12 @@ class Spec2Pep(pl.LightningModule):
         )
 
         batch_size = len(peptides_true)
-        log_args = dict(on_step=False, on_epoch=True, sync_dist=True)
+        log_args = dict(
+            add_dataloader_idx=False,
+            on_step=False,
+            on_epoch=True,
+            sync_dist=True,
+        )
         self.log(
             "pep_precision", pep_precision, **log_args, batch_size=batch_size
         )
@@ -954,18 +990,27 @@ class Spec2Pep(pl.LightningModule):
         Log the validation metrics at the end of each epoch.
         """
         callback_metrics = self.trainer.callback_metrics
-        metrics = {
-            "step": self.trainer.global_step,
-            "valid": callback_metrics["valid_CELoss"].detach().item(),
-        }
+        metrics = {"step": self.trainer.global_step}
+
+        if "valid_CELoss" in callback_metrics:
+            metrics["valid"] = callback_metrics["valid_CELoss"].detach().item()
+
+        for stem in self.val_stems:
+            key = f"valid_CELoss/{stem}"
+            if key in callback_metrics:
+                metrics[f"valid/{stem}"] = (
+                    callback_metrics[key].detach().item()
+                )
 
         if self.calculate_precision:
-            metrics["valid_aa_precision"] = (
-                callback_metrics["aa_precision"].detach().item()
-            )
-            metrics["valid_pep_precision"] = (
-                callback_metrics["pep_precision"].detach().item()
-            )
+            if "aa_precision" in callback_metrics:
+                metrics["valid_aa_precision"] = (
+                    callback_metrics["aa_precision"].detach().item()
+                )
+            if "pep_precision" in callback_metrics:
+                metrics["valid_pep_precision"] = (
+                    callback_metrics["pep_precision"].detach().item()
+                )
         self._history.append(metrics)
         self._log_history()
 
@@ -994,10 +1039,13 @@ class Spec2Pep(pl.LightningModule):
                 spec_match.aa_scores[1] *= spec_match.aa_scores[0]
                 spec_match.aa_scores = spec_match.aa_scores[1:]
 
-            # Compute the precursor m/z of the predicted peptide.
-            spec_match.calc_mz = self.tokenizer.calculate_precursor_ions(
-                spec_match.sequence, torch.tensor(spec_match.charge)
-            ).item()
+            # Compute the precursor m/z if not already set (e.g. from the
+            # peptide database in DB search mode).
+            if np.isnan(spec_match.calc_mz):
+                spec_match.calc_mz = self.tokenizer.calculate_precursor_ions(
+                    spec_match.sequence,
+                    torch.tensor(spec_match.charge),
+                ).item()
 
             self.out_writer.psms.append(spec_match)
 
@@ -1213,11 +1261,15 @@ class DbSpec2Pep(Spec2Pep):
             )
         )
 
-        # Determine the parent proteins only for the retained PSMs.
+        # Determine the parent proteins and calc_mz only for the retained PSMs.
         for pred in predictions:
             pred.protein = self.protein_database.get_associated_protein(
                 pred.sequence
             )
+            calc_mass = self.protein_database.db_peptides.loc[
+                pred.sequence, "calc_mass"
+            ]
+            pred.calc_mz = float(calc_mass) / pred.charge + PROTON
 
         return predictions
 
@@ -1264,8 +1316,8 @@ class DbSpec2Pep(Spec2Pep):
         batch_size = batch["precursor_charge"].shape[0]
 
         # Iterate precursor charges and m/z values per spectrum.
-        charge_iter = batch["precursor_charge"]  # tensor[B]
-        mz_iter = batch["precursor_mz"]  # tensor[B]
+        charge_iter = batch["precursor_charge"].detach().cpu().tolist()
+        mz_iter = batch["precursor_mz"].detach().cpu().tolist()
 
         # Use pre-computed encoder outputs if available; otherwise compute once here.
         if enc_cache is None:
@@ -1281,26 +1333,34 @@ class DbSpec2Pep(Spec2Pep):
         for i, (precursor_charge, precursor_mz) in enumerate(
             zip(charge_iter, mz_iter)
         ):
-            for cand in self.protein_database.get_candidates(
+            spec_cands = self.protein_database.get_candidates(
                 precursor_mz, precursor_charge
-            ):
-                candidates.append((i, cand))
+            )
+            candidates.extend((i, cand) for cand in spec_cands)
 
-            # Yield a batch if sufficient candidates are found or all spectra have been processed.
-            while len(candidates) >= batch_size or (
-                i == batch_size - 1 and len(candidates) > 0
-            ):
-                batch_candidates = candidates[:batch_size]
+        if len(candidates) == 0:
+            return
+
+        # Yield PSM sub-batches with a progress bar.
+        progress = tqdm.tqdm(
+            total=len(candidates),
+            desc="Scoring candidates",
+            unit="PSM",
+            leave=False,
+        )
+        try:
+            for start in range(0, len(candidates), batch_size):
+                batch_candidates = candidates[start : start + batch_size]
 
                 # Repeat the spectrum information for each candidate to be matched.
                 psm_batch = {key: [] for key in [*batch.keys(), "seq"]}
                 for spec_i, cand in batch_candidates:
-                    for key in batch.keys():
+                    for key in batch:
                         psm_batch[key].append(batch[key][spec_i])
                     psm_batch["seq"].append(cand)
 
                 # Convert tensor items to batched tensors on the correct device.
-                for key in psm_batch.keys():
+                for key in psm_batch:
                     if isinstance(psm_batch[key][0], torch.Tensor):
                         psm_batch[key] = torch.stack(psm_batch[key]).to(
                             self.decoder.device
@@ -1324,12 +1384,12 @@ class DbSpec2Pep(Spec2Pep):
                 psm_batch["precursors"] = precursors_all.index_select(
                     0, spec_idx
                 )
-
                 # Yield the PSM batch for processing.
                 yield psm_batch
 
-                # Remove the processed candidates and continue.
-                candidates = candidates[batch_size:]
+                progress.update(len(batch_candidates))
+        finally:
+            progress.close()
 
 
 def _calc_match_score(
