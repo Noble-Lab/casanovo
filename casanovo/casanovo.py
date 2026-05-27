@@ -560,7 +560,9 @@ def setup_model(
     cache_dir = Path(appdirs.user_cache_dir("casanovo", False, opinion=False))
     resolved_model: Optional[Path] = None
 
-    if not is_train:
+    if model and Path(model).is_file():
+        resolved_model = Path(model)
+    elif not is_train:
         if not model:
             logger.warning(
                 "No model was specified. Using the default model '%s'. "
@@ -570,12 +572,8 @@ def setup_model(
             )
             model = _DEFAULT_MODEL_ID
 
-        if Path(model).is_file():
-            resolved_model = Path(model)
-
-        elif _is_valid_url(model):
+        if _is_valid_url(model):
             resolved_model = _get_weights_from_url(model, cache_dir)
-
         else:
             try:
                 resolved_model = _get_model_weights(
@@ -583,8 +581,9 @@ def setup_model(
                 )
             except github.RateLimitExceededException:
                 logger.error(
-                    "GitHub API rate limit exceeded. Download model weights manually "
-                    "from https://github.com/Noble-Lab/casanovo and use '--model <path>'."
+                    "GitHub API rate limit exceeded. Download model weights "
+                    "manually from https://github.com/Noble-Lab/casanovo "
+                    "and use '--model <path>'."
                 )
                 raise PermissionError(
                     "GitHub API rate limit exceeded"
