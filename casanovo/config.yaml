@@ -205,3 +205,11 @@ residues:
   "[Ammonia-loss]-": -17.026549           # Ammonia loss
   "[+25.980265]-": 25.980265              # Carbamylation and ammonia loss
   #"[Carbamyl][Ammonia-loss]-": 25.980265  # Carbamylation and ammonia loss
+
+# When fine-tuning with a vocabulary that extends the checkpoint's, map each
+# new token to an existing token whose weights should be used for initialization.
+# Example:
+#   new_token_init:
+#     "K[Acetyl]": "K"
+# Leave empty when training from scratch or when vocabs already match.
+new_token_init: {}

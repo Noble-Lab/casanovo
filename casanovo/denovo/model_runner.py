@@ -144,6 +144,7 @@ class ModelRunner:
             model=str(self.model_filename),
             config_filename=self.config.file,
         )
+        self.writer.set_database(str(fasta_path))
         self.initialize_trainer(train=True)
         self.initialize_tokenizer()
         self.initialize_model(train=False, db_search=True)
@@ -174,6 +175,7 @@ class ModelRunner:
         train_peak_path: Iterable[str],
         valid_peak_path: Iterable[str],
         ckpt_path: Optional[str] = None,
+        tracking_peak_path: Iterable[str] = (),
     ) -> None:
         """
         Train the Casanovo model.
@@ -183,11 +185,18 @@ class ModelRunner:
         train_peak_path : iterable of str
             The path to the MS data files for training.
         valid_peak_path : iterable of str
-            The path to the MS data files for validation.
+            The path to the MS data files for validation. These files
+            contribute to the aggregate ``valid_CELoss`` used for
+            checkpoint selection.
         ckpt_path : str, optional
             Path to a checkpoint file to resume training from. When provided,
             training will resume from the saved optimizer state, learning rate
             scheduler, and epoch. If None, training starts fresh (default).
+        tracking_peak_path : iterable of str, optional
+            Additional MS data files whose loss is logged per-file for
+            monitoring purposes (e.g. detecting catastrophic forgetting)
+            but is excluded from the aggregate used for checkpoint
+            selection.
         """
         self.initialize_trainer(train=True)
         self.initialize_tokenizer()
@@ -195,8 +204,21 @@ class ModelRunner:
 
         train_paths = self._get_input_paths(train_peak_path, True, "train")
         valid_paths = self._get_input_paths(valid_peak_path, True, "valid")
-        self.initialize_data_module(train_paths, valid_paths)
+        tracking_paths = (
+            self._get_input_paths(tracking_peak_path, True, "tracking")
+            if tracking_peak_path
+            else []
+        )
+        self.initialize_data_module(
+            train_paths, valid_paths, tracking_paths=tracking_paths
+        )
         self.loaders.setup()
+
+        # Store per-file validation metadata on the model so validation_step
+        # can log per-file losses. trainer.datamodule is None when dataloaders
+        # are passed directly to trainer.fit(), so we attach metadata here.
+        self.model.val_stems = self.loaders.val_stems
+        self.model.n_main_loaders = self.loaders.n_main_loaders
 
         if ckpt_path is None:
             self.trainer.fit(
@@ -520,7 +542,9 @@ class ModelRunner:
             )
             # Use tokenizer initialized from config file instead of loaded
             # from checkpoint file.
+            ckpt_tokenizer = self.model.hparams.get("tokenizer")
             self.model.tokenizer = tokenizer
+            self._remap_decoder_vocab(ckpt_tokenizer, tokenizer)
 
             architecture_params = set(model_params.keys()) - set(
                 loaded_model_params.keys()
@@ -549,7 +573,9 @@ class ModelRunner:
                     weights_only=False,
                     **model_params,
                 )
+                ckpt_tokenizer = self.model.hparams.get("tokenizer")
                 self.model.tokenizer = tokenizer
+                self._remap_decoder_vocab(ckpt_tokenizer, tokenizer)
 
             except RuntimeError:
                 raise RuntimeError(
@@ -564,6 +590,7 @@ class ModelRunner:
         train_paths: Sequence[str] | None = None,
         valid_paths: Sequence[str] | None = None,
         test_paths: Sequence[str] | None = None,
+        tracking_paths: Sequence[str] | None = None,
     ) -> None:
         """Initialize the data module.
 
@@ -572,9 +599,13 @@ class ModelRunner:
         train_paths : str, optional
             Spectrum paths for model training.
         valid_paths : str, optional
-            Spectrum paths for validation.
+            Spectrum paths for validation (contribute to aggregate
+            ``valid_CELoss`` used for checkpoint selection).
         test_paths : str, optional
             Spectrum paths for evaluation or inference.
+        tracking_paths : str, optional
+            Additional validation paths logged per-file for monitoring
+            only; excluded from the aggregate ``valid_CELoss``.
         """
         try:
             n_devices = self.trainer.num_devices
@@ -601,6 +632,7 @@ class ModelRunner:
             train_paths=train_paths,
             valid_paths=valid_paths,
             test_paths=test_paths,
+            tracking_paths=tracking_paths,
             train_batch_size=train_batch_size,
             eval_batch_size=eval_batch_size,
             min_peaks=self.config.min_peaks,
@@ -730,6 +762,126 @@ class ModelRunner:
                 "config's `residues` and token ordering match those used "
                 "during training."
             )
+
+    def _remap_decoder_vocab(
+        self,
+        ckpt_tokenizer: Optional[PeptideTokenizer],
+        new_tokenizer: PeptideTokenizer,
+    ) -> None:
+        """Remap the decoder embedding and output layers to a new vocabulary.
+
+        Called after loading a checkpoint whose tokenizer vocabulary differs
+        from the config tokenizer (e.g. when fine-tuning with additional PTM
+        tokens). Rows for tokens present in both vocabularies are copied by
+        name; rows for new tokens are initialized from ``config.new_token_init``
+        (a dict mapping new token -> existing token to copy from). After this
+        call the decoder layers and ``model.vocab_size`` reflect the new vocab.
+
+        Parameters
+        ----------
+        ckpt_tokenizer : PeptideTokenizer or None
+            The tokenizer stored in the checkpoint. If None the function
+            returns immediately.
+        new_tokenizer : PeptideTokenizer
+            The tokenizer built from the current config file.
+        """
+        if ckpt_tokenizer is None:
+            return
+        # Build index dicts: token -> integer position in the embedding table.
+        ckpt_vocab = ckpt_tokenizer.index
+        new_vocab = new_tokenizer.index
+        ckpt_set = set(ckpt_vocab)
+        new_set = set(new_vocab)
+        if ckpt_set == new_set:
+            return
+
+        # Identify which tokens are added or removed relative to the checkpoint.
+        new_tokens = new_set - ckpt_set
+        removed_tokens = ckpt_set - new_set
+        if removed_tokens:
+            logger.warning(
+                "Checkpoint tokens absent from new config (dropped): %s",
+                sorted(removed_tokens),
+            )
+
+        # Every new token must have an initialization source in the config.
+        new_token_init: dict = self.config.new_token_init or {}
+        missing_init = new_tokens - set(new_token_init)
+        if missing_init:
+            raise ValueError(
+                f"New tokens {sorted(missing_init)} have no initialization "
+                "source. Add entries to the 'new_token_init' config field, "
+                'e.g.  "K[Acetyl]": "K"'
+            )
+
+        logger.info(
+            "Remapping decoder vocabulary: %d -> %d tokens",
+            len(ckpt_vocab) + 1,
+            len(new_vocab) + 1,
+        )
+
+        def _remap_rows(old: torch.Tensor) -> torch.Tensor:
+            """Return a new tensor with rows remapped by token name.
+
+            Row 0 (padding) is preserved as-is. Every other row is either
+            copied from the matching checkpoint position (known token) or
+            copied from the initialization-source token (new token).
+            """
+            new_n = len(new_vocab) + 1
+            out = torch.zeros(
+                new_n, *old.shape[1:], dtype=old.dtype, device=old.device
+            )
+            # Row 0 is the padding embedding; keep it unchanged.
+            out[0] = old[0]
+            for tok, new_idx in new_vocab.items():
+                if tok in ckpt_vocab:
+                    out[new_idx] = old[ckpt_vocab[tok]]
+                else:
+                    # New token: copy weights from the configured source token.
+                    init_src = new_token_init[tok]
+                    if init_src not in ckpt_vocab:
+                        raise ValueError(
+                            f"Init source {init_src!r} for new token "
+                            f"{tok!r} is not in checkpoint vocabulary"
+                        )
+                    out[new_idx] = old[ckpt_vocab[init_src]]
+            return out
+
+        new_n_tokens = len(new_vocab) + 1
+        decoder = self.model.decoder
+
+        # Replace the input embedding table (token -> vector).
+        old_emb = decoder.token_encoder.weight.data
+        new_emb = _remap_rows(old_emb)
+        decoder.token_encoder = torch.nn.Embedding(
+            new_n_tokens,
+            old_emb.shape[1],
+            padding_idx=decoder.token_encoder.padding_idx,
+        ).to(old_emb.device)
+        decoder.token_encoder.weight.data.copy_(new_emb)
+
+        # Replace the output projection (vector -> logit per token).
+        # Capture bias BEFORE replacing the layer to avoid reading
+        # the new (zero-initialized) bias instead of the checkpoint bias.
+        old_w = decoder.final.weight.data
+        old_b = (
+            decoder.final.bias.data.clone()
+            if decoder.final.bias is not None
+            else None
+        )
+        new_w = _remap_rows(old_w)
+        decoder.final = torch.nn.Linear(
+            old_w.shape[1], new_n_tokens, bias=old_b is not None
+        ).to(old_w.device)
+        decoder.final.weight.data.copy_(new_w)
+        if old_b is not None:
+            decoder.final.bias.data.copy_(_remap_rows(old_b))
+
+        # Keep vocab_size and the checkpoint's hyperparameter record in sync
+        # with the new layers so downstream comparisons and checkpoint saves
+        # see the updated vocabulary.
+        self.model.vocab_size = new_n_tokens
+        self.model.hparams["tokenizer"] = new_tokenizer
 
 
 def _get_peak_filenames(
