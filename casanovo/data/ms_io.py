@@ -148,7 +148,7 @@ class MztabWriter:
         """
         Export the spectrum identifications to the mzTab file.
         """
-        with open(self.filename, "w", newline="") as f:
+        with open(self.filename, "w", newline="", encoding="utf-8") as f:
             writer = csv.writer(f, delimiter="\t", lineterminator=os.linesep)
             # Write metadata.
             for row in self.metadata:
