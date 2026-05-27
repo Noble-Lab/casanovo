@@ -577,9 +577,18 @@ def setup_model(
             resolved_model = _get_weights_from_url(model, cache_dir)
 
         else:
-            resolved_model = _get_model_weights(
-                model, cache_dir, utils.split_version(__version__)
-            )
+            try:
+                resolved_model = _get_model_weights(
+                    model, cache_dir, utils.split_version(__version__)
+                )
+            except github.RateLimitExceededException:
+                logger.error(
+                    "GitHub API rate limit exceeded. Download model weights manually "
+                    "from https://github.com/Noble-Lab/casanovo and use '--model <path>'."
+                )
+                raise PermissionError(
+                    "GitHub API rate limit exceeded"
+                ) from None
 
     logger.info("Casanovo version %s", str(__version__))
     logger.debug("model = %s", resolved_model)
@@ -601,6 +610,7 @@ def _get_model_weights(
     Resolve a model selector to a checkpoint, checking the local cache
     first and falling back to GitHub releases.
     """
+    casanovo_version = tuple(int(x) for x in casanovo_version)
     os.makedirs(cache_dir, exist_ok=True)
 
     def scan_ckpts(filenames, base_dir=None):

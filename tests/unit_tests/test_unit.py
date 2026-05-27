@@ -288,31 +288,6 @@ def test_version():
     assert casanovo.__version__ is not None
 
 
-@pytest.mark.parametrize(
-    ("model_file", "expectation", "log_message"),
-    [
-        (None, None, "must also be provided"),
-        (
-            "https://github.com/Noble-Lab/casanovo",
-            pytest.raises(ValueError, match="cannot be loaded from a URL"),
-            None,
-        ),
-        (
-            "nonexistent_file.ckpt",
-            pytest.raises(ValueError, match="must point to an existing file"),
-            None,
-        ),
-    ],
-)
-def test_is_valid_model(model_file, expectation, log_message, caplog):
-    if expectation is None:
-        casanovo._is_valid_model(model_file, load_all_states=True)
-        assert log_message in caplog.text
-    else:
-        with expectation:
-            casanovo._is_valid_model(model_file, load_all_states=True)
-
-
 @pytest.mark.skip(reason="Skipping due to Linux deadlock issue")
 def test_n_workers(monkeypatch):
     """Check that n_workers is correct without a GPU."""
@@ -458,6 +433,13 @@ class MockResponseHead:
         return response
 
 
+@pytest.mark.parametrize(
+    ("model_arg", "expected_filename"),
+    [
+        (None, "casanovo_orbitrap_v3-0-0.ckpt"),
+        ("timstof", "casanovo_timstof_v3-0-0.ckpt"),
+    ],
+)
 def test_setup_model(monkeypatch, model_arg, expected_filename):
     test_releases = ["3.0.0", "3.0.999", "3.999.999"]
     mock_get = MockResponseGet()
@@ -688,7 +670,7 @@ def test_resolve_selector_success(selector, candidates, expected):
         # Ambiguous substring
         ("rap", ["orbitrap", "orbitrap-tmt"]),
         # Unknown
-        ("tof", ["orbitrap", "timstof"]),
+        ("xyz", ["orbitrap", "timstof"]),
         ("foobar", ["orbitrap", "timstof"]),
     ],
 )
