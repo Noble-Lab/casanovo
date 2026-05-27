@@ -523,13 +523,13 @@ def test_setup_model(monkeypatch, model_arg, expected_filename):
             temp_file_path, None, None, None, False
         )
         assert mock_get.request_counter == 3
-        assert result == temp_file_path
+        assert result == pathlib.Path(temp_file_path)
 
         _, result = casanovo.setup_model(
             temp_file_path, None, None, None, True
         )
         assert mock_get.request_counter == 3
-        assert result == temp_file_path
+        assert result == pathlib.Path(temp_file_path)
 
     with (
         monkeypatch.context() as mnk,
@@ -3122,7 +3122,6 @@ def test_train_cli_tracking_peak_path(tmp_path, mgf_small, monkeypatch):
         captured["tracking"] = tracking_pp
 
     monkeypatch.setattr(_ModelRunner, "train", fake_train)
-    monkeypatch.setattr(casanovo, "_is_valid_model", lambda *a, **kw: None)
     monkeypatch.setattr(
         casanovo, "_setup_output", lambda *a, **kw: (tmp_path, "out")
     )

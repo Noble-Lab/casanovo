@@ -641,14 +641,7 @@ def _get_model_weights(
             )
             return best
 
-    try:
-        repo = github.Github().get_repo("Noble-Lab/casanovo")
-    except github.RateLimitExceededException:
-        logger.error(
-            "GitHub API rate limit exceeded. Download model weights manually from "
-            "https://github.com/Noble-Lab/casanovo and use '--model <path>'."
-        )
-        raise PermissionError("GitHub API rate limit exceeded") from None
+    repo = github.Github().get_repo("Noble-Lab/casanovo")
 
     github_ckpts = []
     for release in repo.get_releases():
