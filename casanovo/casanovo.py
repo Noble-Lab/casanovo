@@ -567,7 +567,7 @@ def _parse_ckpt(filename: str) -> Optional[Tuple[str, Tuple[int, int, int]]]:
         and the integer tuple values set to the Casanovo compatibility
         version.
     """
-    parsed_string = _CKPT_RE.match(os.path.basename(filename))
+    parsed_string = _CKPT_RE.match(os.path.basename(filename).lower())
     if not parsed_string:
         return None
     return parsed_string.group(1), (
@@ -688,6 +688,25 @@ def setup_model(
 
     if model and Path(model).is_file():
         resolved_model = Path(model)
+    elif model:
+        if _is_valid_url(model):
+            resolved_model = _get_weights_from_url(model, cache_dir)
+        elif not is_train or model:
+            try:
+                version = tuple(
+                    int(x) if x else 0
+                    for x in utils.split_version(__version__)
+                )
+                resolved_model = _get_model_weights(model, cache_dir, version)
+            except github.RateLimitExceededException:
+                logger.error(
+                    "GitHub API rate limit exceeded. Download model weights "
+                    "manually from https://github.com/Noble-Lab/casanovo "
+                    "and use '--model <path>'."
+                )
+                raise PermissionError(
+                    "GitHub API rate limit exceeded"
+                ) from None
     elif not is_train:
         if not model:
             logger.warning(
@@ -698,22 +717,10 @@ def setup_model(
             )
             model = _DEFAULT_MODEL_ID
 
-        if _is_valid_url(model):
-            resolved_model = _get_weights_from_url(model, cache_dir)
-        else:
-            try:
-                resolved_model = _get_model_weights(
-                    model, cache_dir, utils.split_version(__version__)
-                )
-            except github.RateLimitExceededException:
-                logger.error(
-                    "GitHub API rate limit exceeded. Download model weights "
-                    "manually from https://github.com/Noble-Lab/casanovo "
-                    "and use '--model <path>'."
-                )
-                raise PermissionError(
-                    "GitHub API rate limit exceeded"
-                ) from None
+        version = tuple(
+            int(x) if x else 0 for x in utils.split_version(__version__)
+        )
+        resolved_model = _get_model_weights(model, cache_dir, version)
 
     logger.info("Casanovo version %s", str(__version__))
     logger.debug("model = %s", resolved_model)
@@ -776,16 +783,21 @@ def _get_model_weights(
     local = scan_ckpts(os.listdir(cache_dir), cache_dir)
 
     if local:
-        canonical_id = _resolve_selector(
-            selector, list({mid for mid, _, _ in local})
-        )
-        family = [(p, v) for mid, p, v in local if mid == canonical_id]
-        best = _best_ckpt(family, casanovo_version)
-        if best:
-            logger.info(
-                "Model weights file %s retrieved from local cache", best
+        try:
+            canonical_id = _resolve_selector(
+                selector, list({mid for mid, _, _ in local})
             )
-            return best
+        except ValueError:
+            pass
+
+        if canonical_id is not None:
+            family = [(p, v) for mid, p, v in local if mid == canonical_id]
+            best = _best_ckpt(family, casanovo_version)
+            if best:
+                logger.info(
+                    "Model weights file %s retrieved from local cache", best
+                )
+                return best
 
     repo = github.Github().get_repo("Noble-Lab/casanovo")
 

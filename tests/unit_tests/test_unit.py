@@ -687,7 +687,7 @@ def test_resolve_selector_failure(selector, candidates):
         ("casanovo_orbitrap-tmt_v6-0-1.ckpt", ("orbitrap-tmt", (6, 0, 1))),
         # Path prefix is stripped correctly
         ("/some/dir/casanovo_orbitrap_v3-0-0.ckpt", ("orbitrap", (3, 0, 0))),
-        ("casanovo_Orbitrap_v3-0-0.ckpt", ("orbitrap", (5, 0, 0))),
+        ("casanovo_Orbitrap_v3-0-0.ckpt", ("orbitrap", (3, 0, 0))),
     ],
 )
 def test_parse_ckpt_valid(filename, expected):
