@@ -520,13 +520,13 @@ def test_setup_model(monkeypatch, model_arg, expected_filename):
             temp_file_path, None, None, None, False
         )
         assert mock_get.request_counter == 3
-        assert result == temp_file_path
+        assert result == pathlib.Path(temp_file_path)
 
         _, result = casanovo.setup_model(
             temp_file_path, None, None, None, True
         )
         assert mock_get.request_counter == 3
-        assert result == temp_file_path
+        assert result == pathlib.Path(temp_file_path)
 
     # Test model is neither a URL or File
     with (
