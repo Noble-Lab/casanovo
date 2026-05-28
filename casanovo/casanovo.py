@@ -395,6 +395,36 @@ def train(
         utils.log_run_report(start_time=start_time, end_time=time.time())
 
 
+@main.command()
+def version() -> None:
+    """Get the Casanovo version information."""
+    _setup_output(None, None, True, "info")
+    utils.log_system_info()
+
+
+@main.command(cls=_SharedFileIOParams)
+def configure(
+    output_dir: str, output_root: str, verbosity: str, force_overwrite: bool
+) -> None:
+    """
+    Generate a Casanovo configuration file to customize.
+
+    The Casanovo configuration file is in the YAML format.
+    """
+    utils.log_system_info()
+    output_path, _ = _setup_output(
+        output_dir, output_root, force_overwrite, verbosity
+    )
+    config_fname = output_root if output_root is not None else "casanovo"
+    config_fname = Path(config_fname).with_suffix(".yaml")
+    if not force_overwrite:
+        utils.check_dir_file_exists(output_path, str(config_fname))
+
+    config_path = str(output_path / config_fname)
+    Config.copy_default(config_path)
+    logger.info(f"Wrote {config_path}")
+
+
 def _is_valid_model(model: Optional[str], load_all_states: bool) -> None:
     """
     Validate the model argument when --load_all_states is specified.
@@ -429,36 +459,6 @@ def _is_valid_model(model: Optional[str], load_all_states: bool) -> None:
             raise ValueError(
                 "When --load_all_states is True, the model path must point to an existing file.",
             )
-
-
-@main.command()
-def version() -> None:
-    """Get the Casanovo version information."""
-    _setup_output(None, None, True, "info")
-    utils.log_system_info()
-
-
-@main.command(cls=_SharedFileIOParams)
-def configure(
-    output_dir: str, output_root: str, verbosity: str, force_overwrite: bool
-) -> None:
-    """
-    Generate a Casanovo configuration file to customize.
-
-    The Casanovo configuration file is in the YAML format.
-    """
-    utils.log_system_info()
-    output_path, _ = _setup_output(
-        output_dir, output_root, force_overwrite, verbosity
-    )
-    config_fname = output_root if output_root is not None else "casanovo"
-    config_fname = Path(config_fname).with_suffix(".yaml")
-    if not force_overwrite:
-        utils.check_dir_file_exists(output_path, str(config_fname))
-
-    config_path = str(output_path / config_fname)
-    Config.copy_default(config_path)
-    logger.info(f"Wrote {config_path}")
 
 
 def setup_logging(
@@ -613,7 +613,7 @@ def _resolve_selector(selector: str, candidates: List[str]) -> str:
             options = ", ".join(sorted(matches))
             raise ValueError(
                 f"Ambiguous model selector '{selector}'. Matching models:\n"
-                + f"{options} \n Please specify one of: {options}."
+                + f"{options} \n Please specify one of these options."
             )
 
     available = "\n".join(f"  {c}" for c in sorted(candidates))
@@ -798,7 +798,9 @@ def _get_model_weights(
             canonical_id = _resolve_selector(
                 selector, list({mid for mid, _, _ in local})
             )
-        except ValueError:
+        except ValueError as exc:
+            if "Unknown model selector" not in str(exc):
+                raise
             canonical_id = None
 
         if canonical_id is not None:
