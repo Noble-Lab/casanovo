@@ -582,6 +582,9 @@ def test_get_model_weights(monkeypatch, selector, expected_filename):
             monkeypatch.context() as mnk,
             tempfile.TemporaryDirectory() as tmp_dir,
         ):
+            version = tuple(
+                int(x) if x else 0 for x in utils.split_version(version)
+            )
             mnk.setattr(casanovo, "__version__", version)
             mnk.setattr(
                 "appdirs.user_cache_dir", lambda n, a, opinion: tmp_dir
@@ -593,13 +596,13 @@ def test_get_model_weights(monkeypatch, selector, expected_filename):
             filename = tmp_path / expected_filename
             assert not filename.is_file()
             result_path = casanovo._get_model_weights(
-                selector, tmp_path, utils.split_version(version)
+                selector, tmp_path, version
             )
             assert result_path == filename
             assert filename.is_file()
             # Second call should use cache, no extra download.
             result_path = casanovo._get_model_weights(
-                selector, tmp_path, utils.split_version(version)
+                selector, tmp_path, version
             )
             assert result_path == filename
 

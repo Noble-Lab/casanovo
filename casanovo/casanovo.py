@@ -686,19 +686,19 @@ def setup_model(
     cache_dir = Path(appdirs.user_cache_dir("casanovo", False, opinion=False))
     resolved_model: Optional[Path] = None
 
+    version = tuple(
+        int(x) if x else 0 for x in utils.split_version(__version__)
+    )
+
     if model and Path(model).is_file():
         resolved_model = Path(model)
     elif model:
         if _is_valid_url(model):
             resolved_model = _get_weights_from_url(model, cache_dir)
-        elif not is_train or model:
+        else:
             try:
-                version = tuple(
-                    int(x) if x else 0
-                    for x in utils.split_version(__version__)
-                )
                 resolved_model = _get_model_weights(model, cache_dir, version)
-            except github.RateLimitExceededException:
+            except github.GithubException.RateLimitExceededException:
                 logger.error(
                     "GitHub API rate limit exceeded. Download model weights "
                     "manually from https://github.com/Noble-Lab/casanovo "
@@ -708,19 +708,23 @@ def setup_model(
                     "GitHub API rate limit exceeded"
                 ) from None
     elif not is_train:
-        if not model:
-            logger.warning(
-                "No model was specified. Using the default model '%s'. "
-                "To make this choice explicit, use '--model %s'.",
-                _DEFAULT_MODEL_ID,
-                _DEFAULT_MODEL_ID,
-            )
-            model = _DEFAULT_MODEL_ID
-
-        version = tuple(
-            int(x) if x else 0 for x in utils.split_version(__version__)
+        # Defaulting to default model
+        logger.warning(
+            "No model was specified. Using the default model '%s'. "
+            "To make this choice explicit, use '--model %s'.",
+            _DEFAULT_MODEL_ID,
+            _DEFAULT_MODEL_ID,
         )
-        resolved_model = _get_model_weights(model, cache_dir, version)
+        model = _DEFAULT_MODEL_ID
+        try:
+            resolved_model = _get_model_weights(model, cache_dir, version)
+        except github.GithubException.RateLimitExceededException:
+            logger.error(
+                "GitHub API rate limit exceeded. Download model weights "
+                "manually from https://github.com/Noble-Lab/casanovo "
+                "and use '--model <path>'."
+            )
+            raise PermissionError("GitHub API rate limit exceeded") from None
 
     logger.info("Casanovo version %s", str(__version__))
     logger.debug("model = %s", resolved_model)
@@ -788,7 +792,7 @@ def _get_model_weights(
                 selector, list({mid for mid, _, _ in local})
             )
         except ValueError:
-            pass
+            canonical_id = None
 
         if canonical_id is not None:
             family = [(p, v) for mid, p, v in local if mid == canonical_id]
