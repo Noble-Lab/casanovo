@@ -291,6 +291,9 @@ END IONS
 In case the peptide sequence includes PTMs, ensure that these are formatted correctly and match the amino acid and modification vocabulary in the Casanovo configuration.
 ```
 
+When fine-tuning a pre-trained model with new PTMs, the `new_token_init` option in the [configuration file](https://github.com/Noble-Lab/casanovo/blob/main/casanovo/config.yaml) must map each new token to an existing one for weight initialization.
+See the [FAQ](faq.md#how-do-i-fine-tune-casanovo-on-data-with-new-ptms) for the complete fine-tuning workflow.
+
 mzML or mzXML files are not supported as input during training, as these formats do not provide a mechanism to annotate their spectra with peptide sequences.
 Similarly, in Casanovo evaluation mode only annotated MGF files are supported.
 
