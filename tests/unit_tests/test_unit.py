@@ -363,9 +363,9 @@ class MockRepo:
         self,
         release_dict={
             "v3.0.0": [
-                "casanovo_orbitrap_v3-0-0.ckpt",  # renamed from massivekb
+                "casanovo_orbitrap_v3-0-0.ckpt",
                 "casanovo_timstof_v3-0-0.ckpt",
-                "casanovo_non-enzy.checkpt",  # invalid extension – ignored
+                "casanovo_non-enzy.ckpt",
                 "v3.0.0.zip",
                 "v3.0.0.tar.gz",
             ],
@@ -687,6 +687,7 @@ def test_resolve_selector_failure(selector, candidates):
         ("casanovo_orbitrap-tmt_v6-0-1.ckpt", ("orbitrap-tmt", (6, 0, 1))),
         # Path prefix is stripped correctly
         ("/some/dir/casanovo_orbitrap_v3-0-0.ckpt", ("orbitrap", (3, 0, 0))),
+        ("casanovo_Orbitrap_v3-0-0.ckpt", ("orbitrap", (5, 0, 0))),
     ],
 )
 def test_parse_ckpt_valid(filename, expected):
@@ -699,7 +700,6 @@ def test_parse_ckpt_valid(filename, expected):
         "casanovo_massivekb.ckpt",  # old format, no version
         "casanovo_timstof.ckpt",  # old format, no version
         "casanovo_non-enzy.checkpt",  # wrong extension
-        "casanovo_Orbitrap_v3-0-0.ckpt",  # uppercase model ID
         "casanovo__v3-0-0.ckpt",  # empty model ID
         "casanovo_orbitrap_v3.0.0.ckpt",  # dots instead of dashes in version
         "v3.0.0.zip",

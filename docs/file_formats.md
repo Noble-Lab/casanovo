@@ -36,7 +36,9 @@ These weights define the functionality of the Casanovo neural network.
 
 If no input weights file is provided, Casanovo will automatically use the most recent compatible weights from the [official Casanovo GitHub repository](https://github.com/Noble-Lab/casanovo), which will be downloaded and cached locally if they are not already.
 Model weights are retrieved by matching Casanovo release version, which is of the form (major, minor, patch).
-Casanovo supports models optimized for different instrument types. The default model is **orbitrap**, and other models can be specified with **--model timstof** (only other model currently supported). The model selector matching is done case-insensitively and separators are ignored (e.g., **Orbitrap**, **orbitrap**, and **orbi-trap** all resolve to the **orbitrap** model). Partial names are accepted as long as they match exactly one model (e.g., **tims** would resolve to **timstof**).
+Casanovo supports models optimized for different instrument types. 
+The default model is ``orbitrap``, and other models can be specified with ``--model timstof`` (only other model currently supported). 
+The model selector matching is done case-insensitively and separators are ignored (e.g., ``Orbitrap``, ``orbitrap``, and ``orbi-trap`` all resolve to the ``orbitrap`` model). Partial names are accepted as long as they match exactly one model (e.g., ``tims`` would resolve to ``timstof``).
 If no model weights for an identical release are available, alternative releases with matching (i) major and minor, or (ii) major versions will be used.
 
 Alternatively, you can input custom model weights in the form of a local file system path or a URL pointing to a compatible Casanovo model weights file.

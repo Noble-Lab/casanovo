@@ -520,29 +520,83 @@ def setup_logging(
     logging.getLogger("urllib3").setLevel(logging.WARNING)
 
 
+# The regex pattern below describes the the model weight
+# naming pattern.
 _CKPT_RE = re.compile(
     r"^casanovo_([a-z0-9][a-z0-9-]*)_v([0-9]+)-([0-9]+)-([0-9]+)\.ckpt$"
 )
+# The default model is orbitrap.
 _DEFAULT_MODEL_ID = "orbitrap"
 
 
 def _normalize(s: str) -> str:
+    """
+    Normalizes model selector.
+
+    Removes hyphens, underscores, and whitespace characters.
+
+    Parameters
+    ----------
+    s: String
+       The string to be normalized.
+
+    Returns
+    -------
+    String
+       The normalized model selector.
+    """
     return re.sub(r"[-_\s]", "", s).lower()
 
 
 def _parse_ckpt(filename: str) -> Optional[Tuple[str, Tuple[int, int, int]]]:
-    m = _CKPT_RE.match(os.path.basename(filename))
-    if not m:
+    """
+    Parses the checkpoint filename.
+
+    Extracts the major, minor model versions and model selector.
+
+    Parameters
+    ----------
+    filename: String
+        The name of the model file provided.
+
+    Returns
+    -------
+    Optional[Tuple[str, Tuple[int, int, int]]]
+        Method could return None if filename does not match _CKPT_RE
+        Returns a Tuple with the String set to the model selector,
+        and the integer tuple values set to the Casanovo compatibility
+        version.
+    """
+    parsed_string = _CKPT_RE.match(os.path.basename(filename))
+    if not parsed_string:
         return None
-    return m.group(1), (int(m.group(2)), int(m.group(3)), int(m.group(4)))
+    return parsed_string.group(1), (
+        int(parsed_string.group(2)),
+        int(parsed_string.group(3)),
+        int(parsed_string.group(4)),
+    )
 
 
 def _resolve_selector(selector: str, candidates: List[str]) -> str:
     """
+    Resolves the model selector to a present model.
+
     Resolve a model selector to a canonical model ID via:
       1. Exact normalized match
       2. Unique normalized prefix match
       3. Unique normalized substring match
+
+    Parameters
+    ----------
+    selector: String
+       The parsed selector from _parse_ckpt.
+    candidates: List[str]
+        The current models present in the cache.
+
+    Returns
+    -------
+    String
+        Best matching model to selector
     """
     norm = _normalize(selector)
     norm_map = {c: _normalize(c) for c in candidates}
@@ -558,8 +612,7 @@ def _resolve_selector(selector: str, candidates: List[str]) -> str:
             options = ", ".join(sorted(matches))
             raise ValueError(
                 f"Ambiguous model selector '{selector}'. Matching models:\n"
-                + "\n".join(f"  {m}" for m in sorted(matches))
-                + f"\nPlease specify one of: {options}."
+                + f"{options} \n Please specify one of: {options}."
             )
 
     available = "\n".join(f"  {c}" for c in sorted(candidates))
@@ -572,7 +625,16 @@ def _best_ckpt(
     checkpoints: List[Tuple[Path, Tuple[int, int, int]]],
     version: Tuple[int, int, int],
 ) -> Optional[Path]:
-    """Pick best checkpoint by: exact patch > latest same minor > latest same major."""
+    """
+    Pick best checkpoint by: exact patch > latest same minor > latest same major.
+
+    Parameters
+    ----------
+    checkpoints: List[Tuple[Path, Tuple[int, int, int]]]
+        Possible checkpoints.
+    version: Tuple[int, int, int]
+        Intended version.
+    """
     maj, min_, pat = version
     for subset in (
         [x for x in checkpoints if x[1] == (maj, min_, pat)],
@@ -591,6 +653,33 @@ def setup_model(
     output_root_name: str,
     is_train: bool,
 ) -> Tuple["Config", Optional[Path]]:
+    """
+    Set up Casanovo config and resolve model weights (.ckpt) path.
+
+    Parameters
+    ----------
+    model : str | None
+        May be a file system path, a URL pointing to a .ckpt file, or
+        None. If `model` is a URL the weights will be downloaded and
+        cached from `model`. If `model` is `None` the weights from the
+        latest matching official release will be used (downloaded and
+        cached).
+    config : str | None
+        Config file path. If None the default config will be used.
+    output_dir: : Path | str
+        The path to the output directory.
+    output_root_name : str,
+        The base name for the output files.
+    is_train : bool
+        Are we training? If not, we need to retrieve weights when the
+        model is None.
+
+    Return
+    ------
+    Tuple[Config, Path]
+        Initialized Casanovo config, local path to model weights if any
+        (may be `None` if training using random starting weights).
+    """
     config = Config(config)
     seed_everything(seed=config["random_seed"], workers=True)
 
@@ -643,10 +732,34 @@ def _get_model_weights(
     casanovo_version: Tuple[int, int, int],
 ) -> Path:
     """
-    Resolve a model selector to a checkpoint, checking the local cache
-    first and falling back to GitHub releases.
+    Use cached model weights or download them from GitHub.
+
+    If no weights file (extension: .ckpt) is available in the cache
+    directory, it will be downloaded from a release asset on GitHub.
+    Model weights are retrieved by matching release version and by model selector.
+    The model selector indicates the type of model to be used (e.g., orbitrap, timstof).
+    Partial (or full) case-insensitive and character stripped comparisons are made
+    to the existing models to find the closest version.
+    If no model weights for an identical release (major, minor, patch), alternative
+    releases with matching (i) major and minor, or (ii) major versions
+    will be used. If no matching release can be found, no model weights
+    will be downloaded.
+
+    Note that the GitHub API is limited to 60 requests from the same IP
+    per hour.
+
+    Parameters
+    ----------
+    cache_dir : Path
+        Model weights cache directory path.
+    selector : String
+        The model name (e.g., timstof, orbitrap)
+
+    Returns
+    -------
+    Path
+        The path of the model weights file.
     """
-    casanovo_version = tuple(int(x) for x in casanovo_version)
     os.makedirs(cache_dir, exist_ok=True)
 
     def scan_ckpts(filenames, base_dir=None):
@@ -660,11 +773,8 @@ def _get_model_weights(
                 results.append((model_id, path, version))
         return results
 
-    local = (
-        scan_ckpts(os.listdir(cache_dir), cache_dir)
-        if cache_dir.exists()
-        else []
-    )
+    local = scan_ckpts(os.listdir(cache_dir), cache_dir)
+
     if local:
         canonical_id = _resolve_selector(
             selector, list({mid for mid, _, _ in local})
