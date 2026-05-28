@@ -698,7 +698,7 @@ def setup_model(
         else:
             try:
                 resolved_model = _get_model_weights(model, cache_dir, version)
-            except github.GithubException.RateLimitExceededException:
+            except github.RateLimitExceededException:
                 logger.error(
                     "GitHub API rate limit exceeded. Download model weights "
                     "manually from https://github.com/Noble-Lab/casanovo "
@@ -718,7 +718,7 @@ def setup_model(
         model = _DEFAULT_MODEL_ID
         try:
             resolved_model = _get_model_weights(model, cache_dir, version)
-        except github.GithubException.RateLimitExceededException:
+        except github.RateLimitExceededException:
             logger.error(
                 "GitHub API rate limit exceeded. Download model weights "
                 "manually from https://github.com/Noble-Lab/casanovo "
