@@ -214,7 +214,7 @@ casanovo train --model pretrained.ckpt -p new_ptm_validation.mgf -t original_val
 ```
 
 Files specified with `-p` (`--validation_peak_path`) contribute to the aggregate `valid_CELoss` metric used for selecting the best checkpoint.
-Files specified with `-t` (`--tracking_peak_path`) are logged per-file only (as `valid_CELoss/<file_stem>`, e.g. `valid_CELoss/original_validation`) and do not influence which checkpoint is saved as best.
+Files specified with `-t` (`--tracking_peak_path`) are logged per-file only (as `valid/<file_stem>` in the console and CSV logs, e.g. `valid/original_validation`) and do not influence which checkpoint is saved as best.
 This makes it easy to detect if the model is forgetting what it previously learned.
 
 ```{tip}
