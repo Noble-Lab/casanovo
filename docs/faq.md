@@ -159,8 +159,67 @@ To include new PTMs in Casanovo, you need to:
 2. Compile a large training dataset that includes those PTMs and format this as an annotated MGF file. Note that you can include some or all of the data that was originally used to train Casanovo (see above), in addition to the data that includes your new types of PTMs.
 3. Train a new version of Casanovo on this dataset.
 
-It is unfortunately not possible to finetune a pre-trained Casanovo model to add new types of PTMs.
-Instead, such a model must be trained from scratch.
+Alternatively, you can fine-tune an existing pre-trained Casanovo model on data with new PTMs instead of training from scratch.
+See the next question for a step-by-step guide.
+
+### How do I fine-tune Casanovo on data with new PTMs?
+
+Instead of training a new model from scratch, Casanovo can fine-tune a pre-trained checkpoint with an extended residue vocabulary.
+When loading the checkpoint, Casanovo copies the learned weights for all tokens that the checkpoint already knows, and initializes new tokens from existing ones using the `new_token_init` configuration option.
+
+To fine-tune Casanovo with new PTMs:
+
+1. **Add the new PTM to the `residues` dictionary** in the [configuration file](https://github.com/Noble-Lab/casanovo/blob/main/casanovo/config.yaml).
+   For example, to add acetylation of lysine:
+
+   ```yaml
+   residues:
+     # ... existing residues ...
+     "K[Acetyl]": 170.105528
+   ```
+
+2. **Map each new token to an initialization source** in the `new_token_init` configuration option.
+   This tells Casanovo which existing token's learned weights to copy as a starting point for the new token:
+
+   ```yaml
+   new_token_init:
+     "K[Acetyl]": "K"
+   ```
+
+3. **Prepare an annotated MGF training dataset** that includes spectra with the new PTMs.
+   You can combine this with some or all of the data that was originally used to train Casanovo (see above).
+
+4. **Run fine-tuning**, specifying the pre-trained checkpoint with `--model`:
+
+   ```sh
+   casanovo train --model pretrained.ckpt -p validation_spectra.mgf training_spectra.mgf
+   ```
+
+```{tip}
+The initialization source in `new_token_init` should be the unmodified amino acid (e.g. `"K"` for `"K[Acetyl]"`) or an amino acid with a similar PTM that the model already knows.
+This gives the model a reasonable starting point for the new token's weights.
+```
+
+```{warning}
+Every new token in `residues` that is not present in the checkpoint must have a corresponding entry in `new_token_init`.
+Omitting an entry will cause Casanovo to raise a `ValueError` at startup.
+```
+
+**Monitoring for catastrophic forgetting.**
+When fine-tuning, the model may lose performance on its original training distribution.
+To monitor this, use the `--tracking_peak_path` (`-t`) option to track validation loss on additional files without influencing checkpoint selection:
+
+```sh
+casanovo train --model pretrained.ckpt -p new_ptm_validation.mgf -t original_validation.mgf training_spectra.mgf
+```
+
+Files specified with `-p` (`--validation_peak_path`) contribute to the aggregate `valid_CELoss` metric used for selecting the best checkpoint.
+Files specified with `-t` (`--tracking_peak_path`) are logged per-file only (as `valid/<file_stem>` in the console and CSV logs, e.g. `valid/original_validation`) and do not influence which checkpoint is saved as best.
+This makes it easy to detect if the model is forgetting what it previously learned.
+
+```{tip}
+To view per-file tracking losses, enable `tb_summarywriter: true` or `log_metrics: true` in the [configuration file](https://github.com/Noble-Lab/casanovo/blob/main/casanovo/config.yaml).
+```
 
 ### How can I change the learning rate schedule used during training?
 
