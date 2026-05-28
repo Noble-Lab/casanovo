@@ -725,11 +725,17 @@ def setup_model(
             resolved_model = _get_model_weights(model, cache_dir, version)
         except github.RateLimitExceededException:
             logger.error(
-                "GitHub API rate limit exceeded. Download model weights "
-                "manually from https://github.com/Noble-Lab/casanovo "
-                "and use '--model <path>'."
+                "GitHub API rate limit exceeded while trying to download "
+                "the model weights. Please download compatible model "
+                "weights manually from the official Casanovo code website "
+                "(https://github.com/Noble-Lab/casanovo) and specify "
+                "these explicitly using the `--model` parameter when "
+                "running Casanovo."
             )
-            raise PermissionError("GitHub API rate limit exceeded") from None
+            raise PermissionError(
+                "GitHub API rate limit exceeded while trying to download "
+                "the model weights"
+            ) from None
 
     logger.info("Casanovo version %s", str(__version__))
     logger.debug("model = %s", resolved_model)

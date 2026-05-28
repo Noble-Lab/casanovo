@@ -484,7 +484,8 @@ def test_setup_model(monkeypatch, model_arg, expected_filename):
         file_url = f"http://www.example.com/{cache_file_name}"
         url_hash = hashlib.shake_256(file_url.encode("utf-8")).hexdigest(5)
         cache_dir = pathlib.Path(tmp_dir)
-        cache_file_path = cache_dir / url_hash / cache_file_name
+        cache_file_dir = cache_dir / url_hash
+        cache_file_path = cache_file_dir / cache_file_name
 
         assert not cache_file_path.is_file()
         _, result_path = casanovo.setup_model(
@@ -495,12 +496,15 @@ def test_setup_model(monkeypatch, model_arg, expected_filename):
         assert mock_get.request_counter == 2
         os.remove(result_path)
 
+        assert not cache_file_path.is_file()
         _, result_path = casanovo.setup_model(
             file_url, None, None, None, False
         )
         assert cache_file_path.is_file()
+        assert result_path.resolve() == cache_file_path.resolve()
         assert mock_get.request_counter == 3
 
+    # Test model is file
     with (
         monkeypatch.context() as mnk,
         tempfile.NamedTemporaryFile(suffix=".ckpt") as temp_file,
@@ -516,14 +520,15 @@ def test_setup_model(monkeypatch, model_arg, expected_filename):
             temp_file_path, None, None, None, False
         )
         assert mock_get.request_counter == 3
-        assert result == pathlib.Path(temp_file_path)
+        assert result == temp_file_path
 
         _, result = casanovo.setup_model(
             temp_file_path, None, None, None, True
         )
         assert mock_get.request_counter == 3
-        assert result == pathlib.Path(temp_file_path)
+        assert result == temp_file_path
 
+    # Test model is neither a URL or File
     with (
         monkeypatch.context() as mnk,
         tempfile.TemporaryDirectory() as tmp_dir,
@@ -535,6 +540,12 @@ def test_setup_model(monkeypatch, model_arg, expected_filename):
 
         with pytest.raises(ValueError):
             casanovo.setup_model("FooBar", None, None, None, False)
+
+        assert mock_get.request_counter == 3
+
+        with pytest.raises(ValueError):
+            casanovo.setup_model("FooBar", None, None, None, False)
+
         assert mock_get.request_counter == 3
 
 
@@ -599,7 +610,8 @@ def test_get_model_weights(monkeypatch, selector, expected_filename):
             )
             assert result_path == filename
 
-    # No compatible checkpoint: full version mismatch and major mismatch.
+    # Impossible to find model weights for (i) full version mismatch and (ii)
+    # major version mismatch.
     for version in ["999.999.999", "999.0.0"]:
         with (
             monkeypatch.context() as mnk,
@@ -619,7 +631,7 @@ def test_get_model_weights(monkeypatch, selector, expected_filename):
                     version_tup,
                 )
 
-    # GitHub rate limit bubbles up as RateLimitExceededException.
+    # Test GitHub API rate limit.
     def request(self, *args, **kwargs):
         raise github.RateLimitExceededException(
             403, "API rate limit exceeded", None
@@ -637,6 +649,7 @@ def test_get_model_weights(monkeypatch, selector, expected_filename):
             casanovo._get_model_weights(
                 selector, pathlib.Path(tmp_dir), (3, 0, 0)
             )
+
         assert mock_get.request_counter == 0
 
 
@@ -3147,6 +3160,7 @@ def test_train_cli_tracking_peak_path(tmp_path, mgf_small, monkeypatch):
         captured["tracking"] = tracking_pp
 
     monkeypatch.setattr(_ModelRunner, "train", fake_train)
+    monkeypatch.setattr(casanovo, "_is_valid_model", lambda *a, **kw: None)
     monkeypatch.setattr(
         casanovo, "_setup_output", lambda *a, **kw: (tmp_path, "out")
     )
