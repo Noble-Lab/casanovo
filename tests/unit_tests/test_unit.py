@@ -465,13 +465,6 @@ def test_setup_model(monkeypatch, model_arg, expected_filename):
         assert mock_get.request_counter == 1
         os.remove(result_path)
 
-        if model_arg is None:
-            assert not filename.is_file()
-            _, result = casanovo.setup_model(None, None, None, None, True)
-            assert result is None
-            assert not filename.is_file()
-            assert mock_get.request_counter == 1
-
         assert not filename.is_file()
         _, result = casanovo.setup_model(None, None, None, None, True)
         assert result is None
@@ -812,6 +805,31 @@ def test_get_weights_from_url(monkeypatch):
         with pytest.raises(ValueError):
             bad_url = "foobar"
             casanovo._get_weights_from_url(bad_url, cache_dir)
+
+
+@pytest.mark.parametrize(
+    ("model_file", "expectation", "log_message"),
+    [
+        (None, None, "must also be provided"),
+        (
+            "https://github.com/Noble-Lab/casanovo",
+            pytest.raises(ValueError, match="cannot be loaded from a URL"),
+            None,
+        ),
+        (
+            "nonexistent_file.ckpt",
+            pytest.raises(ValueError, match="must point to an existing file"),
+            None,
+        ),
+    ],
+)
+def test_is_valid_model(model_file, expectation, log_message, caplog):
+    if expectation is None:
+        casanovo._is_valid_model(model_file, load_all_states=True)
+        assert log_message in caplog.text
+    else:
+        with expectation:
+            casanovo._is_valid_model(model_file, load_all_states=True)
 
 
 def test_is_valid_url():

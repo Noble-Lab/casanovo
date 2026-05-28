@@ -348,6 +348,7 @@ def train(
     those provided by MassIVE-KB, from which to train a new Casnovo
     model.
     """
+
     _is_valid_model(model, load_all_states)
 
     output_path, output_root_name = _setup_output(
@@ -700,12 +701,16 @@ def setup_model(
                 resolved_model = _get_model_weights(model, cache_dir, version)
             except github.RateLimitExceededException:
                 logger.error(
-                    "GitHub API rate limit exceeded. Download model weights "
-                    "manually from https://github.com/Noble-Lab/casanovo "
-                    "and use '--model <path>'."
+                    "GitHub API rate limit exceeded while trying to download "
+                    "the model weights. Please download compatible model "
+                    "weights manually from the official Casanovo code website "
+                    "(https://github.com/Noble-Lab/casanovo) and specify "
+                    "these explicitly using the `--model` parameter when "
+                    "running Casanovo."
                 )
                 raise PermissionError(
-                    "GitHub API rate limit exceeded"
+                    "GitHub API rate limit exceeded while trying to download "
+                    "the model weights"
                 ) from None
     elif not is_train:
         # Defaulting to default model
@@ -773,18 +778,14 @@ def _get_model_weights(
     """
     os.makedirs(cache_dir, exist_ok=True)
 
-    def scan_ckpts(filenames, base_dir=None):
-        """Parse filenames into (model_id, path, version) triples."""
-        results = []
-        for fn in filenames:
-            parsed = _parse_ckpt(fn)
-            if parsed:
-                model_id, version = parsed
-                path = (base_dir / fn) if base_dir else Path(fn)
-                results.append((model_id, path, version))
-        return results
-
-    local = scan_ckpts(os.listdir(cache_dir), cache_dir)
+    # Parse filenames into (model_id, path, version) triples.
+    local = []
+    for fn in os.listdir(cache_dir):
+        parsed = _parse_ckpt(fn)
+        if parsed:
+            model_id, version = parsed
+            path = (cache_dir / fn) if cache_dir else Path(fn)
+            local.append((model_id, path, version))
 
     if local:
         try:
