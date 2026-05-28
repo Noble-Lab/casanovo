@@ -582,7 +582,7 @@ def test_get_model_weights(monkeypatch, selector, expected_filename):
             monkeypatch.context() as mnk,
             tempfile.TemporaryDirectory() as tmp_dir,
         ):
-            version = tuple(
+            version_tup = tuple(
                 int(x) if x else 0 for x in utils.split_version(version)
             )
             mnk.setattr(casanovo, "__version__", version)
@@ -596,13 +596,13 @@ def test_get_model_weights(monkeypatch, selector, expected_filename):
             filename = tmp_path / expected_filename
             assert not filename.is_file()
             result_path = casanovo._get_model_weights(
-                selector, tmp_path, version
+                selector, tmp_path, version_tup
             )
             assert result_path == filename
             assert filename.is_file()
             # Second call should use cache, no extra download.
             result_path = casanovo._get_model_weights(
-                selector, tmp_path, version
+                selector, tmp_path, version_tup
             )
             assert result_path == filename
 
@@ -612,6 +612,10 @@ def test_get_model_weights(monkeypatch, selector, expected_filename):
             monkeypatch.context() as mnk,
             tempfile.TemporaryDirectory() as tmp_dir,
         ):
+            version_tup = tuple(
+                int(x) if x else 0 for x in utils.split_version(version)
+            )
+
             mnk.setattr(casanovo, "__version__", version)
             mnk.setattr(github, "Github", mock_github)
             mnk.setattr(requests, "get", mock_get)
@@ -619,7 +623,7 @@ def test_get_model_weights(monkeypatch, selector, expected_filename):
                 casanovo._get_model_weights(
                     selector,
                     pathlib.Path(tmp_dir),
-                    utils.split_version(version),
+                    version_tup,
                 )
 
     # GitHub rate limit bubbles up as RateLimitExceededException.
