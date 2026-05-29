@@ -388,8 +388,9 @@ class MockRepo:
         self,
         release_dict={
             "v3.0.0": [
-                "casanovo_massivekb.ckpt",
-                "casanovo_non-enzy.checkpt",
+                "casanovo_orbitrap_v3-0-0.ckpt",
+                "casanovo_timstof_v3-0-0.ckpt",
+                "casanovo_non-enzy.ckpt",
                 "v3.0.0.zip",
                 "v3.0.0.tar.gz",
             ],
@@ -397,8 +398,9 @@ class MockRepo:
             "v3.2.0": ["v3.2.0.zip", "v3.2.0.tar.gz"],
             "v3.3.0": ["v3.3.0.zip", "v3.3.0.tar.gz"],
             "v4.0.0": [
-                "casanovo_massivekb.ckpt",
-                "casanovo_nontryptic.ckpt",
+                "casanovo_orbitrap_v4-0-0.ckpt",
+                "casanovo_timstof_v4-0-0.ckpt",
+                "casanovo_orbitrap-tmt_v4-0-0.ckpt",
                 "v4.0.0.zip",
                 "v4.0.0.tar.gz",
             ],
@@ -456,13 +458,19 @@ class MockResponseHead:
         return response
 
 
-def test_setup_model(monkeypatch):
+@pytest.mark.parametrize(
+    ("model_arg", "expected_filename"),
+    [
+        (None, "casanovo_orbitrap_v3-0-0.ckpt"),
+        ("timstof", "casanovo_timstof_v3-0-0.ckpt"),
+    ],
+)
+def test_setup_model(monkeypatch, model_arg, expected_filename):
     test_releases = ["3.0.0", "3.0.999", "3.999.999"]
     mock_get = MockResponseGet()
     mock_github = functools.partial(MockGithub, test_releases)
     version = "3.0.0"
 
-    # Test model is none when not training
     with (
         monkeypatch.context() as mnk,
         tempfile.TemporaryDirectory() as tmp_dir,
@@ -471,10 +479,12 @@ def test_setup_model(monkeypatch):
         mnk.setattr("appdirs.user_cache_dir", lambda n, a, opinion: tmp_dir)
         mnk.setattr(github, "Github", mock_github)
         mnk.setattr(requests, "get", mock_get)
-        filename = pathlib.Path(tmp_dir) / "casanovo_massivekb_v3_0_0.ckpt"
+        filename = pathlib.Path(tmp_dir) / expected_filename
 
         assert not filename.is_file()
-        _, result_path = casanovo.setup_model(None, None, None, None, False)
+        _, result_path = casanovo.setup_model(
+            model_arg, None, None, None, False
+        )
         assert result_path.resolve() == filename.resolve()
         assert filename.is_file()
         assert mock_get.request_counter == 1
@@ -535,13 +545,13 @@ def test_setup_model(monkeypatch):
             temp_file_path, None, None, None, False
         )
         assert mock_get.request_counter == 3
-        assert result == temp_file_path
+        assert result == pathlib.Path(temp_file_path)
 
         _, result = casanovo.setup_model(
             temp_file_path, None, None, None, True
         )
         assert mock_get.request_counter == 3
-        assert result == temp_file_path
+        assert result == pathlib.Path(temp_file_path)
 
     # Test model is neither a URL or File
     with (
@@ -564,22 +574,46 @@ def test_setup_model(monkeypatch):
         assert mock_get.request_counter == 3
 
 
-def test_get_model_weights(monkeypatch):
-    """
-    Test that model weights can be downloaded from GitHub or used from the
-    cache.
-    """
-    # Model weights for fully matching version, minor matching version, major
-    # matching version.
+@pytest.mark.parametrize("model_arg", [None, "timstof"])
+def test_rate_limit_exception(monkeypatch, model_arg):
+    def mock_get_model_weights(selector, cache_dir, casanovo_version):
+        raise github.RateLimitExceededException(403, "rate limit exceeded", {})
+
+    with (
+        monkeypatch.context() as mnk,
+        tempfile.TemporaryDirectory() as tmp_dir,
+    ):
+        mnk.setattr(casanovo, "__version__", "3.0.0")
+        mnk.setattr("appdirs.user_cache_dir", lambda n, a, opinion: tmp_dir)
+        mnk.setattr(casanovo, "_get_model_weights", mock_get_model_weights)
+
+        with pytest.raises(
+            PermissionError, match="GitHub API rate limit exceeded"
+        ):
+            casanovo.setup_model(model_arg, None, None, None, False)
+
+
+@pytest.mark.parametrize(
+    "selector, expected_filename",
+    [
+        ("orbitrap", "casanovo_orbitrap_v3-0-0.ckpt"),
+        ("timstof", "casanovo_timstof_v3-0-0.ckpt"),
+    ],
+)
+def test_get_model_weights(monkeypatch, selector, expected_filename):
     test_releases = ["3.0.0", "3.0.999", "3.999.999"]
     mock_get = MockResponseGet()
     mock_github = functools.partial(MockGithub, test_releases)
 
+    # Matching versions: exact, same minor, same major.
     for version in test_releases:
         with (
             monkeypatch.context() as mnk,
             tempfile.TemporaryDirectory() as tmp_dir,
         ):
+            version_tup = tuple(
+                int(x) if x else 0 for x in utils.split_version(version)
+            )
             mnk.setattr(casanovo, "__version__", version)
             mnk.setattr(
                 "appdirs.user_cache_dir", lambda n, a, opinion: tmp_dir
@@ -588,12 +622,17 @@ def test_get_model_weights(monkeypatch):
             mnk.setattr(requests, "get", mock_get)
 
             tmp_path = pathlib.Path(tmp_dir)
-            filename = tmp_path / "casanovo_massivekb_v3_0_0.ckpt"
+            filename = tmp_path / expected_filename
             assert not filename.is_file()
-            result_path = casanovo._get_model_weights(tmp_path)
+            result_path = casanovo._get_model_weights(
+                selector, tmp_path, version_tup
+            )
             assert result_path == filename
             assert filename.is_file()
-            result_path = casanovo._get_model_weights(tmp_path)
+            # Second call should use cache, no extra download.
+            result_path = casanovo._get_model_weights(
+                selector, tmp_path, version_tup
+            )
             assert result_path == filename
 
     # Impossible to find model weights for (i) full version mismatch and (ii)
@@ -603,11 +642,19 @@ def test_get_model_weights(monkeypatch):
             monkeypatch.context() as mnk,
             tempfile.TemporaryDirectory() as tmp_dir,
         ):
+            version_tup = tuple(
+                int(x) if x else 0 for x in utils.split_version(version)
+            )
+
             mnk.setattr(casanovo, "__version__", version)
             mnk.setattr(github, "Github", mock_github)
             mnk.setattr(requests, "get", mock_get)
             with pytest.raises(ValueError):
-                casanovo._get_model_weights(pathlib.Path(tmp_dir))
+                casanovo._get_model_weights(
+                    selector,
+                    pathlib.Path(tmp_dir),
+                    version_tup,
+                )
 
     # Test GitHub API rate limit.
     def request(self, *args, **kwargs):
@@ -624,9 +671,89 @@ def test_get_model_weights(monkeypatch):
         mnk.setattr(requests, "get", mock_get)
         mock_get.request_counter = 0
         with pytest.raises(github.RateLimitExceededException):
-            casanovo._get_model_weights(pathlib.Path(tmp_dir))
+            casanovo._get_model_weights(
+                selector, pathlib.Path(tmp_dir), (3, 0, 0)
+            )
 
         assert mock_get.request_counter == 0
+
+
+@pytest.mark.parametrize(
+    "selector, candidates, expected",
+    [
+        # Exact match
+        ("orbitrap", ["orbitrap", "timstof"], "orbitrap"),
+        ("timstof", ["orbitrap", "timstof"], "timstof"),
+        # Case-insensitive exact
+        ("Orbitrap", ["orbitrap", "timstof"], "orbitrap"),
+        ("TIMSTOF", ["orbitrap", "timstof"], "timstof"),
+        # Prefix match
+        ("tims", ["orbitrap", "timstof"], "timstof"),
+        ("orbit", ["orbitrap"], "orbitrap"),
+        # Substring match
+        ("tmt", ["orbitrap", "orbitrap-tmt"], "orbitrap-tmt"),
+        # Hyphen/separator stripped
+        ("orbitrap-tmt", ["orbitrap", "orbitrap-tmt"], "orbitrap-tmt"),
+    ],
+)
+def test_resolve_selector_success(selector, candidates, expected):
+    assert casanovo._resolve_selector(selector, candidates) == expected
+
+
+@pytest.mark.parametrize(
+    "selector, candidates",
+    [
+        # Ambiguous prefix
+        ("orbit", ["orbitrap", "orbitrap-tmt"]),
+        # Ambiguous substring
+        ("rap", ["orbitrap", "orbitrap-tmt"]),
+        # Unknown
+        ("xyz", ["orbitrap", "timstof"]),
+        ("foobar", ["orbitrap", "timstof"]),
+    ],
+)
+def test_resolve_selector_failure(selector, candidates):
+    with pytest.raises(ValueError):
+        casanovo._resolve_selector(selector, candidates)
+
+
+@pytest.mark.parametrize(
+    "filename, expected",
+    [
+        ("casanovo_orbitrap_v5-0-0.ckpt", ("orbitrap", (5, 0, 0))),
+        ("casanovo_timstof_v5-2-0.ckpt", ("timstof", (5, 2, 0))),
+        ("casanovo_orbitrap-tmt_v6-0-1.ckpt", ("orbitrap-tmt", (6, 0, 1))),
+        # Path prefix is stripped correctly
+        ("/some/dir/casanovo_orbitrap_v3-0-0.ckpt", ("orbitrap", (3, 0, 0))),
+        ("casanovo_Orbitrap_v3-0-0.ckpt", ("orbitrap", (3, 0, 0))),
+    ],
+)
+def test_parse_ckpt_valid(filename, expected):
+    assert casanovo._parse_ckpt(filename) == expected
+
+
+@pytest.mark.parametrize(
+    "filename",
+    [
+        "casanovo_massivekb.ckpt",  # old format, no version
+        "casanovo_timstof.ckpt",  # old format, no version
+        "casanovo_non-enzy.checkpt",  # wrong extension
+        "casanovo__v3-0-0.ckpt",  # empty model ID
+        "casanovo_orbitrap_v3.0.0.ckpt",  # dots instead of dashes in version
+        "v3.0.0.zip",
+        "model.ckpt",
+    ],
+)
+def test_parse_ckpt_invalid(filename):
+    assert casanovo._parse_ckpt(filename) is None
+
+
+def test_best_ckpt_no_cross_family():
+    """Version resolution must never silently fall back across model families."""
+    # Caller is responsible for pre-filtering by family; _best_ckpt only
+    # sees one family's checkpoints. Confirm it returns None rather than
+    # picking something from a different family if the list is empty.
+    assert casanovo._best_ckpt([], (4, 3, 2)) is None
 
 
 def test_get_weights_from_url(monkeypatch):
