@@ -62,7 +62,7 @@ dev = [
     "black>=26.3.0",
     "ppx",
     "psims",
-    "pyteomics",
+    "pyteomics>=4.7,<5.0",
     "pytest",
 ]
 
