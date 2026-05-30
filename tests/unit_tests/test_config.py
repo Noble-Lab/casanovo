@@ -176,10 +176,10 @@ def test_precursor_mass_tol_inf(tmp_path):
 
 
 def test_isotope_error_range_type():
-    """Test that isotope_error_range is returned as a list of two ints."""
+    """Test that isotope_error_range is returned as a tuple of two ints."""
     config = Config()
     r = config.isotope_error_range
-    assert isinstance(r, list)
+    assert isinstance(r, tuple)
     assert len(r) == 2
     assert all(isinstance(v, int) for v in r)
 

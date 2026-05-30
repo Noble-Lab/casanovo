@@ -220,7 +220,11 @@ class Config:
         except KeyError:
             raise KeyError(param) from None
         if isinstance(val, (DictConfig, ListConfig)):
-            return OmegaConf.to_container(val, resolve=True)
+            result = OmegaConf.to_container(val, resolve=True)
+            # Preserve historical tuple contract for isotope_error_range.
+            if param == "isotope_error_range" and isinstance(result, list):
+                return tuple(int(v) for v in result)
+            return result
         return val
 
     def __getattr__(self, param: str) -> Any:
