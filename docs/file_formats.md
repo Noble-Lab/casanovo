@@ -41,7 +41,6 @@ Alternatively, you can input custom model weights in the form of a local file sy
 If a URL is provided, the upstream weights file will be downloaded and cached locally for later use.
 See the [command line interface documentation](cli.rst) for more details.
 
-This change will be removed
 ## Output: Understanding the mzTab format
 
 After Casanovo processes your input file(s), it provides the results in an **[mzTab]((https://doi.org/10.1074/mcp.O113.036681))** file.
