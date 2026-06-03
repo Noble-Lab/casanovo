@@ -30,6 +30,7 @@ dependencies = [
     "PyGithub",
     "pylance==0.15.0",
     "PyYAML",
+    "omegaconf>=2.3",
     "requests",
     "rich-click>=1.6.1",
     "scikit-learn",

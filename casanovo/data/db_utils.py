@@ -6,7 +6,7 @@ import os
 import re
 import string
 from pathlib import Path
-from typing import Dict, Iterator, Pattern, Set, Tuple
+from typing import Dict, Iterator, Optional, Pattern, Set, Tuple
 
 import depthcharge.constants
 import depthcharge.tokenizers
@@ -43,8 +43,9 @@ class ProteinDatabase:
         The minimum length of peptides to consider.
     max_peptide_len : int
         The maximum length of peptides to consider.
-    max_mods : int
+    max_mods : Optional[int]
         The maximum number of modifications to allow per peptide.
+        ``None`` generates all possible isoforms as candidates.
     precursor_tolerance : float
         The precursor mass tolerance in ppm.
     isotope_error : Tuple[int, int]
@@ -66,7 +67,7 @@ class ProteinDatabase:
         missed_cleavages: int,
         min_peptide_len: int,
         max_peptide_len: int,
-        max_mods: int,
+        max_mods: Optional[int],
         precursor_tolerance: float,
         isotope_error: Tuple[int, int],
         allowed_fixed_mods: str,
@@ -81,7 +82,7 @@ class ProteinDatabase:
         configured_mods = set()
         mods_to_check = (
             [self.fixed_mods, self.var_mods]
-            if max_mods > 0
+            if max_mods is None or max_mods > 0
             else [self.fixed_mods]
         )
         for mod_dict in mods_to_check:
