@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+## [5.2.0] - 2026-06-02
+
 ### Added
 
 - Support timsTOF files (as .d folders) as spectra input files.
@@ -22,7 +24,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Upgraded minimum Lightning version to 2.6.
 - Increased minimum Python version from 3.8 to 3.10.
 - Black version upgraded for Python 3.10.
-- Upgraded minimum DepthCharge version to 0.4.9.
+- Upgraded minimum DepthCharge version to 0.4.10.
 - Changed default gradient clipping to a norm of 1.0.
 - Updated `train_batch_size` documentation to reflect per-device/effective batch computation.
 - A more descriptive error message is logged for some annotated spectrum file parsing failure cases.
@@ -357,7 +359,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 - Initial Casanovo version.
 
-[Unreleased]: https://github.com/Noble-Lab/casanovo/compare/v5.1.2...HEAD
+[Unreleased]: https://github.com/Noble-Lab/casanovo/compare/v5.2.0...HEAD
+[5.2.0]: https://github.com/Noble-Lab/casanovo/compare/v5.1.2...v5.2.0
 [5.1.2]: https://github.com/Noble-Lab/casanovo/compare/v5.1.1...v5.1.2
 [5.1.1]: https://github.com/Noble-Lab/casanovo/compare/v5.1.0...v5.1.1
 [5.1.0]: https://github.com/Noble-Lab/casanovo/compare/v5.0.0...v5.1.0
