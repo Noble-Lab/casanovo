@@ -156,6 +156,20 @@ This will write PSM scores for the given MS/MS spectra and FASTA file to the spe
 Database searching is an *experimental feature* that may run very slowly for large protein databases.
 ```
 
+### Train a new model
+
+To train a model from scratch, run:
+
+```sh
+casanovo train --validation_peak_path validation_spectra.mgf training_spectra.mgf
+```
+![`casanovo train --help`](images/train-help.svg)
+
+Training and validation MS/MS data need to be provided as annotated MGF files, where the peptide sequence is denoted in the `SEQ` field.
+
+If a training is continued for a previously trained model, specify the starting model weights using `--model`.
+To fine-tune an existing model with new post-translational modifications, additional configuration is required; see the [FAQ](faq.md#how-do-i-fine-tune-casanovo-on-data-with-new-ptms) for a detailed guide.
+
 ## Try Casanovo On a Small Example
 
 Let's use Casanovo to sequence peptides from a small collection of mass spectra in an MGF file (~100 MS/MS spectra).

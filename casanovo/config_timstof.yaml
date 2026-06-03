@@ -96,7 +96,7 @@ val_check_interval: 50_000
 min_peaks: 20
 # Maximum number of the most intense peaks to retain, any remaining peaks are
 # discarded.
-max_peaks: 150
+max_peaks: 500
 # Min peak m/z allowed, peaks with smaller m/z are discarded.
 min_mz: 50.0
 # Max peak m/z allowed, peaks with larger m/z are discarded.
@@ -181,7 +181,7 @@ residues:
   "P": 97.052764
   "V": 99.068414
   "T": 101.047670
-  "C[Carbamidomethyl]": 160.030649 # 103.009185 + 57.021464 
+  "C": 103.009185
   "L": 113.084064
   "I": 113.084064
   "N": 114.042927
@@ -196,15 +196,17 @@ residues:
   "Y": 163.063329
   "W": 186.079313
   # Amino acid modifications.
-  "M[Oxidation]": 147.035400      # Met oxidation:   131.040485 + 15.994915
-  "N[Deamidated]": 115.026943     # Asn deamidation: 114.042927 +  0.984016
-  "Q[Deamidated]": 129.042594     # Gln deamidation: 128.058578 +  0.984016
+  "C[Carbamidomethyl]": 160.030649        # Cys carbamidomethylation: 103.009185 + 57.021464
+  "C[Cysteinyl]": 222.013285              # Cys cysteinylation: 103.009185 + 119.004100
+  "M[Oxidation]": 147.035400              # Met oxidation: 131.040485 + 15.994915
+  "N[Deamidated]": 115.026943             # Asn deamidation: 114.042927 +  0.984016
+  "Q[Deamidated]": 129.042594             # Gln deamidation: 128.058578 +  0.984016
   # N-terminal modifications.
   "[Acetyl]-": 42.010565                  # Acetylation
   "[Carbamyl]-": 43.005814                # Carbamylation
   "[Ammonia-loss]-": -17.026549           # Ammonia loss
   "[+25.980265]-": 25.980265              # Carbamylation and ammonia loss
-  #"[Carbamyl][Ammonia-loss]-": 25.980265  # Carbamylation and ammonia loss
+  "[Carbamyl][Ammonia-loss]-": 25.980265  # Carbamylation and ammonia loss
 
 # When fine-tuning with a vocabulary that extends the checkpoint's, map each
 # new token to an existing token whose weights should be used for initialization.
