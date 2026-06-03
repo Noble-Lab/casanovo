@@ -1,0 +1,217 @@
+###
+# Casanovo configuration.
+# Blank entries are interpreted as `None`.
+###
+
+###
+# The following parameters can be modified when running inference or when
+# fine-tuning an existing Casanovo model. They also affect database search
+# parameters when running Casanovo in database search mode.
+###
+
+# The minimum length of considered peptides.
+min_peptide_len: 6
+# The maximum length of considered peptides.
+max_peptide_len: 100
+# Number of spectra in one inference batch.
+predict_batch_size: 1024
+# Number of PSMs for each spectrum.
+top_match: 1
+# The hardware accelerator to use. Must be one of:
+# "cpu", "gpu", "tpu", "ipu", "hpu", "mps", or "auto".
+accelerator: "auto"
+# The devices to use. Can be set to a positive number int, or the value -1 to
+# indicate all available devices should be used. If left empty, the appropriate
+# number will be automatically selected for based on the chosen accelerator.
+devices:
+
+
+###
+# The following parameters are unique to Casanovo's de novo sequencing mode.
+###
+
+# Number of beams used in beam search.
+n_beams: 1
+
+
+###
+# The following parameters are unique to Casanovo's database search mode.
+###
+
+# Max absolute difference allowed with respect to observed precursor m/z.
+# Only peptides within the specified precursor m/z tolerance are considered.
+precursor_mass_tol: 50 
+
+# Isotopes to consider when comparing predicted and observed precursor m/z's.
+isotope_error_range: [0, 1]
+
+# Enzyme for in silico digestion, used to generate candidate peptides.
+# See pyteomics.parser.expasy_rules for valid enzymes.
+# Can also take a regex to specify custom digestion rules.
+enzyme: "trypsin"
+# Digestion type for candidate peptide generation.
+# - full: Standard digestion.
+# - semi: Include products of semi-specific cleavage.
+# - non-specific: Include products of non-specific cleavage.
+digestion: "full"
+# Number of allowed missed cleavages when digesting proteins.
+missed_cleavages: 0
+# Maximum number of variable amino acid modifications per peptide,
+# `None` generates all possible isoforms as candidates.
+max_mods: 1
+# Select which modifications from the vocabulary can be used in candidate
+# creation.
+# Format: Comma-separated list of "aa:mod_residue", where `aa` is a standard
+# amino acid (or "nterm" for an N-terminal mod) and `mod_residue` is a key from
+# the "residues" dictionary.
+# Example: "M:M[Oxidation],nterm:[Carbamyl]-"
+allowed_fixed_mods: "C:C[Carbamidomethyl]"
+allowed_var_mods: "M:M[Oxidation],N:N[Deamidated],Q:Q[Deamidated],nterm:[Acetyl]-,nterm:[Carbamyl]-,nterm:[Ammonia-loss]-,nterm:[+25.980265]-"
+
+
+###
+# The following parameters should only be modified if you are training a new
+# Casanovo model from scratch.
+###
+
+# Random seed to ensure reproducible results.
+random_seed: 454
+
+# OUTPUT OPTIONS
+# Logging frequency in training steps.
+n_log: 1
+# Whether to create Tensorboard directory.
+tb_summarywriter: false
+# Whether to create csv_logs directory.
+log_metrics: false
+# How often to log optimizer parameters in steps.
+log_every_n_steps: 50
+# Path to save Lance instances.
+lance_dir:
+# Model validation and checkpointing frequency in training steps.
+val_check_interval: 50_000
+
+# SPECTRUM PROCESSING OPTIONS
+# Minimum number of peaks for a spectrum to be considered valid.
+min_peaks: 20
+# Maximum number of the most intense peaks to retain, any remaining peaks are
+# discarded.
+max_peaks: 500
+# Min peak m/z allowed, peaks with smaller m/z are discarded.
+min_mz: 50.0
+# Max peak m/z allowed, peaks with larger m/z are discarded.
+max_mz: 2500.0
+# Min peak intensity allowed, less intense peaks are discarded.
+min_intensity: 0.01
+# Max absolute m/z difference allowed when removing the precursor peak.
+remove_precursor_tol: 2.0  # Da
+# Max precursor charge allowed, spectra with larger charge are skipped.
+max_charge: 4
+
+# MODEL ARCHITECTURE OPTIONS
+# Dimensionality of latent representations, i.e. peak embeddings.
+dim_model: 512
+# Number of attention heads.
+n_head: 8
+# Dimensionality of fully connected layers.
+dim_feedforward: 1024
+# Number of transformer layers in spectrum encoder and peptide decoder.
+n_layers: 9
+# Dropout rate for model weights.
+dropout: 0.0
+# Number of dimensions to use for encoding peak intensity.
+dim_intensity:
+# The number of iterations for the linear warm-up of the learning rate.
+warmup_iters: 100_000
+# The number of iterations for the cosine half period of the learning rate.
+cosine_schedule_period_iters: 600_000
+# Learning rate for weight updates during training.
+learning_rate: 5e-4
+# Regularization term for weight updates.
+weight_decay: 1e-5
+# Amount of label smoothing when computing the training loss.
+train_label_smoothing: 0.01
+
+# TRAINING/INFERENCE OPTIONS
+# Number of spectra in one training batch.
+# Per-device micro-batch is train_batch_size // n on n devices.
+# Effective optimization batch size is:
+# (per-device micro-batch) * n * accumulate_grad_batches.
+# `train_batch_size` should be >= n and preferably divisible by n; otherwise
+# floor division drops the remainder.
+train_batch_size: 32
+# Max number of training epochs.
+max_epochs: 30
+# Shuffle dataset during training.
+shuffle: true
+# Number of samples to buffer while randomly shuffling the training data.
+shuffle_buffer_size: 10_000
+# Number of validation steps to run before training begins.
+num_sanity_val_steps: 0
+# Calculate peptide and amino acid precision during training.
+# This is expensive, so we recommend against it.
+calculate_precision: false
+
+# Accumulates gradients over `k` batches before stepping the optimizer.
+accumulate_grad_batches: 1
+# The value at which to clip gradients. Leave blank / set to `None` to disable
+# gradient clipping.
+gradient_clip_val: 1.0 
+# The gradient clipping algorithm to use.
+# Must be one of: "value", "norm", or `None`.
+# "value": The gradient values are clipped to the range [-gradient_clip_val, gradient_clip_val]
+# "norm": If the total L2 norm of the gradients exceeds gradient_clip_val, the gradients 
+#         are rescaled so the total L2 norm equals gradient_clip_val
+gradient_clip_algorithm: "norm"
+# Floating point precision.
+# Must be one of: "16-true", "16-mixed", "bf16-true", "bf16-mixed", "32-true",
+# "64-true", "64", "32", "16", or "bf16".
+precision: "32-true"
+
+# Replace I by L in peptide sequences.
+replace_isoleucine_with_leucine: true
+# MassIVE-KB style tokenizer, otherwise ProForma syntax.
+massivekb_tokenizer: false
+
+# AMINO ACID AND MODIFICATION VOCABULARY
+residues:
+  "G": 57.021464
+  "A": 71.037114
+  "S": 87.032028
+  "P": 97.052764
+  "V": 99.068414
+  "T": 101.047670
+  "C": 103.009185
+  "L": 113.084064
+  "I": 113.084064
+  "N": 114.042927
+  "D": 115.026943
+  "Q": 128.058578
+  "K": 128.094963
+  "E": 129.042593
+  "M": 131.040485
+  "H": 137.058912
+  "F": 147.068414
+  "R": 156.101111
+  "Y": 163.063329
+  "W": 186.079313
+  # Amino acid modifications.
+  "C[Carbamidomethyl]": 160.030649        # Cys carbamidomethylation: 103.009185 + 57.021464
+  "C[Cysteinyl]": 222.013285              # Cys cysteinylation: 103.009185 + 119.004100
+  "M[Oxidation]": 147.035400              # Met oxidation: 131.040485 + 15.994915
+  "N[Deamidated]": 115.026943             # Asn deamidation: 114.042927 +  0.984016
+  "Q[Deamidated]": 129.042594             # Gln deamidation: 128.058578 +  0.984016
+  # N-terminal modifications.
+  "[Acetyl]-": 42.010565                  # Acetylation
+  "[Carbamyl]-": 43.005814                # Carbamylation
+  "[Ammonia-loss]-": -17.026549           # Ammonia loss
+  "[+25.980265]-": 25.980265              # Carbamylation and ammonia loss
+  "[Carbamyl][Ammonia-loss]-": 25.980265  # Carbamylation and ammonia loss
+
+# When fine-tuning with a vocabulary that extends the checkpoint's, map each
+# new token to an existing token whose weights should be used for initialization.
+# Example:
+#   new_token_init:
+#     "K[Acetyl]": "K"
+# Leave empty when training from scratch or when vocabs already match.
+new_token_init: {}
