@@ -425,13 +425,21 @@ class MockResponseGet:
     def __init__(self):
         self.request_counter = 0
         self.is_ok = True
+        self.timeout = None
 
     def raise_for_status(self):
         if not self.is_ok:
             raise requests.HTTPError
 
-    def __call__(self, url, stream=True, allow_redirects=True):
+    def __call__(
+        self,
+        url,
+        stream=True,
+        allow_redirects=True,
+        timeout=None,
+    ):
         self.request_counter += 1
+        self.timeout = timeout
         response = unittest.mock.MagicMock()
         response.raise_for_status = self.raise_for_status
         response.headers = {"Content-Length": str(len(self.file_content))}
@@ -444,8 +452,10 @@ class MockResponseHead:
         self.last_modified = None
         self.is_ok = True
         self.fail = False
+        self.timeout = None
 
-    def __call__(self, url):
+    def __call__(self, url, timeout=None):
+        self.timeout = timeout
         if self.fail:
             raise requests.ConnectionError
 
@@ -780,11 +790,13 @@ def test_get_weights_from_url(monkeypatch):
         assert cache_file_path.is_file()
         assert result_path.resolve() == cache_file_path.resolve()
         assert mock_get.request_counter == 1
+        assert mock_get.timeout == casanovo.REQUEST_TIMEOUT
 
         # Test that cached file is used
         result_path = casanovo._get_weights_from_url(file_url, cache_dir)
         assert result_path.resolve() == cache_file_path.resolve()
         assert mock_get.request_counter == 1
+        assert mock_head.timeout == casanovo.REQUEST_TIMEOUT
 
         # Test force downloading the file
         result_path = casanovo._get_weights_from_url(

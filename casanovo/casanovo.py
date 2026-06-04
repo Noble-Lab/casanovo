@@ -43,6 +43,7 @@ from .config import Config
 from .denovo import ModelRunner
 
 logger = logging.getLogger("casanovo")
+REQUEST_TIMEOUT = 30
 click.rich_click.USE_MARKDOWN = True
 click.rich_click.STYLE_HELPTEXT = ""
 click.rich_click.SHOW_ARGUMENTS = True
@@ -953,7 +954,9 @@ def _get_weights_from_url(
         url_last_modified = 0
 
         try:
-            file_response = requests.head(file_url)
+            file_response = requests.head(
+                file_url, timeout=REQUEST_TIMEOUT
+            )
             if file_response.ok:
                 if "Last-Modified" in file_response.headers:
                     url_last_modified = datetime.datetime.strptime(
@@ -1005,7 +1008,12 @@ def _download_weights(file_url: str, download_path: Path) -> None:
     """
     download_file_dir = download_path.parent
     os.makedirs(download_file_dir, exist_ok=True)
-    response = requests.get(file_url, stream=True, allow_redirects=True)
+    response = requests.get(
+        file_url,
+        stream=True,
+        allow_redirects=True,
+        timeout=REQUEST_TIMEOUT,
+    )
     response.raise_for_status()
     file_size = int(response.headers.get("Content-Length", 0))
     desc = "(Unknown total file size)" if file_size == 0 else ""
