@@ -954,9 +954,7 @@ def _get_weights_from_url(
         url_last_modified = 0
 
         try:
-            file_response = requests.head(
-                file_url, timeout=REQUEST_TIMEOUT
-            )
+            file_response = requests.head(file_url, timeout=REQUEST_TIMEOUT)
             if file_response.ok:
                 if "Last-Modified" in file_response.headers:
                     url_last_modified = datetime.datetime.strptime(
