@@ -211,7 +211,7 @@ class Spec2Pep(pl.LightningModule):
             idx = self.tokenizer.index.get(aa)
             if idx is not None:
                 self.token_masses[idx] = mass
-                
+
     def compile_model(self) -> None:
         """
         Apply ``torch.compile`` to the encoder and decoder for
@@ -569,14 +569,12 @@ class Spec2Pep(pl.LightningModule):
                 aa_scores_tensor = torch.cat(
                     [
                         aa_scores_tensor,
-                        torch.tensor(
-                            [0.0], device=aa_scores_tensor.device
-                        ),
+                        torch.tensor([0.0], device=aa_scores_tensor.device),
                     ]
                 )
 
             # Calculate the peptide score using the appropriate scoring function
-peptide_score = _peptide_score(aa_scores_tensor)
+            peptide_score = _peptide_score(aa_scores_tensor)
             if isinstance(peptide_score, torch.Tensor):
                 peptide_score = peptide_score.item()
 
@@ -1536,8 +1534,8 @@ class CosineWarmupScheduler(torch.optim.lr_scheduler._LRScheduler):
 
 def _peptide_score(
     aa_scores: Union[np.ndarray, torch.Tensor],
-    fits_precursor_mz: Union[bool, np.ndarray, torch.Tensor] = True,
     lengths: Optional[Union[np.ndarray, torch.Tensor]] = None,
+    fits_precursor_mz: Union[bool, np.ndarray, torch.Tensor] = True,
 ) -> Union[float, np.ndarray, torch.Tensor]:
     """
     Calculate the peptide-level confidence score from the raw
