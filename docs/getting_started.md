@@ -63,6 +63,7 @@ After installation, test that it was successful by viewing the Casanovo command 
 ```sh
 casanovo --help
 ```
+
 ![`casanovo --help`](images/help.svg)
 
 
@@ -71,6 +72,7 @@ To generate a YAML file containing the current Casanovo defaults, run:
 ```sh
 casanovo configure
 ```
+
 ![`casanovo configure --help`](images/configure-help.svg)
 
 When using Casanovo to sequence peptides from mass spectra or evaluate a previous model's performance, you can change some of the parameters in the first section of this file.
@@ -79,19 +81,20 @@ Parameters in the second section will not have an effect unless you are training
 ### Download Model Weights
 
 Using Casanovo to sequence peptides from new mass spectra, Casanovo needs compatible pretrained model weights to make its predictions.
-By default, Casanovo will try to download the latest compatible model weights from GitHub when it is run. 
+By default, Casanovo first checks for compatible cached weights before attempting to download from GitHub.
+Weights are cached in `~/.cache/casanovo/` on Linux, `~/Library/Caches/casanovo/` on macOS, and a platform-specific user cache directory on Windows (typically under `%LOCALAPPDATA%\casanovo\`).
+If no compatible weights are found in the cache, then Casanovo downloads them from GitHub, matching first on exact version (major, minor, patch), then falling back to major+minor, and finally to major version only.
+If a cached file becomes corrupted, delete it from the cache directory and Casanovo will re-download it on the next run.
 
-However, our model weights are uploaded with new Casanovo versions on the [Releases page](https://github.com/Noble-Lab/casanovo/releases) under the "Assets" for each release (file extension: `.ckpt`).
+```{note}
+The GitHub API used for auto-download is rate-limited to 60 requests per IP per hour.
+If you hit this limit, download the weights manually from the [Releases page](https://github.com/Noble-Lab/casanovo/releases) and specify the file with `--model`.
+```
+
+Our model weights are uploaded with new Casanovo versions on the [Releases page](https://github.com/Noble-Lab/casanovo/releases) under the "Assets" for each release (file extension: `.ckpt`).
 This model file or a custom one can then be specified using the `--model` command-line parameter when executing Casanovo.
 
 Not all releases will have a model file included on the [Releases page](https://github.com/Noble-Lab/casanovo/releases), in which case model weights for alternative releases with the same major version number can be used.
-
-The most recent model weights for Casanovo version 4.2 and above are currently provided under [Casanovo v4.2.0](https://github.com/Noble-Lab/casanovo/releases/tag/v4.2.0):
-- `casanovo_v4_2_0.ckpt`: Default Casanovo weights to use as described in [Melendez et al.](https://pubs.acs.org/doi/full/10.1021/acs.jproteome.4c00422). These weights will be downloaded automatically if no weights are explicitly specified.
-
-Alternatively, model weigths for Casanovo version 4.x as described in [Yilmaz et al.](https://www.nature.com/articles/s41467-024-49731-x) are currently provided under [Casanovo v4.0.0](https://github.com/Noble-Lab/casanovo/releases/tag/v4.0.0):
-- `casanovo_massivekb.ckpt`: Casanovo weights to use when analyzing tryptic data. These weights need to be downloaded manually.
-- `casanovo_nontryptic.ckpt`: Casanovo weights to use when analyzing non-tryptic data, obtained by fine-tuning the tryptic model on multi-enzyme data. These weights need to be downloaded manually.
 
 ## Running Casanovo
 
@@ -106,10 +109,20 @@ To *de novo* sequence your own mass spectra with Casanovo, use the `casanovo seq
 ```sh
 casanovo sequence spectra.mgf
 ```
+
 ![`casanovo sequence --help`](images/sequence-help.svg)
 
 Casanovo can predict peptide sequences for MS/MS spectra in mzML, mzXML, and MGF files.
 This will write peptide predictions for the given MS/MS spectra to the specified output file in mzTab format.
+
+By default, Casanovo reports the single top-scoring candidate peptide per spectrum.
+To retrieve multiple candidates per spectrum (e.g. for downstream re-ranking), set `top_match` in the configuration file:
+
+```yaml
+top_match: 5
+```
+
+Each candidate will appear as a separate row in the mzTab output, distinguished by the `PSM_ID` field.
 
 ### Evaluate *De Novo* Sequencing Performance
 
@@ -118,10 +131,12 @@ To evaluate _de novo_ sequencing performance based on known mass spectrum annota
 ```sh
 casanovo sequence annotated_spectra.mgf --evaluate
 ```
-![`casanovo evaluate --help`](images/evaluate-help.svg)
+
+![`casanovo sequence --evaluate --help`](images/evaluate-help.svg)
 
 To evaluate the peptide predictions, ground truth peptide labels must to be provided as an annotated MGF file where the peptide sequence is denoted in the `SEQ` field. 
 Compatible MGF files are available from [MassIVE-KB](https://massive.ucsd.edu/ProteoSAFe/static/massive-kb-libraries.jsp).
+Note that the `--evaluate` flag requires that `top-match` is set to 1 in the configuration file.
 
 ### Database searching
 
@@ -130,6 +145,7 @@ To perform database search using Casanovo as a score function, use the `casanovo
 ```sh
 casanovo db-search spectra.mgf proteome.fasta
 ```
+
 ![`casanovo db-search --help`](images/db-search-help.svg)
 
 In this case, besides MS/MS spectra in mzML, mzXML, or MGF file(s), Casanovo needs as minimal input the protein database in the FASTA format.
@@ -152,6 +168,7 @@ casanovo train --validation_peak_path validation_spectra.mgf training_spectra.mg
 Training and validation MS/MS data need to be provided as annotated MGF files, where the peptide sequence is denoted in the `SEQ` field.
 
 If a training is continued for a previously trained model, specify the starting model weights using `--model`.
+To fine-tune an existing model with new post-translational modifications, additional configuration is required; see the [FAQ](faq.md#how-do-i-fine-tune-casanovo-on-data-with-new-ptms) for a detailed guide.
 
 ## Try Casanovo On a Small Example
 
@@ -193,3 +210,63 @@ casanovo db-search [PATH_TO_MGF]/sample_preprocessed_spectra.mgf [PATH_TO_FASTA]
 This job should complete in < 1 minute.
 
 Congratulations! Casanovo is installed and running in database searching mode.
+
+### Advanced: Train a new model
+
+Most users of Casanovo will not need to train their own models.
+However, if you have a large collection of annotated spectra and want to try training your own model from scratch, you can run:
+
+```sh
+casanovo train --validation_peak_path validation_spectra.mgf training_spectra.mgf
+```
+
+![`casanovo train --help`](images/train-help.svg)
+
+Training and validation MS/MS data need to be provided as annotated MGF files, where the peptide sequence is denoted in the `SEQ` field.
+
+Optionally, you can continue training using weights from a previously trained model.
+This can be useful if you have a smaller set of annotated spectra but want to fine-tune the model to potentially capture properties of spectra that are particular to your experimental setup.
+To do this fine-tuning, specify the starting model weights using `--model`.
+
+Note that you cannot (currently) fine-tune a model using a different amino acid alphabet.
+Hence, if you want to add new types of PTMs to Casanovo, you have to train from scratch.
+We are working on adding functionality to allow novel PTMs during fine-tuning, using the approach pioneered by [Modanovo](https://linkinghub.elsevier.com/retrieve/pii/S1535-9476(25)00600-0).
+
+#### Lance file caching
+
+During training, Casanovo converts the input MGF files into [Lance](https://lancedb.github.io/lance/) format — a columnar binary format that enables faster data loading.
+By default these Lance files are written to a temporary directory and deleted when training finishes, so MGF files are re-converted on every run.
+
+To avoid re-converting on subsequent runs, set `lance_dir` in the configuration file to a persistent directory:
+
+```yaml
+lance_dir: /path/to/lance_cache
+```
+
+Casanovo will write `train.lance` and `valid.lance` to that directory on the first run and reuse them automatically on later runs with the same data.
+
+You can also pass a pre-built `.lance` file directly as the training or validation input instead of an MGF file, as long as only one file is provided per split:
+
+```sh
+casanovo train --validation_peak_path valid.lance train.lance
+```
+
+#### GPU memory and gradient accumulation
+
+If training runs out of GPU memory, reduce `train_batch_size` in the configuration file.
+To maintain an equivalent effective batch size, set `accumulate_grad_batches` to compensate — for example, halving `train_batch_size` and doubling `accumulate_grad_batches` keeps the same effective batch size with half the peak memory usage:
+
+```yaml
+train_batch_size: 16
+accumulate_grad_batches: 2
+```
+
+#### Shuffle buffer size
+
+During training, spectra are shuffled using a streaming buffer of `shuffle_buffer_size` spectra (default: 10,000).
+A larger buffer improves randomization but uses more memory; reduce it if training runs out of CPU memory:
+
+```yaml
+shuffle_buffer_size: 1000
+```
+

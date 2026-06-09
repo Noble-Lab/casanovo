@@ -6,6 +6,42 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+## [5.2.0] - 2026-06-02
+
+### Added
+
+- Support timsTOF files (as .d folders) as spectra input files.
+- Added `--load_all_states` flag to load all model states when resuming training.
+- A TSV file with all candidate peptides can be exported during database searching with the `--export` flag.
+- Track instrument-assigned scan numbers from MGF `SCANS`, `SCAN`, and `SCAN ID` header fields in a new `opt_global_cv_MS:1003057_scan_number` mzTab column.
+- Modified weights loading to match based on model selectors (e.g., `orbitrap` and `timstof` are currently supported) and major/minor versions.
+- Support fine-tuning a pretrained checkpoint with an extended residue vocabulary via the `new_token_init` config option.
+- Per-file validation loss logging via `valid_CELoss/<stem>` keys.
+- New `--tracking_peak_path/-t` CLI option for monitoring catastrophic forgetting on additional validation files without affecting checkpoint selection.
+
+### Changed
+
+- Upgraded minimum Lightning version to 2.6.
+- Increased minimum Python version from 3.8 to 3.10.
+- Black version upgraded for Python 3.10.
+- Upgraded minimum DepthCharge version to 0.4.10.
+- Changed default gradient clipping to a norm of 1.0.
+- Updated `train_batch_size` documentation to reflect per-device/effective batch computation.
+- A more descriptive error message is logged for some annotated spectrum file parsing failure cases.
+- The precursor mass filter is no longer applied in *de novo* mode, and correspondingly peptide-level scores are no longer penalized based on the precursor mass. The config options `precursor_mass_tol` and `isotope_error_range` now only apply to database search mode.
+- The amino acid scores and ProForma columns in the output mzTab files have been renamed to `opt_global_aa_scores` and `opt_global_cv_MS:1003169_proforma_peptidoform_sequence`, according to the mzTab specification.
+- Minor speedup during database searching through optimized candidate selection.
+
+### Fixed
+
+- A mismatching parameter warning will now only be triggered for the tokenizer if the config and checkpoint tokenizers do not have equivalent vocabularies.
+- Removed erroneous tokenizer vocabulary warning.
+- Fixed an issue which led the reported peptide precision to be 0 during evaluation mode.
+- Peptide predictions failing the minimum peptide length are not reported, irrespective of whether they match or exceed the precursor mass.
+- Setting `--output_root` to a directory will no longer cause an error.
+- The `--force_overwrite` flag now also checks whether mzTab output files would be overwritten.
+- Fixed an issue where some predictions that are one residue less than the configured minimum peptide length are reported.
+
 ## [5.1.2] - 2025-12-11
 
 ### Changed
@@ -323,8 +359,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 - Initial Casanovo version.
 
-[Unreleased]: https://github.com/Noble-Lab/casanovo/compare/v5.1.2...HEAD
-[5.1.1]: https://github.com/Noble-Lab/casanovo/compare/v5.1.1...v5.1.2
+[Unreleased]: https://github.com/Noble-Lab/casanovo/compare/v5.2.0...HEAD
+[5.2.0]: https://github.com/Noble-Lab/casanovo/compare/v5.1.2...v5.2.0
+[5.1.2]: https://github.com/Noble-Lab/casanovo/compare/v5.1.1...v5.1.2
 [5.1.1]: https://github.com/Noble-Lab/casanovo/compare/v5.1.0...v5.1.1
 [5.1.0]: https://github.com/Noble-Lab/casanovo/compare/v5.0.0...v5.1.0
 [5.0.0]: https://github.com/Noble-Lab/casanovo/compare/v4.3.0...v5.0.0
