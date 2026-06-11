@@ -48,7 +48,7 @@ class Config:
     ```
     """
 
-    _default_config = Path(__file__).parent / "config.yaml"
+    _orbitrap_config = Path(__file__).parent / "config_orbitrap.yaml"
     _timstof_config = Path(__file__).parent / "config_timstof.yaml"
 
     _config_types = dict(
@@ -169,7 +169,7 @@ class Config:
     def _builtin_configs(self):
         return {
             name.removeprefix("_").removesuffix("_config"): value
-            for name, value in vars(self).items()
+            for name, value in vars(type(self)).items()
             if name.endswith("_config") and isinstance(value, Path)
         }
 
@@ -179,7 +179,7 @@ class Config:
                 "No configuration specified; using default configuration.",
                 UserWarning,
             )
-            return self._default_config
+            return self._orbitrap_config
 
         config_path = Path(config_file)
         if config_path.exists():
