@@ -48,11 +48,8 @@ class Config:
     ```
     """
 
-    _orbitrap_config = Path(__file__).parent / "config.yaml"
-    _timstof_config = Path(__file__).parent / "config_timstof.yaml"
-
     _builtin_configs = {
-        "orbitrap": Path(__file__).parent / "config_orbitrap.yaml",
+        "orbitrap": Path(__file__).parent / "config.yaml",
         "timstof": Path(__file__).parent / "config_timstof.yaml",
     }
 
@@ -119,7 +116,7 @@ class Config:
         self.file = str(config_file) if config_file is not None else "default"
         self._config_file = self._resolve_config_file(config_file)
 
-        with self._orbitrap_config.open() as f_in:
+        with self._builtin_configs[self._default_config_key].open() as f_in:
             self._params = yaml.safe_load(f_in)
 
         if config_file is None:
@@ -196,7 +193,9 @@ class Config:
             return builtins[key]
 
         matches = [
-            (name, path) for name, path in builtins.items() if key in name
+            (name, path)
+            for name, path in builtins.items()
+            if key in name and len(key) > 2
         ]
 
         if len(matches) == 1:
@@ -268,4 +267,4 @@ class Config:
         output : str
             The output file.
         """
-        shutil.copyfile(cls._orbitrap_config, output)
+        shutil.copyfile(cls._builtin_configs[cls._default_config_key], output)

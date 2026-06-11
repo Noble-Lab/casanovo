@@ -6,7 +6,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
-- Added modified config loading based on flag matching similar to model weights loading 
+- Added config file selection by model type name with exact or partial string matching (e.g., `--config timstof` or `--config tims`).
 
 ## [5.1.2] - 2025-12-11
 
