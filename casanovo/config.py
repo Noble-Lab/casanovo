@@ -48,7 +48,7 @@ class Config:
     ```
     """
 
-    _orbitrap_config = Path(__file__).parent / "config_orbitrap.yaml"
+    _orbitrap_config = Path(__file__).parent / "config.yaml"
     _timstof_config = Path(__file__).parent / "config_timstof.yaml"
 
     _config_types = dict(
