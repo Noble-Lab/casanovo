@@ -27,6 +27,12 @@ def test_timstof():
     assert config._config_file.name == "config_timstof.yaml"
     assert config.file == "tims"
 
+    with pytest.raises(ValueError):
+        config = Config("t")
+
+    with pytest.raises(FileNotFoundError):
+        config = Config("zzz")
+
 
 def test_override(tmp_path, tiny_config):
     # Test expected config option is missing.

@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+- Added modified config loading based on flag matching similar to model weights loading 
+
 ## [5.1.2] - 2025-12-11
 
 ### Changed

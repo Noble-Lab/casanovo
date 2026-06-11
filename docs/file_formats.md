@@ -220,6 +220,10 @@ The PSM identifier in the `PSM_ID` column is not necessarily identical to the sp
 Casanovo operates based on settings defined in a [YAML configuration file](https://github.com/Noble-Lab/casanovo/blob/main/casanovo/config.yaml).
 This file contains several options that affect how Casanovo processes your data and predicts peptide sequences.
 If you run Casanovo without specifying a configuration file, it uses a set of default settings.
+Casanovo can be ran by specifying a config file based on the type of model. 
+For example, the configuration for the timsTOF model can be specified by `--config timstof` or with partial string matching (e.g., `--config tims`). 
+Currently, the default configuration (trained with Orbitrap data) and timsTOF are available. 
+The Orbitrap model can also be specified with `--config orbitrap` or `--config orbi`.
 However, you might want to adjust these settings for several reasons, such as to capture specific characteristics of your data or to experiment with different training configurations.
 
 To create a custom configuration file, you can start by generating a copy of the default configuration:

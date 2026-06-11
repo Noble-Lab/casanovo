@@ -51,6 +51,13 @@ class Config:
     _orbitrap_config = Path(__file__).parent / "config.yaml"
     _timstof_config = Path(__file__).parent / "config_timstof.yaml"
 
+    _builtin_configs = {
+        "orbitrap": Path(__file__).parent / "config_orbitrap.yaml",
+        "timstof": Path(__file__).parent / "config_timstof.yaml",
+    }
+
+    _default_config_key = "orbitrap"
+
     _config_types = dict(
         precursor_mass_tol=float,
         isotope_error_range=lambda min_max: (int(min_max[0]), int(min_max[1])),
@@ -166,54 +173,44 @@ class Config:
                 " please specify it explicitly in the config file."
             )
 
-    def _builtin_configs(self):
-        return {
-            name.removeprefix("_").removesuffix("_config"): value
-            for name, value in vars(type(self)).items()
-            if name.endswith("_config") and isinstance(value, Path)
-        }
-
     def _resolve_config_file(self, config_file: Optional[str]) -> Path:
         if config_file is None:
             warnings.warn(
-                "No configuration specified; using default configuration.",
+                f"No configuration specified; using default '{self._default_config_key}'.",
                 UserWarning,
                 stacklevel=2,
             )
-            return self._orbitrap_config
+            return self._builtin_configs[self._default_config_key]
 
         config_path = Path(config_file)
         if config_path.exists():
             return config_path
 
-        normalized = config_path.stem.lower()
+        key = str(config_file).lower()
+        key = (
+            key.replace("config_", "").replace(".yaml", "").replace(".yml", "")
+        )
+        builtins = self._builtin_configs
 
-        if normalized.startswith("config_"):
-            normalized = normalized[len("config_") :]
-
-        builtins = self._builtin_configs()
-
-        if normalized in builtins:
-            return builtins[normalized]
+        if key in builtins:
+            return builtins[key]
 
         matches = [
-            path
-            for name, path in builtins.items()
-            if normalized in name or name in normalized
+            (name, path) for name, path in builtins.items() if key in name
         ]
 
         if len(matches) == 1:
-            return matches[0]
+            return matches[0][1]
 
         if len(matches) > 1:
             raise ValueError(
-                f"Ambiguous configuration '{config_file}'. "
-                f"Possible matches: {list(builtins.keys())}"
+                f"Ambiguous config '{config_file}'. "
+                f"Matches: {[m[0] for m in matches]}"
             )
 
         raise FileNotFoundError(
-            f"Could not resolve configuration '{config_file}'. "
-            f"Available built-in configs: {list(builtins.keys())}"
+            f"Unknown config '{config_file}'. "
+            f"Valid options: {list(builtins.keys())}"
         )
 
     def __getitem__(self, param: str) -> Union[int, bool, str, Tuple, Dict]:
