@@ -9,8 +9,9 @@ When you are ready to use Casanovo, you can input your MS/MS spectra in one of t
 - **[mzML](https://doi.org/10.1074/mcp.R110.000133)**: XML-based mass spectrometry community standard file format developed by the Proteomics Standards Initiative (PSI).
 - **[mzXML](https://doi.org/10.1038/nbt1031)**: XML-based predecessor of mzML. Although supported by Casanovo, mzML should typically be preferred instead.
 - **[MGF](https://www.matrixscience.com/help/data_file_help.html)**: A simple text-based peak file, though not as rich in detail as mzML.
+- **D**: A proprietary binary file format used by Bruker instruments.
 
-All three of the above file formats can be used as input to Casanovo for *de novo* peptide sequencing and database searching.
+All four of the above file formats can be used as input to Casanovo for *de novo* peptide sequencing and database searching.
 As the official PSI standard format containing the complete information from a mass spectrometry run, mzML should typically be preferred.
 
 ### FASTA (optional)
@@ -35,6 +36,10 @@ These weights define the functionality of the Casanovo neural network.
 
 If no input weights file is provided, Casanovo will automatically use the most recent compatible weights from the [official Casanovo GitHub repository](https://github.com/Noble-Lab/casanovo), which will be downloaded and cached locally if they are not already.
 Model weights are retrieved by matching Casanovo release version, which is of the form (major, minor, patch).
+Casanovo supports models optimized for different instrument types. 
+The default model is ``orbitrap``, and other models can be specified with ``--model timstof`` (only other model currently supported). 
+The model selector matching is done case-insensitively and separators are ignored (e.g., ``Orbitrap``, ``orbitrap``, and ``orbi-trap`` all resolve to the ``orbitrap`` model). 
+Partial names are accepted as long as they match exactly one model (e.g., ``tims`` would resolve to ``timstof``).
 If no model weights for an identical release are available, alternative releases with matching (i) major and minor, or (ii) major versions will be used.
 
 Alternatively, you can input custom model weights in the form of a local file system path or a URL pointing to a compatible Casanovo model weights file.
@@ -43,7 +48,7 @@ See the [command line interface documentation](cli.rst) for more details.
 
 ## Output: Understanding the mzTab format
 
-After Casanovo processes your input file(s), it provides the results in an **[mzTab]((https://doi.org/10.1074/mcp.O113.036681))** file.
+After Casanovo processes your input file(s), it provides the results in an **[mzTab](https://doi.org/10.1074/mcp.O113.036681)** file.
 This file is divided into two main sections:
 
 1. **Metadata section**: This part describes general information about the file and the Casanovo task.
@@ -115,13 +120,13 @@ MTD	software[1]-setting[7]	predict_batch_size = 1024
 MTD	software[1]-setting[8]	top_match = 1
 MTD	software[1]-setting[9]	accelerator = auto
 MTD	software[1]-setting[10]	devices = None
-MTD	software[1]-setting[11]	n_beams = 10
+MTD	software[1]-setting[11]	n_beams = 1
 MTD	software[1]-setting[12]	enzyme = trypsin
 MTD	software[1]-setting[13]	digestion = full
 MTD	software[1]-setting[14]	missed_cleavages = 0
 MTD	software[1]-setting[15]	max_mods = 1
-MTD	software[1]-setting[16]	allowed_fixed_mods = C:C+57.021
-MTD	software[1]-setting[17]	allowed_var_mods = M:M+15.995,N:N+0.984,Q:Q+0.984,nterm:+42.011,nterm:+43.006,nterm:-17.027,nterm:+43.006-17.027
+MTD	software[1]-setting[16]	allowed_fixed_mods = C:C[Carbamidomethyl]
+MTD	software[1]-setting[17]	allowed_var_mods = M:M[Oxidation],N:N[Deamidated],Q:Q[Deamidated],nterm:[Acetyl]-,nterm:[Carbamyl]-,nterm:[Ammonia-loss]-,nterm:[+25.980265]-
 MTD	software[1]-setting[18]	random_seed = 454
 MTD	software[1]-setting[19]	n_log = 1
 MTD	software[1]-setting[20]	tb_summarywriter = False
@@ -133,7 +138,7 @@ MTD	software[1]-setting[25]	min_mz = 50.0
 MTD	software[1]-setting[26]	max_mz = 2500.0
 MTD	software[1]-setting[27]	min_intensity = 0.01
 MTD	software[1]-setting[28]	remove_precursor_tol = 2.0
-MTD	software[1]-setting[29]	max_charge = 10
+MTD	software[1]-setting[29]	max_charge = 4
 MTD	software[1]-setting[30]	dim_model = 512
 MTD	software[1]-setting[31]	n_head = 8
 MTD	software[1]-setting[32]	dim_feedforward = 1024
@@ -164,27 +169,28 @@ The PSM section in mzTab files starts with a header line, indicated by the `PSH`
 Next, the following lines each start with the `PSM` key and contain information for an individual PSM predicted by Casanovo.
 
 ```
-PSH	sequence	PSM_ID	accession	unique	database	database_version	search_engine	search_engine_score[1]	modifications	retention_time	charge	exp_mass_to_charge	calc_mass_to_charge	spectra_ref	pre	post	start	end	opt_ms_run[1]_aa_scores
-PSM	EPPTPLTYVAGAGSGVR	1	null	null	null	null	[MS, MS:1003281, Casanovo, 4.0.1]	0.968312939008077	null	null	2.0	836.439	836.4386613168799	ms_run[1]:index=0	null	null	null	null	0.96454,0.90841,0.97874,0.97979,0.97915,0.98254,0.98184,0.97898,0.86762,0.97782,0.97771,0.97899,0.97987,0.97788,0.97949,0.98074,0.97561
-PSM	VVHGFYNPAVSRVLEQ	2	null	null	null	null	[MS, MS:1003281, Casanovo, 4.0.1]	0.9652494998539195	null	null	3.0	605.6572	605.65644936688	ms_run[1]:index=1	null	null	null	null	0.96870,0.97701,0.85667,0.97274,0.97827,0.97790,0.97829,0.97706,0.97654,0.97725,0.97778,0.95544,0.95622,0.96240,0.96992,0.96909
-PSM	EPPTPLTYVAGGSLNR	3	null	null	null	null	[MS, MS:1003281, Casanovo, 4.0.1]	0.813004752730622	null	null	2.0	836.4398	836.4386608168799	ms_run[1]:index=2	null	null	null	null	0.78636,0.45168,0.64947,0.68432,0.89344,0.90091,0.90124,0.56938,0.89757,0.90204,0.90129,0.90190,0.80076,0.90097,0.90233,0.87599
-PSM	LERPFVHLM+15.995VFLGGSGR	4	null	null	null	null	[MS, MS:1003281, Casanovo, 4.0.1]	0.758128507890635	null	null	4.0	483.7627	483.51345739187997	ms_run[1]:index=3	null	null	null	null	0.86884,0.85508,0.87392,0.39732,0.87556,0.87291,0.69642,0.87083,0.79858,0.86588,0.86291,0.84178,0.45706,0.52835,0.85704,0.41526,0.83419
-PSM	GEYKLLPFNKLMLGEG	5	null	null	null	null	[MS, MS:1003281, Casanovo, 4.0.1]	-0.18260370983796959	null	null	3.0	602.99817	603.6586910335465	ms_run[1]:index=4	null	null	null	null	0.64453,0.77152,0.90248,0.84100,0.65059,0.89975,0.87886,0.82220,0.90324,0.90056,0.88657,0.86091,0.66978,0.63579,0.81815,0.90577
+PSH	sequence	PSM_ID	accession	unique	database	database_version	search_engine	search_engine_score[1]	modifications	retention_time	charge	exp_mass_to_charge	calc_mass_to_charge	spectra_ref	pre	post	start	end	opt_global_aa_scores    opt_global_cv_MS:1003169_proforma_peptidoform_sequence
+PSM	EPPTPLTYVAGAGSGVR	1	null	null	null	null	[MS, MS:1003281, Casanovo, 4.0.1]	0.968312939008077	null	null	2.0	836.439	836.4386613168799	ms_run[1]:index=0	null	null	null	null	0.96454,0.90841,0.97874,0.97979,0.97915,0.98254,0.98184,0.97898,0.86762,0.97782,0.97771,0.97899,0.97987,0.97788,0.97949,0.98074,0.97561    EPPTPLTYVAGAGSGVR
+PSM	VVHGFYNPAVSRVLEQ	2	null	null	null	null	[MS, MS:1003281, Casanovo, 4.0.1]	0.9652494998539195	null	null	3.0	605.6572	605.65644936688	ms_run[1]:index=1	null	null	null	null	0.96870,0.97701,0.85667,0.97274,0.97827,0.97790,0.97829,0.97706,0.97654,0.97725,0.97778,0.95544,0.95622,0.96240,0.96992,0.96909    VVHGFYNPAVSRVLEQ
+PSM	EPPTPLTYVAGGSLNR	3	null	null	null	null	[MS, MS:1003281, Casanovo, 4.0.1]	0.813004752730622	null	null	2.0	836.4398	836.4386608168799	ms_run[1]:index=2	null	null	null	null	0.78636,0.45168,0.64947,0.68432,0.89344,0.90091,0.90124,0.56938,0.89757,0.90204,0.90129,0.90190,0.80076,0.90097,0.90233,0.87599    EPPTPLTYVAGGSLNR
+PSM	LERPFVHLMVFLGGSGR	4	null	null	null	null	[MS, MS:1003281, Casanovo, 4.0.1]	0.758128507890635	null	null	4.0	483.7627	483.51345739187997	ms_run[1]:index=3	null	null	null	null	0.86884,0.85508,0.87392,0.39732,0.87556,0.87291,0.69642,0.87083,0.79858,0.86588,0.86291,0.84178,0.45706,0.52835,0.85704,0.41526,0.83419    LERPFVHLM[Oxidation]VFLGGSGR
+PSM	GEYKLLPFNKLMLGEG	5	null	null	null	null	[MS, MS:1003281, Casanovo, 4.0.1]	-0.18260370983796959	null	null	3.0	602.99817	603.6586910335465	ms_run[1]:index=4	null	null	null	null	0.64453,0.77152,0.90248,0.84100,0.65059,0.89975,0.87886,0.82220,0.90324,0.90056,0.88657,0.86091,0.66978,0.63579,0.81815,0.90577    GEYKLLPFNKLMLGEG
 ...
 ```
 
 Key information for each PSM is as follows:
-- `sequence`: The predicted peptide sequence.
+- `sequence`: The predicted unmodified peptide sequence.
 - `PSM_ID`: A monotonically increasing index, serving as a unique identifier for each PSM.
 - `search_engine_score[1]`: The score of this PSM.
 - `spectra_ref`: Unique identifier linking the prediction back to the original spectrum in the input file(s).
-- `opt_ms_run[1]_aa_scores`: Casanovo predicts peptides in an autoregressive fashion, one amino acid at a time. This column contains comma-separated scores of the individual amino acid predictions.
+- `opt_global_aa_scores`: Casanovo predicts peptides in an autoregressive fashion, one amino acid at a time. This column contains comma-separated scores of the individual amino acid predictions.
+- `opt_global_cv_MS:1003169_proforma_peptidoform_sequence`: The predicted modified peptide sequence in ProForma format.
 
 When running Casanovo in _database searching mode_ rather than *de novo* peptide sequencing mode, the PSM section will look slightly differently:
 
 ```
-PSH	sequence	PSM_ID	accession	unique	database	database_version	search_engine	search_engine_score[1]	modifications	retention_time	charge	exp_mass_to_charge	calc_mass_to_charge	spectra_ref	pre	post	start	end	opt_ms_run[1]_aa_scores
-PSM	THM+15.995ELGGK	1	sp|A5A616|MGTS_ECOLI	null	null	null	[MS, MS:1003281, Casanovo, 4.1.1.dev8+g258edb4.d20240329]	0.6994086	null	null	2	444.71582381688	444.7159	ms_run[1]:index=0	null	null	null	null	0.84454,0.81027,0.83296,0.56239,0.40844,0.83554,0.82437,0.84730,0.84514
+PSH	sequence	PSM_ID	accession	unique	database	database_version	search_engine	search_engine_score[1]	modifications	retention_time	charge	exp_mass_to_charge	calc_mass_to_charge	spectra_ref	pre	post	start	end	opt_global_aa_scores    opt_global_cv_MS:1003169_proforma_peptidoform_sequence
+PSM	THMELGGK	1	sp|A5A616|MGTS_ECOLI	null	null	null	[MS, MS:1003281, Casanovo, 4.1.1.dev8+g258edb4.d20240329]	0.6994086	null	null	2	444.71582381688	444.7159	ms_run[1]:index=0	null	null	null	null	0.84454,0.81027,0.83296,0.56239,0.40844,0.83554,0.82437,0.84730,0.84514    THM[Oxidation]ELGGK
 ...
 ```
 
@@ -208,6 +214,13 @@ This column consists of two parts: the run index and the spectrum reference, sep
 Be mindful of the input peak file format when linking Casanovo PSMs to their input spectra.
 Even when the same raw file is converted to both mzML and MGF, scan numbers in the mzML file will generally not match spectrum indices in the MGF file, as the former contains both MS and MS/MS spectra while the latter only contains MS/MS spectra.
 ```
+When processing MGF files that contain instrument-assigned scan numbers in a `SCANS`, `SCAN`, or `SCAN ID` header field, Casanovo will additionally export an optional `opt_global_cv_MS:1003057_scan_number` column in the PSM section.
+This column preserves the native scan number from the instrument and takes the form `ms_run[FILE_INDEX]:scan=SCAN_NUMBER`, for example `ms_run[1]:scan=17`.
+This column is separate from the `spectra_ref` column and does not replace the index-based spectrum reference.
+The column is global to the entire mzTab file: it is added whenever at least one MGF input file contains scan number header fields.
+In mixed-input runs (e.g. both MGF and mzML files), the column is present for the whole file, but rows originating from mzML, mzXML, or MGF spectra without scan number headers will have a "null" value in this column.
+If no input file contains scan number headers the column is omitted entirely.
+Note that only purely numeric scan values are exported; MGF files that use composite or non-numeric scan identifiers in these fields will have a "null" value in this column.
 
 ```{note}
 The PSM identifier in the `PSM_ID` column is not necessarily identical to the spectrum index in the `spectra_ref` column, even for MGF files.
@@ -285,6 +298,9 @@ END IONS
 ```{note}
 In case the peptide sequence includes PTMs, ensure that these are formatted correctly and match the amino acid and modification vocabulary in the Casanovo configuration.
 ```
+
+When fine-tuning a pre-trained model with new PTMs, the `new_token_init` option in the [configuration file](https://github.com/Noble-Lab/casanovo/blob/main/casanovo/config.yaml) must map each new token to an existing one for weight initialization.
+See the [FAQ](faq.md#how-do-i-fine-tune-casanovo-on-data-with-new-ptms) for the complete fine-tuning workflow.
 
 mzML or mzXML files are not supported as input during training, as these formats do not provide a mechanism to annotate their spectra with peptide sequences.
 Similarly, in Casanovo evaluation mode only annotated MGF files are supported.

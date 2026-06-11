@@ -12,7 +12,7 @@ import time
 import urllib.parse
 import warnings
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import Optional, Tuple, List
 
 warnings.formatwarning = lambda message, category, *args, **kwargs: (
     f"{category.__name__}: {message}"
@@ -63,7 +63,7 @@ class _SharedFileIOParams(click.RichCommand):
             click.Option(
                 ("-o", "--output_root"),
                 help="The root name for all output files.",
-                type=click.Path(dir_okay=False),
+                type=str,
             ),
             click.Option(
                 ("-f", "--force_overwrite"),
@@ -180,7 +180,9 @@ def sequence(
     start_time = time.time()
     utils.log_system_info()
 
-    utils.check_dir_file_exists(output_path, f"{output_root}.mztab")
+    if not force_overwrite:
+        utils.check_dir_file_exists(output_path, f"{output_root_name}.mztab")
+
     config, model = setup_model(
         model, config, output_path, output_root_name, False
     )
@@ -219,6 +221,16 @@ def sequence(
     nargs=1,
     type=click.Path(exists=True, dir_okay=False),
 )
+@click.option(
+    "--export",
+    is_flag=True,
+    default=False,
+    help="""
+    Dumps peptides digested from data for debugging.
+    Contains mass of peptide, sequence, and proteins 
+    it is associated with
+    """,
+)
 def db_search(
     peak_path: Tuple[str],
     fasta_path: str,
@@ -226,6 +238,7 @@ def db_search(
     config: Optional[str],
     output_dir: Optional[str],
     output_root: Optional[str],
+    export: Optional[bool],
     verbosity: str,
     force_overwrite: bool,
 ) -> None:
@@ -241,7 +254,9 @@ def db_search(
     start_time = time.time()
     utils.log_system_info()
 
-    utils.check_dir_file_exists(output_path, f"{output_root}.mztab")
+    if not force_overwrite:
+        utils.check_dir_file_exists(output_path, f"{output_root_name}.mztab")
+
     config, model = setup_model(
         model, config, output_path, output_root_name, False
     )
@@ -262,6 +277,12 @@ def db_search(
 
         results_path = output_path / f"{output_root_name}.mztab"
         runner.db_search(peak_path, fasta_path, str(results_path))
+        if export:
+            if not force_overwrite:
+                utils.check_dir_file_exists(
+                    output_path, f"{output_root_name}.tsv"
+                )
+            runner.model.protein_database.export(output_path, output_root_name)
         utils.log_annotate_report(
             runner.writer.psms, start_time=start_time, end_time=time.time()
         )
@@ -279,21 +300,47 @@ def db_search(
     "--validation_peak_path",
     help="""
     An annotated MGF file for validation, like from MassIVE-KB. Use this
-    option multiple times to specify multiple files.
+    option multiple times to specify multiple files. Loss from these files
+    contributes to the aggregate valid_CELoss used for checkpoint selection.
     """,
     required=False,
     multiple=True,
     type=click.Path(exists=True, dir_okay=True),
 )
+@click.option(
+    "-t",
+    "--tracking_peak_path",
+    help="""
+    An annotated MGF file used to monitor validation loss during training
+    without influencing checkpoint selection (useful for detecting
+    catastrophic forgetting). Use this option multiple times to specify
+    multiple files.
+    """,
+    required=False,
+    multiple=True,
+    type=click.Path(exists=True, dir_okay=True),
+)
+@click.option(
+    "--load_all_states",
+    help="""
+    Flag to indicate whether all states are loaded when re-starting 
+    training, or only the weights. Defaults to False.
+    """,
+    required=False,
+    default=False,
+    is_flag=True,
+)
 def train(
     train_peak_path: Tuple[str],
     validation_peak_path: Optional[Tuple[str]],
+    tracking_peak_path: Optional[Tuple[str]],
     model: Optional[str],
     config: Optional[str],
     output_dir: Optional[str],
     output_root: Optional[str],
     verbosity: str,
     force_overwrite: bool,
+    load_all_states: bool,
 ) -> None:
     """Train a Casanovo model on your own data.
 
@@ -301,6 +348,9 @@ def train(
     those provided by MassIVE-KB, from which to train a new Casnovo
     model.
     """
+
+    _is_valid_model(model, load_all_states)
+
     output_path, output_root_name = _setup_output(
         output_dir, output_root, force_overwrite, verbosity
     )
@@ -330,7 +380,18 @@ def train(
         for peak_file in validation_peak_path:
             logger.info("  %s", peak_file)
 
-        runner.train(train_peak_path, validation_peak_path)
+        if tracking_peak_path:
+            logger.info("Using the following tracking-only validation files:")
+            for peak_file in tracking_peak_path:
+                logger.info("  %s", peak_file)
+
+        runner.train(
+            train_peak_path,
+            validation_peak_path,
+            model if load_all_states else None,
+            tracking_peak_path,
+        )
+
         utils.log_run_report(start_time=start_time, end_time=time.time())
 
 
@@ -362,6 +423,42 @@ def configure(
     config_path = str(output_path / config_fname)
     Config.copy_default(config_path)
     logger.info(f"Wrote {config_path}")
+
+
+def _is_valid_model(model: Optional[str], load_all_states: bool) -> None:
+    """
+    Validate the model argument when --load_all_states is specified.
+
+    Parameters
+    ----------
+    model : Optional[str]
+        The model path or URL.
+    load_all_states : bool
+        Whether to load all model states for resuming training.
+
+    Raises
+    ------
+    ValueError
+        If load_all_states is True and model is a URL or non-existent file.
+    UserWarning
+        If load_all_states is True but model is not provided
+    """
+    if load_all_states:
+        if model is None:
+            logger.warning(
+                "When --load_all_states is specified, --model must also be provided. "
+                "Training will start from scratch without a provided model.",
+                stacklevel=2,
+            )
+        elif _is_valid_url(model):
+            raise ValueError(
+                "Full model state cannot be loaded from a URL. "
+                "Please provide a local file path when --load_all_states is True.",
+            )
+        elif not Path(model).is_file():
+            raise ValueError(
+                "When --load_all_states is True, the model path must point to an existing file.",
+            )
 
 
 def setup_logging(
@@ -424,13 +521,139 @@ def setup_logging(
     logging.getLogger("urllib3").setLevel(logging.WARNING)
 
 
+# The regex pattern below describes the the model weight
+# naming pattern.
+_CKPT_RE = re.compile(
+    r"^casanovo_([a-z0-9][a-z0-9-]*)_v([0-9]+)-([0-9]+)-([0-9]+)\.ckpt$"
+)
+# The default model is orbitrap.
+_DEFAULT_MODEL_ID = "orbitrap"
+
+
+def _normalize(s: str) -> str:
+    """
+    Normalizes model selector.
+
+    Removes hyphens, underscores, and whitespace characters.
+
+    Parameters
+    ----------
+    s: String
+       The string to be normalized.
+
+    Returns
+    -------
+    String
+       The normalized model selector.
+    """
+    return re.sub(r"[-_\s]", "", s).lower()
+
+
+def _parse_ckpt(filename: str) -> Optional[Tuple[str, Tuple[int, int, int]]]:
+    """
+    Parses the checkpoint filename.
+
+    Extracts the major, minor model versions and model selector.
+
+    Parameters
+    ----------
+    filename: String
+        The name of the model file provided.
+
+    Returns
+    -------
+    Optional[Tuple[str, Tuple[int, int, int]]]
+        Method could return None if filename does not match _CKPT_RE
+        Returns a Tuple with the String set to the model selector,
+        and the integer tuple values set to the Casanovo compatibility
+        version.
+    """
+    parsed_string = _CKPT_RE.match(os.path.basename(filename).lower())
+    if not parsed_string:
+        return None
+    return parsed_string.group(1), (
+        int(parsed_string.group(2)),
+        int(parsed_string.group(3)),
+        int(parsed_string.group(4)),
+    )
+
+
+def _resolve_selector(selector: str, candidates: List[str]) -> str:
+    """
+    Resolves the model selector to a present model.
+
+    Resolve a model selector to a canonical model ID via:
+      1. Exact normalized match
+      2. Unique normalized prefix match
+      3. Unique normalized substring match
+
+    Parameters
+    ----------
+    selector: String
+       The parsed selector from _parse_ckpt.
+    candidates: List[str]
+        The current models present in the cache.
+
+    Returns
+    -------
+    String
+        Best matching model to selector
+    """
+    norm = _normalize(selector)
+    norm_map = {c: _normalize(c) for c in candidates}
+
+    for matches in (
+        [c for c, nc in norm_map.items() if nc == norm],
+        [c for c, nc in norm_map.items() if nc.startswith(norm)],
+        [c for c, nc in norm_map.items() if norm in nc],
+    ):
+        if len(matches) == 1:
+            return matches[0]
+        if len(matches) > 1:
+            options = ", ".join(sorted(matches))
+            raise ValueError(
+                f"Ambiguous model selector '{selector}'. Matching models:\n"
+                + f"{options} \n Please specify one of these options."
+            )
+
+    available = "\n".join(f"  {c}" for c in sorted(candidates))
+    raise ValueError(
+        f"Unknown model selector '{selector}'.\nAvailable models:\n{available}"
+    )
+
+
+def _best_ckpt(
+    checkpoints: List[Tuple[Path, Tuple[int, int, int]]],
+    version: Tuple[int, int, int],
+) -> Optional[Path]:
+    """
+    Pick best checkpoint by: exact patch > latest same minor > latest same major.
+
+    Parameters
+    ----------
+    checkpoints: List[Tuple[Path, Tuple[int, int, int]]]
+        Possible checkpoints.
+    version: Tuple[int, int, int]
+        Intended version.
+    """
+    maj, min_, pat = version
+    for subset in (
+        [x for x in checkpoints if x[1] == (maj, min_, pat)],
+        [x for x in checkpoints if x[1][:2] == (maj, min_)],
+        [x for x in checkpoints if x[1][0] == maj],
+    ):
+        if subset:
+            return max(subset, key=lambda x: x[1])[0]
+    return None
+
+
 def setup_model(
     model: str | None,
     config: str | None,
     output_dir: Path | str,
     output_root_name: str,
     is_train: bool,
-) -> Tuple[Config, Path | None]:
+) -> Tuple["Config", Optional[Path]]:
     """
     Set up Casanovo config and resolve model weights (.ckpt) path.
 
@@ -458,17 +681,24 @@ def setup_model(
         Initialized Casanovo config, local path to model weights if any
         (may be `None` if training using random starting weights).
     """
-    # Read parameters from the config file.
     config = Config(config)
     seed_everything(seed=config["random_seed"], workers=True)
 
-    # Download model weights if these were not specified (except when
-    # training).
     cache_dir = Path(appdirs.user_cache_dir("casanovo", False, opinion=False))
-    if model is None:
-        if not is_train:
+    resolved_model: Optional[Path] = None
+
+    version = tuple(
+        int(x) if x else 0 for x in utils.split_version(__version__)
+    )
+
+    if model and Path(model).is_file():
+        resolved_model = Path(model)
+    elif model:
+        if _is_valid_url(model):
+            resolved_model = _get_weights_from_url(model, cache_dir)
+        else:
             try:
-                model = _get_model_weights(cache_dir)
+                resolved_model = _get_model_weights(model, cache_dir, version)
             except github.RateLimitExceededException:
                 logger.error(
                     "GitHub API rate limit exceeded while trying to download "
@@ -482,37 +712,57 @@ def setup_model(
                     "GitHub API rate limit exceeded while trying to download "
                     "the model weights"
                 ) from None
-    else:
-        if _is_valid_url(model):
-            model = _get_weights_from_url(model, cache_dir)
-        elif not Path(model).is_file():
-            error_msg = (
-                f"{model} is not a valid URL or checkpoint file path, "
-                "--model argument must be a URL or checkpoint file path"
+    elif not is_train:
+        # Defaulting to default model
+        logger.warning(
+            "No model was specified. Using the default model '%s'. "
+            "To make this choice explicit, use '--model %s'.",
+            _DEFAULT_MODEL_ID,
+            _DEFAULT_MODEL_ID,
+        )
+        model = _DEFAULT_MODEL_ID
+        try:
+            resolved_model = _get_model_weights(model, cache_dir, version)
+        except github.RateLimitExceededException:
+            logger.error(
+                "GitHub API rate limit exceeded while trying to download "
+                "the model weights. Please download compatible model "
+                "weights manually from the official Casanovo code website "
+                "(https://github.com/Noble-Lab/casanovo) and specify "
+                "these explicitly using the `--model` parameter when "
+                "running Casanovo."
             )
-            logger.error(error_msg)
-            raise ValueError(error_msg)
+            raise PermissionError(
+                "GitHub API rate limit exceeded while trying to download "
+                "the model weights"
+            ) from None
 
-    # Log the active configuration.
     logger.info("Casanovo version %s", str(__version__))
-    logger.debug("model = %s", model)
+    logger.debug("model = %s", resolved_model)
     logger.debug("config = %s", config.file)
     logger.debug("output directory = %s", output_dir)
     logger.debug("output root name = %s", output_root_name)
     for key, value in config.items():
         logger.debug("%s = %s", str(key), str(value))
 
-    return config, model
+    return config, resolved_model
 
 
-def _get_model_weights(cache_dir: Path) -> Path:
+def _get_model_weights(
+    selector: str,
+    cache_dir: Path,
+    casanovo_version: Tuple[int, int, int],
+) -> Path:
     """
     Use cached model weights or download them from GitHub.
 
     If no weights file (extension: .ckpt) is available in the cache
     directory, it will be downloaded from a release asset on GitHub.
-    Model weights are retrieved by matching release version. If no model
-    weights for an identical release (major, minor, patch), alternative
+    Model weights are retrieved by matching release version and by model selector.
+    The model selector indicates the type of model to be used (e.g., orbitrap, timstof).
+    Partial (or full) case-insensitive and character stripped comparisons are made
+    to the existing models to find the closest version.
+    If no model weights for an identical release (major, minor, patch), alternative
     releases with matching (i) major and minor, or (ii) major versions
     will be used. If no matching release can be found, no model weights
     will be downloaded.
@@ -524,6 +774,8 @@ def _get_model_weights(cache_dir: Path) -> Path:
     ----------
     cache_dir : Path
         Model weights cache directory path.
+    selector : String
+        The model name (e.g., timstof, orbitrap)
 
     Returns
     -------
@@ -531,76 +783,79 @@ def _get_model_weights(cache_dir: Path) -> Path:
         The path of the model weights file.
     """
     os.makedirs(cache_dir, exist_ok=True)
-    version = utils.split_version(__version__)
-    version_match: Tuple[Optional[str], Optional[str], int] = None, None, 0
-    # Try to find suitable model weights in the local cache.
-    for filename in os.listdir(cache_dir):
-        root, ext = os.path.splitext(filename)
-        if ext == ".ckpt":
-            file_version = tuple(
-                g for g in re.match(r".*_v(\d+)_(\d+)_(\d+)", root).groups()
+
+    # Parse filenames into (model_id, path, version) triples.
+    local = []
+    for fn in os.listdir(cache_dir):
+        parsed = _parse_ckpt(fn)
+        if parsed:
+            model_id, version = parsed
+            path = (cache_dir / fn) if cache_dir else Path(fn)
+            local.append((model_id, path, version))
+
+    if local:
+        try:
+            canonical_id = _resolve_selector(
+                selector, list({mid for mid, _, _ in local})
             )
-            match = (
-                sum(m)
-                if (m := [i == j for i, j in zip(version, file_version)])[0]
-                else 0
-            )
-            if match > version_match[2]:
-                version_match = os.path.join(cache_dir, filename), None, match
-    # Provide the cached model weights if found.
-    if version_match[2] > 0:
-        logger.info(
-            "Model weights file %s retrieved from local cache",
-            version_match[0],
+        except ValueError as exc:
+            if "Unknown model selector" not in str(exc):
+                raise
+            canonical_id = None
+
+        if canonical_id is not None:
+            family = [(p, v) for mid, p, v in local if mid == canonical_id]
+            best = _best_ckpt(family, casanovo_version)
+            if best:
+                logger.info(
+                    "Model weights file %s retrieved from local cache", best
+                )
+                return best
+
+    repo = github.Github().get_repo("Noble-Lab/casanovo")
+
+    github_ckpts = []
+    for release in repo.get_releases():
+        for asset in release.get_assets():
+            parsed = _parse_ckpt(asset.name)
+            if parsed:
+                model_id, version = parsed
+                github_ckpts.append(
+                    (model_id, asset.name, version, asset.browser_download_url)
+                )
+
+    if not github_ckpts:
+        raise ValueError(
+            "No canonical model checkpoints found on GitHub. "
+            "Specify weights explicitly with '--model'."
         )
-        return Path(version_match[0])
-    # Otherwise try to find compatible model weights on GitHub.
-    else:
-        repo = github.Github().get_repo("Noble-Lab/casanovo")
-        # Find the best matching release with model weights provided as asset.
-        for release in repo.get_releases():
-            rel_version = tuple(
-                g
-                for g in re.match(
-                    r"v(\d+)\.(\d+)\.(\d+)", release.tag_name
-                ).groups()
-            )
-            match = (
-                sum(m)
-                if (m := [i == j for i, j in zip(version, rel_version)])[0]
-                else 0
-            )
-            if match > version_match[2]:
-                for release_asset in release.get_assets():
-                    fn, ext = os.path.splitext(release_asset.name)
-                    if ext == ".ckpt":
-                        version_match = (
-                            os.path.join(
-                                cache_dir,
-                                f"{fn}_v{'_'.join(map(str, rel_version))}{ext}",
-                            ),
-                            release_asset.browser_download_url,
-                            match,
-                        )
-                        break
-        # Download the model weights if a matching release was found.
-        if version_match[2] > 0:
-            filename, url, _ = version_match
-            cache_file_path = cache_dir / filename
-            _download_weights(url, cache_file_path)
-            return cache_file_path
-        else:
-            logger.error(
-                "No matching model weights for release v%s found, please "
-                "specify your model weights explicitly using the `--model` "
-                "parameter",
-                __version__,
-            )
-            raise ValueError(
-                f"No matching model weights for release v{__version__} found, "
-                f"please specify your model weights explicitly using the "
-                f"`--model` parameter"
-            )
+
+    canonical_id = _resolve_selector(
+        selector, list({mid for mid, _, _, _ in github_ckpts})
+    )
+    family_gh = [
+        (Path(fn), v, url)
+        for mid, fn, v, url in github_ckpts
+        if mid == canonical_id
+    ]
+    best = _best_ckpt([(p, v) for p, v, _ in family_gh], casanovo_version)
+
+    if best is None:
+        available = "\n".join(
+            f"  {p.name}" for p, _, _ in sorted(family_gh, key=lambda x: x[1])
+        )
+        raise ValueError(
+            f"No compatible '{canonical_id}' checkpoint found for Casanovo "
+            f"{'.'.join(map(str, casanovo_version))}.\n"
+            f"Available {canonical_id} checkpoints:\n{available}\n"
+            "Please upgrade Casanovo, choose another model, or provide a "
+            "local path or URL with '--model'."
+        )
+
+    url = next(url for p, _, url in family_gh if p == best)
+    dest = cache_dir / best.name
+    _download_weights(url, dest)
+    return dest
 
 
 def _setup_output(
@@ -758,9 +1013,12 @@ def _download_weights(file_url: str, download_path: Path) -> None:
         response.raw.read, decode_content=True
     )
 
-    with tqdm.tqdm.wrapattr(
-        response.raw, "read", total=file_size, desc=desc
-    ) as r_raw, open(download_path, "wb") as file:
+    with (
+        tqdm.tqdm.wrapattr(
+            response.raw, "read", total=file_size, desc=desc
+        ) as r_raw,
+        open(download_path, "wb") as file,
+    ):
         shutil.copyfileobj(r_raw, file)
 
 
