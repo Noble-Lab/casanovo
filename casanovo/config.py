@@ -112,7 +112,7 @@ class Config:
         self.file = str(config_file) if config_file is not None else "default"
         self._config_file = self._resolve_config_file(config_file)
 
-        with self._default_config.open() as f_in:
+        with self._orbitrap_config.open() as f_in:
             self._params = yaml.safe_load(f_in)
 
         if config_file is None:
@@ -270,4 +270,4 @@ class Config:
         output : str
             The output file.
         """
-        shutil.copyfile(cls._default_config, output)
+        shutil.copyfile(cls._orbitrap_config, output)
