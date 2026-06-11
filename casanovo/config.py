@@ -109,14 +109,16 @@ class Config:
 
     def __init__(self, config_file: Optional[str] = None):
         """Initialize a Config object."""
-        self.file = str(self._resolve_config_file(config_file))
+        self.file = str(config_file) if config_file is not None else "default"
+        self._config_file = self._resolve_config_file(config_file)
+
         with self._default_config.open() as f_in:
             self._params = yaml.safe_load(f_in)
 
         if config_file is None:
             self._user_config = {}
         else:
-            with Path(config_file).open() as f_in:
+            with Path(self._config_file).open() as f_in:
                 self._user_config = yaml.safe_load(f_in)
                 # Remap deprecated config entries.
                 for old, new in _config_deprecated.items():
@@ -171,15 +173,15 @@ class Config:
             if name.endswith("_config") and isinstance(value, Path)
         }
 
-    def _resolve_config_file(self, config_file_name: Optional[str]) -> Path:
-        if config_file_name is None:
+    def _resolve_config_file(self, config_file: Optional[str]) -> Path:
+        if config_file is None:
             warnings.warn(
                 "No configuration specified; using default configuration.",
                 UserWarning,
             )
             return self._default_config
 
-        config_path = Path(config_file_name)
+        config_path = Path(config_file)
         if config_path.exists():
             return config_path
 
@@ -204,12 +206,12 @@ class Config:
 
         if len(matches) > 1:
             raise ValueError(
-                f"Ambiguous configuration '{config_file_name}'. "
+                f"Ambiguous configuration '{config_file}'. "
                 f"Possible matches: {list(builtins.keys())}"
             )
 
         raise FileNotFoundError(
-            f"Could not resolve configuration '{config_file_name}'. "
+            f"Could not resolve configuration '{config_file}'. "
             f"Available built-in configs: {list(builtins.keys())}"
         )
 
