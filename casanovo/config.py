@@ -180,7 +180,7 @@ class Config:
             return self._builtin_configs[self._default_config_key]
 
         config_path = Path(config_file)
-        if config_path.exists():
+        if config_path.is_file() and config_path.exists():
             return config_path
 
         key = str(config_file).lower()
@@ -193,9 +193,7 @@ class Config:
             return builtins[key]
 
         matches = [
-            (name, path)
-            for name, path in builtins.items()
-            if key in name and len(key) > 2
+            (name, path) for name, path in builtins.items() if key in name
         ]
 
         if len(matches) == 1:

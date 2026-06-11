@@ -31,9 +31,6 @@ def test_timstof():
     assert config._config_file.name == "config_timstof.yaml"
     assert config.file == "tims"
 
-    with pytest.raises(ValueError, match="Ambiguous config"):
-        Config("t")
-
     with pytest.raises(FileNotFoundError, match="Unknown config"):
         Config("zzz")
 

@@ -6,7 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+### Added
+
 - Added config file selection by model type name with exact or partial string matching (e.g., `--config timstof` or `--config tims`).
+
 ## [5.2.0] - 2026-06-02
 
 ### Added
