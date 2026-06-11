@@ -178,6 +178,7 @@ class Config:
             warnings.warn(
                 "No configuration specified; using default configuration.",
                 UserWarning,
+                stacklevel=2,
             )
             return self._orbitrap_config
 
