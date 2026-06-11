@@ -47,6 +47,8 @@ click.rich_click.USE_MARKDOWN = True
 click.rich_click.STYLE_HELPTEXT = ""
 click.rich_click.SHOW_ARGUMENTS = True
 
+_URL_WEIGHTS_CACHE_TTL_SECONDS = 24 * 60 * 60
+
 
 class _SharedFileIOParams(click.RichCommand):
     """File IO options shared between most Casanovo commands"""
@@ -950,6 +952,12 @@ def _get_weights_from_url(
 
     if cache_file_path.is_file() and not force_download:
         cache_time = cache_file_path.stat()
+        if time.time() - cache_time.st_mtime < _URL_WEIGHTS_CACHE_TTL_SECONDS:
+            logger.info(
+                "Model weights %s retrieved from local cache", file_url
+            )
+            return cache_file_path
+
         url_last_modified = 0
 
         try:

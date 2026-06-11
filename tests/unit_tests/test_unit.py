@@ -444,8 +444,10 @@ class MockResponseHead:
         self.last_modified = None
         self.is_ok = True
         self.fail = False
+        self.request_counter = 0
 
     def __call__(self, url):
+        self.request_counter += 1
         if self.fail:
             raise requests.ConnectionError
 
@@ -785,6 +787,7 @@ def test_get_weights_from_url(monkeypatch):
         result_path = casanovo._get_weights_from_url(file_url, cache_dir)
         assert result_path.resolve() == cache_file_path.resolve()
         assert mock_get.request_counter == 1
+        assert mock_head.request_counter == 0
 
         # Test force downloading the file
         result_path = casanovo._get_weights_from_url(
@@ -797,20 +800,29 @@ def test_get_weights_from_url(monkeypatch):
         # file last modified
         # NOTE: Assuming test takes < 1 year to run
         curr_utc = datetime.datetime.now().astimezone(datetime.timezone.utc)
+        stale_time = (
+            datetime.datetime.now().timestamp()
+            - casanovo._URL_WEIGHTS_CACHE_TTL_SECONDS
+            - 1
+        )
+        os.utime(cache_file_path, (stale_time, stale_time))
         mock_head.last_modified = (
             curr_utc + datetime.timedelta(days=365.0)
         ).strftime("%a, %d %b %Y %H:%M:%S GMT")
         result_path = casanovo._get_weights_from_url(file_url, cache_dir)
         assert result_path.resolve() == cache_file_path.resolve()
         assert mock_get.request_counter == 3
+        assert mock_head.request_counter == 1
 
         # Test file is not redownloaded if its newer than upstream file
+        os.utime(cache_file_path, (stale_time, stale_time))
         mock_head.last_modified = (
             curr_utc - datetime.timedelta(days=365.0)
         ).strftime("%a, %d %b %Y %H:%M:%S GMT")
         result_path = casanovo._get_weights_from_url(file_url, cache_dir)
         assert result_path.resolve() == cache_file_path.resolve()
         assert mock_get.request_counter == 3
+        assert mock_head.request_counter == 2
 
         # Test that error is raised if file get response is not OK
         mock_get.is_ok = False
@@ -823,6 +835,7 @@ def test_get_weights_from_url(monkeypatch):
 
         # Test that cached file is used if head requests yields non-ok status
         # code, even if upstream file is newer
+        os.utime(cache_file_path, (stale_time, stale_time))
         mock_head.is_ok = False
         mock_head.last_modified = (
             curr_utc + datetime.timedelta(days=365.0)
@@ -830,13 +843,16 @@ def test_get_weights_from_url(monkeypatch):
         result_path = casanovo._get_weights_from_url(file_url, cache_dir)
         assert result_path.resolve() == cache_file_path.resolve()
         assert mock_get.request_counter == 4
+        assert mock_head.request_counter == 3
         mock_head.is_ok = True
 
         # Test that cached file is used if head request fails
+        os.utime(cache_file_path, (stale_time, stale_time))
         mock_head.fail = True
         result_path = casanovo._get_weights_from_url(file_url, cache_dir)
         assert result_path.resolve() == cache_file_path.resolve()
         assert mock_get.request_counter == 4
+        assert mock_head.request_counter == 4
         mock_head.fail = False
 
         # Test invalid URL
