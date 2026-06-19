@@ -200,38 +200,6 @@ class Spec2Pep(pl.LightningModule):
             persistent=False,
         )
 
-        # Register tensor buffer for amino acid token masses
-        self.register_buffer(
-            "token_masses",
-            torch.zeros(self.vocab_size, dtype=torch.float64),
-            persistent=False,
-        )
-        # Populate token masses from tokenizer residues
-        for aa, mass in self.tokenizer.residues.items():
-            idx = self.tokenizer.index.get(aa)
-            if idx is not None:
-                self.token_masses[idx] = mass
-
-    def compile_model(self) -> None:
-        """
-        Apply ``torch.compile`` to the encoder and decoder for
-        improved throughput, particularly at larger batch sizes.
-
-        This is an optional, opt-in optimization. Call after loading
-        model weights. Requires PyTorch >= 2.0.
-
-        Notes
-        -----
-        ``dynamic=True`` is used to support the variable-length token
-        sequences produced during beam search decoding.
-        """
-        try:
-            self.encoder = torch.compile(self.encoder, dynamic=True)
-            self.decoder = torch.compile(self.decoder, dynamic=True)
-            logger.info("Compiled encoder and decoder successfully.")
-        except Exception as e:
-            logger.warning(f"Failed to compile model: {e}")
-
     @property
     def device(self) -> torch.device:
         """
@@ -1535,16 +1503,16 @@ class CosineWarmupScheduler(torch.optim.lr_scheduler._LRScheduler):
 def _peptide_score(
     aa_scores: Union[np.ndarray, torch.Tensor],
     lengths: Optional[Union[np.ndarray, torch.Tensor]] = None,
-    fits_precursor_mz: Union[bool, np.ndarray, torch.Tensor] = True,
 ) -> Union[float, np.ndarray, torch.Tensor]:
     """
     Calculate the peptide-level confidence score from the raw
     amino acid scores.
 
     The peptide score is the product of the raw amino acid scores.
-    This function contains paths for both single peptide inputs
-    (de novo mode) and batched peptide inputs (database search mode).
-    Both NumPy arrays and PyTorch tensors are accepted.
+    This function accepts both NumPy arrays and PyTorch tensors.
+    NumPy inputs are converted to tensors for computation (zero-copy
+    for contiguous CPU arrays) and the result is returned in the
+    original type.
 
     Parameters
     ----------
@@ -1560,70 +1528,33 @@ def _peptide_score(
     peptide_score : float, np.ndarray, or torch.Tensor
         The calculated peptide score or an array of scores for the batch.
     """
-    if isinstance(aa_scores, torch.Tensor):
-        eps = torch.finfo(torch.float64).eps
-        if aa_scores.ndim == 1:
-            # FAST PATH: de novo inference
-            log_scores = torch.log(torch.clamp(aa_scores.double(), eps, 1))
-            peptide_score = torch.exp(torch.sum(log_scores))
-            if not fits_precursor_mz:
-                peptide_score = peptide_score - 1
-            return peptide_score
-        else:
-            # BATCH PATH: database search
-            if lengths is None:
-                raise ValueError(
-                    "`lengths` must be provided for batched input."
-                )
-            log_scores = torch.log(torch.clamp(aa_scores.double(), eps, 1))
-            cumsum = torch.cumsum(log_scores, dim=1)
-            batch_size = aa_scores.shape[0]
-            idx = torch.arange(batch_size, device=aa_scores.device)
-            # Normalise lengths to a tensor so torch.clamp works regardless
-            # of whether the caller passed a numpy array or a torch tensor.
-            if not isinstance(lengths, torch.Tensor):
-                lengths = torch.tensor(
-                    lengths, dtype=torch.long, device=aa_scores.device
-                )
-            peptide_scores = torch.exp(
-                cumsum[idx, torch.clamp(lengths - 1, min=0)]
-            )
-            if isinstance(fits_precursor_mz, bool):
-                if not fits_precursor_mz:
-                    peptide_scores = peptide_scores - 1
-            else:
-                if not isinstance(fits_precursor_mz, torch.Tensor):
-                    fits_precursor_mz = torch.tensor(
-                        fits_precursor_mz, device=aa_scores.device
-                    )
-                peptide_scores[~fits_precursor_mz] -= 1
-            return peptide_scores
+    # Track whether the input was numpy to return the appropriate type.
+    return_numpy = isinstance(aa_scores, np.ndarray)
 
-    # NumPy path — used by database search and legacy callers
-    eps = np.finfo(np.float64).eps
+    # Convert numpy arrays to tensors without copying data (zero-copy for
+    # contiguous CPU arrays), enabling a single unified computation path.
+    if return_numpy:
+        aa_scores = torch.as_tensor(aa_scores)
 
-    # FAST PATH: de novo inference
+    eps = torch.finfo(torch.float64).eps
+    log_scores = torch.log(torch.clamp(aa_scores.double(), eps, 1))
+
     if aa_scores.ndim == 1:
-        log_scores = np.log(np.clip(aa_scores, eps, 1))
-        peptide_score = np.exp(np.sum(log_scores))
-        if not fits_precursor_mz:
-            peptide_score -= 1
-        return peptide_score
-
-    # BATCH PATH: database search
+        # FAST PATH: de novo inference — single peptide.
+        peptide_score = torch.exp(torch.sum(log_scores))
+        return peptide_score.item() if return_numpy else peptide_score
     else:
+        # BATCH PATH: database search — padded batch of peptides.
         if lengths is None:
             raise ValueError("`lengths` must be provided for batched input.")
-
-        log_scores = np.log(np.clip(aa_scores, eps, 1))
-        cumsum = np.cumsum(log_scores, axis=1)
+        if not isinstance(lengths, torch.Tensor):
+            lengths = torch.tensor(
+                lengths, dtype=torch.long, device=aa_scores.device
+            )
+        cumsum = torch.cumsum(log_scores, dim=1)
         batch_size = aa_scores.shape[0]
-        idx = np.arange(batch_size)
-        peptide_scores = np.exp(cumsum[idx, np.maximum(lengths - 1, 0)])
-
-        if isinstance(fits_precursor_mz, (bool, np.bool_)):
-            if not fits_precursor_mz:
-                peptide_scores -= 1
-        else:
-            peptide_scores[~fits_precursor_mz] -= 1
-        return peptide_scores
+        idx = torch.arange(batch_size, device=aa_scores.device)
+        peptide_scores = torch.exp(
+            cumsum[idx, torch.clamp(lengths - 1, min=0)]
+        )
+        return peptide_scores.numpy() if return_numpy else peptide_scores
