@@ -8,9 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Removed
 
-- Removed the override that forced `accelerator: "auto"` to `"cpu"` on Apple Silicon
-  devices. PyTorch Lightning's `"auto"` mode correctly selects MPS on arm64 macOS,
-  giving approximately 2.3× faster inference compared to CPU.
+- Removed the override that forced `accelerator: "auto"` to `"cpu"` on Apple Silicon devices.
 
 ## [5.2.0] - 2026-06-02
 
