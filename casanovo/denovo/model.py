@@ -1543,18 +1543,16 @@ def _peptide_score(
         # FAST PATH: de novo inference — single peptide.
         peptide_score = torch.exp(torch.sum(log_scores))
         return peptide_score.item() if return_numpy else peptide_score
-    else:
-        # BATCH PATH: database search — padded batch of peptides.
-        if lengths is None:
-            raise ValueError("`lengths` must be provided for batched input.")
-        if not isinstance(lengths, torch.Tensor):
-            lengths = torch.tensor(
-                lengths, dtype=torch.long, device=aa_scores.device
-            )
-        cumsum = torch.cumsum(log_scores, dim=1)
-        batch_size = aa_scores.shape[0]
-        idx = torch.arange(batch_size, device=aa_scores.device)
-        peptide_scores = torch.exp(
-            cumsum[idx, torch.clamp(lengths - 1, min=0)]
+
+    # BATCH PATH: database search — padded batch of peptides.
+    if lengths is None:
+        raise ValueError("`lengths` must be provided for batched input.")
+    if not isinstance(lengths, torch.Tensor):
+        lengths = torch.tensor(
+            lengths, dtype=torch.long, device=aa_scores.device
         )
-        return peptide_scores.numpy() if return_numpy else peptide_scores
+    cumsum = torch.cumsum(log_scores, dim=1)
+    batch_size = aa_scores.shape[0]
+    idx = torch.arange(batch_size, device=aa_scores.device)
+    peptide_scores = torch.exp(cumsum[idx, torch.clamp(lengths - 1, min=0)])
+    return peptide_scores.numpy() if return_numpy else peptide_scores
