@@ -1537,7 +1537,7 @@ def _peptide_score(
         aa_scores = torch.as_tensor(aa_scores)
 
     eps = torch.finfo(torch.float64).eps
-    log_scores = torch.log(torch.clamp(aa_scores.double(), eps, 1))
+    log_scores = torch.log(torch.clamp(aa_scores, eps, 1))
 
     if aa_scores.ndim == 1:
         # FAST PATH: de novo inference — single peptide.
