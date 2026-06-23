@@ -174,6 +174,7 @@ class ModelRunner:
         self,
         train_peak_path: Iterable[str],
         valid_peak_path: Iterable[str],
+        annotation_path: Iterable[str] | None = None,
         ckpt_path: Optional[str] = None,
         tracking_peak_path: Iterable[str] = (),
     ) -> None:
@@ -185,6 +186,9 @@ class ModelRunner:
         train_peak_path : iterable of str
             The path to the MS data files for training.
         valid_peak_path : iterable of str
+            The path to the MS data files for validation.
+        annotation_path : iterable of str
+            The path to the annotation file paths.
             The path to the MS data files for validation. These files
             contribute to the aggregate ``valid_CELoss`` used for
             checkpoint selection.
@@ -202,8 +206,22 @@ class ModelRunner:
         self.initialize_tokenizer()
         self.initialize_model(train=True)
 
+        # Need to pass in here? idk yet tbh
         train_paths = self._get_input_paths(train_peak_path, True, "train")
         valid_paths = self._get_input_paths(valid_peak_path, True, "valid")
+
+        annotation_paths = None
+        if annotation_path:
+            annotation_paths = self._get_input_paths(
+                annotation_path, True, "annotations"
+            )
+
+        self.initialize_data_module(
+            train_paths=train_paths,
+            valid_paths=valid_paths,
+            annotation_paths=annotation_paths,
+        )
+
         tracking_paths = (
             self._get_input_paths(tracking_peak_path, True, "tracking")
             if tracking_peak_path
@@ -590,6 +608,7 @@ class ModelRunner:
         train_paths: Sequence[str] | None = None,
         valid_paths: Sequence[str] | None = None,
         test_paths: Sequence[str] | None = None,
+        annotation_paths: Sequence[str] | None = None,
         tracking_paths: Sequence[str] | None = None,
     ) -> None:
         """Initialize the data module.
@@ -632,6 +651,7 @@ class ModelRunner:
             train_paths=train_paths,
             valid_paths=valid_paths,
             test_paths=test_paths,
+            annotation_paths=annotation_paths,
             tracking_paths=tracking_paths,
             train_batch_size=train_batch_size,
             eval_batch_size=eval_batch_size,
@@ -691,7 +711,7 @@ class ModelRunner:
         List[str]
             The input spectrum paths for the specified mode.
         """
-        ext = (".mgf", ".lance")
+        ext = (".mgf", ".lance", ".tsv")
         if not annotated:
             ext += (".mzml", ".mzxml", ".d")
 

@@ -7,8 +7,10 @@ import os
 import pathlib
 from typing import Optional, Sequence
 
+import lance
 import lightning.pytorch as pl
 import numpy as np
+import pandas as pd
 import pyarrow as pa
 import spectrum_utils.spectrum as sus
 import torch.utils.data._utils.collate
@@ -77,6 +79,8 @@ class DeNovoDataModule(pl.LightningDataModule):
         DataLoader and contributes to the aggregate ``valid_CELoss``.
     test_paths : Sequence[str], optional
         Spectrum Lance path(s) for evaluation or inference.
+    annotation_paths : Sequence[str], optional
+        Annotation file paths for DIA training
     tracking_paths : Sequence[str], optional
         Additional annotated spectrum files logged per-file for monitoring
         only (e.g. detecting catastrophic forgetting); excluded from the
@@ -122,6 +126,7 @@ class DeNovoDataModule(pl.LightningDataModule):
         train_paths: Optional[Sequence[str]] = None,
         valid_paths: Optional[Sequence[str]] = None,
         test_paths: Optional[Sequence[str]] = None,
+        annotation_paths: Optional[Sequence[str]] = None,
         tracking_paths: Optional[Sequence[str]] = None,
         train_batch_size: int = 128,
         eval_batch_size: int = 1028,
@@ -144,6 +149,7 @@ class DeNovoDataModule(pl.LightningDataModule):
         self.train_paths = train_paths
         self.valid_paths = list(valid_paths or [])
         self.test_paths = test_paths
+        self.annotation_paths = annotation_paths
         self.tracking_paths = list(tracking_paths or [])
 
         self.train_batch_size = train_batch_size
@@ -200,7 +206,8 @@ class DeNovoDataModule(pl.LightningDataModule):
             if self.train_paths is not None:
                 self.train_dataset = self._make_dataset(
                     self.train_paths,
-                    annotated=True,
+                    train_annotation_paths=self.annotation_paths,
+                    annotated=False,
                     mode="train",
                     shuffle=self.shuffle,
                 )
@@ -208,6 +215,7 @@ class DeNovoDataModule(pl.LightningDataModule):
                     "Training dataset contains %d spectra.",
                     self._get_n_spectra(self.train_dataset),
                 )
+
             # Build one dataset per validation file so each gets its own
             # DataLoader and its loss can be logged separately.
             self.valid_datasets = []
@@ -220,6 +228,7 @@ class DeNovoDataModule(pl.LightningDataModule):
                         shuffle=False,
                     )
                 )
+
             self.tracking_datasets = []
             for i, path in enumerate(self.tracking_paths):
                 self.tracking_datasets.append(
@@ -234,6 +243,7 @@ class DeNovoDataModule(pl.LightningDataModule):
             self.val_stems = _unique_stems(
                 [*self.valid_paths, *self.tracking_paths]
             )
+
             if self.valid_datasets:
                 total = sum(
                     self._get_n_spectra(ds) for ds in self.valid_datasets
@@ -273,7 +283,7 @@ class DeNovoDataModule(pl.LightningDataModule):
         return dataset.n_spectra
 
     def _make_dataset(
-        self, paths, annotated, mode, shuffle
+        self, paths, annotated, mode, shuffle, train_annotation_paths=None
     ) -> torch.utils.data.Dataset:
         """
         Make spectrum datasets.
@@ -289,13 +299,17 @@ class DeNovoDataModule(pl.LightningDataModule):
             The mode indicating name of lance instance
         shuffle: bool
             Shuffle the dataset or not.
+        train_annotation_paths: Iteratble[str]
+            Paths to the annotation files for the training data
 
         Returns
         -------
         torch.utils.data.Dataset
             A PyTorch Dataset for the given peak files.
         """
+
         custom_fields = [self.custom_field_anno] if annotated else []
+
         lance_path = pathlib.Path(f"{self.lance_dir}/{mode}.lance")
 
         parse_params = dict(
@@ -334,6 +348,9 @@ class DeNovoDataModule(pl.LightningDataModule):
                 **params,
             )
 
+        if train_annotation_paths is not None and mode == "train":
+            dataset = self._train_dia_align(train_annotation_paths)
+
         if shuffle:
             buffer_batches = max(
                 1, math.ceil(self.shuffle_buffer_size / self.train_batch_size)
@@ -341,6 +358,57 @@ class DeNovoDataModule(pl.LightningDataModule):
             dataset = ShufflerIterDataPipe(dataset, buffer_size=buffer_batches)
 
         return dataset
+
+    def _train_dia_align(self, annotation_paths):
+        annotation_frames = []
+        for path in annotation_paths:
+            df = pd.read_csv(path)
+            annotation_frames.append(df)
+
+        annotations = pd.concat(annotation_frames, ignore_index=True)
+
+        def make_key(p):
+            if pd.isna(p):
+                return None
+            return os.path.splitext(os.path.basename(str(p)))[0]
+
+        annotations["key"] = annotations["filename"].apply(make_key)
+        annotations = annotations[["key", "scan_id", "sequence", "charge"]]
+        lance_df = self.train_dataset.to_table().to_pandas()
+        lance_df["key"] = lance_df["peak_file"].apply(make_key)
+
+        merged = lance_df.merge(
+            annotations,
+            on=["key", "scan_id"],
+            how="left",
+            suffixes=("_x", "_anno"),
+        )
+
+        if "sequence_anno" in merged.columns:
+            merged["sequence"] = merged["sequence_anno"].combine_first(
+                merged.get("sequence_x")
+            )
+            merged.drop(columns=["sequence_x", "sequence_anno"], inplace=True)
+
+        if "charge_anno" in merged.columns:
+            merged["charge"] = merged["charge_anno"].combine_first(
+                merged.get("charge_x")
+            )
+            merged.drop(columns=["charge_x", "charge_anno"], inplace=True)
+
+        if "sequence" in merged.columns:
+            merged["sequence"] = merged["sequence"].astype("string")
+
+        if "charge" in merged.columns:
+            merged["charge"] = merged["charge"].astype("Int64")
+
+        merged["scan_id"] = merged["scan_id"].astype(str)
+
+        enriched_table = pa.Table.from_pandas(
+            merged, preserve_index=False, safe=False
+        )
+
+        return type(self.train_dataset).from_table(enriched_table)
 
     def _make_loader(
         self, dataset: torch.utils.data.Dataset, shuffle: bool = False
