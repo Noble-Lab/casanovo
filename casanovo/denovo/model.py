@@ -1551,6 +1551,8 @@ def _peptide_score(
         lengths = torch.tensor(
             lengths, dtype=torch.long, device=aa_scores.device
         )
+    else:
+        lengths = lengths.to(dtype=torch.long, device=aa_scores.device)
     cumsum = torch.cumsum(log_scores, dim=1)
     batch_size = aa_scores.shape[0]
     idx = torch.arange(batch_size, device=aa_scores.device)
