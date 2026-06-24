@@ -430,9 +430,9 @@ def _get_retention_time(spectrum: dict[str, Any]) -> float:
             return float(spectrum[key])
 
     # mzML nested scanList
-    scan = spectrum.get("scanList", {}).get("scan", [{}])[0]
-    if "scan start time" in scan:
-        return float(scan["scan start time"])
+    scans = spectrum.get("scanList", {}).get("scan") or []
+    if scans and "scan start time" in scans[0]:
+        return float(scans[0]["scan start time"])
 
     # MGF params block
     params = spectrum.get("params", {})

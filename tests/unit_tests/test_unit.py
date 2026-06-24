@@ -284,6 +284,43 @@ def test_mztab_save(tiny_config, tmp_path):
     assert file.is_file()
 
 
+def test_mztab_retention_time(tiny_config, tmp_path):
+    """Known RT is written numerically; unknown RT becomes null in mzTab."""
+    file = tmp_path / "rt_test.mztab"
+    writer = ms_io.MztabWriter(str(file))
+    writer.set_metadata(Config(tiny_config))
+    writer.set_ms_run(["test.mgf"])
+    writer.psms = [
+        psm.PepSpecMatch(
+            sequence="AAAA",
+            spectrum_id=("test.mgf", "0"),
+            peptide_score=1.0,
+            charge=2,
+            calc_mz=100.0,
+            exp_mz=100.0,
+            aa_scores=[0.5] * 4,
+            retention_time=42.5,
+        ),
+        psm.PepSpecMatch(
+            sequence="PPPP",
+            spectrum_id=("test.mgf", "1"),
+            peptide_score=0.9,
+            charge=2,
+            calc_mz=200.0,
+            exp_mz=200.0,
+            aa_scores=[0.8] * 4,
+            retention_time=float("nan"),
+        ),
+    ]
+    writer.save()
+
+    mztab = pyteomics.mztab.MzTab(str(file))
+    rows = mztab.spectrum_match_table
+    assert float(rows.loc[1, "retention_time"]) == pytest.approx(42.5)
+    rt2 = rows.loc[2, "retention_time"]
+    assert rt2 is None or (isinstance(rt2, float) and math.isnan(rt2))
+
+
 def test_version():
     """Check that the version is not None."""
     assert casanovo.__version__ is not None

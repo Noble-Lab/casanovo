@@ -950,6 +950,11 @@ class Spec2Pep(pl.LightningModule):
         predictions: List[psm.PepSpecMatch]
             Predicted PSMs for the given batch of spectra.
         """
+        n = len(batch["peak_file"])
+        retention_times = batch.get(
+            "retention_time",
+            torch.full((n,), float("nan")),
+        )
         predictions = []
         for (
             filename,
@@ -963,7 +968,7 @@ class Spec2Pep(pl.LightningModule):
             batch["scan_id"],
             batch["precursor_charge"],
             batch["precursor_mz"],
-            batch["retention_time"],
+            retention_times,
             self.forward(batch),
         ):
             for peptide_score, aa_scores, peptide in spectrum_preds:
@@ -976,7 +981,7 @@ class Spec2Pep(pl.LightningModule):
                         calc_mz=np.nan,
                         exp_mz=precursor_mz.item(),
                         aa_scores=aa_scores,
-                        retention_time=retention_time.item(),
+                        retention_time=float(retention_time),
                     )
                 )
 
@@ -1209,6 +1214,13 @@ class DbSpec2Pep(Spec2Pep):
         """
         predictions = collections.defaultdict(list)
 
+        if "retention_time" not in batch:
+            n = batch["precursor_charge"].shape[0]
+            batch = {
+                **batch,
+                "retention_time": torch.full((n,), float("nan")),
+            }
+
         with torch.inference_mode():
             # Pre-compute encoder outputs for the entire batch.
             mzs, intensities, precursors_all, _ = self._process_batch(batch)
@@ -1259,7 +1271,7 @@ class DbSpec2Pep(Spec2Pep):
                             calc_mz=np.nan,
                             exp_mz=precursor_mz.item(),
                             aa_scores=curr_aa_scores,
-                            retention_time=retention_time.item(),
+                            retention_time=float(retention_time),
                         )
                     )
 
