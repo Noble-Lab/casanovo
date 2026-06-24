@@ -6,6 +6,7 @@ import hashlib
 import heapq
 import io
 import logging
+import math
 import os
 import pathlib
 import platform
@@ -34,7 +35,7 @@ from casanovo import casanovo, denovo, utils
 from casanovo.casanovo import _SharedFileIOParams
 from casanovo.config import Config
 from casanovo.data import db_utils, ms_io, psm
-from casanovo.denovo.dataloaders import DeNovoDataModule
+from casanovo.denovo.dataloaders import DeNovoDataModule, _get_retention_time
 from casanovo.denovo.evaluate import aa_match, aa_match_batch, aa_match_metrics
 from casanovo.denovo.model import (
     DbSpec2Pep,
@@ -1613,6 +1614,7 @@ def test_db_stop_token(tiny_config):
         "scan_id": [1, 2],
         "mz_array": torch.zeros((2, 10)),
         "intensity_array": torch.zeros((2, 10)),
+        "retention_time": torch.tensor([float("nan"), float("nan")]),
     }
 
     for predction in db_model.predict_step(mock_batch):
@@ -1648,6 +1650,7 @@ def test_isoleucine_match(tiny_config):
         "intensity_array": torch.zeros((2, 10)),
         "peak_file": ["one.mgf", "two.mgf"],
         "scan_id": [1, 2],
+        "retention_time": torch.tensor([float("nan"), float("nan")]),
     }
 
     matches = db_model.predict_step(batch)
@@ -1964,6 +1967,7 @@ def test_n_term_scores_db(tiny_config, monkeypatch):
             "scan_id": [1, 2],
             "precursor_charge": ["+1", "+1"],
             "precursor_mz": torch.tensor([42.0, 42.0]),
+            "retention_time": torch.tensor([float("nan"), float("nan")]),
             "original_seq_str": ["[Acetyl]-P", "PP"],
         }
     ]
@@ -3176,3 +3180,29 @@ def test_train_cli_tracking_peak_path(tmp_path, mgf_small, monkeypatch):
     )
     assert result.exit_code == 0, result.output
     assert str(mgf_small) in captured.get("tracking", ())
+
+
+@pytest.mark.parametrize(
+    "spectrum, expected",
+    [
+        # Flat mzML / mzXML style
+        ({"scan start time": 123.4}, 123.4),
+        ({"retention time": 456.7}, 456.7),
+        ({"retentionTime": 789.0}, 789.0),
+        # Nested mzML style
+        ({"scanList": {"scan": [{"scan start time": 321.0}]}}, 321.0),
+        # MGF style
+        ({"params": {"rtinseconds": 654.0}}, 654.0),
+        ({"params": {"rtinsec": 987.0}}, 987.0),
+        # Missing all keys
+        ({}, math.nan),
+        ({"scanList": {"scan": [{}]}}, math.nan),
+        ({"params": {}}, math.nan),
+    ],
+)
+def test_get_retention_time(spectrum, expected):
+    result = _get_retention_time(spectrum)
+    if math.isnan(expected):
+        assert math.isnan(result)
+    else:
+        assert result == pytest.approx(expected)

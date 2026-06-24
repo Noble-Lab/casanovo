@@ -3,6 +3,7 @@
 import collections
 import csv
 import logging
+import math
 import operator
 import os
 import re
@@ -293,9 +294,11 @@ class MztabWriter:
                     # FIXME: Modifications should be specified as
                     #  controlled vocabulary terms.
                     psm.modifications,  # modifications
-                    # FIXME: Can we get the retention time from the data
-                    #  loader?
-                    "null",  # retention_time
+                    (
+                        "null"
+                        if math.isnan(psm.retention_time)
+                        else psm.retention_time
+                    ),  # retention_time
                     psm.charge,  # charge
                     psm.exp_mz,  # exp_mass_to_charge
                     psm.calc_mz,  # calc_mass_to_charge

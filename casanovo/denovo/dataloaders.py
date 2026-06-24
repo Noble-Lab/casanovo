@@ -5,7 +5,7 @@ import logging
 import math
 import os
 import pathlib
-from typing import Optional, Sequence
+from typing import Any, Optional, Sequence
 
 import lightning.pytorch as pl
 import numpy as np
@@ -295,7 +295,11 @@ class DeNovoDataModule(pl.LightningDataModule):
         torch.utils.data.Dataset
             A PyTorch Dataset for the given peak files.
         """
-        custom_fields = [self.custom_field_anno] if annotated else []
+        custom_fields = [
+            CustomField("retention_time", _get_retention_time, pa.float32())
+        ]
+        if annotated:
+            custom_fields.append(self.custom_field_anno)
         lance_path = pathlib.Path(f"{self.lance_dir}/{mode}.lance")
 
         parse_params = dict(
@@ -402,6 +406,41 @@ class DeNovoDataModule(pl.LightningDataModule):
     def db_dataloader(self) -> torch.utils.data.DataLoader:
         """Get a special dataloader for DB search."""
         return self._make_loader(self.test_dataset)
+
+
+def _get_retention_time(spectrum: dict[str, Any]) -> float:
+    """
+    Extract the retention time from a spectrum dict and return it in seconds.
+
+    Handles mzML, mzXML, and MGF formats. Returns NaN if unavailable.
+
+    Parameters
+    ----------
+    spectrum : dict
+        A spectrum dictionary as returned by pyteomics.
+
+    Returns
+    -------
+    float
+        The retention time in seconds, or NaN if unavailable.
+    """
+    # mzML / mzXML top-level keys
+    for key in ("scan start time", "retention time", "retentionTime"):
+        if key in spectrum:
+            return float(spectrum[key])
+
+    # mzML nested scanList
+    scan = spectrum.get("scanList", {}).get("scan", [{}])[0]
+    if "scan start time" in scan:
+        return float(scan["scan start time"])
+
+    # MGF params block
+    params = spectrum.get("params", {})
+    for key in ("rtinseconds", "rtinsec"):
+        if key in params:
+            return float(params[key])
+
+    return float("nan")
 
 
 def _discard_low_quality(
