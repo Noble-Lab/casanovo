@@ -75,6 +75,23 @@ def test_val_check_interval_accepts_int_or_float(tmp_path, tiny_config):
     assert config.val_check_interval == 100
 
 
+@pytest.mark.parametrize("val_check_interval", [-0.1, 1.5])
+def test_val_check_interval_rejects_out_of_range_float(
+    tmp_path, tiny_config, val_check_interval
+):
+    filename = str(tmp_path / "config_val_check_interval.yml")
+    with (
+        open(tiny_config, "r", encoding="utf-8") as f_in,
+        open(filename, "w", encoding="utf-8") as f_out,
+    ):
+        cfg = yaml.safe_load(f_in)
+        cfg["val_check_interval"] = val_check_interval
+        yaml.safe_dump(cfg, f_out)
+
+    with pytest.raises(TypeError, match="val_check_interval"):
+        Config(filename)
+
+
 def test_deprecated(tmp_path, tiny_config):
     filename = str(tmp_path / "config_deprecated.yml")
     with (

@@ -29,11 +29,18 @@ _config_deprecated = dict(
 def _int_or_float(value: int | float | str) -> int | float:
     """Parse an integer batch count or a float epoch fraction."""
     if isinstance(value, float):
-        return value
-    try:
-        return int(value)
-    except (TypeError, ValueError):
-        return float(value)
+        parsed = value
+    else:
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            parsed = float(value)
+
+    if not 0 <= parsed <= 1:
+        raise ValueError(
+            "Float val_check_interval values must be within [0, 1]"
+        )
+    return parsed
 
 
 class Config:
