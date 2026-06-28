@@ -26,6 +26,16 @@ _config_deprecated = dict(
 )
 
 
+def _int_or_float(value: int | float | str) -> int | float:
+    """Parse an integer batch count or a float epoch fraction."""
+    if isinstance(value, float):
+        return value
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return float(value)
+
+
 class Config:
     """
     The Casanovo configuration options.
@@ -70,7 +80,7 @@ class Config:
         log_metrics=bool,
         log_every_n_steps=int,
         lance_dir=str,
-        val_check_interval=int,
+        val_check_interval=_int_or_float,
         min_peaks=int,
         max_peaks=int,
         min_mz=float,
@@ -162,11 +172,11 @@ class Config:
                 " please specify it explicitly in the config file."
             )
 
-    def __getitem__(self, param: str) -> Union[int, bool, str, Tuple, Dict]:
+    def __getitem__(self, param: str) -> Union[int, float, bool, str, Tuple, Dict]:
         """Retrieve a parameter."""
         return self._params[param]
 
-    def __getattr__(self, param: str) -> Union[int, bool, str, Tuple, Dict]:
+    def __getattr__(self, param: str) -> Union[int, float, bool, str, Tuple, Dict]:
         """Retrieve a parameter."""
         return self._params[param]
 

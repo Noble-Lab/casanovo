@@ -50,6 +50,31 @@ def test_override(tmp_path, tiny_config):
         Config(filename)
 
 
+def test_val_check_interval_accepts_int_or_float(tmp_path, tiny_config):
+    filename = str(tmp_path / "config_val_check_interval.yml")
+    with (
+        open(tiny_config, "r", encoding="utf-8") as f_in,
+        open(filename, "w", encoding="utf-8") as f_out,
+    ):
+        cfg = yaml.safe_load(f_in)
+        cfg["val_check_interval"] = 0.5
+        yaml.safe_dump(cfg, f_out)
+
+    config = Config(filename)
+    assert config.val_check_interval == 0.5
+
+    with (
+        open(tiny_config, "r", encoding="utf-8") as f_in,
+        open(filename, "w", encoding="utf-8") as f_out,
+    ):
+        cfg = yaml.safe_load(f_in)
+        cfg["val_check_interval"] = 100
+        yaml.safe_dump(cfg, f_out)
+
+    config = Config(filename)
+    assert config.val_check_interval == 100
+
+
 def test_deprecated(tmp_path, tiny_config):
     filename = str(tmp_path / "config_deprecated.yml")
     with (
