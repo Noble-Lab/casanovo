@@ -172,11 +172,15 @@ class Config:
                 " please specify it explicitly in the config file."
             )
 
-    def __getitem__(self, param: str) -> Union[int, float, bool, str, Tuple, Dict]:
+    def __getitem__(
+        self, param: str
+    ) -> Union[int, float, bool, str, Tuple, Dict]:
         """Retrieve a parameter."""
         return self._params[param]
 
-    def __getattr__(self, param: str) -> Union[int, float, bool, str, Tuple, Dict]:
+    def __getattr__(
+        self, param: str
+    ) -> Union[int, float, bool, str, Tuple, Dict]:
         """Retrieve a parameter."""
         return self._params[param]
 
