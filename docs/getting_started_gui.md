@@ -6,7 +6,8 @@ Configure your inputs in a form, click **Run Casanovo**, and watch the output st
 
 ## Installation
 
-CasanovoGUI's native installers require **no manual setup** — you do not need to install Java, Python, or pip. The cross-platform `.jar` is the exception: it needs a Java 23+ runtime already installed.
+CasanovoGUI's native installers require **no manual setup** — you do not need to install Java, Python, or pip.
+The cross-platform `.jar` is the exception: it needs a Java 23+ runtime already installed.
 
 1. Download the installer for your platform from the [CasanovoGUI Releases page](https://github.com/Noble-Lab/CasanovoGUI/releases/latest):
 
@@ -14,7 +15,7 @@ CasanovoGUI's native installers require **no manual setup** — you do not need 
    |------------------|----------|------------|
    | **Windows** | `CasanovoGUI-<version>-windows-x64.zip` | Unzip and run `CasanovoGUI.exe` |
    | **macOS** (Apple Silicon) | `CasanovoGUI-<version>-macos-arm64.dmg` | Open and drag to Applications |
-   | **Linux** | `CasanovoGUI-<version>-linux-x86_64.deb` or `…-linux-x86_64.tar.gz` | Install the `.deb`, or extract the `.tar.gz` (no root) and run |
+   | **Linux** | `CasanovoGUI-<version>-linux-x86_64.deb` or `...-linux-x86_64.tar.gz` | Install the `.deb`, or extract the `.tar.gz` (no root) and run |
    | **Any OS** (Java 23+) | `CasanovoGUI-<version>.jar` | Run with a Java 23+ runtime (also the option for Intel Macs) |
 
    The native installers bundle their own Java runtime, so no separate Java installation is needed.
@@ -29,7 +30,7 @@ CasanovoGUI's native installers require **no manual setup** — you do not need 
 
 The **De novo** tab runs `casanovo sequence` to predict peptide sequences directly from your spectra.
 
-<img src="https://raw.githubusercontent.com/Noble-Lab/CasanovoGUI/main/docs/images/CasanovoGUI.png" alt="CasanovoGUI De novo tab" width="70%">
+<img src="https://raw.githubusercontent.com/Noble-Lab/CasanovoGUI/main/docs/images/CasanovoGUI.png" alt="CasanovoGUI de novo tab" width="70%">
 
 Its main settings are:
 
@@ -39,15 +40,15 @@ Its main settings are:
 - **Output directory** *(required)* and **output root name** — where the result `.mztab` and log are written, and the base name used for them. You must choose an output directory before running. If you leave the output root blank, Casanovo names the files `casanovo_<timestamp>`.
 - **Verbosity** and **Overwrite existing output files** — the logging level and whether to overwrite a previous run in the same folder.
 
-Click **Parameters** to fine-tune any Casanovo setting (precursor m/z tolerance, peptide length, number of beams, batch size, accelerator, and more) without editing the Casanovo configuration file by hand.
-A live **command preview** shows the exact `casanovo …` command that will run.
+Click **Parameters** to fine-tune any Casanovo setting (precursor *m*/*z* tolerance, peptide length, number of beams, batch size, accelerator, and more) without editing the Casanovo configuration file by hand.
+A live **command preview** shows the exact `casanovo ...` command that will run.
 Click **Run Casanovo** to start; the console streams the log as it runs, and the `.mztab` result is written to your output directory.
 
 ### Other tasks
 
 The remaining tabs expose the corresponding Casanovo commands with the same form-based interface:
 
-- **DB Search** (`casanovo db-search`) — score spectra against a protein FASTA database.
+- **Database Search** (`casanovo db-search`) — score spectra against a protein FASTA database.
 - **Evaluate** (`casanovo sequence --evaluate`) — measure *de novo* performance against annotated spectra.
 - **Train** (`casanovo train`) — train or fine-tune a model from annotated MGF files.
 
