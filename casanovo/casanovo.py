@@ -47,6 +47,14 @@ click.rich_click.USE_MARKDOWN = True
 click.rich_click.STYLE_HELPTEXT = ""
 click.rich_click.SHOW_ARGUMENTS = True
 
+# The regex pattern below describes the the model weight
+# naming pattern.
+_CKPT_RE = re.compile(
+    r"^casanovo_([a-z0-9][a-z0-9-]*)_v([0-9]+)-([0-9]+)-([0-9]+)\.ckpt$"
+)
+# The default model is orbitrap.
+_DEFAULT_MODEL_ID = "orbitrap"
+
 
 class _SharedFileIOParams(click.RichCommand):
     """File IO options shared between most Casanovo commands"""
@@ -521,15 +529,6 @@ def setup_logging(
     logging.getLogger("urllib3").setLevel(logging.WARNING)
 
 
-# The regex pattern below describes the the model weight
-# naming pattern.
-_CKPT_RE = re.compile(
-    r"^casanovo_([a-z0-9][a-z0-9-]*)_v([0-9]+)-([0-9]+)-([0-9]+)\.ckpt$"
-)
-# The default model is orbitrap.
-_DEFAULT_MODEL_ID = "orbitrap"
-
-
 def _normalize(s: str) -> str:
     """
     Normalizes model selector.
@@ -660,11 +659,12 @@ def setup_model(
     Parameters
     ----------
     model : str | None
-        May be a file system path, a URL pointing to a .ckpt file, or
-        None. If `model` is a URL the weights will be downloaded and
-        cached from `model`. If `model` is `None` the weights from the
-        latest matching official release will be used (downloaded and
-        cached).
+        May be a file system path, a URL pointing to a .ckpt file, None,
+        or a model selector. If `model` is a URL the weights will be downloaded
+        and cached from `model`. If `model` is `None` the weights from the
+        latest matching Orbitrap official release will be used (downloaded and
+        cached). If `model` is a selector, the weights from the latest
+        appropriate official release will be used (downloaded and cached).
     config : str | None
         Config file path. If None the default config will be used.
     output_dir: : Path | str
