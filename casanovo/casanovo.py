@@ -681,9 +681,6 @@ def setup_model(
         Initialized Casanovo config, local path to model weights if any
         (may be `None` if training using random starting weights).
     """
-    config = Config(config)
-    seed_everything(seed=config["random_seed"], workers=True)
-
     cache_dir = Path(appdirs.user_cache_dir("casanovo", False, opinion=False))
     resolved_model: Optional[Path] = None
 
@@ -736,6 +733,16 @@ def setup_model(
                 "GitHub API rate limit exceeded while trying to download "
                 "the model weights"
             ) from None
+
+    if config is None:
+        config = Config(None)
+    elif Path(config).is_file():
+        config = Config(config)
+    else:
+        parsed = _parse_ckpt(resolved_model.name)
+        config = Config(parsed[0] if parsed else None)
+
+    seed_everything(seed=config["random_seed"], workers=True)
 
     logger.info("Casanovo version %s", str(__version__))
     logger.debug("model = %s", resolved_model)

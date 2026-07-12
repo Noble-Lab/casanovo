@@ -144,6 +144,51 @@ def test_train_and_run(
     assert psms.loc[4, "spectra_ref"] == "ms_run[2]:scan=17"
 
     # Run Casanovo in de novo evaluation mode.
+    # Test Casanovo without providing config file
+    monkeypatch.setattr(casanovo, "__version__", "5.1.2")
+    output_filename = (tmp_path / "test_tims_no_conf").with_suffix(".mztab")
+    eval_args = [
+        "sequence",
+        "--model",
+        "timstof",
+        "--output_dir",
+        str(tmp_path),
+        "--output_root",
+        "test_tims_no_conf",
+        str(mgf_small),
+        "--evaluate",
+    ]
+
+    result = run(eval_args)
+    assert result.exit_code == 0
+    assert output_filename.is_file()
+
+    mztab = pyteomics.mztab.MzTab(str(output_filename))
+    assert mztab.metadata.get("max_peaks") == 500
+
+    # Testing no model
+    output_filename = (tmp_path / "test_no_model_no_conf").with_suffix(
+        ".mztab"
+    )
+    eval_args = [
+        "sequence",
+        "--output_dir",
+        str(tmp_path),
+        "--output_root",
+        "test_no_model_no_conf",
+        str(mgf_small),
+        "--evaluate",
+    ]
+
+    result = run(eval_args)
+    assert result.exit_code == 0
+    assert output_filename.is_file()
+
+    mztab = pyteomics.mztab.MzTab(str(output_filename))
+    assert mztab.metadata.get("max_peaks") == 150
+
+    monkeypatch.setattr(casanovo, "__version__", "3.0.1")
+
     output_rootname = "test-eval"
     output_filename = (tmp_path / output_rootname).with_suffix(".mztab")
     eval_args = [
