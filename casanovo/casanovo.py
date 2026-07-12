@@ -769,9 +769,6 @@ def _resolve_setup_config(
     resolved_model : Path | None
         Path to the resolved model weights, or None if training from
         scratch with random starting weights.
-    is_train : bool
-        Whether this is a training run (affects the wording of the
-        fallback warning).
 
     Returns
     -------
@@ -802,7 +799,10 @@ def _resolve_setup_config(
     elif Path(config).is_file():
         config = Config(config)
     else:
-        logger.warning("Config was: %s, which is not None or a Path", config)
+        logger.warning(
+            "Config '%s' is not a valid file path; using default config.",
+            config,
+        )
         config = Config(None)
 
     return config

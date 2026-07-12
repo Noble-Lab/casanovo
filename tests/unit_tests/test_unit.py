@@ -44,10 +44,21 @@ from casanovo.denovo.model import (
 )
 
 
-def test_casanovo_resolve_config(caplog):
+def test_casanovo_resolve_config_from_model(tmp_path, caplog):
     result = casanovo._resolve_setup_config("test", None)
     assert result["max_peaks"] == Config(result._default_config)["max_peaks"]
     assert "Config was: test, which is not None or a Path" in caplog.text
+
+    fake_ckpt = tmp_path / "casanovo_orbitrap_v1-0-0.ckpt"
+    fake_ckpt.touch()
+    result = casanovo._resolve_setup_config(None, fake_ckpt)
+    assert result["max_peaks"] == Config(None)["max_peaks"]
+
+    fake_ckpt2 = tmp_path / "casanovo_unknownmodel_v1-0-0.ckpt"
+    fake_ckpt2.touch()
+    result2 = casanovo._resolve_setup_config(None, fake_ckpt2)
+    assert result2["max_peaks"] == Config(None)["max_peaks"]
+    assert "No bundled config found" in caplog.text
 
 
 def test_forward_reverse():
