@@ -735,10 +735,31 @@ def setup_model(
             ) from None
 
     if config is None:
-        parsed = _parse_ckpt(resolved_model.name)
-        config = Config(parsed[0] if parsed else None)
+        if resolved_model is not None:
+            parsed = _parse_ckpt(resolved_model.name)
+            if parsed is not None:
+                canonical_id = parsed[0]
+            else:
+                canonical_id = None
+                logger.warning(
+                    "Could not determine model type from weights file '%s'. "
+                    "Using default config. If this is incorrect, specify a "
+                    "config file explicitly with '--config'.",
+                    resolved_model.name,
+                )
+        else:
+            canonical_id = None
+            logger.warning(
+                "No model weights specified (training from scratch). "
+                "Using default config. If this is incorrect, specify a "
+                "config file explicitly with '--config'."
+            )
+        config = Config(canonical_id)
     elif Path(config).is_file():
         config = Config(config)
+    else:
+        logger.warning("Config was: %s, which is not None or a Path", config)
+        config = Config(None)
 
     seed_everything(seed=config["random_seed"], workers=True)
 
