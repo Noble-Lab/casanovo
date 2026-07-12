@@ -44,6 +44,12 @@ from casanovo.denovo.model import (
 )
 
 
+def test_casanovo_resolve_config(caplog):
+    result = casanovo._resolve_setup_config("test", None)
+    assert result["max_peaks"] == Config(result._default_config)["max_peaks"]
+    assert "Config was: test, which is not None or a Path" in caplog.text
+
+
 def test_forward_reverse():
     """Test forward and reverse peptide predictions"""
     score_A = [0.42, 1.0, 0.0, 0.0, 0.0]

@@ -224,9 +224,6 @@ class Config:
         shutil.copyfile(cls._default_config, output)
 
     def _resolve_config(self, config_selector: str) -> Path:
-        if config_selector is None:
-            return self._default_config
-
         base_config = self._canonical_configs.get(config_selector)
         if base_config is None:
             logger.warning(
