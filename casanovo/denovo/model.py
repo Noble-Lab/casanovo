@@ -527,19 +527,27 @@ class Spec2Pep(pl.LightningModule):
             # Calculate softmax scores directly with proper indexing
             smx = self.softmax(scores[i : i + 1, : step + 1, :])
 
-            # Vectorized AA score extraction
+            # Vectorized AA score extraction (kept on GPU to avoid
+            # unnecessary CPU/GPU round-trips per decode step).
             range_tensor = torch.arange(len(pred_tokens), device=device)
-            aa_scores = smx[0, range_tensor, pred_tokens].cpu().numpy()
+            aa_scores_tensor = smx[0, range_tensor, pred_tokens]
 
             # Add explicit score 0 for missing stop token
             if not has_stop_token:
-                aa_scores = np.append(aa_scores, 0)
+                aa_scores_tensor = torch.cat(
+                    [
+                        aa_scores_tensor,
+                        torch.tensor([0.0], device=aa_scores_tensor.device),
+                    ]
+                )
 
             # Calculate the peptide score using the appropriate scoring function
-            peptide_score = _peptide_score(aa_scores)
+            peptide_score = _peptide_score(aa_scores_tensor)
+            if isinstance(peptide_score, torch.Tensor):
+                peptide_score = peptide_score.item()
 
             # Omit the stop token from the amino acid-level scores.
-            aa_scores = aa_scores[:-1]
+            aa_scores = aa_scores_tensor.cpu().numpy()[:-1]
 
             pred_peptide_cpu = pred_peptide.cpu()
             peptide_entry = (
@@ -1493,51 +1501,60 @@ class CosineWarmupScheduler(torch.optim.lr_scheduler._LRScheduler):
 
 
 def _peptide_score(
-    aa_scores: np.ndarray,
-    lengths: Optional[np.ndarray] = None,
-) -> Union[float, np.ndarray]:
+    aa_scores: Union[np.ndarray, torch.Tensor],
+    lengths: Optional[Union[np.ndarray, torch.Tensor]] = None,
+) -> Union[float, np.ndarray, torch.Tensor]:
     """
     Calculate the peptide-level confidence score from the raw
     amino acid scores.
 
     The peptide score is the product of the raw amino acid scores.
-    This function contains paths for both single peptide inputs
-    (de novo mode) and batched peptide inputs (database search mode).
+    This function accepts both NumPy arrays and PyTorch tensors.
+    NumPy inputs are converted to tensors for computation (zero-copy
+    for contiguous CPU arrays) and the result is returned in the
+    original type.
 
     Parameters
     ----------
-    aa_scores : np.ndarray
+    aa_scores : np.ndarray or torch.Tensor
         A 1D array of amino acid scores for a single peptide, or a 2D
         padded array for a batch of peptides.
-    lengths : Optional[np.ndarray]
+    lengths : Optional[np.ndarray or torch.Tensor]
         An array of peptide lengths, required when `aa_scores` is a 2D
         (batched) array.
 
     Returns
     -------
-    peptide_score : float or np.ndarray
+    peptide_score : float, np.ndarray, or torch.Tensor
         The calculated peptide score or an array of scores for the batch.
     """
-    eps = np.finfo(np.float64).eps
+    # Track whether the input was numpy to return the appropriate type.
+    return_numpy = isinstance(aa_scores, np.ndarray)
 
-    # FAST PATH: de novo inference
+    # Convert numpy arrays to tensors without copying data (zero-copy for
+    # contiguous CPU arrays), enabling a single unified computation path.
+    if return_numpy:
+        aa_scores = torch.as_tensor(aa_scores)
+
+    eps = torch.finfo(torch.float64).eps
+    log_scores = torch.log(torch.clamp(aa_scores, eps, 1))
+
     if aa_scores.ndim == 1:
-        log_scores = np.log(np.clip(aa_scores, eps, 1))
-        peptide_log_score = np.sum(log_scores)
-        peptide_score = np.exp(peptide_log_score)
+        # FAST PATH: de novo inference — single peptide.
+        peptide_score = torch.exp(torch.sum(log_scores))
+        return peptide_score.item() if return_numpy else peptide_score
 
-        return peptide_score
-
-    # BATCH PATH: database search
+    # BATCH PATH: database search — padded batch of peptides.
+    if lengths is None:
+        raise ValueError("`lengths` must be provided for batched input.")
+    if not isinstance(lengths, torch.Tensor):
+        lengths = torch.tensor(
+            lengths, dtype=torch.long, device=aa_scores.device
+        )
     else:
-        if lengths is None:
-            raise ValueError("`lengths` must be provided for batched input.")
-
-        log_scores = np.log(np.clip(aa_scores, eps, 1))
-        cumsum = np.cumsum(log_scores, axis=1)
-        batch_size = aa_scores.shape[0]
-        idx = np.arange(batch_size)
-        peptide_log_scores = cumsum[idx, np.maximum(lengths - 1, 0)]
-        peptide_scores = np.exp(peptide_log_scores)
-
-        return peptide_scores
+        lengths = lengths.to(dtype=torch.long, device=aa_scores.device)
+    cumsum = torch.cumsum(log_scores, dim=1)
+    batch_size = aa_scores.shape[0]
+    idx = torch.arange(batch_size, device=aa_scores.device)
+    peptide_scores = torch.exp(cumsum[idx, torch.clamp(lengths - 1, min=0)])
+    return peptide_scores.numpy() if return_numpy else peptide_scores

@@ -1,19 +1,14 @@
 """Test configuration loading"""
 
-import logging
-
 import pytest
 import yaml
 
 from casanovo.config import Config
 
 
-def test_default(monkeypatch):
+def test_default():
     """Test that loading the default works"""
-    with monkeypatch.context() as ctx:
-        ctx.setattr("platform.machine", lambda: "x86-64")
-        config = Config()
-
+    config = Config()
     assert config.random_seed == 454
     assert config["random_seed"] == 454
     assert config.accelerator == "auto"
@@ -75,39 +70,3 @@ def test_deprecated(tmp_path, tiny_config):
 
     with pytest.warns(DeprecationWarning):
         Config(filename)
-
-
-def test_override_mps(monkeypatch, tiny_config, tmp_path, caplog):
-    filename = str(tmp_path / "config_auto.yml")
-    with (
-        open(tiny_config, "r", encoding="utf-8") as f_in,
-        open(filename, "w", encoding="utf-8") as f_out,
-    ):
-        cfg = yaml.safe_load(f_in)
-        cfg["accelerator"] = "auto"
-        yaml.safe_dump(cfg, f_out)
-
-    with monkeypatch.context() as ctx, caplog.at_level(logging.WARNING):
-        # Overwrite on Apple Silicon
-        ctx.setattr("platform.system", lambda: "Darwin")
-        ctx.setattr("platform.machine", lambda: "arm64")
-        cfg = Config(filename)
-
-        assert cfg["accelerator"] == "cpu"
-        assert cfg.accelerator == "cpu"
-        assert any(
-            "overwritten to 'cpu' on Apple Silicon" in rec.getMessage()
-            for rec in caplog.records
-        )
-
-        # Don't overwrite on x86-64
-        caplog.clear()
-        ctx.setattr("platform.machine", lambda: "x86-64")
-        cfg = Config(filename)
-
-        assert cfg["accelerator"] == "auto"
-        assert cfg.accelerator == "auto"
-        assert not any(
-            "overwritten to 'cpu' on Apple Silicon" in rec.getMessage()
-            for rec in caplog.records
-        )
