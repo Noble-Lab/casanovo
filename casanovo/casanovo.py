@@ -734,6 +734,51 @@ def setup_model(
                 "the model weights"
             ) from None
 
+    config = _resolve_setup_config(config, resolved_model)
+
+    seed_everything(seed=config["random_seed"], workers=True)
+
+    logger.info("Casanovo version %s", str(__version__))
+    logger.debug("model = %s", resolved_model)
+    logger.debug("config = %s", config.file)
+    logger.debug("output directory = %s", output_dir)
+    logger.debug("output root name = %s", output_root_name)
+    for key, value in config.items():
+        logger.debug("%s = %s", str(key), str(value))
+
+    return config, resolved_model
+
+
+def _resolve_setup_config(
+    config: Optional[str],
+    resolved_model: Optional[Path],
+) -> "Config":
+    """
+    Resolve the Config object to use for this run.
+
+    Priority:
+      1. Explicit `config` path, if it points to a real file.
+      2. Auto-resolved from `resolved_model`'s canonical model id, if
+         the weights filename can be identified.
+      3. Default config, with a warning explaining why no more
+         specific config could be determined.
+
+    Parameters
+    ----------
+    config : str | None
+        User-supplied config file path, or None if not specified.
+    resolved_model : Path | None
+        Path to the resolved model weights, or None if training from
+        scratch with random starting weights.
+    is_train : bool
+        Whether this is a training run (affects the wording of the
+        fallback warning).
+
+    Returns
+    -------
+    Config
+        The resolved Config object.
+    """
     if config is None:
         if resolved_model is not None:
             parsed = _parse_ckpt(resolved_model.name)
@@ -749,14 +794,11 @@ def setup_model(
                 )
         else:
             canonical_id = None
-            if is_train:
-                logger.warning(
-                    "No model weights specified (training from scratch). "
-                    "Using default config. If this is incorrect, specify a "
-                    "config file explicitly with '--config'."
-                )
-            else:
-                logger.warning()
+            logger.warning(
+                "No model weights specified (training from scratch). "
+                "Using default config. If this is incorrect, specify a "
+                "config file explicitly with '--config'."
+            )
         config = Config(canonical_id)
     elif Path(config).is_file():
         config = Config(config)
@@ -764,17 +806,7 @@ def setup_model(
         logger.warning("Config was: %s, which is not None or a Path", config)
         config = Config(None)
 
-    seed_everything(seed=config["random_seed"], workers=True)
-
-    logger.info("Casanovo version %s", str(__version__))
-    logger.debug("model = %s", resolved_model)
-    logger.debug("config = %s", config.file)
-    logger.debug("output directory = %s", output_dir)
-    logger.debug("output root name = %s", output_root_name)
-    for key, value in config.items():
-        logger.debug("%s = %s", str(key), str(value))
-
-    return config, resolved_model
+    return config
 
 
 def _get_model_weights(

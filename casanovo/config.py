@@ -47,11 +47,15 @@ class Config:
     ```
     """
 
-    _default_config = Path(__file__).parent / "config.yaml"
-    _timstof_config = Path(__file__).parent / "config_timstof.yaml"
+    _config_dir = Path(__file__).parent
+    _default_config = _config_dir / "config.yaml"
+
     _canonical_configs = {
         "orbitrap": _default_config,
-        "timstof": _timstof_config,
+        **{
+            path.stem.removeprefix("config_"): path
+            for path in _config_dir.glob("config_*.yaml")
+        },
     }
 
     _config_types = dict(
