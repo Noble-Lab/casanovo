@@ -31,6 +31,14 @@ warnings.filterwarnings(
     ".*Converting mask without torch.bool dtype to bool*",
 )
 
+# The regex pattern below describes the the model weight
+# naming pattern.
+_CKPT_RE = re.compile(
+    r"^casanovo_([a-z0-9][a-z0-9-]*)_v([0-9]+)-([0-9]+)-([0-9]+)\.ckpt$"
+)
+# The default model is orbitrap.
+_DEFAULT_MODEL_ID = "orbitrap"
+
 import appdirs
 import github
 import requests
@@ -519,15 +527,6 @@ def setup_logging(
     logging.getLogger("pytorch_lightning").setLevel(logging.WARNING)
     logging.getLogger("torch").setLevel(logging.WARNING)
     logging.getLogger("urllib3").setLevel(logging.WARNING)
-
-
-# The regex pattern below describes the the model weight
-# naming pattern.
-_CKPT_RE = re.compile(
-    r"^casanovo_([a-z0-9][a-z0-9-]*)_v([0-9]+)-([0-9]+)-([0-9]+)\.ckpt$"
-)
-# The default model is orbitrap.
-_DEFAULT_MODEL_ID = "orbitrap"
 
 
 def _normalize(s: str) -> str:
