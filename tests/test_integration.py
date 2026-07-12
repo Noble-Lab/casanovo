@@ -164,7 +164,9 @@ def test_train_and_run(
     assert output_filename.is_file()
 
     mztab = pyteomics.mztab.MzTab(str(output_filename))
-    assert mztab.metadata.get("max_peaks") == 500
+    assert (
+        int(mztab.metadata["software[1]-setting[26]"].split(" = ")[1]) == 500
+    )
 
     # Testing no model
     output_filename = (tmp_path / "test_no_model_no_conf").with_suffix(
@@ -185,7 +187,9 @@ def test_train_and_run(
     assert output_filename.is_file()
 
     mztab = pyteomics.mztab.MzTab(str(output_filename))
-    assert mztab.metadata.get("max_peaks") == 150
+    assert (
+        int(mztab.metadata["software[1]-setting[26]"].split(" = ")[1]) == 150
+    )
 
     monkeypatch.setattr(casanovo, "__version__", "3.0.1")
 
