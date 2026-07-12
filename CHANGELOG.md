@@ -6,6 +6,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+- Modified config loading to load based on model selectors (e.g., `orbitrap` and `timstof` 
+are currently supported) in sequencing mode
+
 ### Removed
 
 - Removed the override that forced `accelerator: "auto"` to `"cpu"` on Apple Silicon devices.
