@@ -749,11 +749,14 @@ def setup_model(
                 )
         else:
             canonical_id = None
-            logger.warning(
-                "No model weights specified (training from scratch). "
-                "Using default config. If this is incorrect, specify a "
-                "config file explicitly with '--config'."
-            )
+            if is_train:
+                logger.warning(
+                    "No model weights specified (training from scratch). "
+                    "Using default config. If this is incorrect, specify a "
+                    "config file explicitly with '--config'."
+                )
+            else:
+                logger.warning()
         config = Config(canonical_id)
     elif Path(config).is_file():
         config = Config(config)
