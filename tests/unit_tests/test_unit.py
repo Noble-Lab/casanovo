@@ -47,7 +47,10 @@ from casanovo.denovo.model import (
 def test_casanovo_resolve_config_from_model(tmp_path, caplog):
     result = casanovo._resolve_setup_config("test", None)
     assert result["max_peaks"] == Config(result._default_config)["max_peaks"]
-    assert "Config was: test, which is not None or a Path" in caplog.text
+    assert (
+        "Config 'test' is not a valid file path; using default config."
+        in caplog.text
+    )
 
     fake_ckpt = tmp_path / "casanovo_orbitrap_v1-0-0.ckpt"
     fake_ckpt.touch()
