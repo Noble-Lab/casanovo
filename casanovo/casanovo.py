@@ -735,12 +735,10 @@ def setup_model(
             ) from None
 
     if config is None:
-        config = Config(None)
-    elif Path(config).is_file():
-        config = Config(config)
-    else:
         parsed = _parse_ckpt(resolved_model.name)
         config = Config(parsed[0] if parsed else None)
+    elif Path(config).is_file():
+        config = Config(config)
 
     seed_everything(seed=config["random_seed"], workers=True)
 
