@@ -31,6 +31,14 @@ warnings.filterwarnings(
     ".*Converting mask without torch.bool dtype to bool*",
 )
 
+# The regex pattern below describes the the model weight
+# naming pattern.
+_CKPT_RE = re.compile(
+    r"^casanovo_([a-z0-9][a-z0-9-]*)_v([0-9]+)-([0-9]+)-([0-9]+)\.ckpt$"
+)
+# The default model is orbitrap.
+_DEFAULT_MODEL_ID = "orbitrap"
+
 import appdirs
 import github
 import requests
@@ -521,15 +529,6 @@ def setup_logging(
     logging.getLogger("urllib3").setLevel(logging.WARNING)
 
 
-# The regex pattern below describes the the model weight
-# naming pattern.
-_CKPT_RE = re.compile(
-    r"^casanovo_([a-z0-9][a-z0-9-]*)_v([0-9]+)-([0-9]+)-([0-9]+)\.ckpt$"
-)
-# The default model is orbitrap.
-_DEFAULT_MODEL_ID = "orbitrap"
-
-
 def _normalize(s: str) -> str:
     """
     Normalizes model selector.
@@ -660,11 +659,13 @@ def setup_model(
     Parameters
     ----------
     model : str | None
-        May be a file system path, a URL pointing to a .ckpt file, or
-        None. If `model` is a URL the weights will be downloaded and
-        cached from `model`. If `model` is `None` the weights from the
-        latest matching official release will be used (downloaded and
-        cached).
+        May be a file system path, a URL pointing to a .ckpt file, None,
+        or model identifier (e.g. timstof). If `model` is a URL the weights
+        will be downloaded and cached from `model`. If `model` is `None`
+        when `is_train` is `False` the weights from the latest matching
+        official release will be used (downloaded and cached). If `model`
+        is an identifier the weights from the latest appropriate release
+        will be used.
     config : str | None
         Config file path. If None the default config will be used.
     output_dir: : Path | str
