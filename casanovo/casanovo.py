@@ -662,9 +662,10 @@ def setup_model(
         May be a file system path, a URL pointing to a .ckpt file, None,
         or model identifier (e.g. timstof). If `model` is a URL the weights
         will be downloaded and cached from `model`. If `model` is `None`
-        the weights from the latest matching official release will be used
-        (downloaded and cached). If `model` is an identifier the weights from
-        the latest appropriate release will be used.
+        when `is_train` is `False` the weights from the latest matching
+        official release will be used (downloaded and cached). If `model`
+        is an identifier the weights from the latest appropriate release
+        will be used.
     config : str | None
         Config file path. If None the default config will be used.
     output_dir: : Path | str
