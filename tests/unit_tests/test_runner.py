@@ -375,7 +375,8 @@ def test_evaluate_failure_cases(
     mgf_path = Path(mgf_small)
     improperly_annotated_file = mgf_path.parent / "improperly_annotated.mgf"
     improperly_annotated_file.write_text(
-        mgf_path.read_text().replace("SEQ=", "PEPTIDE=")
+        mgf_path.read_text(encoding="utf-8").replace("SEQ=", "PEPTIDE="),
+        encoding="utf-8",
     )
 
     file_map = {
