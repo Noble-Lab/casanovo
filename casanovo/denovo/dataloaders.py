@@ -357,6 +357,7 @@ class DeNovoDataModule(pl.LightningDataModule):
 
     def _dia_to_dataframe(self, paths, annotated):
         for spectra in paths:
+            skipped = 0
             f_to_mzrt_to_pep, max_mz, window_size, cycle_time = (
                 self.get_centers(spectra)
             )
