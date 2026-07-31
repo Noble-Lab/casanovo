@@ -2067,7 +2067,7 @@ def test_spectrum_id_mgf(mgf_small, tmp_path):
     mgf_small2 = tmp_path / "mgf_small2.mgf"
     shutil.copy(mgf_small, mgf_small2)
     data_module = DeNovoDataModule(
-        lance_dir=tmp_path.name,
+        lance_dir=str(tmp_path),
         train_paths=[mgf_small, mgf_small2],
         valid_paths=[mgf_small, mgf_small2],
         test_paths=[mgf_small, mgf_small2],
@@ -2104,7 +2104,7 @@ def test_log_training_set_size(mgf_small, tmp_path, caplog):
     mgf_small2 = tmp_path / "mgf_small2.mgf"
     shutil.copy(mgf_small, mgf_small2)
     data_module = DeNovoDataModule(
-        lance_dir=tmp_path.name,
+        lance_dir=str(tmp_path),
         train_paths=[mgf_small, mgf_small2],
         valid_paths=[mgf_small],
         min_peaks=0,
@@ -2128,7 +2128,7 @@ def test_log_training_set_size_shuffled(mgf_small, tmp_path, caplog):
     mgf_small2 = tmp_path / "mgf_small2.mgf"
     shutil.copy(mgf_small, mgf_small2)
     data_module = DeNovoDataModule(
-        lance_dir=tmp_path.name,
+        lance_dir=str(tmp_path),
         train_paths=[mgf_small, mgf_small2],
         valid_paths=[mgf_small],
         min_peaks=0,
@@ -2152,7 +2152,7 @@ def test_spectrum_id_mzml(mzml_small, tmp_path):
     mzml_small2 = tmp_path / "mzml_small2.mzml"
     shutil.copy(mzml_small, mzml_small2)
     data_module = DeNovoDataModule(
-        lance_dir=tmp_path.name,
+        lance_dir=str(tmp_path),
         test_paths=[mzml_small, mzml_small2],
         min_peaks=0,
         shuffle=False,
@@ -2391,7 +2391,7 @@ def test_spectrum_preprocessing(tmp_path, mgf_small):
     # One spectrum removed with too few peaks.
     total_spectra = 1
     dataloader = DeNovoDataModule(
-        tmp_path.name,
+        str(tmp_path),
         test_paths=str(mgf_small),
         min_peaks=min_peaks,
         max_peaks=max_peaks,
@@ -2413,7 +2413,7 @@ def test_spectrum_preprocessing(tmp_path, mgf_small):
     # All spectra retained.
     total_spectra = 2
     dataloader = DeNovoDataModule(
-        tmp_path.name,
+        str(tmp_path),
         test_paths=str(mgf_small),
         min_peaks=min_peaks,
         max_peaks=max_peaks,
@@ -2436,7 +2436,7 @@ def test_spectrum_preprocessing(tmp_path, mgf_small):
     # One spectrum removed with too high charge.
     total_spectra = 1
     dataloader = DeNovoDataModule(
-        tmp_path.name,
+        str(tmp_path),
         test_paths=str(mgf_small),
         min_peaks=min_peaks,
         max_peaks=max_peaks,
@@ -3093,7 +3093,7 @@ def test_data_module_per_file_validation(mgf_small, tmp_path):
     mgf_small2 = tmp_path / "mgf_small2.mgf"
     shutil.copy(mgf_small, mgf_small2)
     data_module = DeNovoDataModule(
-        lance_dir=tmp_path.name,
+        lance_dir=str(tmp_path),
         valid_paths=[mgf_small, mgf_small2],
         tracking_paths=[mgf_small],
         min_peaks=0,
