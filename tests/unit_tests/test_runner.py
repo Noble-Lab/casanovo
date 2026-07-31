@@ -116,7 +116,9 @@ def test_db_search_no_model_raises(
         ),
     ):
         runner.db_search(
-            (str(mgf_small),), str(tiny_fasta_file), str(tmp_path / "test.mztab")
+            (str(mgf_small),),
+            str(tiny_fasta_file),
+            str(tmp_path / "test.mztab"),
         )
 
 
