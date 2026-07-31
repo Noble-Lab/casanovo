@@ -360,7 +360,7 @@ def _get_config_file(file_path, file_name, additional_cfg=None):
             "[Acetyl]-": 42.010565,
             "[Carbamyl]-": 43.005814,
             "[Ammonia-loss]-": -17.026549,
-            "[+25.980265]-": 25.980265,
+            "[+25.980265]-": 25.979265,
         },
         "new_token_init": {},
     }
