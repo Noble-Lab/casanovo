@@ -68,6 +68,7 @@ dev = [
 
 [project.scripts]
 casanovo = "casanovo.casanovo:main"
+cascadia = "cascadia.cascadia:main"
 
 [tool.setuptools]
 include-package-data = true

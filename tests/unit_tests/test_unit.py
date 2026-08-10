@@ -30,13 +30,17 @@ import requests
 import torch
 import pyteomics.mztab
 
-from casanovo import casanovo, denovo, utils
-from casanovo.casanovo import _SharedFileIOParams
-from casanovo.config import Config
-from casanovo.data import db_utils, ms_io, psm
-from casanovo.denovo.dataloaders import DeNovoDataModule
-from casanovo.denovo.evaluate import aa_match, aa_match_batch, aa_match_metrics
-from casanovo.denovo.model import (
+from casanovo import casanovo_cascadia, denovo, utils
+from casanovo.casanovo_cascadia import _SharedFileIOParams
+from casanovo_cascadia.config import Config
+from casanovo_cascadia.data import db_utils, ms_io, psm
+from casanovo_cascadia.denovo.dataloaders import DeNovoDataModule
+from casanovo_cascadia.denovo.evaluate import (
+    aa_match,
+    aa_match_batch,
+    aa_match_metrics,
+)
+from casanovo_cascadia.denovo.model import (
     DbSpec2Pep,
     Spec2Pep,
     _calc_match_score,
@@ -285,7 +289,7 @@ def test_mztab_save(tiny_config, tmp_path):
 
 def test_version():
     """Check that the version is not None."""
-    assert casanovo.__version__ is not None
+    assert casanovo_cascadia.__version__ is not None
 
 
 @pytest.mark.parametrize(
@@ -306,11 +310,11 @@ def test_version():
 )
 def test_is_valid_model(model_file, expectation, log_message, caplog):
     if expectation is None:
-        casanovo._is_valid_model(model_file, load_all_states=True)
+        casanovo_cascadia._is_valid_model(model_file, load_all_states=True)
         assert log_message in caplog.text
     else:
         with expectation:
-            casanovo._is_valid_model(model_file, load_all_states=True)
+            casanovo_cascadia._is_valid_model(model_file, load_all_states=True)
 
 
 @pytest.mark.skip(reason="Skipping due to Linux deadlock issue")
@@ -475,14 +479,14 @@ def test_setup_model(monkeypatch, model_arg, expected_filename):
         monkeypatch.context() as mnk,
         tempfile.TemporaryDirectory() as tmp_dir,
     ):
-        mnk.setattr(casanovo, "__version__", version)
+        mnk.setattr(casanovo_cascadia, "__version__", version)
         mnk.setattr("appdirs.user_cache_dir", lambda n, a, opinion: tmp_dir)
         mnk.setattr(github, "Github", mock_github)
         mnk.setattr(requests, "get", mock_get)
         filename = pathlib.Path(tmp_dir) / expected_filename
 
         assert not filename.is_file()
-        _, result_path = casanovo.setup_model(
+        _, result_path = casanovo_cascadia.setup_model(
             model_arg, None, None, None, False
         )
         assert result_path.resolve() == filename.resolve()
@@ -491,7 +495,7 @@ def test_setup_model(monkeypatch, model_arg, expected_filename):
         os.remove(result_path)
 
         assert not filename.is_file()
-        _, result = casanovo.setup_model(None, None, None, None, True)
+        _, result = casanovo_cascadia.setup_model(None, None, None, None, True)
         assert result is None
         assert not filename.is_file()
         assert mock_get.request_counter == 1
@@ -500,7 +504,7 @@ def test_setup_model(monkeypatch, model_arg, expected_filename):
         monkeypatch.context() as mnk,
         tempfile.TemporaryDirectory() as tmp_dir,
     ):
-        mnk.setattr(casanovo, "__version__", version)
+        mnk.setattr(casanovo_cascadia, "__version__", version)
         mnk.setattr("appdirs.user_cache_dir", lambda n, a, opinion: tmp_dir)
         mnk.setattr(github, "Github", mock_github)
         mnk.setattr(requests, "get", mock_get)
@@ -513,7 +517,7 @@ def test_setup_model(monkeypatch, model_arg, expected_filename):
         cache_file_path = cache_file_dir / cache_file_name
 
         assert not cache_file_path.is_file()
-        _, result_path = casanovo.setup_model(
+        _, result_path = casanovo_cascadia.setup_model(
             file_url, None, None, None, False
         )
         assert cache_file_path.is_file()
@@ -522,7 +526,7 @@ def test_setup_model(monkeypatch, model_arg, expected_filename):
         os.remove(result_path)
 
         assert not cache_file_path.is_file()
-        _, result_path = casanovo.setup_model(
+        _, result_path = casanovo_cascadia.setup_model(
             file_url, None, None, None, False
         )
         assert cache_file_path.is_file()
@@ -535,19 +539,19 @@ def test_setup_model(monkeypatch, model_arg, expected_filename):
         tempfile.NamedTemporaryFile(suffix=".ckpt") as temp_file,
         tempfile.TemporaryDirectory() as tmp_dir,
     ):
-        mnk.setattr(casanovo, "__version__", version)
+        mnk.setattr(casanovo_cascadia, "__version__", version)
         mnk.setattr("appdirs.user_cache_dir", lambda n, a, opinion: tmp_dir)
         mnk.setattr(github, "Github", mock_github)
         mnk.setattr(requests, "get", mock_get)
 
         temp_file_path = temp_file.name
-        _, result = casanovo.setup_model(
+        _, result = casanovo_cascadia.setup_model(
             temp_file_path, None, None, None, False
         )
         assert mock_get.request_counter == 3
         assert result == pathlib.Path(temp_file_path)
 
-        _, result = casanovo.setup_model(
+        _, result = casanovo_cascadia.setup_model(
             temp_file_path, None, None, None, True
         )
         assert mock_get.request_counter == 3
@@ -558,18 +562,18 @@ def test_setup_model(monkeypatch, model_arg, expected_filename):
         monkeypatch.context() as mnk,
         tempfile.TemporaryDirectory() as tmp_dir,
     ):
-        mnk.setattr(casanovo, "__version__", version)
+        mnk.setattr(casanovo_cascadia, "__version__", version)
         mnk.setattr("appdirs.user_cache_dir", lambda n, a, opinion: tmp_dir)
         mnk.setattr(github, "Github", mock_github)
         mnk.setattr(requests, "get", mock_get)
 
         with pytest.raises(ValueError):
-            casanovo.setup_model("FooBar", None, None, None, False)
+            casanovo_cascadia.setup_model("FooBar", None, None, None, False)
 
         assert mock_get.request_counter == 3
 
         with pytest.raises(ValueError):
-            casanovo.setup_model("FooBar", None, None, None, False)
+            casanovo_cascadia.setup_model("FooBar", None, None, None, False)
 
         assert mock_get.request_counter == 3
 
@@ -583,14 +587,16 @@ def test_rate_limit_exception(monkeypatch, model_arg):
         monkeypatch.context() as mnk,
         tempfile.TemporaryDirectory() as tmp_dir,
     ):
-        mnk.setattr(casanovo, "__version__", "3.0.0")
+        mnk.setattr(casanovo_cascadia, "__version__", "3.0.0")
         mnk.setattr("appdirs.user_cache_dir", lambda n, a, opinion: tmp_dir)
-        mnk.setattr(casanovo, "_get_model_weights", mock_get_model_weights)
+        mnk.setattr(
+            casanovo_cascadia, "_get_model_weights", mock_get_model_weights
+        )
 
         with pytest.raises(
             PermissionError, match="GitHub API rate limit exceeded"
         ):
-            casanovo.setup_model(model_arg, None, None, None, False)
+            casanovo_cascadia.setup_model(model_arg, None, None, None, False)
 
 
 @pytest.mark.parametrize(
@@ -614,7 +620,7 @@ def test_get_model_weights(monkeypatch, selector, expected_filename):
             version_tup = tuple(
                 int(x) if x else 0 for x in utils.split_version(version)
             )
-            mnk.setattr(casanovo, "__version__", version)
+            mnk.setattr(casanovo_cascadia, "__version__", version)
             mnk.setattr(
                 "appdirs.user_cache_dir", lambda n, a, opinion: tmp_dir
             )
@@ -624,13 +630,13 @@ def test_get_model_weights(monkeypatch, selector, expected_filename):
             tmp_path = pathlib.Path(tmp_dir)
             filename = tmp_path / expected_filename
             assert not filename.is_file()
-            result_path = casanovo._get_model_weights(
+            result_path = casanovo_cascadia._get_model_weights(
                 selector, tmp_path, version_tup
             )
             assert result_path == filename
             assert filename.is_file()
             # Second call should use cache, no extra download.
-            result_path = casanovo._get_model_weights(
+            result_path = casanovo_cascadia._get_model_weights(
                 selector, tmp_path, version_tup
             )
             assert result_path == filename
@@ -646,11 +652,11 @@ def test_get_model_weights(monkeypatch, selector, expected_filename):
                 int(x) if x else 0 for x in utils.split_version(version)
             )
 
-            mnk.setattr(casanovo, "__version__", version)
+            mnk.setattr(casanovo_cascadia, "__version__", version)
             mnk.setattr(github, "Github", mock_github)
             mnk.setattr(requests, "get", mock_get)
             with pytest.raises(ValueError):
-                casanovo._get_model_weights(
+                casanovo_cascadia._get_model_weights(
                     selector,
                     pathlib.Path(tmp_dir),
                     version_tup,
@@ -671,7 +677,7 @@ def test_get_model_weights(monkeypatch, selector, expected_filename):
         mnk.setattr(requests, "get", mock_get)
         mock_get.request_counter = 0
         with pytest.raises(github.RateLimitExceededException):
-            casanovo._get_model_weights(
+            casanovo_cascadia._get_model_weights(
                 selector, pathlib.Path(tmp_dir), (3, 0, 0)
             )
 
@@ -697,7 +703,9 @@ def test_get_model_weights(monkeypatch, selector, expected_filename):
     ],
 )
 def test_resolve_selector_success(selector, candidates, expected):
-    assert casanovo._resolve_selector(selector, candidates) == expected
+    assert (
+        casanovo_cascadia._resolve_selector(selector, candidates) == expected
+    )
 
 
 @pytest.mark.parametrize(
@@ -714,7 +722,7 @@ def test_resolve_selector_success(selector, candidates, expected):
 )
 def test_resolve_selector_failure(selector, candidates):
     with pytest.raises(ValueError):
-        casanovo._resolve_selector(selector, candidates)
+        casanovo_cascadia._resolve_selector(selector, candidates)
 
 
 @pytest.mark.parametrize(
@@ -729,7 +737,7 @@ def test_resolve_selector_failure(selector, candidates):
     ],
 )
 def test_parse_ckpt_valid(filename, expected):
-    assert casanovo._parse_ckpt(filename) == expected
+    assert casanovo_cascadia._parse_ckpt(filename) == expected
 
 
 @pytest.mark.parametrize(
@@ -745,7 +753,7 @@ def test_parse_ckpt_valid(filename, expected):
     ],
 )
 def test_parse_ckpt_invalid(filename):
-    assert casanovo._parse_ckpt(filename) is None
+    assert casanovo_cascadia._parse_ckpt(filename) is None
 
 
 def test_best_ckpt_no_cross_family():
@@ -753,7 +761,7 @@ def test_best_ckpt_no_cross_family():
     # Caller is responsible for pre-filtering by family; _best_ckpt only
     # sees one family's checkpoints. Confirm it returns None rather than
     # picking something from a different family if the list is empty.
-    assert casanovo._best_ckpt([], (4, 3, 2)) is None
+    assert casanovo_cascadia._best_ckpt([], (4, 3, 2)) is None
 
 
 def test_get_weights_from_url(monkeypatch):
@@ -776,18 +784,22 @@ def test_get_weights_from_url(monkeypatch):
 
         # Test downloading and caching the file
         assert not cache_file_path.is_file()
-        result_path = casanovo._get_weights_from_url(file_url, cache_dir)
+        result_path = casanovo_cascadia._get_weights_from_url(
+            file_url, cache_dir
+        )
         assert cache_file_path.is_file()
         assert result_path.resolve() == cache_file_path.resolve()
         assert mock_get.request_counter == 1
 
         # Test that cached file is used
-        result_path = casanovo._get_weights_from_url(file_url, cache_dir)
+        result_path = casanovo_cascadia._get_weights_from_url(
+            file_url, cache_dir
+        )
         assert result_path.resolve() == cache_file_path.resolve()
         assert mock_get.request_counter == 1
 
         # Test force downloading the file
-        result_path = casanovo._get_weights_from_url(
+        result_path = casanovo_cascadia._get_weights_from_url(
             file_url, cache_dir, force_download=True
         )
         assert result_path.resolve() == cache_file_path.resolve()
@@ -800,7 +812,9 @@ def test_get_weights_from_url(monkeypatch):
         mock_head.last_modified = (
             curr_utc + datetime.timedelta(days=365.0)
         ).strftime("%a, %d %b %Y %H:%M:%S GMT")
-        result_path = casanovo._get_weights_from_url(file_url, cache_dir)
+        result_path = casanovo_cascadia._get_weights_from_url(
+            file_url, cache_dir
+        )
         assert result_path.resolve() == cache_file_path.resolve()
         assert mock_get.request_counter == 3
 
@@ -808,14 +822,16 @@ def test_get_weights_from_url(monkeypatch):
         mock_head.last_modified = (
             curr_utc - datetime.timedelta(days=365.0)
         ).strftime("%a, %d %b %Y %H:%M:%S GMT")
-        result_path = casanovo._get_weights_from_url(file_url, cache_dir)
+        result_path = casanovo_cascadia._get_weights_from_url(
+            file_url, cache_dir
+        )
         assert result_path.resolve() == cache_file_path.resolve()
         assert mock_get.request_counter == 3
 
         # Test that error is raised if file get response is not OK
         mock_get.is_ok = False
         with pytest.raises(requests.HTTPError):
-            casanovo._get_weights_from_url(
+            casanovo_cascadia._get_weights_from_url(
                 file_url, cache_dir, force_download=True
             )
         mock_get.is_ok = True
@@ -827,14 +843,18 @@ def test_get_weights_from_url(monkeypatch):
         mock_head.last_modified = (
             curr_utc + datetime.timedelta(days=365.0)
         ).strftime("%a, %d %b %Y %H:%M:%S GMT")
-        result_path = casanovo._get_weights_from_url(file_url, cache_dir)
+        result_path = casanovo_cascadia._get_weights_from_url(
+            file_url, cache_dir
+        )
         assert result_path.resolve() == cache_file_path.resolve()
         assert mock_get.request_counter == 4
         mock_head.is_ok = True
 
         # Test that cached file is used if head request fails
         mock_head.fail = True
-        result_path = casanovo._get_weights_from_url(file_url, cache_dir)
+        result_path = casanovo_cascadia._get_weights_from_url(
+            file_url, cache_dir
+        )
         assert result_path.resolve() == cache_file_path.resolve()
         assert mock_get.request_counter == 4
         mock_head.fail = False
@@ -842,12 +862,12 @@ def test_get_weights_from_url(monkeypatch):
         # Test invalid URL
         with pytest.raises(ValueError):
             bad_url = "foobar"
-            casanovo._get_weights_from_url(bad_url, cache_dir)
+            casanovo_cascadia._get_weights_from_url(bad_url, cache_dir)
 
 
 def test_is_valid_url():
-    assert casanovo._is_valid_url("https://www.washington.edu/")
-    assert not casanovo._is_valid_url("foobar")
+    assert casanovo_cascadia._is_valid_url("https://www.washington.edu/")
+    assert not casanovo_cascadia._is_valid_url("foobar")
 
 
 @pytest.mark.parametrize(
@@ -2361,14 +2381,14 @@ def test_check_dir(tmp_path):
 def test_setup_output(tmp_path, monkeypatch):
     with monkeypatch.context() as mnk:
         mnk.setattr(pathlib.Path, "cwd", lambda: tmp_path)
-        output_path, output_root = casanovo._setup_output(
+        output_path, output_root = casanovo_cascadia._setup_output(
             None, None, False, "info"
         )
         assert output_path.resolve() == tmp_path.resolve()
         assert re.fullmatch(r"casanovo_\d+", output_root) is not None
 
         target_path = tmp_path / "foo"
-        output_path, output_root = casanovo._setup_output(
+        output_path, output_root = casanovo_cascadia._setup_output(
             str(target_path), "bar", False, "info"
         )
 
@@ -2895,7 +2915,7 @@ def test_mgf_scan_index_built_correctly(mgf_small_with_scans):
     _build_mgf_scan_index must yield `(spectrum_ref_id, scan_number)`
     pairs for SCANS values written into the MGF file.
     """
-    from casanovo.data.ms_io import _build_mgf_scan_index
+    from casanovo_cascadia.data.ms_io import _build_mgf_scan_index
 
     result = dict(_build_mgf_scan_index(str(mgf_small_with_scans)))
     assert result == {"index=0": "17", "index=1": "42"}
@@ -2906,7 +2926,7 @@ def test_mgf_without_scans_gives_empty_index(mgf_small):
     An MGF file without any SCANS fields must produce an empty index
     (not crash and not map anything).
     """
-    from casanovo.data.ms_io import _build_mgf_scan_index
+    from casanovo_cascadia.data.ms_io import _build_mgf_scan_index
 
     result = dict(_build_mgf_scan_index(str(mgf_small)))
     assert result == {}
@@ -2917,7 +2937,7 @@ def test_mgf_scan_alias_scan_field(tmp_path):
     _build_mgf_scan_index must recognise the SCAN= header alias
     in addition to SCANS=.
     """
-    from casanovo.data.ms_io import _build_mgf_scan_index
+    from casanovo_cascadia.data.ms_io import _build_mgf_scan_index
 
     mgf_file = tmp_path / "alias_scan.mgf"
     mgf_file.write_text(
@@ -2932,7 +2952,7 @@ def test_mgf_scan_alias_scan_id_field(tmp_path):
     _build_mgf_scan_index must recognise the SCAN ID= header alias
     in addition to SCANS=.
     """
-    from casanovo.data.ms_io import _build_mgf_scan_index
+    from casanovo_cascadia.data.ms_io import _build_mgf_scan_index
 
     mgf_file = tmp_path / "alias_scan_id.mgf"
     mgf_file.write_text(
@@ -3152,7 +3172,9 @@ def test_validation_step_logs_per_file():
 
 def test_train_cli_tracking_peak_path(tmp_path, mgf_small, monkeypatch):
     """-t/--tracking_peak_path CLI option is forwarded to ModelRunner.train()."""
-    from casanovo.denovo.model_runner import ModelRunner as _ModelRunner
+    from casanovo_cascadia.denovo.model_runner import (
+        ModelRunner as _ModelRunner,
+    )
 
     captured = {}
 
@@ -3160,18 +3182,20 @@ def test_train_cli_tracking_peak_path(tmp_path, mgf_small, monkeypatch):
         captured["tracking"] = tracking_pp
 
     monkeypatch.setattr(_ModelRunner, "train", fake_train)
-    monkeypatch.setattr(casanovo, "_is_valid_model", lambda *a, **kw: None)
     monkeypatch.setattr(
-        casanovo, "_setup_output", lambda *a, **kw: (tmp_path, "out")
+        casanovo_cascadia, "_is_valid_model", lambda *a, **kw: None
     )
     monkeypatch.setattr(
-        casanovo, "setup_model", lambda *a, **kw: (Config(), None)
+        casanovo_cascadia, "_setup_output", lambda *a, **kw: (tmp_path, "out")
+    )
+    monkeypatch.setattr(
+        casanovo_cascadia, "setup_model", lambda *a, **kw: (Config(), None)
     )
     monkeypatch.setattr(utils, "log_system_info", lambda: None)
     monkeypatch.setattr(utils, "log_run_report", lambda **kw: None)
 
     result = click.testing.CliRunner().invoke(
-        casanovo.main,
+        casanovo_cascadia.main,
         ["train", "-t", str(mgf_small), str(mgf_small)],
     )
     assert result.exit_code == 0, result.output

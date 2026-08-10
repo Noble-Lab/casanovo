@@ -61,28 +61,6 @@ def n_workers() -> int:
     )
 
 
-def split_version(version: str) -> Tuple[str, str, str]:
-    """
-    Split the version into its semantic versioning components.
-
-    Parameters
-    ----------
-    version : str
-        The version number.
-
-    Returns
-    -------
-    major : str
-        The major release.
-    minor : str
-        The minor release.
-    patch : str
-        The patch release.
-    """
-    version_regex = re.compile(r"(\d+)\.(\d+)\.*(\d*)(?:.dev\d+.+)?")
-    return tuple(g for g in version_regex.match(version).groups())
-
-
 def _get_report_dict(
     results_table: pd.DataFrame, score_bins: Iterable[float] = SCORE_BINS
 ) -> Optional[Dict]:
@@ -121,7 +99,7 @@ def _get_report_dict(
     }
 
 
-def log_system_info() -> None:
+def log_system_info(model) -> None:
     """
     Log system information.
 
@@ -134,7 +112,7 @@ def log_system_info() -> None:
     logger.info("OS: %s", platform.system())
     logger.info("OS Version: %s", platform.version())
     logger.info("Python Version: %s", platform.python_version())
-    logger.info("Casanovo Version: %s", __version__)
+    logger.info(f"{model} Version: %s", __version__)
     logger.info("Depthcharge Version: %s", depthcharge.__version__)
     logger.info("PyTorch Version: %s", torch.__version__)
     if torch.cuda.is_available():
