@@ -3,7 +3,7 @@
 from typing import Optional
 
 
-def _get_version() -> Optional[str]:
+def _get_version(model: str) -> Optional[str]:
     """
     Retrieve the package version.
 
@@ -21,7 +21,7 @@ def _get_version() -> Optional[str]:
         from importlib.metadata import PackageNotFoundError, version
 
         try:
-            return version("casanovo")
+            return version(model)
         except PackageNotFoundError:
             return None
     except ImportError:
@@ -29,6 +29,6 @@ def _get_version() -> Optional[str]:
         from pkg_resources import DistributionNotFound, get_distribution
 
         try:
-            return get_distribution("casanovo").version
+            return get_distribution(model).version
         except DistributionNotFound:
             return None

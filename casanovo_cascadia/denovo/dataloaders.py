@@ -26,6 +26,20 @@ from torch.utils.data.datapipes.iter.combinatorics import ShufflerIterDataPipe
 
 logger = logging.getLogger("casanovo")
 
+DIA_SCHEMA = pa.schema(
+    [
+        pa.field("peak_file", pa.string()),
+        pa.field("scan_id", pa.string()),
+        pa.field("ms_level", pa.uint8()),
+        pa.field("precursor_mz", pa.float64()),
+        pa.field("precursor_charge", pa.int16()),
+        pa.field("mz_array", pa.list_(pa.float64())),
+        pa.field("intensity_array", pa.list_(pa.float64())),
+        pa.field("scan_window_array", pa.list_(pa.float32())),
+        pa.field("ms_array", pa.list_(pa.int8())),
+    ]
+)
+
 
 def _unique_stems(paths: list) -> list:
     """Return unique file stems for a list of paths.
@@ -140,11 +154,12 @@ class DeNovoDataModule(pl.LightningDataModule):
         n_workers: Optional[int] = None,
         ms_level: Optional[int] = 2,
         scan_width: Optional[int] = 2,
+        casanovo: Optional[int] = True,
     ):
         super().__init__()
 
         self.lance_dir = lance_dir
-
+        self.casanovo = casanovo
         self.train_paths = train_paths
         self.valid_paths = list(valid_paths or [])
         self.test_paths = test_paths
@@ -233,7 +248,7 @@ class DeNovoDataModule(pl.LightningDataModule):
                         [path],
                         annotated=True,
                         mode=f"tracking_{i}",
-                        shuffle=False,
+                        shuffle=False,  # better design choice for this?
                     )
                 )
             self.n_main_loaders = len(self.valid_datasets)
@@ -334,10 +349,7 @@ class DeNovoDataModule(pl.LightningDataModule):
         ):
             dataset = Dataset.from_lance(paths[0], **params)
         else:
-            if not all(
-                (pathlib.Path(path).suffix.lower() == ".mzml")
-                for path in paths
-            ) and (self.ms_level == 1):
+            if not self.casanovo:
                 paths = self._dia_to_dataframe(paths, annotated)
 
             dataset = Dataset(
@@ -357,9 +369,10 @@ class DeNovoDataModule(pl.LightningDataModule):
 
     def _dia_to_dataframe(self, paths, annotated):
         for spectra in paths:
+            file_records = []
             skipped = 0
             f_to_mzrt_to_pep, max_mz, window_size, cycle_time = (
-                self.get_centers(spectra)
+                self._get_centers(spectra)
             )
             for part in f_to_mzrt_to_pep.keys():
                 prec_to_spec = self._extract_spectra(
@@ -394,7 +407,7 @@ class DeNovoDataModule(pl.LightningDataModule):
                     ms1_rts = ms1_rts[sorted_ms1_rt_idxs]
                     ms1_scans = ms1_scans[sorted_ms1_rt_idxs]
 
-                    for charge in range(1, self.max_charge + 1):
+                    for charge in self.valid_charge:
                         mz_array = []
                         intensity_array = []
                         scan_window_array = []
@@ -409,7 +422,6 @@ class DeNovoDataModule(pl.LightningDataModule):
 
                         for scan, cur_rt in zip(ms1_scans, ms1_rts):
                             for mz, intensity in scan:
-
                                 if abs(mz - prec) > window_width + 1:
                                     continue
 
@@ -421,6 +433,7 @@ class DeNovoDataModule(pl.LightningDataModule):
                         record = {
                             "peak_file": pathlib.Path(spectra).name,
                             "scan_id": value["center_scan_id"],
+                            "ms_level": 2,
                             "precursor_mz": prec,
                             "mz_array": np.asarray(mz_array, dtype=np.float32),
                             "intensity_array": np.asarray(
@@ -435,85 +448,109 @@ class DeNovoDataModule(pl.LightningDataModule):
                         if not annotated:
                             record["charge"] = charge
 
-                        yield pl.DataFrame(record)
+                        file_records.append(record)
 
-            logging.warning(
-                f"{skipped} spectra were skipped due to missing MS1 scans for file {spectra}"
+            logger.warning(
+                "%d spectra were skipped due to missing MS1 scans for file %s",
+                skipped,
+                spectra,
             )
 
+            yield pa.RecordBatch.from_pylist(file_records, schema=DIA_SCHEMA)
+
+    def _select_top_peaks(self, spec, top_n, sqrt_passes=1):
+        """Select the top-n most intense peaks, sort by m/z, scale intensities.
+
+        Parameters
+        ----------
+        spec : dict
+            A pyteomics mzML spectrum record.
+        top_n : int
+            Keep only the top_n most intense peaks.
+        sqrt_passes : int
+            Number of sqrt scaling passes. MS1 uses 2 (fourth-root) to
+            compress its wider dynamic range; MS2 uses 1.
+        """
+        mzs = spec["m/z array"]
+        intensities = spec["intensity array"]
+
+        top_idx = np.argsort(intensities)[-top_n:]
+        mzs, intensities = mzs[top_idx], intensities[top_idx]
+
+        mz_order = np.argsort(mzs)
+        mzs, intensities = mzs[mz_order], intensities[mz_order]
+
+        for _ in range(sqrt_passes):
+            intensities = intensities**0.5
+        if len(intensities):
+            intensities = intensities / np.max(intensities)
+
+        return mzs, intensities
+
+    def _accumulate_scan(
+        self,
+        prec_to_spec,
+        key,
+        scans_key,
+        rts_key,
+        mzs,
+        intensities,
+        rt_offset,
+        **extra,
+    ):
+        """Append one scan's selected peaks onto the record for `key`,
+        creating it with any one-time metadata (extra) on first use."""
+        entry = prec_to_spec.setdefault(key, dict(extra))
+        entry.setdefault(scans_key, []).append(list(zip(mzs, intensities)))
+        entry.setdefault(rts_key, []).append(rt_offset)
+
     def _extract_spectra(
-        mzml_file, f_to_mzrt_to_pep, part, top_n, time_width, max_mz
+        self, mzml_file, f_to_mzrt_to_pep, part, top_n, time_width, max_mz
     ):
         prec_to_spec = {}
+        bins_by_rt = {}
+        for (scan_window, scan_rt), entries in f_to_mzrt_to_pep[part].items():
+            bins_by_rt[scan_rt][scan_window] = entries
+
         with pyteomics.mzml.read(mzml_file) as reader:
             for spec in reader:
                 cur_rt = 60 * spec["scanList"]["scan"][0]["scan start time"]
+
                 if spec["ms level"] == 1:
+                    mzs, intensities = self._select_top_peaks(
+                        spec, top_n, sqrt_passes=2
+                    )
                     for scan_rt in range(
                         int(cur_rt / 10) - 1, int(cur_rt / 10) + 1
                     ):
-                        for scan_window in range(max_mz + 1):
-                            if (scan_window, scan_rt) in f_to_mzrt_to_pep[
-                                part
+                        for scan_window, entries in bins_by_rt.get(
+                            scan_rt
+                        ).items():
+                            bin_key = (scan_window, scan_rt)
+                            if bin_key not in f_to_mzrt_to_pep[part]:
+                                continue
+                            for mz, rt, charge in f_to_mzrt_to_pep[part][
+                                bin_key
                             ]:
-                                for mz, rt, charge in f_to_mzrt_to_pep[part][
-                                    (scan_window, scan_rt)
-                                ]:
-                                    if np.abs(rt - cur_rt) < time_width:
-                                        mzs = spec["m/z array"]
-                                        intensities = spec["intensity array"]
+                                if np.abs(rt - cur_rt) >= time_width:
+                                    continue
+                                self._accumulate_scan(
+                                    prec_to_spec,
+                                    (mz, rt, charge),
+                                    "ms1_scans",
+                                    "ms1_rts",
+                                    mzs,
+                                    intensities,
+                                    cur_rt - rt,
+                                    center_scan_id=spec.get("params", {}).get(
+                                        "id"
+                                    ),
+                                )
 
-                                        sorted_intensity_idxs = np.argsort(
-                                            intensities
-                                        )[-top_n:]
-                                        intensities = intensities[
-                                            sorted_intensity_idxs
-                                        ]
-                                        mzs = mzs[sorted_intensity_idxs]
-
-                                        sorted_mz_idxs = np.argsort(mzs)
-                                        intensities = intensities[
-                                            sorted_mz_idxs
-                                        ]
-                                        mzs = mzs[sorted_mz_idxs]
-
-                                        intensities = intensities**0.5
-                                        if len(intensities) > 0:
-                                            intensities = intensities / np.max(
-                                                intensities
-                                            )
-
-                                        if (
-                                            mz,
-                                            rt,
-                                            charge,
-                                        ) not in prec_to_spec:
-                                            prec_to_spec[(mz, rt, charge)] = {
-                                                "center_scan_id": spec.get(
-                                                    "params"
-                                                ).get("id"),
-                                            }
-                                        if (
-                                            "ms1_scans"
-                                            not in prec_to_spec[
-                                                (mz, rt, charge)
-                                            ]
-                                        ):
-                                            prec_to_spec[(mz, rt, charge)][
-                                                "ms1_scans"
-                                            ] = []
-                                            prec_to_spec[(mz, rt, charge)][
-                                                "ms1_rts"
-                                            ] = []
-                                        prec_to_spec[(mz, rt, charge)][
-                                            "ms1_scans"
-                                        ].append(
-                                            [x for x in zip(mzs, intensities)]
-                                        )
-                                        prec_to_spec[(mz, rt, charge)][
-                                            "ms1_rts"
-                                        ].append(cur_rt - rt)
                 elif spec["ms level"] == 2:
+                    mzs, intensities = self._select_top_peaks(
+                        spec, top_n, sqrt_passes=1
+                    )
                     window = spec["precursorList"]["precursor"][0][
                         "isolationWindow"
                     ]
@@ -521,86 +558,49 @@ class DeNovoDataModule(pl.LightningDataModule):
                     lower_offset = window["isolation window lower offset"]
                     upper_offset = window["isolation window upper offset"]
 
+                    lo_bin = int((window_center - lower_offset) / 10) - 1
+                    hi_bin = int((window_center + upper_offset) / 10) + 1
                     for scan_rt in range(
                         int(cur_rt / 10) - 1, int(cur_rt / 10) + 1
                     ):
-                        for scan_window in range(
-                            int((window_center - lower_offset) / 10) - 1,
-                            int((window_center + upper_offset) / 10) + 1,
-                        ):
-                            if (scan_window, scan_rt) in f_to_mzrt_to_pep[
-                                part
+                        for scan_window in range(lo_bin, hi_bin):
+                            bin_key = (scan_window, scan_rt)
+                            if bin_key not in f_to_mzrt_to_pep[part]:
+                                continue
+                            for mz, rt, charge in f_to_mzrt_to_pep[part][
+                                bin_key
                             ]:
-                                for mz, rt, charge in f_to_mzrt_to_pep[part][
-                                    (scan_window, scan_rt)
-                                ]:
-                                    in_mz = (
-                                        mz > window_center - lower_offset
-                                        and mz < window_center + upper_offset
-                                    )
-                                    rt_diff = np.abs(rt - cur_rt)
-                                    if in_mz and rt_diff < time_width:
-                                        mzs = spec["m/z array"]
-                                        intensities = spec["intensity array"]
-
-                                        sorted_intensity_idxs = np.argsort(
-                                            intensities
-                                        )[-top_n:]
-                                        intensities = intensities[
-                                            sorted_intensity_idxs
-                                        ]
-                                        mzs = mzs[sorted_intensity_idxs]
-
-                                        sorted_mz_idxs = np.argsort(mzs)
-                                        intensities = intensities[
-                                            sorted_mz_idxs
-                                        ]
-                                        mzs = mzs[sorted_mz_idxs]
-
-                                        intensities = intensities**0.5
-                                        if len(intensities) > 0:
-                                            intensities = intensities / np.max(
-                                                intensities
-                                            )
-
-                                        if (
-                                            mz,
-                                            rt,
-                                            charge,
-                                        ) not in prec_to_spec:
-                                            prec_to_spec[(mz, rt, charge)] = {}
-                                        if (
-                                            "scans"
-                                            not in prec_to_spec[
-                                                (mz, rt, charge)
-                                            ]
-                                        ):
-                                            prec_to_spec[(mz, rt, charge)][
-                                                "scans"
-                                            ] = []
-                                            prec_to_spec[(mz, rt, charge)][
-                                                "rts"
-                                            ] = []
-                                            prec_to_spec[(mz, rt, charge)][
-                                                "window_width"
-                                            ] = max(lower_offset, upper_offset)
-                                        prec_to_spec[(mz, rt, charge)][
-                                            "scans"
-                                        ].append(
-                                            [x for x in zip(mzs, intensities)]
-                                        )
-                                        prec_to_spec[(mz, rt, charge)][
-                                            "rts"
-                                        ].append(cur_rt - rt)
+                                in_mz = (
+                                    window_center - lower_offset
+                                    < mz
+                                    < window_center + upper_offset
+                                )
+                                if not (
+                                    in_mz and np.abs(rt - cur_rt) < time_width
+                                ):
+                                    continue
+                                self._accumulate_scan(
+                                    prec_to_spec,
+                                    (mz, rt, charge),
+                                    "scans",
+                                    "rts",
+                                    mzs,
+                                    intensities,
+                                    cur_rt - rt,
+                                    window_width=max(
+                                        lower_offset, upper_offset
+                                    ),
+                                )
         return prec_to_spec
 
-    def _get_centers(mzml_file):
+    def _get_centers(self, mzml_file):
         f_to_mzrt_to_pep = {}
         max_mz = 0
         num_spectra = 0
         part = 0
-        last_rt = 0
+        last_rt = None
         cycle_time = None
+        window_size = None
         with pyteomics.mzml.read(mzml_file, decode_binary=False) as reader:
             for spec in reader:
                 if spec["ms level"] == 1:
@@ -608,6 +608,9 @@ class DeNovoDataModule(pl.LightningDataModule):
                         60 * spec["scanList"]["scan"][0]["scan start time"]
                     )
                     cycle_time = cur_rt - last_rt
+                    if last_rt is not None:
+                        cycle_time = cur_rt - last_rt
+
                     last_rt = cur_rt
                 if spec["ms level"] == 2:
                     window = spec["precursorList"]["precursor"][0][
@@ -635,6 +638,12 @@ class DeNovoDataModule(pl.LightningDataModule):
                         f_to_mzrt_to_pep[part][key] = [
                             (window_center, cur_rt, 1)
                         ]
+
+        if cycle_time is None or window_size is None:
+            raise ValueError(
+                f"{mzml_file} does not contain the MS1/MS2 scans required "
+                "for DIA extraction"
+            )
 
         return f_to_mzrt_to_pep, max_mz, window_size, cycle_time
 

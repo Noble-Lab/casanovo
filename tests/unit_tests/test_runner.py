@@ -9,9 +9,9 @@ import numpy as np
 import pytest
 import torch
 
-from casanovo.config import Config
-from casanovo.data.psm import PepSpecMatch
-from casanovo.denovo.model_runner import ModelRunner
+from casanovo_cascadia.config import Config
+from casanovo_cascadia.data.psm import PepSpecMatch
+from casanovo_cascadia.denovo.model_runner import ModelRunner
 
 
 def test_loading_timstof_folders(tmp_path, monkeypatch):

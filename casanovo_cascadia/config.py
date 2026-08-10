@@ -103,6 +103,7 @@ class Config:
         massivekb_tokenizer=bool,
         residues=dict,
         new_token_init=dict,
+        width=int,
     )
 
     def __init__(self, config_file: Optional[str] = None):
