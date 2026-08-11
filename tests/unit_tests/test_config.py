@@ -3,7 +3,7 @@
 import pytest
 import yaml
 
-from casanovo_cascadia.config import Config
+from casanovo.config import Config
 
 
 def test_default():

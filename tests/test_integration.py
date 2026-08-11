@@ -8,7 +8,7 @@ import pytest
 import yaml
 from click.testing import CliRunner
 
-from casanovo import casanovo_cascadia
+from casanovo import casanovo
 
 TEST_DIR = Path(__file__).resolve().parent
 
@@ -24,11 +24,11 @@ def test_train_and_run(
     tiny_fasta_file,
 ):
     # We can use this to explicitly test different versions.
-    monkeypatch.setattr(casanovo_cascadia, "__version__", "3.0.1")
+    monkeypatch.setattr(casanovo, "__version__", "3.0.1")
 
     # Run a command.
     run = functools.partial(
-        CliRunner().invoke, casanovo_cascadia.main, catch_exceptions=False
+        CliRunner().invoke, casanovo.main, catch_exceptions=False
     )
 
     # Run Casanovo to train a tiny model.
@@ -314,7 +314,7 @@ def test_train_and_run(
 def test_auxilliary_cli(tmp_path, mgf_small, monkeypatch):
     """Test the secondary CLI commands."""
     run = functools.partial(
-        CliRunner().invoke, casanovo_cascadia.main, catch_exceptions=False
+        CliRunner().invoke, casanovo.main, catch_exceptions=False
     )
 
     monkeypatch.chdir(tmp_path)
