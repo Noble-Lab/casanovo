@@ -363,6 +363,7 @@ def _get_config_file(file_path, file_name, additional_cfg=None):
             "[+25.980265]-": 25.980265,
         },
         "new_token_init": {},
+        "width": 2,
     }
 
     if additional_cfg is not None:
