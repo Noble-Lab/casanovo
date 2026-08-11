@@ -115,7 +115,7 @@ class Config:
             self._user_config = {}
         else:
             with Path(config_file).open() as f_in:
-                self._user_config = yaml.safe_load(f_in)
+                self._user_config = yaml.safe_load(f_in) or {}
                 # Remap deprecated config entries.
                 for old, new in _config_deprecated.items():
                     if old in self._user_config:

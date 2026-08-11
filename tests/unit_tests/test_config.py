@@ -16,6 +16,12 @@ def test_default():
 
 
 def test_override(tmp_path, tiny_config):
+    filename = tmp_path / "config_empty.yml"
+    filename.write_text("", encoding="utf-8")
+
+    with pytest.raises(KeyError, match="Missing expected config option"):
+        Config(str(filename))
+
     # Test expected config option is missing.
     filename = str(tmp_path / "config_missing.yml")
     with (
