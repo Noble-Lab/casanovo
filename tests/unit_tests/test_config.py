@@ -16,10 +16,17 @@ def test_default():
 
 
 def test_override(tmp_path, tiny_config):
-    filename = tmp_path / "config_empty.yml"
-    filename.write_text("", encoding="utf-8")
+    for content in ("", "null", "~"):
+        filename = tmp_path / "config_empty.yml"
+        filename.write_text(content, encoding="utf-8")
 
-    with pytest.raises(KeyError, match="Missing expected config option"):
+        with pytest.raises(KeyError, match="Missing expected config option"):
+            Config(str(filename))
+
+    filename = tmp_path / "config_list.yml"
+    filename.write_text("[]", encoding="utf-8")
+
+    with pytest.raises(TypeError, match="must define a mapping"):
         Config(str(filename))
 
     # Test expected config option is missing.

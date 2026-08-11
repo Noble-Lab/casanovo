@@ -115,7 +115,13 @@ class Config:
             self._user_config = {}
         else:
             with Path(config_file).open() as f_in:
-                self._user_config = yaml.safe_load(f_in) or {}
+                self._user_config = yaml.safe_load(f_in)
+                if self._user_config is None:
+                    self._user_config = {}
+                elif not isinstance(self._user_config, dict):
+                    raise TypeError(
+                        "Configuration file must define a mapping of options"
+                    )
                 # Remap deprecated config entries.
                 for old, new in _config_deprecated.items():
                     if old in self._user_config:
