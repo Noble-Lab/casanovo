@@ -428,8 +428,10 @@ class Spec2Pep(pl.LightningModule):
         )
         discarded_beams[current_tokens == 0] = True
 
-        # Discard beams with invalid modification combinations
-        if step > 1:
+        # Discard beams with invalid modification combinations. At step 0 the
+        # single token is at the position where an N-terminal modification is
+        # allowed under either token order, so the check starts at step 1.
+        if step > 0:
             final_pos = torch.full((batch_size,), step, device=device)
             final_pos[ends_stop_token] = step - 1
 
@@ -447,8 +449,11 @@ class Spec2Pep(pl.LightningModule):
                 # This will fail to catch internal modifications in some cases
                 # where there are multiple mods, but these are already discarded
                 # by the previous check.
+                # A reversed tokenizer emits the C-terminus first, so a valid
+                # N-terminal modification is the *last* token generated; an
+                # unreversed tokenizer emits it first.
                 n_terminal_pos = (
-                    0 if self.tokenizer.reverse else final_pos[has_n_term]
+                    final_pos[has_n_term] if self.tokenizer.reverse else 0
                 )
                 internal_mods = ~token_is_nterm[has_n_term, n_terminal_pos]
 

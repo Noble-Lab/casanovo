@@ -6,6 +6,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+### Fixed
+
+- Fixed the mass of the carbamylation + ammonia-loss N-terminal token to `25.979265`. The token name is deliberately left as `[+25.980265]-` because it appears in released checkpoint vocabularies.
+
+### Removed
+
+- Removed the override that forced `accelerator: "auto"` to `"cpu"` on Apple Silicon devices.
+
+## [5.2.1] - 2026-08-12
+
+### Fixed
+
+- Fixed the placement check for N-terminal modifications during decoding, whose two branches were swapped. This silently discarded every peptide with an N-terminal modification, and could instead retain a malformed peptide that fails to parse. Note that this changes *de novo* sequencing results: peptides with N-terminal modifications will now appear in the output, so any evaluation metrics computed with version 5.2.0 should be recomputed.
+
+## [5.2.0] - 2026-06-02
 ### Added
 
 - Support timsTOF files (as .d folders) as spectra input files.
@@ -352,7 +367,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 - Initial Casanovo version.
 
-[Unreleased]: https://github.com/Noble-Lab/casanovo/compare/v5.1.2...HEAD
+[Unreleased]: https://github.com/Noble-Lab/casanovo/compare/v5.2.1...HEAD
+[5.2.1]: https://github.com/Noble-Lab/casanovo/compare/v5.2.0...v5.2.1
+[5.2.0]: https://github.com/Noble-Lab/casanovo/compare/v5.1.2...v5.2.0
 [5.1.2]: https://github.com/Noble-Lab/casanovo/compare/v5.1.1...v5.1.2
 [5.1.1]: https://github.com/Noble-Lab/casanovo/compare/v5.1.0...v5.1.1
 [5.1.0]: https://github.com/Noble-Lab/casanovo/compare/v5.0.0...v5.1.0
