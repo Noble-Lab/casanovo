@@ -108,5 +108,9 @@ def test_val_check_interval(tmp_path, tiny_config):
     assert config.val_check_interval == 0.25
     assert isinstance(config.val_check_interval, float)
 
-    with pytest.raises(TypeError, match="val_check_interval"):
-        Config(_write(1.5))
+    assert Config().val_check_interval == 1.0
+    assert Config(_write(0.0)).val_check_interval == 0.0
+
+    for bad in (1.5, 0, True):
+        with pytest.raises(TypeError, match="val_check_interval"):
+            Config(_write(bad))
