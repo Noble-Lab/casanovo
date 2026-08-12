@@ -29,6 +29,7 @@ import pytest
 import requests
 import torch
 import pyteomics.mztab
+import pyteomics.proforma
 
 from casanovo import casanovo, denovo, utils
 from casanovo.casanovo import _SharedFileIOParams
@@ -2522,14 +2523,17 @@ def test_invalid_n_term_mod(tiny_config, reverse):
     device = model.device
     model.min_peptide_len = 3
 
+    # A reversed tokenizer emits the C-terminus first, so a valid N-terminal
+    # modification is the last token generated; an unreversed tokenizer emits
+    # it first.
     # (peptide, should_be_discarded)
     peptides = [
         (["P", "E", "P", "K", "K"], False),
-        (["[Acetyl]-", "P", "E", "P", "K"], not reverse),
+        (["[Acetyl]-", "P", "E", "P", "K"], reverse),
         (["[Acetyl]-", "[Acetyl]-", "P", "E", "P"], True),
         (["[Acetyl]-", "P", "E", "P", "[Acetyl]-"], True),
-        (["P", "E", "P", "K", "[Acetyl]-"], reverse),
-        (["P", "E", "P", "[Acetyl]-", "$"], reverse),
+        (["P", "E", "P", "K", "[Acetyl]-"], not reverse),
+        (["P", "E", "P", "[Acetyl]-", "$"], not reverse),
         (["P", "E", "[Acetyl]-", "P", "K"], True),
     ]
 
@@ -2552,6 +2556,109 @@ def test_invalid_n_term_mod(tiny_config, reverse):
 
     assert torch.equal(discarded, expected_discarded)
     assert torch.equal(finished, expected_finished)
+
+
+def _nterm_beam(tokenizer, aa_tokens, max_peptide_len, device):
+    """
+    Build a single beam from a list of amino acid tokens.
+
+    Parameters
+    ----------
+    tokenizer : depthcharge.tokenizers.PeptideTokenizer
+        The tokenizer providing the token indices.
+    aa_tokens : Iterable[str]
+        The amino acid tokens, in the order the decoder would emit them.
+    max_peptide_len : int
+        The maximum peptide length, defining the width of the beam.
+    device : torch.device
+        The device on which to create the beam.
+
+    Returns
+    -------
+    torch.Tensor of shape (1, max_peptide_len + 1)
+        The zero-padded beam.
+    """
+    tokens = torch.zeros(
+        1, max_peptide_len + 1, dtype=torch.int64, device=device
+    )
+    tokens[0, : len(aa_tokens)] = torch.tensor(
+        [tokenizer.index[aa] for aa in aa_tokens], device=device
+    )
+    return tokens
+
+
+@pytest.mark.parametrize("reverse", [True, False])
+def test_n_term_mod_orientation_matches_tokenizer(tiny_config, reverse):
+    """N-term mods placed as the tokenizer emits them must be kept."""
+    config = Config(tiny_config)
+    tokenizer = depthcharge.tokenizers.peptides.PeptideTokenizer(
+        residues=config.residues, reverse=reverse
+    )
+    model = Spec2Pep(n_beams=1, tokenizer=tokenizer, min_peptide_len=4)
+
+    peptide = "[Acetyl]-PEPTIDEK"
+    # Ask the tokenizer for the token order, rather than assuming one, so
+    # that this test still pins down the correct behavior if the decoding
+    # direction ever changes.
+    aa_tokens = list(tokenizer.split(peptide))
+    tokens = _nterm_beam(
+        tokenizer, aa_tokens, model.max_peptide_len, model.device
+    )
+
+    _, discarded = model._finish_beams(tokens, len(aa_tokens) - 1)
+    assert not discarded[0]
+
+    # A kept beam must decode to a valid ProForma peptidoform, since
+    # `on_predict_batch_end` parses it again to compute the precursor m/z.
+    sequence = tokenizer.detokenize(tokens)[0]
+    assert sequence == peptide
+    tokenizer.calculate_precursor_ions(sequence, torch.tensor(2))
+
+
+@pytest.mark.parametrize("reverse", [True, False])
+def test_n_term_mod_wrong_end_discarded(tiny_config, reverse):
+    """N-term mods at the opposite end of the beam must be discarded."""
+    config = Config(tiny_config)
+    tokenizer = depthcharge.tokenizers.peptides.PeptideTokenizer(
+        residues=config.residues, reverse=reverse
+    )
+    model = Spec2Pep(n_beams=1, tokenizer=tokenizer, min_peptide_len=4)
+
+    peptide = "[Acetyl]-PEPTIDEK"
+    aa_tokens = list(tokenizer.split(peptide))[::-1]
+    tokens = _nterm_beam(
+        tokenizer, aa_tokens, model.max_peptide_len, model.device
+    )
+
+    _, discarded = model._finish_beams(tokens, len(aa_tokens) - 1)
+    assert discarded[0]
+
+    # Such a beam decodes to a modification trailing the sequence, which is
+    # not valid ProForma; keeping it would crash `on_predict_batch_end`. The
+    # exact exception type depends on the pyteomics version.
+    with pytest.raises((IndexError, pyteomics.proforma.ProFormaError)):
+        tokenizer.calculate_precursor_ions(
+            tokenizer.detokenize(tokens)[0], torch.tensor(2)
+        )
+
+
+@pytest.mark.parametrize("reverse", [True, False])
+def test_n_term_mod_short_beam_discarded(tiny_config, reverse):
+    """Misplaced N-term mods are caught in two-token beams as well."""
+    config = Config(tiny_config)
+    tokenizer = depthcharge.tokenizers.peptides.PeptideTokenizer(
+        residues=config.residues, reverse=reverse
+    )
+    model = Spec2Pep(n_beams=1, tokenizer=tokenizer, min_peptide_len=2)
+
+    # Too short to be caught by the minimum peptide length check.
+    aa_tokens = ["[Acetyl]-", "K"] if reverse else ["K", "[Acetyl]-"]
+    tokens = _nterm_beam(
+        tokenizer, aa_tokens, model.max_peptide_len, model.device
+    )
+
+    _, discarded = model._finish_beams(tokens, 1)
+    assert discarded[0]
 
 
 def test_cache_finished_beams(tiny_config):
