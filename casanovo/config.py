@@ -26,6 +26,16 @@ _config_deprecated = dict(
 )
 
 
+def _int_or_float(value: Union[int, float]) -> Union[int, float]:
+    """Cast to an int (steps) or a float in [0, 1] (fraction of an epoch)."""
+    if isinstance(value, int):
+        return value
+    value = float(value)
+    if not 0.0 <= value <= 1.0:
+        raise ValueError("a float value must be in [0, 1]")
+    return value
+
+
 class Config:
     """
     The Casanovo configuration options.
@@ -70,7 +80,7 @@ class Config:
         log_metrics=bool,
         log_every_n_steps=int,
         lance_dir=str,
-        val_check_interval=int,
+        val_check_interval=_int_or_float,
         min_peaks=int,
         max_peaks=int,
         min_mz=float,

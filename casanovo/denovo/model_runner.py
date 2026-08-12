@@ -417,16 +417,21 @@ class ModelRunner:
                             ),
                         )
 
+            # A float val_check_interval requires an epoch-based cadence.
+            val_check_interval = self.config.val_check_interval
+            check_val_every_n_epoch = (
+                1 if isinstance(val_check_interval, float) else None
+            )
             additional_cfg = dict(
                 devices=devices,
-                val_check_interval=self.config.val_check_interval,
+                val_check_interval=val_check_interval,
                 max_epochs=self.config.max_epochs,
                 num_sanity_val_steps=self.config.num_sanity_val_steps,
                 accumulate_grad_batches=self.config.accumulate_grad_batches,
                 gradient_clip_val=self.config.gradient_clip_val,
                 gradient_clip_algorithm=self.config.gradient_clip_algorithm,
                 callbacks=self.callbacks,
-                check_val_every_n_epoch=None,
+                check_val_every_n_epoch=check_val_every_n_epoch,
                 enable_checkpointing=True,
                 logger=loggers,
                 strategy=self._get_strategy(),

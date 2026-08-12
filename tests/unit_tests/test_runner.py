@@ -290,6 +290,27 @@ def test_save_final_model(tmp_path, mgf_small, tiny_config):
     assert validation_file.exists()
 
 
+def test_val_check_interval_float(tmp_path, tiny_config):
+    """A float val_check_interval builds a valid trainer (#627)."""
+    config = Config(tiny_config)
+
+    config.val_check_interval = 0.5
+    with ModelRunner(
+        config, output_dir=tmp_path, overwrite_ckpt_check=False
+    ) as runner:
+        runner.initialize_trainer(train=True)
+        assert runner.trainer.val_check_interval == 0.5
+        assert runner.trainer.check_val_every_n_epoch == 1
+
+    config.val_check_interval = 50
+    with ModelRunner(
+        config, output_dir=tmp_path, overwrite_ckpt_check=False
+    ) as runner:
+        runner.initialize_trainer(train=True)
+        assert runner.trainer.val_check_interval == 50
+        assert runner.trainer.check_val_every_n_epoch is None
+
+
 def test_evaluate_success(tmp_path, mgf_small, tiny_config):
     """Test successful model evaluation with annotated peak files."""
     config = Config(tiny_config)
