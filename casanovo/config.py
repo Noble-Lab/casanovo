@@ -29,7 +29,7 @@ _config_deprecated = dict(
 def _int_or_float(value: Union[int, float]) -> Union[int, float]:
     """Cast to an int (steps) or a float in [0, 1] (fraction of an epoch)."""
     if isinstance(value, bool):
-        raise ValueError("must be an int or a float, not a bool")
+        raise TypeError("must be an int or a float, not a bool")
     if isinstance(value, int):
         if value < 1:
             raise ValueError("an int value must be at least 1")
