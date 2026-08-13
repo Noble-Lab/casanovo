@@ -3028,7 +3028,8 @@ def test_mgf_scan_alias_scan_field(tmp_path):
 
     mgf_file = tmp_path / "alias_scan.mgf"
     mgf_file.write_text(
-        "BEGIN IONS\nSCAN=99\nPEPMASS=400.2\nCHARGE=2+\n200.0 1.0\nEND IONS\n"
+        "BEGIN IONS\nSCAN=99\nPEPMASS=400.2\nCHARGE=2+\n200.0 1.0\nEND IONS\n",
+        encoding="utf-8",
     )
     result = dict(_build_mgf_scan_index(str(mgf_file)))
     assert result == {"index=0": "99"}
@@ -3043,7 +3044,8 @@ def test_mgf_scan_alias_scan_id_field(tmp_path):
 
     mgf_file = tmp_path / "alias_scan_id.mgf"
     mgf_file.write_text(
-        "BEGIN IONS\nSCAN ID=42\nPEPMASS=400.2\nCHARGE=2+\n200.0 1.0\nEND IONS\n"
+        "BEGIN IONS\nSCAN ID=42\nPEPMASS=400.2\nCHARGE=2+\n200.0 1.0\nEND IONS\n",
+        encoding="utf-8",
     )
     result = dict(_build_mgf_scan_index(str(mgf_file)))
     assert result == {"index=0": "42"}
@@ -3057,7 +3059,8 @@ def test_scan_num_in_mztab_spectra_ref(tmp_path):
     # Create a minimal MGF with SCANS=17 for the first spectrum.
     mgf_file = tmp_path / "test.mgf"
     mgf_file.write_text(
-        "BEGIN IONS\nSCANS=17\nPEPMASS=400.2\nCHARGE=2+\n200.0 1.0\nEND IONS\n"
+        "BEGIN IONS\nSCANS=17\nPEPMASS=400.2\nCHARGE=2+\n200.0 1.0\nEND IONS\n",
+        encoding="utf-8",
     )
 
     results_path = str(tmp_path / "results.mztab")
