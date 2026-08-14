@@ -135,7 +135,7 @@ After the training job is finished, the validation snapshot that achieved the lo
 Additionally, a snapshot of the model weights at the end of each **training** epoch will be saved to the output directory as `epoch=<epoch>-step=<step>.ckpt`.
 Snapshots from previous training epochs will be overwritten with the latest training snapshot at the end of each training epoch.
 
-By default, Casanovo runs model validation once per training epoch (`val_check_interval: 1.0`).
+By default, Casanovo runs model validation every 50,000 training steps (`val_check_interval: 50_000`).
 You can change this via the `val_check_interval` parameter in the [config file](https://github.com/Noble-Lab/casanovo/blob/main/casanovo/config.yaml): a float in `[0, 1]` sets it as a fraction of an epoch (where `0.0` validates after every step), while a positive integer (`>= 1`) sets it as a number of training steps (where the samples per step depend on the batch size).
 Note that running model validation very frequently will result in slower training time because Casanovo will evaluate its performance on the validation data for every validation check.
 
