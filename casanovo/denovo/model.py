@@ -85,7 +85,8 @@ class Spec2Pep(pl.LightningModule):
     tokenizer: PeptideTokenizer | None
         Tokenizer object to process peptide sequences.
     **kwargs : Dict
-        Additional keyword arguments passed to the Adam optimizer.
+        Additional keyword arguments passed to the Adam optimizer. Only
+        valid Adam parameters are retained; any other values are ignored.
     """
 
     def __init__(
