@@ -2461,6 +2461,30 @@ def test_spectrum_preprocessing(tmp_path, mgf_small):
     max_charge = 4
 
 
+def test_predict_step_counts_missing(tiny_config):
+    config = Config(tiny_config)
+    model = Spec2Pep(
+        tokenizer=depthcharge.tokenizers.peptides.PeptideTokenizer(
+            residues=config.residues
+        ),
+    )
+    # One spectrum gets a prediction; the other returns no valid peptide.
+    model.forward = unittest.mock.MagicMock(
+        return_value=[[(0.9, np.array([0.9]), "PEPK")], []]
+    )
+    batch = {
+        "peak_file": ["a.mgf", "a.mgf"],
+        "scan_id": ["index=0", "index=1"],
+        "precursor_charge": torch.tensor([2, 2]),
+        "precursor_mz": torch.tensor([100.0, 200.0]),
+    }
+    predictions = model.predict_step(batch)
+    assert len(predictions) == 1
+    assert model.n_missing_predictions == 1
+    model.on_predict_start()
+    assert model.n_missing_predictions == 0
+
+
 def test_finish_beams(tiny_config):
     config = Config(tiny_config)
     model = Spec2Pep(
