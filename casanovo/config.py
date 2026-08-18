@@ -26,6 +26,36 @@ _config_deprecated = dict(
 )
 
 
+def _int_or_float(value: Union[int, float]) -> Union[int, float]:
+    """Cast the validation interval to an int (steps) or float in [0, 1]."""
+    if isinstance(value, bool):
+        msg = (
+            "val_check_interval must be a positive integer number of "
+            "training steps or a float in [0, 1] giving a fraction of an "
+            "epoch, not a bool"
+        )
+        logger.error(msg)
+        raise TypeError(msg)
+    if isinstance(value, int):
+        if value < 1:
+            msg = (
+                "val_check_interval as a number of training steps must be "
+                "a positive integer"
+            )
+            logger.error(msg)
+            raise ValueError(msg)
+        return value
+    value = float(value)
+    if not 0.0 <= value <= 1.0:
+        msg = (
+            "val_check_interval as a fraction of an epoch must be a float "
+            "in [0, 1]"
+        )
+        logger.error(msg)
+        raise ValueError(msg)
+    return value
+
+
 class Config:
     """
     The Casanovo configuration options.
@@ -70,7 +100,7 @@ class Config:
         log_metrics=bool,
         log_every_n_steps=int,
         lance_dir=str,
-        val_check_interval=int,
+        val_check_interval=_int_or_float,
         min_peaks=int,
         max_peaks=int,
         min_mz=float,

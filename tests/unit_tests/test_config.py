@@ -84,3 +84,33 @@ def test_deprecated(tmp_path, tiny_config):
 
     with pytest.warns(DeprecationWarning):
         Config(filename)
+
+
+def test_val_check_interval(tmp_path, tiny_config):
+    """val_check_interval accepts an int or a float in [0, 1]."""
+
+    def _write(value):
+        filename = str(tmp_path / "config_vci.yml")
+        with (
+            open(tiny_config, "r", encoding="utf-8") as f_in,
+            open(filename, "w", encoding="utf-8") as f_out,
+        ):
+            cfg = yaml.safe_load(f_in)
+            cfg["val_check_interval"] = value
+            yaml.safe_dump(cfg, f_out)
+        return filename
+
+    config = Config(_write(50))
+    assert config.val_check_interval == 50
+    assert isinstance(config.val_check_interval, int)
+
+    config = Config(_write(0.25))
+    assert config.val_check_interval == 0.25
+    assert isinstance(config.val_check_interval, float)
+
+    assert Config().val_check_interval == 50_000
+    assert Config(_write(0.0)).val_check_interval == 0.0
+
+    for bad in (1.5, 0, True):
+        with pytest.raises(TypeError, match="val_check_interval"):
+            Config(_write(bad))
