@@ -151,6 +151,7 @@ class DeNovoDataModule(pl.LightningDataModule):
 
         # Spectrum preprocessing functions.
         self.preprocessing_fn = [
+            _deduplicate_mz,
             preprocessing.set_mz_range(min_mz=min_mz, max_mz=max_mz),
             preprocessing.remove_precursor_peak(remove_precursor_tol, "Da"),
             preprocessing.scale_intensity("root", 1),
@@ -402,6 +403,34 @@ class DeNovoDataModule(pl.LightningDataModule):
     def db_dataloader(self) -> torch.utils.data.DataLoader:
         """Get a special dataloader for DB search."""
         return self._make_loader(self.test_dataset)
+
+
+def _deduplicate_mz(spectrum: sus.MsmsSpectrum) -> sus.MsmsSpectrum:
+    """
+    Merge peaks that share the same m/z value.
+
+    Repeated m/z values are combined into a single peak whose intensity
+    is the sum of the merged peaks, avoiding undefined behavior when a
+    spectrum contains duplicate m/z values.
+
+    Parameters
+    ----------
+    spectrum : sus.MsmsSpectrum
+        The spectrum to deduplicate.
+
+    Returns
+    -------
+    sus.MsmsSpectrum
+        The spectrum with unique, sorted m/z values.
+    """
+    unique_mz, inverse = np.unique(spectrum.mz, return_inverse=True)
+    if len(unique_mz) == len(spectrum.mz):
+        return spectrum
+    intensity = np.zeros(len(unique_mz), dtype=np.float32)
+    np.add.at(intensity, inverse.ravel(), spectrum.intensity)
+    spectrum._inner._mz = unique_mz.astype(np.float64)
+    spectrum._inner._intensity = intensity
+    return spectrum
 
 
 def _discard_low_quality(
