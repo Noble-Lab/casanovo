@@ -1,9 +1,7 @@
-import collections
 import copy
 import datetime
 import functools
 import hashlib
-import heapq
 import io
 import logging
 import os
@@ -2687,12 +2685,19 @@ def test_cache_finished_beams(tiny_config):
     model._batch_size = batch
     model._beam_size = beam
 
-    scores = torch.zeros(
-        (beam, length, len(model.tokenizer) + 1), device=device
-    )
+    vocab = len(model.tokenizer) + 1
+    scores = torch.zeros((beam, length, vocab), device=device)
     tokens = torch.zeros((beam, length), dtype=torch.int64, device=device)
 
-    pred_cache = collections.OrderedDict((i, []) for i in range(batch))
+    cache_tokens = torch.full(
+        (batch, beam, length, length), 0, dtype=torch.int64, device=device
+    )
+    cache_scores = torch.full(
+        (batch, beam, length, length), 0.0, dtype=scores.dtype, device=device
+    )
+    cache_mask = torch.zeros(
+        (batch, beam, length), dtype=torch.bool, device=device
+    )
 
     true_tok = model.tokenizer.tokenize("PEPR")[0]
     tokens[1, : step + 1] = true_tok
@@ -2702,13 +2707,19 @@ def test_cache_finished_beams(tiny_config):
     discarded = torch.tensor([False, False, False, False], device=device)
 
     model._cache_finished_beams(
-        tokens, scores, step, finished & ~discarded, pred_cache
+        tokens,
+        scores,
+        step,
+        finished & ~discarded,
+        cache_tokens,
+        cache_scores,
+        cache_mask,
+        batch,
+        beam,
     )
 
-    cached = [
-        pep for (_, _, _, pep) in pred_cache[0] if torch.equal(pep, true_tok)
-    ]
-    assert len(cached) == 1
+    assert cache_mask[0, 1, step]
+    assert torch.equal(cache_tokens[0, 1, step, : step + 1], true_tok)
 
 
 def test_get_top_peptide_ranking(tiny_config):
@@ -2719,20 +2730,35 @@ def test_get_top_peptide_ranking(tiny_config):
         )
     )
 
-    cache = collections.OrderedDict({0: []})
+    batch = 1
+    beam = 3
+    length = 10
+    step = 3
+    device = model.device
 
-    heapq.heappush(
-        cache[0], (0.93, 0.1, [0.93] * 4, model.tokenizer.tokenize("PEPY")[0])
+    cache_tokens = torch.full(
+        (batch, beam, length, length), 0, dtype=torch.int64, device=device
     )
-    heapq.heappush(
-        cache[0], (0.95, 0.2, [0.95] * 4, model.tokenizer.tokenize("PEPK")[0])
+    cache_scores = torch.full(
+        (batch, beam, length, length), 0.0, dtype=torch.float32, device=device
     )
-    heapq.heappush(
-        cache[0], (0.94, 0.3, [0.94] * 4, model.tokenizer.tokenize("PEPP")[0])
+    cache_mask = torch.zeros(
+        (batch, beam, length), dtype=torch.bool, device=device
     )
 
-    result = next(model._get_top_peptide(cache))
-    assert result[0][-1] == "PEPK"
+    seqs = ["PEPY", "PEPK", "PEPP"]
+    raw_probs = [0.93, 0.95, 0.94]
+    for b, (seq, raw) in enumerate(zip(seqs, raw_probs)):
+        toks = model.tokenizer.tokenize(seq)[0]
+        n_toks = toks.shape[0]
+        cache_tokens[0, b, step, :n_toks] = toks
+        cache_scores[0, b, step, :n_toks] = raw
+        cache_mask[0, b, step] = True
+
+    result = next(
+        model._get_top_peptide(cache_tokens, cache_scores, cache_mask)
+    )
+    assert result[0][2] == "PEPK"
 
 
 @pytest.mark.parametrize("topk", [1, 2, 3])
@@ -2745,15 +2771,33 @@ def test_get_top_peptide_multiple(topk, tiny_config):
         ),
     )
 
-    cache = collections.OrderedDict({0: []})
-    cache_items = [(0.9, "PEPY"), (0.8, "PEPK"), (0.7, "PEPP")]
-    for score, seq in cache_items:
-        heapq.heappush(
-            cache[0],
-            (score, 0.0, [score] * 3, model.tokenizer.tokenize(seq)[0]),
-        )
+    batch = 1
+    beam = 3
+    length = 10
+    step = 3
+    device = model.device
 
-    result = next(model._get_top_peptide(cache))
+    cache_tokens = torch.full(
+        (batch, beam, length, length), 0, dtype=torch.int64, device=device
+    )
+    cache_scores = torch.full(
+        (batch, beam, length, length), 0.0, dtype=torch.float32, device=device
+    )
+    cache_mask = torch.zeros(
+        (batch, beam, length), dtype=torch.bool, device=device
+    )
+
+    cache_items = [(0.9, "PEPY"), (0.8, "PEPK"), (0.7, "PEPP")]
+    for b, (score, seq) in enumerate(cache_items):
+        toks = model.tokenizer.tokenize(seq)[0]
+        n_toks = toks.shape[0]
+        cache_tokens[0, b, step, :n_toks] = toks
+        cache_scores[0, b, step, :n_toks] = score
+        cache_mask[0, b, step] = True
+
+    result = next(
+        model._get_top_peptide(cache_tokens, cache_scores, cache_mask)
+    )
     assert len(result) == topk
     for i in range(topk):
         assert result[i][2] == cache_items[i][1]
@@ -2770,18 +2814,31 @@ def test_get_top_peptide_reverse(reverse, tiny_config):
 
     model.tokenizer.reverse = reverse
 
-    cache = {
-        0: [
-            (
-                1.0,
-                0.42,
-                np.array([1.0, 0.0]),
-                model.tokenizer.tokenize("PE")[0],
-            )
-        ]
-    }
+    batch = 1
+    beam = 1
+    length = 10
+    step = 1
+    device = model.device
 
-    result = list(model._get_top_peptide(cache))
+    cache_tokens = torch.full(
+        (batch, beam, length, length), 0, dtype=torch.int64, device=device
+    )
+    cache_scores = torch.full(
+        (batch, beam, length, length), 0.0, dtype=torch.float32, device=device
+    )
+    cache_mask = torch.zeros(
+        (batch, beam, length), dtype=torch.bool, device=device
+    )
+
+    toks = model.tokenizer.tokenize("PE")[0]
+    n_toks = toks.shape[0]
+    cache_tokens[0, 0, step, :n_toks] = toks
+    cache_scores[0, 0, step, :n_toks] = 1.0
+    cache_mask[0, 0, step] = True
+
+    result = list(
+        model._get_top_peptide(cache_tokens, cache_scores, cache_mask)
+    )
 
     assert len(result) == 1
     assert len(result[0]) == 1
@@ -2873,20 +2930,36 @@ def test_duplicate_peptide_scores(tiny_config):
         1, vocab, (batch * beam, step), device=device
     )
 
-    pred_cache = collections.OrderedDict((i, []) for i in range(batch))
+    cache_tokens = torch.full(
+        (batch, beam, length, length), 0, dtype=torch.int64, device=device
+    )
+    cache_scores = torch.full(
+        (batch, beam, length, length), 0.0, dtype=scores.dtype, device=device
+    )
+    cache_mask = torch.zeros(
+        (batch, beam, length), dtype=torch.bool, device=device
+    )
 
     model._cache_finished_beams(
         tokens,
         scores,
         step,
         torch.ones(batch * beam, dtype=torch.bool, device=device),
-        pred_cache,
+        cache_tokens,
+        cache_scores,
+        cache_mask,
+        batch,
+        beam,
     )
 
-    for _, preds in pred_cache.items():
-        assert len(preds) == beam
-        vals = [p[0] for p in preds]
-        assert np.allclose(vals, vals[0])
+    # All beams used identical scores, so every cached candidate should have
+    # the same peptide score.
+    for i in range(batch):
+        cached_scores = cache_scores[i, :, step, : step + 1]
+        cached_mask = cache_mask[i, :, step]
+        vals = cached_scores[cached_mask].sum(dim=-1)
+        assert cached_mask.sum() == beam
+        assert torch.allclose(vals, vals[0])
 
 
 class MiniTok:
