@@ -2690,7 +2690,7 @@ def test_cache_finished_beams(tiny_config):
     tokens = torch.zeros((beam, length), dtype=torch.int64, device=device)
 
     cache_tokens = torch.full(
-        (batch, beam, length, length), 0, dtype=torch.int64, device=device
+        (batch, beam, length, length), 0, dtype=torch.int32, device=device
     )
     cache_scores = torch.full(
         (batch, beam, length, length), 0.0, dtype=scores.dtype, device=device
@@ -2737,7 +2737,7 @@ def test_get_top_peptide_ranking(tiny_config):
     device = model.device
 
     cache_tokens = torch.full(
-        (batch, beam, length, length), 0, dtype=torch.int64, device=device
+        (batch, beam, length, length), 0, dtype=torch.int32, device=device
     )
     cache_scores = torch.full(
         (batch, beam, length, length), 0.0, dtype=torch.float32, device=device
@@ -2778,7 +2778,7 @@ def test_get_top_peptide_multiple(topk, tiny_config):
     device = model.device
 
     cache_tokens = torch.full(
-        (batch, beam, length, length), 0, dtype=torch.int64, device=device
+        (batch, beam, length, length), 0, dtype=torch.int32, device=device
     )
     cache_scores = torch.full(
         (batch, beam, length, length), 0.0, dtype=torch.float32, device=device
@@ -2821,7 +2821,7 @@ def test_get_top_peptide_reverse(reverse, tiny_config):
     device = model.device
 
     cache_tokens = torch.full(
-        (batch, beam, length, length), 0, dtype=torch.int64, device=device
+        (batch, beam, length, length), 0, dtype=torch.int32, device=device
     )
     cache_scores = torch.full(
         (batch, beam, length, length), 0.0, dtype=torch.float32, device=device
@@ -2931,7 +2931,7 @@ def test_duplicate_peptide_scores(tiny_config):
     )
 
     cache_tokens = torch.full(
-        (batch, beam, length, length), 0, dtype=torch.int64, device=device
+        (batch, beam, length, length), 0, dtype=torch.int32, device=device
     )
     cache_scores = torch.full(
         (batch, beam, length, length), 0.0, dtype=scores.dtype, device=device

@@ -295,11 +295,12 @@ class Spec2Pep(pl.LightningModule):
             batch, length, beam, dtype=torch.int64, device=device
         )
 
-        # Create cache for decoded beams.
+        # Create cache for decoded beams. cache_tokens uses int32 to reduce
+        # memory footprint; it is cast to int64 before detokenization.
         cache_tokens = torch.full(
             (batch, beam, length, length),
             0,
-            dtype=torch.int64,
+            dtype=torch.int32,
             device=device,
         )
         cache_scores = torch.full(
@@ -773,7 +774,7 @@ class Spec2Pep(pl.LightningModule):
                     continue
 
                 step = int(flat_step_cpu[i, idx])
-                pred_tokens = flat_tokens[i, idx, : step + 1]
+                pred_tokens = flat_tokens[i, idx, : step + 1].long()
                 stop = bool(has_stop_cpu[i, idx])
 
                 if stop:
