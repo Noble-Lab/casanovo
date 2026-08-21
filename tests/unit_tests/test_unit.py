@@ -2485,6 +2485,30 @@ def test_predict_step_counts_missing(tiny_config):
     assert model.n_missing_predictions == 0
 
 
+def test_on_predict_epoch_end_logs(monkeypatch, tiny_config):
+    config = Config(tiny_config)
+    model = Spec2Pep(
+        tokenizer=depthcharge.tokenizers.peptides.PeptideTokenizer(
+            residues=config.residues
+        ),
+    )
+    # Single process: all_gather returns the value unchanged.
+    model.all_gather = lambda x: x
+    model.trainer = unittest.mock.MagicMock(is_global_zero=True)
+    mock_logger = unittest.mock.MagicMock()
+    monkeypatch.setattr("casanovo.denovo.model.logger", mock_logger)
+
+    model.n_missing_predictions = 3
+    model.on_predict_epoch_end()
+    assert mock_logger.info.call_args[0][1] == 3
+
+    # Nothing is logged when every spectrum received a prediction.
+    mock_logger.reset_mock()
+    model.n_missing_predictions = 0
+    model.on_predict_epoch_end()
+    mock_logger.info.assert_not_called()
+
+
 def test_finish_beams(tiny_config):
     config = Config(tiny_config)
     model = Spec2Pep(
