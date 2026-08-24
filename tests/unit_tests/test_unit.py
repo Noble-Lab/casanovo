@@ -2695,9 +2695,6 @@ def test_cache_finished_beams(tiny_config):
     cache_scores = torch.full(
         (batch, beam, length, length), 0.0, dtype=scores.dtype, device=device
     )
-    cache_mask = torch.zeros(
-        (batch, beam, length), dtype=torch.bool, device=device
-    )
 
     true_tok = model.tokenizer.tokenize("PEPR")[0]
     tokens[1, : step + 1] = true_tok
@@ -2713,12 +2710,10 @@ def test_cache_finished_beams(tiny_config):
         finished & ~discarded,
         cache_tokens,
         cache_scores,
-        cache_mask,
-        batch,
-        beam,
     )
 
-    assert cache_mask[0, 1, step]
+    # Valid slots have non-zero raw probabilities; unwritten slots are 0.
+    assert cache_scores[0, 1, step].any()
     assert torch.equal(cache_tokens[0, 1, step, : step + 1], true_tok)
 
 
@@ -2742,9 +2737,6 @@ def test_get_top_peptide_ranking(tiny_config):
     cache_scores = torch.full(
         (batch, beam, length, length), 0.0, dtype=torch.float32, device=device
     )
-    cache_mask = torch.zeros(
-        (batch, beam, length), dtype=torch.bool, device=device
-    )
 
     seqs = ["PEPY", "PEPK", "PEPP"]
     raw_probs = [0.93, 0.95, 0.94]
@@ -2753,11 +2745,8 @@ def test_get_top_peptide_ranking(tiny_config):
         n_toks = toks.shape[0]
         cache_tokens[0, b, step, :n_toks] = toks
         cache_scores[0, b, step, :n_toks] = raw
-        cache_mask[0, b, step] = True
 
-    result = next(
-        model._get_top_peptide(cache_tokens, cache_scores, cache_mask)
-    )
+    result = next(model._get_top_peptide(cache_tokens, cache_scores))
     assert result[0][2] == "PEPK"
 
 
@@ -2783,9 +2772,6 @@ def test_get_top_peptide_multiple(topk, tiny_config):
     cache_scores = torch.full(
         (batch, beam, length, length), 0.0, dtype=torch.float32, device=device
     )
-    cache_mask = torch.zeros(
-        (batch, beam, length), dtype=torch.bool, device=device
-    )
 
     cache_items = [(0.9, "PEPY"), (0.8, "PEPK"), (0.7, "PEPP")]
     for b, (score, seq) in enumerate(cache_items):
@@ -2793,11 +2779,8 @@ def test_get_top_peptide_multiple(topk, tiny_config):
         n_toks = toks.shape[0]
         cache_tokens[0, b, step, :n_toks] = toks
         cache_scores[0, b, step, :n_toks] = score
-        cache_mask[0, b, step] = True
 
-    result = next(
-        model._get_top_peptide(cache_tokens, cache_scores, cache_mask)
-    )
+    result = next(model._get_top_peptide(cache_tokens, cache_scores))
     assert len(result) == topk
     for i in range(topk):
         assert result[i][2] == cache_items[i][1]
@@ -2826,19 +2809,13 @@ def test_get_top_peptide_reverse(reverse, tiny_config):
     cache_scores = torch.full(
         (batch, beam, length, length), 0.0, dtype=torch.float32, device=device
     )
-    cache_mask = torch.zeros(
-        (batch, beam, length), dtype=torch.bool, device=device
-    )
 
     toks = model.tokenizer.tokenize("PE")[0]
     n_toks = toks.shape[0]
     cache_tokens[0, 0, step, :n_toks] = toks
     cache_scores[0, 0, step, :n_toks] = 1.0
-    cache_mask[0, 0, step] = True
 
-    result = list(
-        model._get_top_peptide(cache_tokens, cache_scores, cache_mask)
-    )
+    result = list(model._get_top_peptide(cache_tokens, cache_scores))
 
     assert len(result) == 1
     assert len(result[0]) == 1
@@ -2936,9 +2913,6 @@ def test_duplicate_peptide_scores(tiny_config):
     cache_scores = torch.full(
         (batch, beam, length, length), 0.0, dtype=scores.dtype, device=device
     )
-    cache_mask = torch.zeros(
-        (batch, beam, length), dtype=torch.bool, device=device
-    )
 
     model._cache_finished_beams(
         tokens,
@@ -2947,16 +2921,13 @@ def test_duplicate_peptide_scores(tiny_config):
         torch.ones(batch * beam, dtype=torch.bool, device=device),
         cache_tokens,
         cache_scores,
-        cache_mask,
-        batch,
-        beam,
     )
 
     # All beams used identical scores, so every cached candidate should have
     # the same peptide score.
     for i in range(batch):
         cached_scores = cache_scores[i, :, step, : step + 1]
-        cached_mask = cache_mask[i, :, step]
+        cached_mask = cached_scores.any(dim=-1)
         vals = cached_scores[cached_mask].sum(dim=-1)
         assert cached_mask.sum() == beam
         assert torch.allclose(vals, vals[0])

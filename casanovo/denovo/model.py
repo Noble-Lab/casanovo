@@ -309,11 +309,6 @@ class Spec2Pep(pl.LightningModule):
             dtype=scores.dtype,
             device=device,
         )
-        cache_mask = torch.zeros(
-            (batch, beam, length),
-            dtype=torch.bool,
-            device=device,
-        )
 
         # Get the first prediction.
         pred = self.decoder(
@@ -356,9 +351,6 @@ class Spec2Pep(pl.LightningModule):
                     beams_to_cache,
                     cache_tokens,
                     cache_scores,
-                    cache_mask,
-                    batch,
-                    beam,
                 )
 
                 # Stop decoding when all current beams have been finished.
@@ -399,9 +391,7 @@ class Spec2Pep(pl.LightningModule):
 
         # Return the peptide with the highest confidence score, within
         # the precursor m/z tolerance if possible.
-        return list(
-            self._get_top_peptide(cache_tokens, cache_scores, cache_mask)
-        )
+        return list(self._get_top_peptide(cache_tokens, cache_scores))
 
     def _finish_beams(
         self,
@@ -504,9 +494,6 @@ class Spec2Pep(pl.LightningModule):
         beams_to_cache: torch.Tensor,
         cache_tokens: torch.Tensor,
         cache_scores: torch.Tensor,
-        cache_mask: torch.Tensor,
-        batch: int,
-        beam: int,
     ) -> None:
         """
         Cache terminated beams into fixed-size tensors.
@@ -533,24 +520,20 @@ class Spec2Pep(pl.LightningModule):
         cache_scores : torch.Tensor of shape
             (n_spectra, n_beams, max_length, max_length)
             Tensor cache for raw token probabilities of finished beams.
-        cache_mask : torch.Tensor of shape (n_spectra, n_beams, max_length)
-            Boolean mask indicating valid cache entries.
-        batch : int
-            Number of spectra in the batch.
-        beam : int
-            Number of beams per spectrum.
         """
+        batch, beam, _, _ = cache_tokens.shape
         vocab = scores.shape[-1]
 
         # [B, S, step + 1] actual tokens up to the current step.
         tokens_bsl = tokens.view(batch, beam, -1)[:, :, : step + 1]
 
         # Softmax over the vocabulary and gather the probability of each
-        # selected token in one shot.
-        smx = torch.softmax(
-            scores[:, : step + 1, :].view(batch, beam, step + 1, vocab),
-            dim=-1,
+        # selected token in one shot. Use the model's configured softmax so
+        # that the normalization axis stays in sync with future changes.
+        scores_view = scores[:, : step + 1, :].view(
+            batch, beam, step + 1, vocab
         )
+        smx = self.softmax(scores_view.transpose(2, 3)).transpose(2, 3)
         raw_scores = smx.gather(3, tokens_bsl.unsqueeze(-1)).squeeze(-1)
 
         # Masked write: only update slots where beams_to_cache is True.
@@ -564,11 +547,6 @@ class Spec2Pep(pl.LightningModule):
             write_mask,
             raw_scores,
             cache_scores[:, :, step, : step + 1],
-        )
-        cache_mask[:, :, step] = torch.where(
-            beams_to_cache.view(batch, beam),
-            torch.ones_like(cache_mask[:, :, step]),
-            cache_mask[:, :, step],
         )
 
     def _get_topk_beams(
@@ -685,7 +663,6 @@ class Spec2Pep(pl.LightningModule):
         self,
         cache_tokens: torch.Tensor,
         cache_scores: torch.Tensor,
-        cache_mask: torch.Tensor,
     ) -> Iterable[List[Tuple[float, np.ndarray, str]]]:
         """
         Return the peptide with the highest confidence score for each
@@ -699,9 +676,6 @@ class Spec2Pep(pl.LightningModule):
         cache_scores : torch.Tensor of shape
             (n_spectra, n_beams, max_length, max_length)
             Tensor cache for raw token probabilities of finished beams.
-        cache_mask : torch.Tensor of shape
-            (n_spectra, n_beams, max_length)
-            Boolean mask indicating valid cache entries.
 
         Returns
         -------
@@ -718,7 +692,10 @@ class Spec2Pep(pl.LightningModule):
         # Flatten the candidate pool over beams and decoding steps.
         flat_tokens = cache_tokens.view(batch, beam * length, length)
         flat_raw = cache_scores.view(batch, beam * length, length)
-        flat_mask = cache_mask.view(batch, beam * length)
+        # Valid slots are those with non-zero raw probabilities. This is
+        # equivalent to the previous explicit cache_mask because softmax
+        # probabilities are strictly positive and unwritten slots are 0.
+        flat_mask = flat_raw.any(dim=-1)
 
         # The actual decoding step for each history slot.
         step_idx = torch.arange(length, device=device).view(1, 1, length)
