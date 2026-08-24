@@ -206,7 +206,10 @@ def sequence(
         results_path = output_path / f"{output_root_name}.mztab"
         runner.predict(peak_path, str(results_path), evaluate=evaluate)
         utils.log_annotate_report(
-            runner.writer.psms, start_time=start_time, end_time=time.time()
+            runner.writer.psms,
+            start_time=start_time,
+            end_time=time.time(),
+            n_missing_predictions=runner.model.n_missing_predictions,
         )
 
 
@@ -286,7 +289,10 @@ def db_search(
                 )
             runner.model.protein_database.export(output_path, output_root_name)
         utils.log_annotate_report(
-            runner.writer.psms, start_time=start_time, end_time=time.time()
+            runner.writer.psms,
+            start_time=start_time,
+            end_time=time.time(),
+            n_missing_predictions=runner.model.n_missing_predictions,
         )
 
 

@@ -1037,18 +1037,12 @@ class Spec2Pep(pl.LightningModule):
         self.n_missing_predictions = 0
 
     def on_predict_epoch_end(self) -> None:
-        """Log the number of spectra that did not receive a prediction."""
-        n_missing = int(
+        """Aggregate the missing-prediction count across devices."""
+        self.n_missing_predictions = int(
             self.all_gather(
                 torch.tensor(self.n_missing_predictions, device=self.device)
             ).sum()
         )
-        if n_missing > 0 and self.trainer.is_global_zero:
-            logger.info(
-                "%d spectra did not receive a prediction because beam "
-                "search did not return a valid peptide",
-                n_missing,
-            )
 
     def on_predict_batch_end(
         self, outputs: List[psm.PepSpecMatch], *args

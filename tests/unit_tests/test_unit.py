@@ -2485,28 +2485,27 @@ def test_predict_step_counts_missing(tiny_config):
     assert model.n_missing_predictions == 0
 
 
-def test_on_predict_epoch_end_logs(monkeypatch, tiny_config):
+def test_on_predict_epoch_end_aggregates(tiny_config):
     config = Config(tiny_config)
     model = Spec2Pep(
         tokenizer=depthcharge.tokenizers.peptides.PeptideTokenizer(
             residues=config.residues
         ),
     )
-    # Single process: all_gather returns the value unchanged.
-    model.all_gather = lambda x: x
-    model.trainer = unittest.mock.MagicMock(is_global_zero=True)
+    # Local counts of 2 and 3 from two processes are summed.
+    model.all_gather = lambda x: x.new_tensor([2, 3])
+    model.n_missing_predictions = 2
+    model.on_predict_epoch_end()
+    assert model.n_missing_predictions == 5
+
+
+def test_log_annotate_report_missing_predictions(monkeypatch):
     mock_logger = unittest.mock.MagicMock()
-    monkeypatch.setattr("casanovo.denovo.model.logger", mock_logger)
-
-    model.n_missing_predictions = 3
-    model.on_predict_epoch_end()
-    assert mock_logger.info.call_args[0][1] == 3
-
-    # Nothing is logged when every spectrum received a prediction.
-    mock_logger.reset_mock()
-    model.n_missing_predictions = 0
-    model.on_predict_epoch_end()
-    mock_logger.info.assert_not_called()
+    monkeypatch.setattr("casanovo.utils.logger", mock_logger)
+    monkeypatch.setattr(utils, "log_run_report", lambda **kw: None)
+    utils.log_annotate_report([], n_missing_predictions=4)
+    messages = [call[0][0] for call in mock_logger.info.call_args_list]
+    assert any("did not receive a prediction" in m for m in messages)
 
 
 def test_finish_beams(tiny_config):

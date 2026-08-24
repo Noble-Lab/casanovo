@@ -178,6 +178,7 @@ def log_annotate_report(
     predictions: List[PepSpecMatch],
     start_time: Optional[float] = None,
     end_time: Optional[float] = None,
+    n_missing_predictions: int = 0,
     score_bins: Iterable[float] = SCORE_BINS,
 ) -> None:
     """
@@ -191,6 +192,9 @@ def log_annotate_report(
         The start time of the sequencing run in seconds since the epoch.
     end_time : Optional[float], default=None
         The end time of the sequencing run in seconds since the epoch.
+    n_missing_predictions : int, default=0
+        The number of spectra that did not receive a prediction because
+        beam search did not return a valid peptide.
     score_bins: Iterable[float], Optional
         Confidence scores for creating confidence score distribution.
     """
@@ -229,6 +233,13 @@ def log_annotate_report(
         )
         logger.info(
             "Median Peptide Length: %d", run_report["median_sequence_length"]
+        )
+
+    if n_missing_predictions > 0:
+        logger.info(
+            "%d spectra did not receive a prediction because beam search "
+            "did not return a valid peptide",
+            n_missing_predictions,
         )
 
 
