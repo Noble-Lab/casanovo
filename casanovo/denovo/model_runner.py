@@ -351,7 +351,7 @@ class ModelRunner:
             self.log_metrics(predict_dataloader)
 
     def initialize_trainer(
-        self, train: bool, enable_progress_bar: bool = True
+        self, train: bool, *, enable_progress_bar: bool = True
     ) -> None:
         """
         Initialize the Pytorch Lightning Trainer.
