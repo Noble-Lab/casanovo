@@ -2516,6 +2516,8 @@ def test_log_annotate_report_missing_predictions(monkeypatch):
     # the missing-prediction message fire for a positional argument).
     mock_logger.reset_mock()
     utils.log_annotate_report([], None, None, [0.5])
+    # An empty report still warns that no predictions were logged.
+    mock_logger.warning.assert_called_once()
     missing_calls = [
         c
         for c in mock_logger.info.call_args_list
