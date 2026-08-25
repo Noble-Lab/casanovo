@@ -210,12 +210,7 @@ def log_annotate_report(
         score_bins=score_bins,
     )
 
-    if run_report is None:
-        if n_missing_predictions == 0:
-            logger.warning(
-                "No predictions were logged, this may be due to an error"
-            )
-    else:
+    if run_report is not None:
         num_spectra = run_report["num_spectra"]
         logger.info("Sequenced %s spectra", num_spectra)
         logger.info("Score Distribution:")

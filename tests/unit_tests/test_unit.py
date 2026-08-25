@@ -2510,14 +2510,18 @@ def test_log_annotate_report_missing_predictions(monkeypatch):
         if "did not receive a prediction" in c[0][0]
     ]
     assert calls and calls[0][0][1] == 4
-    # When missing predictions explain the empty report, do not warn.
-    mock_logger.warning.assert_not_called()
 
-    # Positional score_bins callers still bind correctly (not to
-    # the keyword-only n_missing_predictions).
+    # Positional score_bins callers still bind correctly, not to the
+    # keyword-only n_missing_predictions (which would otherwise make
+    # the missing-prediction message fire for a positional argument).
     mock_logger.reset_mock()
     utils.log_annotate_report([], None, None, [0.5])
-    mock_logger.warning.assert_called_once()
+    missing_calls = [
+        c
+        for c in mock_logger.info.call_args_list
+        if "did not receive a prediction" in c[0][0]
+    ]
+    assert not missing_calls
 
 
 def test_finish_beams(tiny_config):
