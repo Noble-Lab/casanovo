@@ -14,6 +14,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ### Fixed
 
 - Fixed the mass of the carbamylation + ammonia-loss N-terminal token to `25.979265`. The token name is deliberately left as `[+25.980265]-` because it appears in released checkpoint vocabularies.
+- Fixed training from a checkpoint failing with `TypeError` when configuration values that are not optimizer arguments (e.g. `precursor_mass_tol`) leaked into the Adam optimizer.
 
 ### Removed
 

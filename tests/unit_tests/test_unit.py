@@ -3337,3 +3337,16 @@ def test_train_cli_tracking_peak_path(tmp_path, mgf_small, monkeypatch):
     )
     assert result.exit_code == 0, result.output
     assert str(mgf_small) in captured.get("tracking", ())
+
+
+def test_optimizer_kwargs_exclude_non_adam():
+    """Non-optimizer config values must not reach the Adam optimizer."""
+    model = Spec2Pep(
+        lr=1e-3,
+        weight_decay=1e-5,
+        precursor_mass_tol=50.0,
+        isotope_error_range=(0, 1),
+    )
+    assert model.opt_kwargs == {"lr": 1e-3, "weight_decay": 1e-5}
+    optimizers, _ = model.configure_optimizers()
+    assert isinstance(optimizers[0], torch.optim.Adam)

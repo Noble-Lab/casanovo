@@ -1,6 +1,7 @@
 """A de novo peptide sequencing model."""
 
 import collections
+import inspect
 import itertools
 import logging
 import warnings
@@ -83,7 +84,8 @@ class Spec2Pep(pl.LightningModule):
     tokenizer: PeptideTokenizer | None
         Tokenizer object to process peptide sequences.
     **kwargs : Dict
-        Additional keyword arguments passed to the Adam optimizer.
+        Additional keyword arguments passed to the Adam optimizer. Only
+        valid Adam parameters are retained; any other values are ignored.
     """
 
     def __init__(
@@ -148,7 +150,10 @@ class Spec2Pep(pl.LightningModule):
                 f"Deprecated hyperparameter '{k}' removed from the model.",
                 DeprecationWarning,
             )
-        self.opt_kwargs = kwargs
+        # Keep only valid Adam arguments; other configuration values
+        # (e.g. loaded from a checkpoint) must not reach the optimizer.
+        adam_kwargs = set(inspect.signature(torch.optim.Adam).parameters)
+        self.opt_kwargs = {k: v for k, v in kwargs.items() if k in adam_kwargs}
 
         # Data properties.
         self.max_peptide_len = max_peptide_len
