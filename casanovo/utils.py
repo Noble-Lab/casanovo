@@ -178,8 +178,9 @@ def log_annotate_report(
     predictions: List[PepSpecMatch],
     start_time: Optional[float] = None,
     end_time: Optional[float] = None,
-    n_missing_predictions: int = 0,
     score_bins: Iterable[float] = SCORE_BINS,
+    *,
+    n_missing_predictions: int = 0,
 ) -> None:
     """
     Log run annotation report.
@@ -192,11 +193,11 @@ def log_annotate_report(
         The start time of the sequencing run in seconds since the epoch.
     end_time : Optional[float], default=None
         The end time of the sequencing run in seconds since the epoch.
+    score_bins: Iterable[float], Optional
+        Confidence scores for creating confidence score distribution.
     n_missing_predictions : int, default=0
         The number of spectra that did not receive a prediction because
         beam search did not return a valid peptide.
-    score_bins: Iterable[float], Optional
-        Confidence scores for creating confidence score distribution.
     """
     log_run_report(start_time=start_time, end_time=end_time)
     run_report = _get_report_dict(
@@ -210,9 +211,10 @@ def log_annotate_report(
     )
 
     if run_report is None:
-        logger.warning(
-            "No predictions were logged, this may be due to an error"
-        )
+        if n_missing_predictions == 0:
+            logger.warning(
+                "No predictions were logged, this may be due to an error"
+            )
     else:
         num_spectra = run_report["num_spectra"]
         logger.info("Sequenced %s spectra", num_spectra)

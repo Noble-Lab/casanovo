@@ -2502,10 +2502,22 @@ def test_on_predict_epoch_end_aggregates(tiny_config):
 def test_log_annotate_report_missing_predictions(monkeypatch):
     mock_logger = unittest.mock.MagicMock()
     monkeypatch.setattr("casanovo.utils.logger", mock_logger)
-    monkeypatch.setattr(utils, "log_run_report", lambda **kw: None)
+    monkeypatch.setattr(utils, "log_run_report", lambda **_: None)
     utils.log_annotate_report([], n_missing_predictions=4)
-    messages = [call[0][0] for call in mock_logger.info.call_args_list]
-    assert any("did not receive a prediction" in m for m in messages)
+    calls = [
+        c
+        for c in mock_logger.info.call_args_list
+        if "did not receive a prediction" in c[0][0]
+    ]
+    assert calls and calls[0][0][1] == 4
+    # When missing predictions explain the empty report, do not warn.
+    mock_logger.warning.assert_not_called()
+
+    # Positional score_bins callers still bind correctly (not to
+    # the keyword-only n_missing_predictions).
+    mock_logger.reset_mock()
+    utils.log_annotate_report([], None, None, [0.5])
+    mock_logger.warning.assert_called_once()
 
 
 def test_finish_beams(tiny_config):
