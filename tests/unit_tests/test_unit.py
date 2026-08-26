@@ -1,9 +1,7 @@
-import collections
 import copy
 import datetime
 import functools
 import hashlib
-import heapq
 import io
 import logging
 import os
@@ -27,6 +25,7 @@ import numpy as np
 import pandas as pd
 import pytest
 import requests
+import lightning.pytorch
 import torch
 import pyteomics.mztab
 import pyteomics.proforma
@@ -2461,6 +2460,71 @@ def test_spectrum_preprocessing(tmp_path, mgf_small):
     max_charge = 4
 
 
+def test_predict_step_counts_missing(tiny_config):
+    config = Config(tiny_config)
+    model = Spec2Pep(
+        tokenizer=depthcharge.tokenizers.peptides.PeptideTokenizer(
+            residues=config.residues
+        ),
+    )
+    # One spectrum gets a prediction; the other returns no valid peptide.
+    model.forward = unittest.mock.MagicMock(
+        return_value=[[(0.9, np.array([0.9]), "PEPK")], []]
+    )
+    batch = {
+        "peak_file": ["a.mgf", "a.mgf"],
+        "scan_id": ["index=0", "index=1"],
+        "precursor_charge": torch.tensor([2, 2]),
+        "precursor_mz": torch.tensor([100.0, 200.0]),
+    }
+    predictions = model.predict_step(batch)
+    assert len(predictions) == 1
+    assert model.n_missing_predictions == 1
+    model.on_predict_start()
+    assert model.n_missing_predictions == 0
+
+
+def test_on_predict_epoch_end_aggregates(tiny_config):
+    config = Config(tiny_config)
+    model = Spec2Pep(
+        tokenizer=depthcharge.tokenizers.peptides.PeptideTokenizer(
+            residues=config.residues
+        ),
+    )
+    # Local counts of 2 and 3 from two processes are summed.
+    model.all_gather = lambda x: x.new_tensor([2, 3])
+    model.n_missing_predictions = 2
+    model.on_predict_epoch_end()
+    assert model.n_missing_predictions == 5
+
+
+def test_log_annotate_report_missing_predictions(monkeypatch):
+    mock_logger = unittest.mock.MagicMock()
+    monkeypatch.setattr("casanovo.utils.logger", mock_logger)
+    monkeypatch.setattr(utils, "log_run_report", lambda **_: None)
+    utils.log_annotate_report([], n_missing_predictions=4)
+    calls = [
+        c
+        for c in mock_logger.info.call_args_list
+        if "did not receive a prediction" in c[0][0]
+    ]
+    assert calls and calls[0][0][1] == 4
+
+    # Positional score_bins callers still bind correctly, not to the
+    # keyword-only n_missing_predictions (which would otherwise make
+    # the missing-prediction message fire for a positional argument).
+    mock_logger.reset_mock()
+    utils.log_annotate_report([], None, None, [0.5])
+    # An empty report still warns that no predictions were logged.
+    mock_logger.warning.assert_called_once()
+    missing_calls = [
+        c
+        for c in mock_logger.info.call_args_list
+        if "did not receive a prediction" in c[0][0]
+    ]
+    assert not missing_calls
+
+
 def test_finish_beams(tiny_config):
     config = Config(tiny_config)
     model = Spec2Pep(
@@ -2687,12 +2751,16 @@ def test_cache_finished_beams(tiny_config):
     model._batch_size = batch
     model._beam_size = beam
 
-    scores = torch.zeros(
-        (beam, length, len(model.tokenizer) + 1), device=device
-    )
+    vocab = len(model.tokenizer) + 1
+    scores = torch.zeros((beam, length, vocab), device=device)
     tokens = torch.zeros((beam, length), dtype=torch.int64, device=device)
 
-    pred_cache = collections.OrderedDict((i, []) for i in range(batch))
+    cache_tokens = torch.full(
+        (batch, beam, length, length), 0, dtype=torch.int32, device=device
+    )
+    cache_scores = torch.full(
+        (batch, beam, length, length), 0.0, dtype=scores.dtype, device=device
+    )
 
     true_tok = model.tokenizer.tokenize("PEPR")[0]
     tokens[1, : step + 1] = true_tok
@@ -2702,13 +2770,17 @@ def test_cache_finished_beams(tiny_config):
     discarded = torch.tensor([False, False, False, False], device=device)
 
     model._cache_finished_beams(
-        tokens, scores, step, finished & ~discarded, pred_cache
+        tokens,
+        scores,
+        step,
+        finished & ~discarded,
+        cache_tokens,
+        cache_scores,
     )
 
-    cached = [
-        pep for (_, _, _, pep) in pred_cache[0] if torch.equal(pep, true_tok)
-    ]
-    assert len(cached) == 1
+    # Valid slots have non-zero raw probabilities; unwritten slots are 0.
+    assert cache_scores[0, 1, step].any()
+    assert torch.equal(cache_tokens[0, 1, step, : step + 1], true_tok)
 
 
 def test_get_top_peptide_ranking(tiny_config):
@@ -2719,20 +2791,29 @@ def test_get_top_peptide_ranking(tiny_config):
         )
     )
 
-    cache = collections.OrderedDict({0: []})
+    batch = 1
+    beam = 3
+    length = 10
+    step = 3
+    device = model.device
 
-    heapq.heappush(
-        cache[0], (0.93, 0.1, [0.93] * 4, model.tokenizer.tokenize("PEPY")[0])
+    cache_tokens = torch.full(
+        (batch, beam, length, length), 0, dtype=torch.int32, device=device
     )
-    heapq.heappush(
-        cache[0], (0.95, 0.2, [0.95] * 4, model.tokenizer.tokenize("PEPK")[0])
-    )
-    heapq.heappush(
-        cache[0], (0.94, 0.3, [0.94] * 4, model.tokenizer.tokenize("PEPP")[0])
+    cache_scores = torch.full(
+        (batch, beam, length, length), 0.0, dtype=torch.float32, device=device
     )
 
-    result = next(model._get_top_peptide(cache))
-    assert result[0][-1] == "PEPK"
+    seqs = ["PEPY", "PEPK", "PEPP"]
+    raw_probs = [0.93, 0.95, 0.94]
+    for b, (seq, raw) in enumerate(zip(seqs, raw_probs)):
+        toks = model.tokenizer.tokenize(seq)[0]
+        n_toks = toks.shape[0]
+        cache_tokens[0, b, step, :n_toks] = toks
+        cache_scores[0, b, step, :n_toks] = raw
+
+    result = next(model._get_top_peptide(cache_tokens, cache_scores))
+    assert result[0][2] == "PEPK"
 
 
 @pytest.mark.parametrize("topk", [1, 2, 3])
@@ -2745,15 +2826,27 @@ def test_get_top_peptide_multiple(topk, tiny_config):
         ),
     )
 
-    cache = collections.OrderedDict({0: []})
-    cache_items = [(0.9, "PEPY"), (0.8, "PEPK"), (0.7, "PEPP")]
-    for score, seq in cache_items:
-        heapq.heappush(
-            cache[0],
-            (score, 0.0, [score] * 3, model.tokenizer.tokenize(seq)[0]),
-        )
+    batch = 1
+    beam = 3
+    length = 10
+    step = 3
+    device = model.device
 
-    result = next(model._get_top_peptide(cache))
+    cache_tokens = torch.full(
+        (batch, beam, length, length), 0, dtype=torch.int32, device=device
+    )
+    cache_scores = torch.full(
+        (batch, beam, length, length), 0.0, dtype=torch.float32, device=device
+    )
+
+    cache_items = [(0.9, "PEPY"), (0.8, "PEPK"), (0.7, "PEPP")]
+    for b, (score, seq) in enumerate(cache_items):
+        toks = model.tokenizer.tokenize(seq)[0]
+        n_toks = toks.shape[0]
+        cache_tokens[0, b, step, :n_toks] = toks
+        cache_scores[0, b, step, :n_toks] = score
+
+    result = next(model._get_top_peptide(cache_tokens, cache_scores))
     assert len(result) == topk
     for i in range(topk):
         assert result[i][2] == cache_items[i][1]
@@ -2770,18 +2863,25 @@ def test_get_top_peptide_reverse(reverse, tiny_config):
 
     model.tokenizer.reverse = reverse
 
-    cache = {
-        0: [
-            (
-                1.0,
-                0.42,
-                np.array([1.0, 0.0]),
-                model.tokenizer.tokenize("PE")[0],
-            )
-        ]
-    }
+    batch = 1
+    beam = 1
+    length = 10
+    step = 1
+    device = model.device
 
-    result = list(model._get_top_peptide(cache))
+    cache_tokens = torch.full(
+        (batch, beam, length, length), 0, dtype=torch.int32, device=device
+    )
+    cache_scores = torch.full(
+        (batch, beam, length, length), 0.0, dtype=torch.float32, device=device
+    )
+
+    toks = model.tokenizer.tokenize("PE")[0]
+    n_toks = toks.shape[0]
+    cache_tokens[0, 0, step, :n_toks] = toks
+    cache_scores[0, 0, step, :n_toks] = 1.0
+
+    result = list(model._get_top_peptide(cache_tokens, cache_scores))
 
     assert len(result) == 1
     assert len(result[0]) == 1
@@ -2873,20 +2973,30 @@ def test_duplicate_peptide_scores(tiny_config):
         1, vocab, (batch * beam, step), device=device
     )
 
-    pred_cache = collections.OrderedDict((i, []) for i in range(batch))
+    cache_tokens = torch.full(
+        (batch, beam, length, length), 0, dtype=torch.int32, device=device
+    )
+    cache_scores = torch.full(
+        (batch, beam, length, length), 0.0, dtype=scores.dtype, device=device
+    )
 
     model._cache_finished_beams(
         tokens,
         scores,
         step,
         torch.ones(batch * beam, dtype=torch.bool, device=device),
-        pred_cache,
+        cache_tokens,
+        cache_scores,
     )
 
-    for _, preds in pred_cache.items():
-        assert len(preds) == beam
-        vals = [p[0] for p in preds]
-        assert np.allclose(vals, vals[0])
+    # All beams used identical scores, so every cached candidate should have
+    # the same peptide score.
+    for i in range(batch):
+        cached_scores = cache_scores[i, :, step, : step + 1]
+        cached_mask = cached_scores.any(dim=-1)
+        vals = cached_scores[cached_mask].sum(dim=-1)
+        assert cached_mask.sum() == beam
+        assert torch.allclose(vals, vals[0])
 
 
 class MiniTok:
@@ -3293,3 +3403,21 @@ def test_train_cli_tracking_peak_path(tmp_path, mgf_small, monkeypatch):
     )
     assert result.exit_code == 0, result.output
     assert str(mgf_small) in captured.get("tracking", ())
+
+
+def test_optimizer_kwargs_exclude_non_adam():
+    """Non-optimizer config values must not reach the Adam optimizer."""
+    model = Spec2Pep(
+        lr=1e-3,
+        weight_decay=1e-5,
+        precursor_mass_tol=50.0,
+        isotope_error_range=(0, 1),
+    )
+    assert model.opt_kwargs == {"lr": 1e-3, "weight_decay": 1e-5}
+    # `configure_optimizers` derives the cosine schedule period from the
+    # trainer, so one needs to be attached.
+    trainer = lightning.pytorch.Trainer(max_epochs=-1, max_steps=600)
+    model.trainer = trainer
+    optimizers, _ = model.configure_optimizers()
+    assert isinstance(optimizers[0], torch.optim.Adam)
+    assert model.cosine_schedule_period_iters == 600

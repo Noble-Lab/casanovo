@@ -965,3 +965,19 @@ def test_initialize_model_with_new_token_init_passes_validate(
         mock_validate.assert_called_once()
 
     assert runner.model.vocab_size == orig_n + 1
+
+
+def test_initialize_trainer_progress_bar(tmp_path, tiny_config):
+    """db_search hides Lightning's progress bar (#655)."""
+    config = Config(tiny_config)
+    with ModelRunner(
+        config, output_dir=tmp_path, overwrite_ckpt_check=False
+    ) as runner:
+        runner.initialize_trainer(train=True)
+        assert runner.trainer.progress_bar_callback is not None
+
+    with ModelRunner(
+        config, output_dir=tmp_path, overwrite_ckpt_check=False
+    ) as runner:
+        runner.initialize_trainer(train=True, enable_progress_bar=False)
+        assert runner.trainer.progress_bar_callback is None

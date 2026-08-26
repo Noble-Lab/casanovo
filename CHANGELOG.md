@@ -6,14 +6,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+### Added
+
+- The number of spectra that receive no prediction because beam search did not return a valid peptide is now counted and logged at the end of a sequencing run.
+
 ### Changed
 
 - `val_check_interval` now accepts a float in `[0, 1]` to validate at a fraction of each training epoch, in addition to an integer number of training steps.
 - The cosine half period of the learning rate schedule now spans the total number of training steps, so after the warm-up the learning rate only decreases, ending near zero on the final step. Previously, training past `cosine_schedule_period_iters` caused the learning rate to increase again.
+- Beam search is sped up by caching finished beams and selecting the top-scoring beam fully on the GPU.
 
 ### Fixed
 
+- The database search progress bar now updates in place instead of printing a new line per refresh, by disabling Lightning's competing progress bar during database search.
 - Fixed the mass of the carbamylation + ammonia-loss N-terminal token to `25.979265`. The token name is deliberately left as `[+25.980265]-` because it appears in released checkpoint vocabularies.
+- Fixed training from a checkpoint failing with `TypeError` when configuration values that are not optimizer arguments (e.g. `precursor_mass_tol`) leaked into the Adam optimizer.
 
 ### Removed
 
