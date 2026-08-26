@@ -123,8 +123,9 @@ dropout: 0.0
 dim_intensity:
 # The number of iterations for the linear warm-up of the learning rate.
 warmup_iters: 100_000
-# The number of iterations for the cosine half period of the learning rate.
-cosine_schedule_period_iters: 600_000
+# After the warm-up, the learning rate follows a half period of cosine decay
+# spanning the total number of training steps, so it only ever decreases; see
+# Spec2Pep.configure_optimizers.
 # Learning rate for weight updates during training.
 learning_rate: 5e-4
 # Regularization term for weight updates.

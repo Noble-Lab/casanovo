@@ -73,9 +73,6 @@ class Spec2Pep(pl.LightningModule):
     warmup_iters : int
         The number of iterations for the linear warm-up of the learning
         rate.
-    cosine_schedule_period_iters : int
-        The number of iterations for the cosine half period of the
-        learning rate.
     out_writer : ms_io.MztabWriter | None
         The output writer for the prediction results.
     calculate_precision : bool
@@ -103,7 +100,6 @@ class Spec2Pep(pl.LightningModule):
         n_log: int = 10,
         train_label_smoothing: float = 0.01,
         warmup_iters: int = 100_000,
-        cosine_schedule_period_iters: int = 600_000,
         out_writer: Optional[ms_io.MztabWriter] = None,
         calculate_precision: bool = False,
         tokenizer: PeptideTokenizer | None = None,
@@ -137,9 +133,11 @@ class Spec2Pep(pl.LightningModule):
             ignore_index=ignore_index, label_smoothing=train_label_smoothing
         )
         self.val_celoss = torch.nn.CrossEntropyLoss(ignore_index=ignore_index)
-        # Optimizer settings.
+        # Optimizer settings. The cosine schedule period is derived
+        # from the total number of training steps in
+        # `configure_optimizers`.
         self.warmup_iters = warmup_iters
-        self.cosine_schedule_period_iters = cosine_schedule_period_iters
+        self.cosine_schedule_period_iters = None
         # `kwargs` will contain additional arguments as well as
         # unrecognized arguments, including deprecated ones. Remove the
         # deprecated ones.
@@ -1108,6 +1106,9 @@ class Spec2Pep(pl.LightningModule):
         Initialize the optimizer.
 
         We use the Adam optimizer with a cosine learning rate scheduler.
+        The cosine half period spans the total number of training steps,
+        so after the warm-up the learning rate only ever decreases,
+        ending near zero on the final step.
 
         Returns
         -------
@@ -1115,6 +1116,9 @@ class Spec2Pep(pl.LightningModule):
             The initialized Adam optimizer and its learning rate
             scheduler.
         """
+        self.cosine_schedule_period_iters = int(
+            self.trainer.estimated_stepping_batches
+        )
         optimizer = torch.optim.Adam(self.parameters(), **self.opt_kwargs)
         # Apply learning rate scheduler per step.
         lr_scheduler = CosineWarmupScheduler(
