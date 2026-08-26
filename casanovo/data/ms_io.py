@@ -240,7 +240,7 @@ class MztabWriter:
             # Evaluation columns are present only when sequencing with
             # the --evaluate flag against annotated spectra.
             include_eval_cols = any(
-                psm.precision is not None for psm in self.psms
+                psm.precision != "null" for psm in self.psms
             )
             writer.writerow(
                 [
@@ -332,21 +332,9 @@ class MztabWriter:
                 if include_eval_cols:
                     row.extend(
                         [
-                            (
-                                psm.ground_truth_sequence
-                                if psm.ground_truth_sequence is not None
-                                else "null"
-                            ),
-                            (
-                                psm.precision
-                                if psm.precision is not None
-                                else "null"
-                            ),
-                            (
-                                psm.coverage
-                                if psm.coverage is not None
-                                else "null"
-                            ),
+                            psm.ground_truth_sequence,
+                            psm.precision,
+                            psm.coverage,
                         ]
                     )
                 writer.writerow(row)

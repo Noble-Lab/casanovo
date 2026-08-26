@@ -46,9 +46,11 @@ class PepSpecMatch:
     aa_scores: Iterable[float]
     protein: str = "null"
     # Evaluation results, populated only when sequencing with --evaluate.
-    ground_truth_sequence: Optional[str] = None
-    precision: Optional[float] = None
-    coverage: Optional[float] = None
+    # The "null" default doubles as the mzTab empty-value token, so no
+    # None handling is needed when exporting these columns.
+    ground_truth_sequence: str = "null"
+    precision: float | str = "null"
+    coverage: float | str = "null"
 
     # Private properties to handle proteoform caching
     _proteoform_sequence: Optional[str] = dataclasses.field(
