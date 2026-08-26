@@ -583,6 +583,51 @@ def test_log_metrics(
             assert pep_precision == pytest.approx(expected_pep)
             assert aa_precision == pytest.approx(expected_aa_prec)
             assert aa_recall == pytest.approx(expected_aa_rec)
+            # Scores are NaN in this fixture, so no prediction is ranked.
+            assert runner.average_precision == 0.0
+
+
+def test_log_metrics_attaches_eval(monkeypatch, tiny_config):
+    """Precision, coverage, and the ground truth are attached to PSMs."""
+    tokenizer = depthcharge.tokenizers.peptides.PeptideTokenizer()
+
+    def mock_psm(sequence, idx, score):
+        return PepSpecMatch(
+            sequence=sequence,
+            spectrum_id=("foo", f"index={idx}"),
+            peptide_score=score,
+            charge=2,
+            calc_mz=0.0,
+            exp_mz=0.0,
+            aa_scores=[],
+        )
+
+    # Two spectra: the first prediction is correct, the second is wrong.
+    true_psms = [mock_psm("PEPK", 0, np.nan), mock_psm("PEPR", 1, np.nan)]
+    pred_psms = [mock_psm("PEPK", 0, 0.9), mock_psm("PEPT", 1, 0.4)]
+    loader = [
+        {
+            "peak_file": [p.spectrum_id[0] for p in true_psms],
+            "scan_id": [p.spectrum_id[1] for p in true_psms],
+            "seq": tokenizer.tokenize([p.sequence for p in true_psms]),
+        }
+    ]
+
+    with ModelRunner(Config(tiny_config)) as runner:
+        runner.writer = unittest.mock.MagicMock()
+        runner.writer.psms = pred_psms
+        runner.tokenizer = tokenizer
+        runner.log_metrics(loader)
+
+    # Ranked by score: PEPK (0.9, correct) then PEPT (0.4, wrong).
+    assert pred_psms[0].ground_truth_sequence == "PEPK"
+    assert pred_psms[0].precision == pytest.approx(1.0)
+    assert pred_psms[0].coverage == pytest.approx(0.5)
+    assert pred_psms[1].ground_truth_sequence == "PEPR"
+    assert pred_psms[1].precision == pytest.approx(0.5)
+    assert pred_psms[1].coverage == pytest.approx(1.0)
+    # Average precision = 1.0 * 0.5 + 0.5 * 0.5 = 0.75.
+    assert runner.average_precision == pytest.approx(0.75)
 
 
 @pytest.mark.parametrize(

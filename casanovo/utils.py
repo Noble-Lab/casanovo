@@ -181,6 +181,7 @@ def log_annotate_report(
     score_bins: Iterable[float] = SCORE_BINS,
     *,
     n_missing_predictions: int = 0,
+    average_precision: Optional[float] = None,
 ) -> None:
     """
     Log run annotation report.
@@ -198,6 +199,9 @@ def log_annotate_report(
     n_missing_predictions : int, default=0
         The number of spectra that did not receive a prediction because
         beam search did not return a valid peptide.
+    average_precision : Optional[float], default=None
+        The average precision (area under the precision-coverage curve),
+        reported when sequencing with evaluation.
     """
     log_run_report(start_time=start_time, end_time=end_time)
     run_report = _get_report_dict(
@@ -242,6 +246,9 @@ def log_annotate_report(
             "did not return a valid peptide",
             n_missing_predictions,
         )
+
+    if average_precision is not None:
+        logger.info("Average Precision: %.4f", average_precision)
 
 
 def check_dir_file_exists(
