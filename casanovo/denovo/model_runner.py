@@ -145,7 +145,7 @@ class ModelRunner:
             config_filename=self.config.file,
         )
         self.writer.set_database(str(fasta_path))
-        self.initialize_trainer(train=True)
+        self.initialize_trainer(train=True, enable_progress_bar=False)
         self.initialize_tokenizer()
         self.initialize_model(train=False, db_search=True)
         self.model.out_writer = self.writer
@@ -350,7 +350,9 @@ class ModelRunner:
         if evaluate:
             self.log_metrics(predict_dataloader)
 
-    def initialize_trainer(self, train: bool) -> None:
+    def initialize_trainer(
+        self, train: bool, *, enable_progress_bar: bool = True
+    ) -> None:
         """
         Initialize the Pytorch Lightning Trainer.
 
@@ -359,6 +361,9 @@ class ModelRunner:
         train : bool
             Determines whether to set the trainer up for model training
             or evaluation / inference.
+        enable_progress_bar : bool
+            Whether to show Lightning's progress bar. Disabled for database
+            search, which shows its own "Scoring candidates" bar.
         """
         trainer_cfg = dict(
             accelerator=self.config.accelerator,
@@ -366,6 +371,7 @@ class ModelRunner:
             enable_checkpointing=False,
             precision=self.config.precision,
             logger=False,
+            enable_progress_bar=enable_progress_bar,
         )
 
         if train:
