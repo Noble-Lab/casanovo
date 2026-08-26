@@ -9,6 +9,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ### Added
 
 - The number of spectra that receive no prediction because beam search did not return a valid peptide is now counted and logged at the end of a sequencing run.
+- When sequencing with `--evaluate`, the ground truth sequence and the precision and coverage at each prediction are added as columns to the mzTab output, and the average precision (area under the precision-coverage curve) is reported in the end-of-run report.
 
 ### Changed
 

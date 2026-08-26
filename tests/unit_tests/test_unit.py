@@ -34,7 +34,12 @@ from casanovo.casanovo import _SharedFileIOParams
 from casanovo.config import Config
 from casanovo.data import db_utils, ms_io, psm
 from casanovo.denovo.dataloaders import DeNovoDataModule
-from casanovo.denovo.evaluate import aa_match, aa_match_batch, aa_match_metrics
+from casanovo.denovo.evaluate import (
+    aa_match,
+    aa_match_batch,
+    aa_match_metrics,
+    precision_coverage,
+)
 from casanovo.denovo.model import (
     DbSpec2Pep,
     Spec2Pep,
@@ -280,6 +285,49 @@ def test_mztab_save(tiny_config, tmp_path):
     writer.save()
 
     assert file.is_file()
+
+
+def test_mztab_save_eval_columns(tiny_config, tmp_path):
+    """Evaluation results are exported as additional mzTab columns."""
+    file = tmp_path / "test.mztab"
+    writer = ms_io.MztabWriter(file)
+    writer.set_metadata(Config(tiny_config))
+    writer.set_ms_run(["test.mgf"])
+    writer.psms = [
+        psm.PepSpecMatch(
+            sequence="AAAA",
+            spectrum_id=("test.mgf", "0"),
+            peptide_score=1.0,
+            charge=3,
+            calc_mz=100.0,
+            exp_mz=100.0,
+            aa_scores=[0.5, 0.5, 0.5, 0.5],
+            ground_truth_sequence="AAAK",
+            precision=1.0,
+            coverage=0.5,
+        )
+    ]
+    writer.save()
+
+    lines = file.read_text(encoding="utf-8").splitlines()
+    header = next(ln for ln in lines if ln.startswith("PSH")).split("\t")
+    fields = next(ln for ln in lines if ln.startswith("PSM")).split("\t")
+    assert fields[header.index("opt_global_ground_truth_sequence")] == "AAAK"
+    assert fields[header.index("opt_global_precision")] == "1.0"
+    assert fields[header.index("opt_global_coverage")] == "0.5"
+
+
+def test_log_annotate_report_average_precision(monkeypatch):
+    mock_logger = unittest.mock.MagicMock()
+    monkeypatch.setattr("casanovo.utils.logger", mock_logger)
+    monkeypatch.setattr(utils, "log_run_report", lambda **_: None)
+    utils.log_annotate_report([], average_precision=0.75)
+    calls = [
+        c
+        for c in mock_logger.info.call_args_list
+        if "Average Precision" in c[0][0]
+    ]
+    assert calls and calls[0][0][1] == 0.75
 
 
 def test_version():
@@ -2218,6 +2266,26 @@ def test_run_map(mgf_small):
     out_writer.set_ms_run([os.path.basename(mgf_small.name)])
     assert mgf_small.name in out_writer._run_map
     assert os.path.abspath(mgf_small.name) not in out_writer._run_map
+
+
+def test_precision_coverage():
+    scores = [0.6, 0.9, 0.7, 0.8]
+    pep_matches = [False, True, True, False]
+    order, coverage, precision = precision_coverage(
+        scores, pep_matches, n_spectra=5
+    )
+    # Ranked by decreasing score (0.9, 0.8, 0.7, 0.6) -> indices 1, 3, 2, 0.
+    assert list(order) == [1, 3, 2, 0]
+    # Matches in that order (True, False, True, False) -> cumsum 1, 1, 2, 2.
+    np.testing.assert_allclose(precision, [1.0, 0.5, 2 / 3, 0.5])
+    np.testing.assert_allclose(coverage, [0.2, 0.4, 0.6, 0.8])
+
+    # Tied scores keep their original order (stable sort).
+    order, coverage, precision = precision_coverage(
+        [0.5, 0.5, 0.9], [True, False, True], n_spectra=3
+    )
+    assert list(order) == [2, 0, 1]
+    np.testing.assert_allclose(precision, [1.0, 1.0, 2 / 3])
 
 
 def test_set_database(tmp_path):

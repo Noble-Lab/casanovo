@@ -45,6 +45,10 @@ class PepSpecMatch:
     exp_mz: float
     aa_scores: Iterable[float]
     protein: str = "null"
+    # Evaluation results, populated only when sequencing with --evaluate.
+    ground_truth_sequence: Optional[str] = None
+    precision: Optional[float] = None
+    coverage: Optional[float] = None
 
     # Private properties to handle proteoform caching
     _proteoform_sequence: Optional[str] = dataclasses.field(

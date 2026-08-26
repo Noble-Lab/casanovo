@@ -210,6 +210,7 @@ def sequence(
             start_time=start_time,
             end_time=time.time(),
             n_missing_predictions=runner.model.n_missing_predictions,
+            average_precision=runner.average_precision,
         )
 
 
@@ -293,6 +294,7 @@ def db_search(
             start_time=start_time,
             end_time=time.time(),
             n_missing_predictions=runner.model.n_missing_predictions,
+            average_precision=runner.average_precision,
         )
 
 

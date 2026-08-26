@@ -237,6 +237,11 @@ class MztabWriter:
                 writer.writerow(["MTD", *row])
             # Write PSMs.
             include_scan_col = bool(self._mgf_scan_index)
+            # Evaluation columns are present only when sequencing with
+            # the --evaluate flag against annotated spectra.
+            include_eval_cols = any(
+                psm.precision is not None for psm in self.psms
+            )
             writer.writerow(
                 [
                     "PSH",
@@ -263,6 +268,15 @@ class MztabWriter:
                     *(
                         ["opt_global_cv_MS:1003057_scan_number"]
                         if include_scan_col
+                        else []
+                    ),
+                    *(
+                        [
+                            "opt_global_ground_truth_sequence",
+                            "opt_global_precision",
+                            "opt_global_coverage",
+                        ]
+                        if include_eval_cols
                         else []
                     ),
                 ]
@@ -314,5 +328,25 @@ class MztabWriter:
                         f"ms_run[{run_idx}]:scan={scan_num}"
                         if scan_num
                         else "null"
+                    )
+                if include_eval_cols:
+                    row.extend(
+                        [
+                            (
+                                psm.ground_truth_sequence
+                                if psm.ground_truth_sequence is not None
+                                else "null"
+                            ),
+                            (
+                                psm.precision
+                                if psm.precision is not None
+                                else "null"
+                            ),
+                            (
+                                psm.coverage
+                                if psm.coverage is not None
+                                else "null"
+                            ),
+                        ]
                     )
                 writer.writerow(row)
