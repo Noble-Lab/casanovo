@@ -2459,6 +2459,71 @@ def test_spectrum_preprocessing(tmp_path, mgf_small):
     max_charge = 4
 
 
+def test_predict_step_counts_missing(tiny_config):
+    config = Config(tiny_config)
+    model = Spec2Pep(
+        tokenizer=depthcharge.tokenizers.peptides.PeptideTokenizer(
+            residues=config.residues
+        ),
+    )
+    # One spectrum gets a prediction; the other returns no valid peptide.
+    model.forward = unittest.mock.MagicMock(
+        return_value=[[(0.9, np.array([0.9]), "PEPK")], []]
+    )
+    batch = {
+        "peak_file": ["a.mgf", "a.mgf"],
+        "scan_id": ["index=0", "index=1"],
+        "precursor_charge": torch.tensor([2, 2]),
+        "precursor_mz": torch.tensor([100.0, 200.0]),
+    }
+    predictions = model.predict_step(batch)
+    assert len(predictions) == 1
+    assert model.n_missing_predictions == 1
+    model.on_predict_start()
+    assert model.n_missing_predictions == 0
+
+
+def test_on_predict_epoch_end_aggregates(tiny_config):
+    config = Config(tiny_config)
+    model = Spec2Pep(
+        tokenizer=depthcharge.tokenizers.peptides.PeptideTokenizer(
+            residues=config.residues
+        ),
+    )
+    # Local counts of 2 and 3 from two processes are summed.
+    model.all_gather = lambda x: x.new_tensor([2, 3])
+    model.n_missing_predictions = 2
+    model.on_predict_epoch_end()
+    assert model.n_missing_predictions == 5
+
+
+def test_log_annotate_report_missing_predictions(monkeypatch):
+    mock_logger = unittest.mock.MagicMock()
+    monkeypatch.setattr("casanovo.utils.logger", mock_logger)
+    monkeypatch.setattr(utils, "log_run_report", lambda **_: None)
+    utils.log_annotate_report([], n_missing_predictions=4)
+    calls = [
+        c
+        for c in mock_logger.info.call_args_list
+        if "did not receive a prediction" in c[0][0]
+    ]
+    assert calls and calls[0][0][1] == 4
+
+    # Positional score_bins callers still bind correctly, not to the
+    # keyword-only n_missing_predictions (which would otherwise make
+    # the missing-prediction message fire for a positional argument).
+    mock_logger.reset_mock()
+    utils.log_annotate_report([], None, None, [0.5])
+    # An empty report still warns that no predictions were logged.
+    mock_logger.warning.assert_called_once()
+    missing_calls = [
+        c
+        for c in mock_logger.info.call_args_list
+        if "did not receive a prediction" in c[0][0]
+    ]
+    assert not missing_calls
+
+
 def test_finish_beams(tiny_config):
     config = Config(tiny_config)
     model = Spec2Pep(

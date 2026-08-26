@@ -167,6 +167,8 @@ class Spec2Pep(pl.LightningModule):
         self.calculate_precision = calculate_precision
         self.n_log = n_log
         self._history = []
+        # Count of spectra for which beam search returned no valid peptide.
+        self.n_missing_predictions = 0
         # Per-file validation metadata; set by ModelRunner.train() before fit.
         self.val_stems: list = []
         self.n_main_loaders: int = 0
@@ -1016,6 +1018,9 @@ class Spec2Pep(pl.LightningModule):
             batch["precursor_mz"],
             self.forward(batch),
         ):
+            if not spectrum_preds:
+                self.n_missing_predictions += 1
+                continue
             for peptide_score, aa_scores, peptide in spectrum_preds:
                 predictions.append(
                     psm.PepSpecMatch(
@@ -1073,6 +1078,18 @@ class Spec2Pep(pl.LightningModule):
                 )
         self._history.append(metrics)
         self._log_history()
+
+    def on_predict_start(self) -> None:
+        """Reset the count of spectra without a prediction."""
+        self.n_missing_predictions = 0
+
+    def on_predict_epoch_end(self) -> None:
+        """Aggregate the missing-prediction count across devices."""
+        self.n_missing_predictions = int(
+            self.all_gather(
+                torch.tensor(self.n_missing_predictions, device=self.device)
+            ).sum()
+        )
 
     def on_predict_batch_end(
         self, outputs: List[psm.PepSpecMatch], *args
