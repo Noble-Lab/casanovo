@@ -146,15 +146,14 @@ MTD	software[1]-setting[33]	n_layers = 9
 MTD	software[1]-setting[34]	dropout = 0.0
 MTD	software[1]-setting[35]	dim_intensity = None
 MTD	software[1]-setting[36]	warmup_iters = 100000
-MTD	software[1]-setting[37]	cosine_schedule_period_iters = 600000
-MTD	software[1]-setting[38]	learning_rate = 0.0005
-MTD	software[1]-setting[39]	weight_decay = 1e-05
-MTD	software[1]-setting[40]	train_label_smoothing = 0.01
-MTD	software[1]-setting[41]	train_batch_size = 32
-MTD	software[1]-setting[42]	max_epochs = 30
-MTD	software[1]-setting[43]	num_sanity_val_steps = 0
-MTD	software[1]-setting[44]	calculate_precision = False
-MTD	software[1]-setting[46]	n_workers = 20
+MTD	software[1]-setting[37]	learning_rate = 0.0005
+MTD	software[1]-setting[38]	weight_decay = 1e-05
+MTD	software[1]-setting[39]	train_label_smoothing = 0.01
+MTD	software[1]-setting[40]	train_batch_size = 32
+MTD	software[1]-setting[41]	max_epochs = 30
+MTD	software[1]-setting[42]	num_sanity_val_steps = 0
+MTD	software[1]-setting[43]	calculate_precision = False
+MTD	software[1]-setting[45]	n_workers = 20
 MTD	ms_run[1]-location	file://[...]/my_example_input.mgf
 ```
 
