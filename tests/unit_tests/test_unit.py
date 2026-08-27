@@ -28,12 +28,13 @@ import requests
 import torch
 import pyteomics.mztab
 import pyteomics.proforma
+import spectrum_utils.spectrum as sus
 
 from casanovo import casanovo, denovo, utils
 from casanovo.casanovo import _SharedFileIOParams
 from casanovo.config import Config
 from casanovo.data import db_utils, ms_io, psm
-from casanovo.denovo.dataloaders import DeNovoDataModule
+from casanovo.denovo.dataloaders import DeNovoDataModule, _deduplicate_mz
 from casanovo.denovo.evaluate import aa_match, aa_match_batch, aa_match_metrics
 from casanovo.denovo.model import (
     DbSpec2Pep,
@@ -2218,6 +2219,30 @@ def test_run_map(mgf_small):
     out_writer.set_ms_run([os.path.basename(mgf_small.name)])
     assert mgf_small.name in out_writer._run_map
     assert os.path.abspath(mgf_small.name) not in out_writer._run_map
+
+
+def test_deduplicate_mz():
+    """Repeated m/z values are merged, summing their intensities (#272)."""
+    spectrum = sus.MsmsSpectrum(
+        "test",
+        500.0,
+        2,
+        np.array([100.0, 100.0, 200.0, 300.0, 300.0]),
+        np.array([1.0, 2.0, 5.0, 3.0, 4.0]),
+    )
+    _deduplicate_mz(spectrum)
+    np.testing.assert_allclose(spectrum.mz, [100.0, 200.0, 300.0])
+    np.testing.assert_allclose(spectrum.intensity, [3.0, 5.0, 7.0])
+
+
+def test_deduplicate_mz_no_duplicates():
+    """Spectra without repeated m/z values are left unchanged (#272)."""
+    mz = np.array([100.0, 200.0, 300.0])
+    intensity = np.array([1.0, 2.0, 3.0])
+    spectrum = sus.MsmsSpectrum("test", 500.0, 2, mz, intensity)
+    _deduplicate_mz(spectrum)
+    np.testing.assert_allclose(spectrum.mz, mz)
+    np.testing.assert_allclose(spectrum.intensity, intensity)
 
 
 def test_set_database(tmp_path):
