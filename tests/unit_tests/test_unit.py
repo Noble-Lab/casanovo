@@ -2235,6 +2235,16 @@ def test_deduplicate_mz():
     np.testing.assert_allclose(spectrum.intensity, [3.0, 5.0, 7.0])
 
 
+def test_deduplicate_mz_no_duplicates():
+    """Spectra without repeated m/z values are left unchanged (#272)."""
+    mz = np.array([100.0, 200.0, 300.0])
+    intensity = np.array([1.0, 2.0, 3.0])
+    spectrum = sus.MsmsSpectrum("test", 500.0, 2, mz, intensity)
+    _deduplicate_mz(spectrum)
+    np.testing.assert_allclose(spectrum.mz, mz)
+    np.testing.assert_allclose(spectrum.intensity, intensity)
+
+
 def test_set_database(tmp_path):
     """Test that set_database populates PSM database columns."""
     fasta = tmp_path / "test.fasta"
