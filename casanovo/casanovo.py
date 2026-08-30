@@ -1005,7 +1005,9 @@ def _download_weights(file_url: str, download_path: Path) -> None:
     """
     download_file_dir = download_path.parent
     os.makedirs(download_file_dir, exist_ok=True)
-    response = requests.get(file_url, stream=True, allow_redirects=True)
+    response = requests.get(
+        file_url, stream=True, allow_redirects=True, timeout=30
+    )
     response.raise_for_status()
     file_size = int(response.headers.get("Content-Length", 0))
     desc = "(Unknown total file size)" if file_size == 0 else ""
