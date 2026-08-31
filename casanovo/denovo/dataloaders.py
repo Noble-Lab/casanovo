@@ -384,7 +384,7 @@ class DeNovoDataModule(pl.LightningDataModule):
         Returns
         -------
         Iterator[pl.DataFrame]
-            An iterator of dataframes with the centered spectra
+            An iterator of dataframes with the centered spectra.
         """
         for spectra in paths:
             file_records = []
@@ -492,7 +492,7 @@ class DeNovoDataModule(pl.LightningDataModule):
         Returns
         -------
         np.array
-            Arrays of the m/z values and intensity values
+            Arrays of the m/z values and intensity values.
         """
         mzs = spec["m/z array"]
         intensities = spec["intensity array"]
@@ -535,21 +535,21 @@ class DeNovoDataModule(pl.LightningDataModule):
         Parameters
         ----------
         mzml_file : Path
-            A path to the mzML file
+            A path to the mzML file.
         f_to_mzrt_to_pep : dict[int, dict[tuple[int, int], list[tuple[float, float, int]]]]
-            Partitions of the file into 50,000 spectra chunks then separated based on m/z, RT and charge
+            Partitions of the file into 50,000 spectra chunks then separated based on m/z, RT and charge.
         part : int
-            Current partition
+            Current partition.
         top_n : int
-            Number of most intense peaks to choose
+            Number of most intense peaks to choose.
         time_width : int
-            Width of scan
+            Width of scan.
 
         Returns
         -------
         dict[tuple, dict[str, tuple]]
             Dictionary keyed by m/z, retention time, and charge tuples with one entry per precursor in
-            f_to_mzrt_to_pep that was matched to at least one scan in the mzML file
+            f_to_mzrt_to_pep that was matched to at least one scan in the mzML file.
         """
         prec_to_spec = {}
         bins_by_rt = {}
