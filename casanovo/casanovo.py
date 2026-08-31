@@ -1,15 +1,8 @@
 """The command line entry point for Casanovo."""
 
-import datetime
-import functools
-import hashlib
 import logging
-import os
 import re
-import shutil
-import sys
 import time
-import urllib.parse
 import warnings
 from pathlib import Path
 from typing import Optional, Tuple
@@ -31,12 +24,7 @@ warnings.filterwarnings(
     ".*Converting mask without torch.bool dtype to bool*",
 )
 
-import appdirs
-import github
-import requests
 import rich_click as click
-import tqdm
-from lightning.pytorch import seed_everything
 from .shared_loading import (
     _SharedFileIOParams,
     _SharedParams,
