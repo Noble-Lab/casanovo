@@ -24,10 +24,6 @@ from .denovo import ModelRunner
 from .shared_loading import (
     _SharedFileIOParams,
     _SharedParams,
-    _DEFAULT_MODEL_ID,
-    _get_model_weights,
-    _is_valid_url,
-    _get_weights_from_url,
     _setup_output,
     setup_model,
 )
@@ -156,3 +152,7 @@ def version() -> None:
     """Get the Casanovo version information."""
     _setup_output(None, None, True, "info", "cascadia")
     utils.log_system_info(model="Cascadia", version=__version__)
+
+
+if __name__ == "__main__":
+    main()

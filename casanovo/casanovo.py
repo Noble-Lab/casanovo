@@ -1,15 +1,8 @@
 """The command line entry point for Casanovo."""
 
-import datetime
-import functools
-import hashlib
 import logging
-import os
 import re
-import shutil
-import sys
 import time
-import urllib.parse
 import warnings
 from pathlib import Path
 from typing import Optional, Tuple
@@ -31,12 +24,7 @@ warnings.filterwarnings(
     ".*Converting mask without torch.bool dtype to bool*",
 )
 
-import appdirs
-import github
-import requests
 import rich_click as click
-import tqdm
-from lightning.pytorch import seed_everything
 from .shared_loading import (
     _SharedFileIOParams,
     _SharedParams,
@@ -56,8 +44,6 @@ click.rich_click.STYLE_HELPTEXT = ""
 click.rich_click.SHOW_ARGUMENTS = True
 
 from .version import _get_version
-_MODEL_WEIGHT_REQUEST_TIMEOUT = 30
-
 
 __version__ = _get_version("casanovo")
 
@@ -404,7 +390,7 @@ def configure(
 
     config_path = str(output_path / config_fname)
     Config.copy_default(config_path)
-    logger.info(f"Wrote {config_path}
+    logger.info(f"Wrote {config_path}")
 
 
 if __name__ == "__main__":
