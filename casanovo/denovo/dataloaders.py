@@ -5,7 +5,7 @@ import logging
 import math
 import os
 import pathlib
-from typing import Optional, Sequence
+from typing import Optional, Sequence, Iterator
 
 import lance
 import lightning.pytorch as pl
@@ -178,6 +178,8 @@ class DeNovoDataModule(pl.LightningDataModule):
             _scale_to_unit_norm,
         ]
         self.valid_charge = np.arange(1, max_charge + 1)
+        self.max_peaks = max_peaks
+        self.max_charge = max_charge
         self.ms_level = ms_level
         self.scan_width = scan_width
 
@@ -367,14 +369,30 @@ class DeNovoDataModule(pl.LightningDataModule):
 
         return dataset
 
-    def _dia_to_dataframe(self, paths, annotated):
+    def _dia_to_dataframe(self, paths, annotated) -> Iterator["pl.DataFrame"]:
+        """
+        Make spectrum dataframes.
+
+        Parameters
+        ----------
+        paths : Iterable[str]
+            Paths to read the spectrum input data from.
+        annotated: bool
+            True if peptide sequence annotations are available for the
+            test data.
+
+        Returns
+        -------
+        Iterator[pl.DataFrame]
+            An iterator of dataframes with the centered spectra
+        """
         for spectra in paths:
             file_records = []
             skipped = 0
-            f_to_mzrt_to_pep, max_mz, window_size, cycle_time = (
+            f_to_mzrt_to_pep, max_mz, _window_size, cycle_time = (
                 self._get_centers(spectra)
             )
-            for part in f_to_mzrt_to_pep.keys():
+            for part in f_to_mzrt_to_pep:
                 prec_to_spec = self._extract_spectra(
                     spectra,
                     f_to_mzrt_to_pep,
@@ -470,6 +488,11 @@ class DeNovoDataModule(pl.LightningDataModule):
         sqrt_passes : int
             Number of sqrt scaling passes. MS1 uses 2 (fourth-root) to
             compress its wider dynamic range; MS2 uses 1.
+
+        Returns
+        -------
+        np.array
+            Arrays of the m/z values and intensity values
         """
         mzs = spec["m/z array"]
         intensities = spec["intensity array"]
@@ -505,8 +528,29 @@ class DeNovoDataModule(pl.LightningDataModule):
         entry.setdefault(rts_key, []).append(rt_offset)
 
     def _extract_spectra(
-        self, mzml_file, f_to_mzrt_to_pep, part, top_n, time_width, max_mz
-    ):
+        self, mzml_file, f_to_mzrt_to_pep, part, top_n, time_width
+    ) -> dict[tuple, dict[str, tuple]]:
+        """Creates a dictionary of precursors with at least one matched scan
+
+        Parameters
+        ----------
+        mzml_file : Path
+            A path to the mzML file
+        f_to_mzrt_to_pep : dict[int, dict[tuple[int, int], list[tuple[float, float, int]]]]
+            Partitions of the file into 50,000 spectra chunks then separated based on m/z, RT and charge
+        part : int
+            Current partition
+        top_n : int
+            Number of most intense peaks to choose
+        time_width : int
+            Width of scan
+
+        Returns
+        -------
+        dict[tuple, dict[str, tuple]]
+            Dictionary keyed by m/z, retention time, and charge tuples with one entry per precursor in
+            f_to_mzrt_to_pep that was matched to at least one scan in the mzML file
+        """
         prec_to_spec = {}
         bins_by_rt = {}
         for (scan_window, scan_rt), entries in f_to_mzrt_to_pep[part].items():
@@ -521,7 +565,7 @@ class DeNovoDataModule(pl.LightningDataModule):
                         spec, top_n, sqrt_passes=2
                     )
                     for scan_rt in range(
-                        int(cur_rt / 10) - 1, int(cur_rt / 10) + 1
+                        int(cur_rt / 10) - 1, int(cur_rt / 10) + 2
                     ):
                         for scan_window, entries in bins_by_rt.get(
                             scan_rt
@@ -594,6 +638,33 @@ class DeNovoDataModule(pl.LightningDataModule):
         return prec_to_spec
 
     def _get_centers(self, mzml_file):
+        """
+        Bin MS2 precursor windows by m/z and retention time for fast lookup.
+
+        Parameters
+        ----------
+        mzml_file : str
+            Path to the mzML file to index.
+
+        Returns
+        -------
+        f_to_mzrt_to_pep : dict[int, dict[tuple[int, int], list[tuple[float, float, int]]]]
+            Nested lookup keyed by chunk index then the transformed cycle type.
+            Each value is a list of (window_center, cur_rt, charge) where the charge
+            is a placeholder.
+        max_mz : int
+            The largest observed isolation-window m/z bin.
+        window_size : float
+            Isolation window width from the last MS2 spectrum processed.
+        cycle_time : float
+            Time (seconds) between the two most recent MS1 scans, taken from the last
+            MS1 spectrum processed.
+
+        Raises
+        ------
+        ValueError
+            If the file contains no MS1 scans or no MS2 scans.
+        """
         f_to_mzrt_to_pep = {}
         max_mz = 0
         num_spectra = 0
