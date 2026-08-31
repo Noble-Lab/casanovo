@@ -24,7 +24,7 @@ from .denovo import ModelRunner
 from .shared_loading import (
     _SharedFileIOParams,
     _SharedParams,
-    _setup_output,
+    setup_output,
     setup_model,
 )
 from .version import _get_version
@@ -83,7 +83,7 @@ def sequence(
     force_overwrite: bool,
     evaluate: bool,
 ) -> None:
-    output_path, output_root_name = _setup_output(
+    output_path, output_root_name = setup_output(
         output_dir, output_root, force_overwrite, verbosity, "cascadia"
     )
 
@@ -134,7 +134,7 @@ def configure(
     The Casanovo configuration file is in the YAML format.
     """
     utils.log_system_info(model="Cascadia", version=__version__)
-    output_path, _ = _setup_output(
+    output_path, _ = setup_output(
         output_dir, output_root, force_overwrite, verbosity, "cascadia"
     )
     config_fname = output_root if output_root is not None else "cascadia"
@@ -150,7 +150,7 @@ def configure(
 @main.command()
 def version() -> None:
     """Get the Casanovo version information."""
-    _setup_output(None, None, True, "info", "cascadia")
+    setup_output(None, None, True, "info", "cascadia")
     utils.log_system_info(model="Cascadia", version=__version__)
 
 
