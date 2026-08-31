@@ -29,7 +29,7 @@ from .shared_loading import (
     _SharedFileIOParams,
     _SharedParams,
     _is_valid_model,
-    setup_output,
+    _setup_output,
     setup_model,
 )
 
@@ -117,7 +117,7 @@ def sequence(
     to sequence peptides. If evaluate is set to True PEAK_PATH must be
     one or more annotated MGF file.
     """
-    output_path, output_root_name = setup_output(
+    output_path, output_root_name = _setup_output(
         output_dir, output_root, force_overwrite, verbosity, "casanovo"
     )
 
@@ -200,7 +200,7 @@ def db_search(
     PEAK_PATH must be one or more mzML, mzXML, or MGF files.
     FASTA_PATH must be one FASTA file.
     """
-    output_path, output_root_name = setup_output(
+    output_path, output_root_name = _setup_output(
         output_dir, output_root, force_overwrite, verbosity, "casanovo"
     )
 
@@ -313,7 +313,7 @@ def train(
 
     _is_valid_model(model, load_all_states)
 
-    output_path, output_root_name = setup_output(
+    output_path, output_root_name = _setup_output(
         output_dir, output_root, force_overwrite, verbosity, "casanovo"
     )
 
@@ -366,7 +366,7 @@ def train(
 @main.command()
 def version() -> None:
     """Get the Casanovo version information."""
-    setup_output(None, None, True, "info", "casanovo")
+    _setup_output(None, None, True, "info", "casanovo")
     utils.log_system_info(model="Casanovo", version=__version__)
 
 
@@ -380,7 +380,7 @@ def configure(
     The Casanovo configuration file is in the YAML format.
     """
     utils.log_system_info(model="Casanovo", version=__version__)
-    output_path, _ = setup_output(
+    output_path, _ = _setup_output(
         output_dir, output_root, force_overwrite, verbosity, "casanovo"
     )
     config_fname = output_root if output_root is not None else "casanovo"
