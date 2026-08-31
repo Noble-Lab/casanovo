@@ -60,6 +60,8 @@ click.rich_click.STYLE_HELPTEXT = ""
 click.rich_click.SHOW_ARGUMENTS = True
 
 from .version import _get_version
+_MODEL_WEIGHT_REQUEST_TIMEOUT = 30
+
 
 __version__ = _get_version("casanovo")
 
@@ -170,7 +172,10 @@ def sequence(
         results_path = output_path / f"{output_root_name}.mztab"
         runner.predict(peak_path, str(results_path), evaluate=evaluate)
         utils.log_annotate_report(
-            runner.writer.psms, start_time=start_time, end_time=time.time()
+            runner.writer.psms,
+            start_time=start_time,
+            end_time=time.time(),
+            n_missing_predictions=runner.model.n_missing_predictions,
         )
 
 
@@ -256,7 +261,10 @@ def db_search(
                 )
             runner.model.protein_database.export(output_path, output_root_name)
         utils.log_annotate_report(
-            runner.writer.psms, start_time=start_time, end_time=time.time()
+            runner.writer.psms,
+            start_time=start_time,
+            end_time=time.time(),
+            n_missing_predictions=runner.model.n_missing_predictions,
         )
 
 
@@ -400,7 +408,7 @@ def configure(
 
     config_path = str(output_path / config_fname)
     Config.copy_default(config_path)
-    logger.info(f"Wrote {config_path}")
+    logger.info(f"Wrote {config_path}
 
 
 if __name__ == "__main__":

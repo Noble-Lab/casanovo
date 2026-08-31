@@ -96,7 +96,8 @@ log_metrics: false
 log_every_n_steps: 50
 # Path to save Lance instances.
 lance_dir:
-# Model validation and checkpointing frequency in training steps.
+# Validation/checkpointing frequency: int = training steps, float in
+# [0, 1] = fraction of an epoch (1.0 = once per epoch).
 val_check_interval: 50_000
 
 # SPECTRUM PROCESSING OPTIONS
@@ -211,8 +212,11 @@ residues:
   "[Acetyl]-": 42.010565                  # Acetylation
   "[Carbamyl]-": 43.005814                # Carbamylation
   "[Ammonia-loss]-": -17.026549           # Ammonia loss
-  "[+25.980265]-": 25.980265              # Carbamylation and ammonia loss
-  #"[Carbamyl][Ammonia-loss]-": 25.980265  # Carbamylation and ammonia loss
+  # NOTE: the token NAME retains the older number; the MASS is authoritative and now correct.
+  # 43.005814 + (-17.026549) = 25.979265 exactly. The name retains the older value because it appears
+  # in released checkpoint vocabularies and renaming it would invalidate them.
+  "[+25.980265]-": 25.979265              # Carbamylation and ammonia loss: 43.005814 - 17.026549
+  #"[Carbamyl][Ammonia-loss]-": 25.979265  # Carbamylation and ammonia loss (alias; see #654)
 
 # When fine-tuning with a vocabulary that extends the checkpoint's, map each
 # new token to an existing token whose weights should be used for initialization.
