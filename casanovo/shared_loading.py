@@ -81,7 +81,7 @@ class _SharedParams(_SharedFileIOParams):
         ]
 
 
-def _setup_output(
+def setup_output(
     output_dir: str | None,
     output_root: str | None,
     overwrite: bool,
