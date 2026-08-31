@@ -24,7 +24,7 @@ from .denovo import ModelRunner
 from .shared_loading import (
     _SharedFileIOParams,
     _SharedParams,
-    setup_output,
+    _setup_output,
     setup_model,
 )
 from .version import _get_version
@@ -35,7 +35,7 @@ click.rich_click.USE_MARKDOWN = True
 click.rich_click.STYLE_HELPTEXT = ""
 click.rich_click.SHOW_ARGUMENTS = True
 
-__version__ = _get_version("cascadia")
+__version__ = "0.1.0"
 
 _CKPT_CASCADIA = re.compile(
     r"^cascadia_([a-z0-9][a-z0-9-]*)_v([0-9]+)-([0-9]+)-([0-9]+)\.ckpt$"
@@ -83,7 +83,7 @@ def sequence(
     force_overwrite: bool,
     evaluate: bool,
 ) -> None:
-    output_path, output_root_name = setup_output(
+    output_path, output_root_name = _setup_output(
         output_dir, output_root, force_overwrite, verbosity, "cascadia"
     )
 
@@ -109,6 +109,7 @@ def sequence(
         output_path,
         output_root_name if output_root is not None else None,
         False,
+        casanovo=False,
     ) as runner:
         logger.info(
             "Sequencing %speptides from:",
@@ -120,7 +121,10 @@ def sequence(
         results_path = output_path / f"{output_root_name}.mztab"
         runner.predict(peak_path, str(results_path), evaluate=evaluate)
         utils.log_annotate_report(
-            runner.writer.psms, start_time=start_time, end_time=time.time()
+            runner.writer.psms,
+            start_time=start_time,
+            end_time=time.time(),
+            n_missing_predictions=runner.model.n_missing_predictions,
         )
 
 
@@ -129,12 +133,12 @@ def configure(
     output_dir: str, output_root: str, verbosity: str, force_overwrite: bool
 ) -> None:
     """
-    Generate a Casanovo configuration file to customize.
+    Generate a Cascadia configuration file to customize.
 
-    The Casanovo configuration file is in the YAML format.
+    The Cascadia configuration file is in the YAML format.
     """
     utils.log_system_info(model="Cascadia", version=__version__)
-    output_path, _ = setup_output(
+    output_path, _ = _setup_output(
         output_dir, output_root, force_overwrite, verbosity, "cascadia"
     )
     config_fname = output_root if output_root is not None else "cascadia"
@@ -149,8 +153,8 @@ def configure(
 
 @main.command()
 def version() -> None:
-    """Get the Casanovo version information."""
-    setup_output(None, None, True, "info", "cascadia")
+    """Get the Cascadia version information."""
+    _setup_output(None, None, True, "info", "cascadia")
     utils.log_system_info(model="Cascadia", version=__version__)
 
 

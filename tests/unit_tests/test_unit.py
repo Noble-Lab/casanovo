@@ -48,6 +48,7 @@ from casanovo.denovo.model import (
 )
 from casanovo.casanovo import _CKPT_CASANOVO
 from casanovo.cascadia import _CKPT_CASCADIA
+import casanovo.shared_loading as shared_loading
 
 
 def test_forward_reverse():
@@ -312,11 +313,11 @@ def test_version():
 )
 def test_is_valid_model(model_file, expectation, log_message, caplog):
     if expectation is None:
-        casanovo._is_valid_model(model_file, load_all_states=True)
+        shared_loading._is_valid_model(model_file, load_all_states=True)
         assert log_message in caplog.text
     else:
         with expectation:
-            casanovo._is_valid_model(model_file, load_all_states=True)
+            shared_loading._is_valid_model(model_file, load_all_states=True)
 
 
 @pytest.mark.skip(reason="Skipping due to Linux deadlock issue")
@@ -490,7 +491,7 @@ def test_setup_model(monkeypatch, model_arg, expected_filename, ckpt_regex):
         filename = pathlib.Path(tmp_dir) / expected_filename
 
         assert not filename.is_file()
-        _, result_path = casanovo.setup_model(
+        _, result_path = shared_loading.setup_model(
             model_arg, None, None, None, False, ckpt_regex, version
         )
         assert result_path.resolve() == filename.resolve()
@@ -499,7 +500,7 @@ def test_setup_model(monkeypatch, model_arg, expected_filename, ckpt_regex):
         os.remove(result_path)
 
         assert not filename.is_file()
-        _, result = casanovo.setup_model(
+        _, result = shared_loading.setup_model(
             None, None, None, None, True, ckpt_regex, version
         )
         assert result is None
@@ -523,7 +524,7 @@ def test_setup_model(monkeypatch, model_arg, expected_filename, ckpt_regex):
         cache_file_path = cache_file_dir / cache_file_name
 
         assert not cache_file_path.is_file()
-        _, result_path = casanovo.setup_model(
+        _, result_path = shared_loading.setup_model(
             file_url, None, None, None, False, ckpt_regex, version
         )
         assert cache_file_path.is_file()
@@ -532,7 +533,7 @@ def test_setup_model(monkeypatch, model_arg, expected_filename, ckpt_regex):
         os.remove(result_path)
 
         assert not cache_file_path.is_file()
-        _, result_path = casanovo.setup_model(
+        _, result_path = shared_loading.setup_model(
             file_url, None, None, None, False, ckpt_regex, version
         )
         assert cache_file_path.is_file()
@@ -551,13 +552,13 @@ def test_setup_model(monkeypatch, model_arg, expected_filename, ckpt_regex):
         mnk.setattr(requests, "get", mock_get)
 
         temp_file_path = temp_file.name
-        _, result = casanovo.setup_model(
+        _, result = shared_loading.setup_model(
             temp_file_path, None, None, None, False, ckpt_regex, version
         )
         assert mock_get.request_counter == 3
         assert result == pathlib.Path(temp_file_path)
 
-        _, result = casanovo.setup_model(
+        _, result = shared_loading.setup_model(
             temp_file_path, None, None, None, True, ckpt_regex, version
         )
         assert mock_get.request_counter == 3
@@ -574,14 +575,14 @@ def test_setup_model(monkeypatch, model_arg, expected_filename, ckpt_regex):
         mnk.setattr(requests, "get", mock_get)
 
         with pytest.raises(ValueError):
-            casanovo.setup_model(
+            shared_loading.setup_model(
                 "FooBar", None, None, None, False, ckpt_regex, version
             )
 
         assert mock_get.request_counter == 3
 
         with pytest.raises(ValueError):
-            casanovo.setup_model(
+            shared_loading.setup_model(
                 "FooBar", None, None, None, False, ckpt_regex, version
             )
 
@@ -606,7 +607,7 @@ def test_rate_limit_exception(monkeypatch, model_arg):
         with pytest.raises(
             PermissionError, match="GitHub API rate limit exceeded"
         ):
-            casanovo.setup_model(
+            shared_loading.setup_model(
                 model_arg, None, None, None, False, _CKPT_CASANOVO, "3.0.0"
             )
 
@@ -645,13 +646,13 @@ def test_get_model_weights(
             tmp_path = pathlib.Path(tmp_dir)
             filename = tmp_path / expected_filename
             assert not filename.is_file()
-            result_path = casanovo._get_model_weights(
+            result_path = shared_loading._get_model_weights(
                 selector, tmp_path, version_tup, ckpt_model
             )
             assert result_path == filename
             assert filename.is_file()
             # Second call should use cache, no extra download.
-            result_path = casanovo._get_model_weights(
+            result_path = shared_loading._get_model_weights(
                 selector, tmp_path, version_tup, ckpt_model
             )
             assert result_path == filename
@@ -671,7 +672,7 @@ def test_get_model_weights(
             mnk.setattr(github, "Github", mock_github)
             mnk.setattr(requests, "get", mock_get)
             with pytest.raises(ValueError):
-                casanovo._get_model_weights(
+                shared_loading._get_model_weights(
                     selector,
                     pathlib.Path(tmp_dir),
                     version_tup,
@@ -693,7 +694,7 @@ def test_get_model_weights(
         mnk.setattr(requests, "get", mock_get)
         mock_get.request_counter = 0
         with pytest.raises(github.RateLimitExceededException):
-            casanovo._get_model_weights(
+            shared_loading._get_model_weights(
                 selector, pathlib.Path(tmp_dir), (3, 0, 0), ckpt_model
             )
 
@@ -821,22 +822,32 @@ def test_get_weights_from_url(monkeypatch):
 
         # Test downloading and caching the file
         assert not cache_file_path.is_file()
-        result_path = casanovo._get_weights_from_url(file_url, cache_dir)
+        result_path = shared_loading._get_weights_from_url(file_url, cache_dir)
         assert cache_file_path.is_file()
         assert result_path.resolve() == cache_file_path.resolve()
         assert mock_get.request_counter == 1
+        assert mock_get.timeouts == [
+            shared_loading._MODEL_WEIGHT_REQUEST_TIMEOUT
+        ]
 
         # Test that cached file is used
-        result_path = casanovo._get_weights_from_url(file_url, cache_dir)
+        result_path = shared_loading._get_weights_from_url(file_url, cache_dir)
         assert result_path.resolve() == cache_file_path.resolve()
         assert mock_get.request_counter == 1
+        assert mock_head.timeouts == [
+            shared_loading._MODEL_WEIGHT_REQUEST_TIMEOUT
+        ]
 
         # Test force downloading the file
-        result_path = casanovo._get_weights_from_url(
+        result_path = shared_loading._get_weights_from_url(
             file_url, cache_dir, force_download=True
         )
         assert result_path.resolve() == cache_file_path.resolve()
         assert mock_get.request_counter == 2
+        assert (
+            mock_get.timeouts[-1]
+            == shared_loading._MODEL_WEIGHT_REQUEST_TIMEOUT
+        )
 
         # Test that file is re-downloaded if last modified is newer than
         # file last modified
@@ -845,7 +856,7 @@ def test_get_weights_from_url(monkeypatch):
         mock_head.last_modified = (
             curr_utc + datetime.timedelta(days=365.0)
         ).strftime("%a, %d %b %Y %H:%M:%S GMT")
-        result_path = casanovo._get_weights_from_url(file_url, cache_dir)
+        result_path = shared_loading._get_weights_from_url(file_url, cache_dir)
         assert result_path.resolve() == cache_file_path.resolve()
         assert mock_get.request_counter == 3
 
@@ -853,14 +864,14 @@ def test_get_weights_from_url(monkeypatch):
         mock_head.last_modified = (
             curr_utc - datetime.timedelta(days=365.0)
         ).strftime("%a, %d %b %Y %H:%M:%S GMT")
-        result_path = casanovo._get_weights_from_url(file_url, cache_dir)
+        result_path = shared_loading._get_weights_from_url(file_url, cache_dir)
         assert result_path.resolve() == cache_file_path.resolve()
         assert mock_get.request_counter == 3
 
         # Test that error is raised if file get response is not OK
         mock_get.is_ok = False
         with pytest.raises(requests.HTTPError):
-            casanovo._get_weights_from_url(
+            shared_loading._get_weights_from_url(
                 file_url, cache_dir, force_download=True
             )
         mock_get.is_ok = True
@@ -872,14 +883,14 @@ def test_get_weights_from_url(monkeypatch):
         mock_head.last_modified = (
             curr_utc + datetime.timedelta(days=365.0)
         ).strftime("%a, %d %b %Y %H:%M:%S GMT")
-        result_path = casanovo._get_weights_from_url(file_url, cache_dir)
+        result_path = shared_loading._get_weights_from_url(file_url, cache_dir)
         assert result_path.resolve() == cache_file_path.resolve()
         assert mock_get.request_counter == 4
         mock_head.is_ok = True
 
         # Test that cached file is used if head request fails
         mock_head.fail = True
-        result_path = casanovo._get_weights_from_url(file_url, cache_dir)
+        result_path = shared_loading._get_weights_from_url(file_url, cache_dir)
         assert result_path.resolve() == cache_file_path.resolve()
         assert mock_get.request_counter == 4
         mock_head.fail = False
@@ -887,12 +898,12 @@ def test_get_weights_from_url(monkeypatch):
         # Test invalid URL
         with pytest.raises(ValueError):
             bad_url = "foobar"
-            casanovo._get_weights_from_url(bad_url, cache_dir)
+            shared_loading._get_weights_from_url(bad_url, cache_dir)
 
 
 def test_is_valid_url():
-    assert casanovo._is_valid_url("https://www.washington.edu/")
-    assert not casanovo._is_valid_url("foobar")
+    assert shared_loading._is_valid_url("https://www.washington.edu/")
+    assert not shared_loading._is_valid_url("foobar")
 
 
 @pytest.mark.parametrize(
@@ -2406,14 +2417,14 @@ def test_check_dir(tmp_path):
 def test_setup_output(tmp_path, monkeypatch):
     with monkeypatch.context() as mnk:
         mnk.setattr(pathlib.Path, "cwd", lambda: tmp_path)
-        output_path, output_root = casanovo._setup_output(
+        output_path, output_root = shared_loading._setup_output(
             None, None, False, "info", "casanovo"
         )
         assert output_path.resolve() == tmp_path.resolve()
         assert re.fullmatch(r"casanovo_\d+", output_root) is not None
 
         target_path = tmp_path / "foo"
-        output_path, output_root = casanovo._setup_output(
+        output_path, output_root = shared_loading._setup_output(
             str(target_path), "bar", False, "info", "casanovo"
         )
 
@@ -3209,10 +3220,10 @@ def test_train_cli_tracking_peak_path(tmp_path, mgf_small, monkeypatch):
     monkeypatch.setattr(_ModelRunner, "train", fake_train)
     monkeypatch.setattr(casanovo, "_is_valid_model", lambda *a, **kw: None)
     monkeypatch.setattr(
-        casanovo, "_setup_output", lambda *a, **kw: (tmp_path, "out")
+        shared_loading, "_setup_output", lambda *a, **kw: (tmp_path, "out")
     )
     monkeypatch.setattr(
-        casanovo, "setup_model", lambda *a, **kw: (Config(), None)
+        shared_loading, "setup_model", lambda *a, **kw: (Config(), None)
     )
     monkeypatch.setattr(utils, "log_system_info", lambda *a, **kw: None)
     monkeypatch.setattr(utils, "log_run_report", lambda **kw: None)

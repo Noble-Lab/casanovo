@@ -83,7 +83,7 @@ class _SharedParams(_SharedFileIOParams):
         ]
 
 
-def setup_output(
+def _setup_output(
     output_dir: str | None,
     output_root: str | None,
     overwrite: bool,
@@ -469,7 +469,7 @@ def setup_model(
                 "the model weights"
             ) from None
 
-    logger.info("Cascadia version %s", str(version))
+    logger.info("Cascadia/Casanovo version %s", str(version))
     logger.debug("model = %s", resolved_model)
     logger.debug("config = %s", config.file)
     logger.debug("output directory = %s", output_dir)
@@ -708,25 +708,3 @@ def _download_weights(file_url: str, download_path: Path) -> None:
         open(download_path, "wb") as file,
     ):
         shutil.copyfileobj(r_raw, file)
-
-
-def split_version(version: str) -> Tuple[str, str, str]:
-    """
-    Split the version into its semantic versioning components.
-
-    Parameters
-    ----------
-    version : str
-        The version number.
-
-    Returns
-    -------
-    major : str
-        The major release.
-    minor : str
-        The minor release.
-    patch : str
-        The patch release.
-    """
-    version_regex = re.compile(r"(\d+)\.(\d+)\.*(\d*)(?:.dev\d+.+)?")
-    return tuple(g for g in version_regex.match(version).groups())

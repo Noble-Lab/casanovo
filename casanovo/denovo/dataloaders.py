@@ -369,7 +369,7 @@ class DeNovoDataModule(pl.LightningDataModule):
 
         return dataset
 
-    def _dia_to_dataframe(self, paths, annotated) -> Iterator["pl.DataFrame"]:
+    def _dia_to_dataframe(self, paths, annotated) -> Iterator[pa.RecordBatch]:
         """
         Make spectrum dataframes.
 
@@ -399,7 +399,6 @@ class DeNovoDataModule(pl.LightningDataModule):
                     part,
                     self.max_peaks,
                     (self.scan_width + 1) * cycle_time,
-                    max_mz,
                 )
                 for key, value in prec_to_spec.items():
                     prec, rt, _ = key
@@ -464,15 +463,16 @@ class DeNovoDataModule(pl.LightningDataModule):
                         }
 
                         if not annotated:
-                            record["charge"] = charge
+                            record["precursor_charge"] = charge
 
                         file_records.append(record)
 
-            logger.warning(
-                "%d spectra were skipped due to missing MS1 scans for file %s",
-                skipped,
-                spectra,
-            )
+            if skipped > 0:
+                logger.warning(
+                    "%d spectra were skipped due to missing MS1 scans for file %s",
+                    skipped,
+                    spectra,
+                )
 
             yield pa.RecordBatch.from_pylist(file_records, schema=DIA_SCHEMA)
 
@@ -554,7 +554,7 @@ class DeNovoDataModule(pl.LightningDataModule):
         prec_to_spec = {}
         bins_by_rt = {}
         for (scan_window, scan_rt), entries in f_to_mzrt_to_pep[part].items():
-            bins_by_rt[scan_rt][scan_window] = entries
+            bins_by_rt.setdefault(scan_rt, {})[scan_window] = entries
 
         with pyteomics.mzml.read(mzml_file) as reader:
             for spec in reader:
@@ -568,7 +568,7 @@ class DeNovoDataModule(pl.LightningDataModule):
                         int(cur_rt / 10) - 1, int(cur_rt / 10) + 2
                     ):
                         for scan_window, entries in bins_by_rt.get(
-                            scan_rt
+                            scan_rt, {}
                         ).items():
                             bin_key = (scan_window, scan_rt)
                             if bin_key not in f_to_mzrt_to_pep[part]:
@@ -605,7 +605,7 @@ class DeNovoDataModule(pl.LightningDataModule):
                     lo_bin = int((window_center - lower_offset) / 10) - 1
                     hi_bin = int((window_center + upper_offset) / 10) + 1
                     for scan_rt in range(
-                        int(cur_rt / 10) - 1, int(cur_rt / 10) + 1
+                        int(cur_rt / 10) - 1, int(cur_rt / 10) + 2
                     ):
                         for scan_window in range(lo_bin, hi_bin):
                             bin_key = (scan_window, scan_rt)
@@ -678,7 +678,6 @@ class DeNovoDataModule(pl.LightningDataModule):
                     cur_rt = (
                         60 * spec["scanList"]["scan"][0]["scan start time"]
                     )
-                    cycle_time = cur_rt - last_rt
                     if last_rt is not None:
                         cycle_time = cur_rt - last_rt
 
