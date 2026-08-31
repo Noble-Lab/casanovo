@@ -1,9 +1,7 @@
-import collections
 import copy
 import datetime
 import functools
 import hashlib
-import heapq
 import io
 import logging
 import os
@@ -29,6 +27,7 @@ import pytest
 import requests
 import torch
 import pyteomics.mztab
+import pyteomics.proforma
 
 from casanovo import casanovo, denovo, utils, shared_loading
 from casanovo.casanovo import _SharedFileIOParams
@@ -432,13 +431,15 @@ class MockResponseGet:
     def __init__(self):
         self.request_counter = 0
         self.is_ok = True
+        self.timeouts = []
 
     def raise_for_status(self):
         if not self.is_ok:
             raise requests.HTTPError
 
-    def __call__(self, url, stream=True, allow_redirects=True):
+    def __call__(self, url, stream=True, allow_redirects=True, timeout=None):
         self.request_counter += 1
+        self.timeouts.append(timeout)
         response = unittest.mock.MagicMock()
         response.raise_for_status = self.raise_for_status
         response.headers = {"Content-Length": str(len(self.file_content))}
@@ -451,8 +452,10 @@ class MockResponseHead:
         self.last_modified = None
         self.is_ok = True
         self.fail = False
+        self.timeouts = []
 
-    def __call__(self, url):
+    def __call__(self, url, timeout=None):
+        self.timeouts.append(timeout)
         if self.fail:
             raise requests.ConnectionError
 
@@ -825,11 +828,13 @@ def test_get_weights_from_url(monkeypatch):
         assert cache_file_path.is_file()
         assert result_path.resolve() == cache_file_path.resolve()
         assert mock_get.request_counter == 1
+        assert mock_get.timeouts == [casanovo._MODEL_WEIGHT_REQUEST_TIMEOUT]
 
         # Test that cached file is used
         result_path = casanovo._get_weights_from_url(file_url, cache_dir)
         assert result_path.resolve() == cache_file_path.resolve()
         assert mock_get.request_counter == 1
+        assert mock_head.timeouts == [casanovo._MODEL_WEIGHT_REQUEST_TIMEOUT]
 
         # Test force downloading the file
         result_path = casanovo._get_weights_from_url(
@@ -837,6 +842,7 @@ def test_get_weights_from_url(monkeypatch):
         )
         assert result_path.resolve() == cache_file_path.resolve()
         assert mock_get.request_counter == 2
+        assert mock_get.timeouts[-1] == casanovo._MODEL_WEIGHT_REQUEST_TIMEOUT
 
         # Test that file is re-downloaded if last modified is newer than
         # file last modified
@@ -1171,29 +1177,29 @@ def test_digest_fasta_mods(tiny_fasta_file):
     # 1 modification allowed
     # fixed: C+57.02146
     # variable: 1M+15.994915,1N+0.984016,1Q+0.984016
-    # nterm: 1X+42.010565,1X+43.005814,1X-17.026549,1X+25.980265
+    # nterm: 1X+42.010565,1X+43.005814,1X-17.026549,1X+25.979265
     expected = np.array(
         [
             697.37586,  # -17.027ATSIPAR
             714.40241,  # ATSIPAR
             717.34797,  # -17.027VTLSC+57.021R
             734.37452,  # VTLSC+57.021R
-            740.3827,  # +43.006-17.027ATSIPAR
+            740.3817,  # +43.006-17.027ATSIPAR
             756.41297,  # +42.011ATSIPAR
             757.40821,  # +43.006ATSIPAR
-            760.35474,  # +43.006-17.027VTLSC+57.021R
+            760.35374,  # +43.006-17.027VTLSC+57.021R
             776.38502,  # +42.011VTLSC+57.021R
             777.38032,  # +43.006VTLSC+57.021R
             975.53889,  # -17.027LLIYGASTR
             992.5655,  # LLIYGASTR
-            1018.54572,  # +43.006-17.027LLIYGASTR
+            1018.54472,  # +43.006-17.027LLIYGASTR
             1034.57599,  # +42.011LLIYGASTR
             1035.57123,  # +43.006LLIYGASTR
             1923.96125,  # -17.027EIVMTQSPPTLSLSPGER
             1940.98774,  # EIVMTQSPPTLSLSPGER
             1941.97175,  # EIVMTQ+0.984SPPTLSLSPGER
             1956.98261,  # EIVM+15.995TQSPPTLSLSPGER
-            1966.96808,  # +43.006-17.027EIVMTQSPPTLSLSPGER
+            1966.96708,  # +43.006-17.027EIVMTQSPPTLSLSPGER
             1982.99836,  # +42.011EIVMTQSPPTLSLSPGER
             1983.99372,  # +43.006EIVMTQSPPTLSLSPGER
             2323.26496,  # -17.027MEAPAQLLFLLLLWLPDTTR
@@ -1201,8 +1207,8 @@ def test_digest_fasta_mods(tiny_fasta_file):
             2340.29157,  # MEAPAQLLFLLLLWLPDTTR
             2341.27546,  # MEAPAQ+0.984LLFLLLLWLPDTTR
             2356.28644,  # M+15.995EAPAQLLFLLLLWLPDTTR
-            2366.2718,  # +43.006-17.027MEAPAQLLFLLLLWLPDTTR
-            2382.26667,  # +43.006-17.027M+15.995EAPAQLLFLLLLWLPDTTR
+            2366.2708,  # +43.006-17.027MEAPAQLLFLLLLWLPDTTR
+            2382.26567,  # +43.006-17.027M+15.995EAPAQLLFLLLLWLPDTTR
             2382.30207,  # +42.011MEAPAQLLFLLLLWLPDTTR
             2383.29743,  # +43.006MEAPAQLLFLLLLWLPDTTR
             2398.29694,  # +42.011M+15.995EAPAQLLFLLLLWLPDTTR
@@ -1213,7 +1219,7 @@ def test_digest_fasta_mods(tiny_fasta_file):
             2469.19245,  # ASQSVSSSYLTWYQQ+0.984KPGQAPR
             2469.19245,  # ASQ+0.984SVSSSYLTWYQQKPGQAPR
             2469.19245,  # ASQSVSSSYLTWYQQKPGQ+0.984APR
-            2494.18879,  # +43.006-17.027ASQSVSSSYLTWYQQKPGQAPR
+            2494.18779,  # +43.006-17.027ASQSVSSSYLTWYQQKPGQAPR
             2510.21906,  # +42.011ASQSVSSSYLTWYQQKPGQAPR
             2511.21418,  # +43.006ASQSVSSSYLTWYQQKPGQAPR
             3789.66681,  # -17.027FSGSGSGTDFTLTISSLQPEDFAVYYC+57.021QQDYNLP
@@ -1222,7 +1228,7 @@ def test_digest_fasta_mods(tiny_fasta_file):
             3807.67707,  # FSGSGSGTDFTLTISSLQPEDFAVYYC+57.021QQDYN+0.984LP
             3807.67731,  # FSGSGSGTDFTLTISSLQPEDFAVYYC+57.021Q+0.984QDYNLP
             3807.67731,  # FSGSGSGTDFTLTISSLQPEDFAVYYC+57.021QQ+0.984DYNLP
-            3832.67365,  # +43.006-17.027FSGSGSGTDFTLTISSLQPEDFAVYYC+57.021QQDYNLP
+            3832.67265,  # +43.006-17.027FSGSGSGTDFTLTISSLQPEDFAVYYC+57.021QQDYNLP
             3848.70392,  # +42.011FSGSGSGTDFTLTISSLQPEDFAVYYC+57.021QQDYNLP
             3849.69904,  # +43.006FSGSGSGTDFTLTISSLQPEDFAVYYC+57.021QQDYNLP
         ]
@@ -2112,7 +2118,7 @@ def test_spectrum_id_mgf(mgf_small, tmp_path):
     mgf_small2 = tmp_path / "mgf_small2.mgf"
     shutil.copy(mgf_small, mgf_small2)
     data_module = DeNovoDataModule(
-        lance_dir=tmp_path.name,
+        lance_dir=str(tmp_path),
         train_paths=[mgf_small, mgf_small2],
         valid_paths=[mgf_small, mgf_small2],
         test_paths=[mgf_small, mgf_small2],
@@ -2149,7 +2155,7 @@ def test_log_training_set_size(mgf_small, tmp_path, caplog):
     mgf_small2 = tmp_path / "mgf_small2.mgf"
     shutil.copy(mgf_small, mgf_small2)
     data_module = DeNovoDataModule(
-        lance_dir=tmp_path.name,
+        lance_dir=str(tmp_path),
         train_paths=[mgf_small, mgf_small2],
         valid_paths=[mgf_small],
         min_peaks=0,
@@ -2173,7 +2179,7 @@ def test_log_training_set_size_shuffled(mgf_small, tmp_path, caplog):
     mgf_small2 = tmp_path / "mgf_small2.mgf"
     shutil.copy(mgf_small, mgf_small2)
     data_module = DeNovoDataModule(
-        lance_dir=tmp_path.name,
+        lance_dir=str(tmp_path),
         train_paths=[mgf_small, mgf_small2],
         valid_paths=[mgf_small],
         min_peaks=0,
@@ -2197,7 +2203,7 @@ def test_spectrum_id_mzml(mzml_small, tmp_path):
     mzml_small2 = tmp_path / "mzml_small2.mzml"
     shutil.copy(mzml_small, mzml_small2)
     data_module = DeNovoDataModule(
-        lance_dir=tmp_path.name,
+        lance_dir=str(tmp_path),
         test_paths=[mzml_small, mzml_small2],
         min_peaks=0,
         shuffle=False,
@@ -2436,7 +2442,7 @@ def test_spectrum_preprocessing(tmp_path, mgf_small):
     # One spectrum removed with too few peaks.
     total_spectra = 1
     dataloader = DeNovoDataModule(
-        tmp_path.name,
+        str(tmp_path),
         test_paths=str(mgf_small),
         min_peaks=min_peaks,
         max_peaks=max_peaks,
@@ -2458,7 +2464,7 @@ def test_spectrum_preprocessing(tmp_path, mgf_small):
     # All spectra retained.
     total_spectra = 2
     dataloader = DeNovoDataModule(
-        tmp_path.name,
+        str(tmp_path),
         test_paths=str(mgf_small),
         min_peaks=min_peaks,
         max_peaks=max_peaks,
@@ -2481,7 +2487,7 @@ def test_spectrum_preprocessing(tmp_path, mgf_small):
     # One spectrum removed with too high charge.
     total_spectra = 1
     dataloader = DeNovoDataModule(
-        tmp_path.name,
+        str(tmp_path),
         test_paths=str(mgf_small),
         min_peaks=min_peaks,
         max_peaks=max_peaks,
@@ -2496,6 +2502,71 @@ def test_spectrum_preprocessing(tmp_path, mgf_small):
     for spec in dataloader.test_dataset:
         assert spec["precursor_charge"] <= max_charge
     max_charge = 4
+
+
+def test_predict_step_counts_missing(tiny_config):
+    config = Config(tiny_config)
+    model = Spec2Pep(
+        tokenizer=depthcharge.tokenizers.peptides.PeptideTokenizer(
+            residues=config.residues
+        ),
+    )
+    # One spectrum gets a prediction; the other returns no valid peptide.
+    model.forward = unittest.mock.MagicMock(
+        return_value=[[(0.9, np.array([0.9]), "PEPK")], []]
+    )
+    batch = {
+        "peak_file": ["a.mgf", "a.mgf"],
+        "scan_id": ["index=0", "index=1"],
+        "precursor_charge": torch.tensor([2, 2]),
+        "precursor_mz": torch.tensor([100.0, 200.0]),
+    }
+    predictions = model.predict_step(batch)
+    assert len(predictions) == 1
+    assert model.n_missing_predictions == 1
+    model.on_predict_start()
+    assert model.n_missing_predictions == 0
+
+
+def test_on_predict_epoch_end_aggregates(tiny_config):
+    config = Config(tiny_config)
+    model = Spec2Pep(
+        tokenizer=depthcharge.tokenizers.peptides.PeptideTokenizer(
+            residues=config.residues
+        ),
+    )
+    # Local counts of 2 and 3 from two processes are summed.
+    model.all_gather = lambda x: x.new_tensor([2, 3])
+    model.n_missing_predictions = 2
+    model.on_predict_epoch_end()
+    assert model.n_missing_predictions == 5
+
+
+def test_log_annotate_report_missing_predictions(monkeypatch):
+    mock_logger = unittest.mock.MagicMock()
+    monkeypatch.setattr("casanovo.utils.logger", mock_logger)
+    monkeypatch.setattr(utils, "log_run_report", lambda **_: None)
+    utils.log_annotate_report([], n_missing_predictions=4)
+    calls = [
+        c
+        for c in mock_logger.info.call_args_list
+        if "did not receive a prediction" in c[0][0]
+    ]
+    assert calls and calls[0][0][1] == 4
+
+    # Positional score_bins callers still bind correctly, not to the
+    # keyword-only n_missing_predictions (which would otherwise make
+    # the missing-prediction message fire for a positional argument).
+    mock_logger.reset_mock()
+    utils.log_annotate_report([], None, None, [0.5])
+    # An empty report still warns that no predictions were logged.
+    mock_logger.warning.assert_called_once()
+    missing_calls = [
+        c
+        for c in mock_logger.info.call_args_list
+        if "did not receive a prediction" in c[0][0]
+    ]
+    assert not missing_calls
 
 
 def test_finish_beams(tiny_config):
@@ -2567,14 +2638,17 @@ def test_invalid_n_term_mod(tiny_config, reverse):
     device = model.device
     model.min_peptide_len = 3
 
+    # A reversed tokenizer emits the C-terminus first, so a valid N-terminal
+    # modification is the last token generated; an unreversed tokenizer emits
+    # it first.
     # (peptide, should_be_discarded)
     peptides = [
         (["P", "E", "P", "K", "K"], False),
-        (["[Acetyl]-", "P", "E", "P", "K"], not reverse),
+        (["[Acetyl]-", "P", "E", "P", "K"], reverse),
         (["[Acetyl]-", "[Acetyl]-", "P", "E", "P"], True),
         (["[Acetyl]-", "P", "E", "P", "[Acetyl]-"], True),
-        (["P", "E", "P", "K", "[Acetyl]-"], reverse),
-        (["P", "E", "P", "[Acetyl]-", "$"], reverse),
+        (["P", "E", "P", "K", "[Acetyl]-"], not reverse),
+        (["P", "E", "P", "[Acetyl]-", "$"], not reverse),
         (["P", "E", "[Acetyl]-", "P", "K"], True),
     ]
 
@@ -2599,6 +2673,109 @@ def test_invalid_n_term_mod(tiny_config, reverse):
     assert torch.equal(finished, expected_finished)
 
 
+def _nterm_beam(tokenizer, aa_tokens, max_peptide_len, device):
+    """
+    Build a single beam from a list of amino acid tokens.
+
+    Parameters
+    ----------
+    tokenizer : depthcharge.tokenizers.PeptideTokenizer
+        The tokenizer providing the token indices.
+    aa_tokens : Iterable[str]
+        The amino acid tokens, in the order the decoder would emit them.
+    max_peptide_len : int
+        The maximum peptide length, defining the width of the beam.
+    device : torch.device
+        The device on which to create the beam.
+
+    Returns
+    -------
+    torch.Tensor of shape (1, max_peptide_len + 1)
+        The zero-padded beam.
+    """
+    tokens = torch.zeros(
+        1, max_peptide_len + 1, dtype=torch.int64, device=device
+    )
+    tokens[0, : len(aa_tokens)] = torch.tensor(
+        [tokenizer.index[aa] for aa in aa_tokens], device=device
+    )
+    return tokens
+
+
+@pytest.mark.parametrize("reverse", [True, False])
+def test_n_term_mod_orientation_matches_tokenizer(tiny_config, reverse):
+    """N-term mods placed as the tokenizer emits them must be kept."""
+    config = Config(tiny_config)
+    tokenizer = depthcharge.tokenizers.peptides.PeptideTokenizer(
+        residues=config.residues, reverse=reverse
+    )
+    model = Spec2Pep(n_beams=1, tokenizer=tokenizer, min_peptide_len=4)
+
+    peptide = "[Acetyl]-PEPTIDEK"
+    # Ask the tokenizer for the token order, rather than assuming one, so
+    # that this test still pins down the correct behavior if the decoding
+    # direction ever changes.
+    aa_tokens = list(tokenizer.split(peptide))
+    tokens = _nterm_beam(
+        tokenizer, aa_tokens, model.max_peptide_len, model.device
+    )
+
+    _, discarded = model._finish_beams(tokens, len(aa_tokens) - 1)
+    assert not discarded[0]
+
+    # A kept beam must decode to a valid ProForma peptidoform, since
+    # `on_predict_batch_end` parses it again to compute the precursor m/z.
+    sequence = tokenizer.detokenize(tokens)[0]
+    assert sequence == peptide
+    tokenizer.calculate_precursor_ions(sequence, torch.tensor(2))
+
+
+@pytest.mark.parametrize("reverse", [True, False])
+def test_n_term_mod_wrong_end_discarded(tiny_config, reverse):
+    """N-term mods at the opposite end of the beam must be discarded."""
+    config = Config(tiny_config)
+    tokenizer = depthcharge.tokenizers.peptides.PeptideTokenizer(
+        residues=config.residues, reverse=reverse
+    )
+    model = Spec2Pep(n_beams=1, tokenizer=tokenizer, min_peptide_len=4)
+
+    peptide = "[Acetyl]-PEPTIDEK"
+    aa_tokens = list(tokenizer.split(peptide))[::-1]
+    tokens = _nterm_beam(
+        tokenizer, aa_tokens, model.max_peptide_len, model.device
+    )
+
+    _, discarded = model._finish_beams(tokens, len(aa_tokens) - 1)
+    assert discarded[0]
+
+    # Such a beam decodes to a modification trailing the sequence, which is
+    # not valid ProForma; keeping it would crash `on_predict_batch_end`. The
+    # exact exception type depends on the pyteomics version.
+    with pytest.raises((IndexError, pyteomics.proforma.ProFormaError)):
+        tokenizer.calculate_precursor_ions(
+            tokenizer.detokenize(tokens)[0], torch.tensor(2)
+        )
+
+
+@pytest.mark.parametrize("reverse", [True, False])
+def test_n_term_mod_short_beam_discarded(tiny_config, reverse):
+    """Misplaced N-term mods are caught in two-token beams as well."""
+    config = Config(tiny_config)
+    tokenizer = depthcharge.tokenizers.peptides.PeptideTokenizer(
+        residues=config.residues, reverse=reverse
+    )
+    model = Spec2Pep(n_beams=1, tokenizer=tokenizer, min_peptide_len=2)
+
+    # Too short to be caught by the minimum peptide length check.
+    aa_tokens = ["[Acetyl]-", "K"] if reverse else ["K", "[Acetyl]-"]
+    tokens = _nterm_beam(
+        tokenizer, aa_tokens, model.max_peptide_len, model.device
+    )
+
+    _, discarded = model._finish_beams(tokens, 1)
+    assert discarded[0]
+
+
 def test_cache_finished_beams(tiny_config):
     config = Config(tiny_config)
     model = Spec2Pep(
@@ -2618,12 +2795,16 @@ def test_cache_finished_beams(tiny_config):
     model._batch_size = batch
     model._beam_size = beam
 
-    scores = torch.zeros(
-        (beam, length, len(model.tokenizer) + 1), device=device
-    )
+    vocab = len(model.tokenizer) + 1
+    scores = torch.zeros((beam, length, vocab), device=device)
     tokens = torch.zeros((beam, length), dtype=torch.int64, device=device)
 
-    pred_cache = collections.OrderedDict((i, []) for i in range(batch))
+    cache_tokens = torch.full(
+        (batch, beam, length, length), 0, dtype=torch.int32, device=device
+    )
+    cache_scores = torch.full(
+        (batch, beam, length, length), 0.0, dtype=scores.dtype, device=device
+    )
 
     true_tok = model.tokenizer.tokenize("PEPR")[0]
     tokens[1, : step + 1] = true_tok
@@ -2633,13 +2814,17 @@ def test_cache_finished_beams(tiny_config):
     discarded = torch.tensor([False, False, False, False], device=device)
 
     model._cache_finished_beams(
-        tokens, scores, step, finished & ~discarded, pred_cache
+        tokens,
+        scores,
+        step,
+        finished & ~discarded,
+        cache_tokens,
+        cache_scores,
     )
 
-    cached = [
-        pep for (_, _, _, pep) in pred_cache[0] if torch.equal(pep, true_tok)
-    ]
-    assert len(cached) == 1
+    # Valid slots have non-zero raw probabilities; unwritten slots are 0.
+    assert cache_scores[0, 1, step].any()
+    assert torch.equal(cache_tokens[0, 1, step, : step + 1], true_tok)
 
 
 def test_get_top_peptide_ranking(tiny_config):
@@ -2650,20 +2835,29 @@ def test_get_top_peptide_ranking(tiny_config):
         )
     )
 
-    cache = collections.OrderedDict({0: []})
+    batch = 1
+    beam = 3
+    length = 10
+    step = 3
+    device = model.device
 
-    heapq.heappush(
-        cache[0], (0.93, 0.1, [0.93] * 4, model.tokenizer.tokenize("PEPY")[0])
+    cache_tokens = torch.full(
+        (batch, beam, length, length), 0, dtype=torch.int32, device=device
     )
-    heapq.heappush(
-        cache[0], (0.95, 0.2, [0.95] * 4, model.tokenizer.tokenize("PEPK")[0])
-    )
-    heapq.heappush(
-        cache[0], (0.94, 0.3, [0.94] * 4, model.tokenizer.tokenize("PEPP")[0])
+    cache_scores = torch.full(
+        (batch, beam, length, length), 0.0, dtype=torch.float32, device=device
     )
 
-    result = next(model._get_top_peptide(cache))
-    assert result[0][-1] == "PEPK"
+    seqs = ["PEPY", "PEPK", "PEPP"]
+    raw_probs = [0.93, 0.95, 0.94]
+    for b, (seq, raw) in enumerate(zip(seqs, raw_probs)):
+        toks = model.tokenizer.tokenize(seq)[0]
+        n_toks = toks.shape[0]
+        cache_tokens[0, b, step, :n_toks] = toks
+        cache_scores[0, b, step, :n_toks] = raw
+
+    result = next(model._get_top_peptide(cache_tokens, cache_scores))
+    assert result[0][2] == "PEPK"
 
 
 @pytest.mark.parametrize("topk", [1, 2, 3])
@@ -2676,15 +2870,27 @@ def test_get_top_peptide_multiple(topk, tiny_config):
         ),
     )
 
-    cache = collections.OrderedDict({0: []})
-    cache_items = [(0.9, "PEPY"), (0.8, "PEPK"), (0.7, "PEPP")]
-    for score, seq in cache_items:
-        heapq.heappush(
-            cache[0],
-            (score, 0.0, [score] * 3, model.tokenizer.tokenize(seq)[0]),
-        )
+    batch = 1
+    beam = 3
+    length = 10
+    step = 3
+    device = model.device
 
-    result = next(model._get_top_peptide(cache))
+    cache_tokens = torch.full(
+        (batch, beam, length, length), 0, dtype=torch.int32, device=device
+    )
+    cache_scores = torch.full(
+        (batch, beam, length, length), 0.0, dtype=torch.float32, device=device
+    )
+
+    cache_items = [(0.9, "PEPY"), (0.8, "PEPK"), (0.7, "PEPP")]
+    for b, (score, seq) in enumerate(cache_items):
+        toks = model.tokenizer.tokenize(seq)[0]
+        n_toks = toks.shape[0]
+        cache_tokens[0, b, step, :n_toks] = toks
+        cache_scores[0, b, step, :n_toks] = score
+
+    result = next(model._get_top_peptide(cache_tokens, cache_scores))
     assert len(result) == topk
     for i in range(topk):
         assert result[i][2] == cache_items[i][1]
@@ -2701,18 +2907,25 @@ def test_get_top_peptide_reverse(reverse, tiny_config):
 
     model.tokenizer.reverse = reverse
 
-    cache = {
-        0: [
-            (
-                1.0,
-                0.42,
-                np.array([1.0, 0.0]),
-                model.tokenizer.tokenize("PE")[0],
-            )
-        ]
-    }
+    batch = 1
+    beam = 1
+    length = 10
+    step = 1
+    device = model.device
 
-    result = list(model._get_top_peptide(cache))
+    cache_tokens = torch.full(
+        (batch, beam, length, length), 0, dtype=torch.int32, device=device
+    )
+    cache_scores = torch.full(
+        (batch, beam, length, length), 0.0, dtype=torch.float32, device=device
+    )
+
+    toks = model.tokenizer.tokenize("PE")[0]
+    n_toks = toks.shape[0]
+    cache_tokens[0, 0, step, :n_toks] = toks
+    cache_scores[0, 0, step, :n_toks] = 1.0
+
+    result = list(model._get_top_peptide(cache_tokens, cache_scores))
 
     assert len(result) == 1
     assert len(result[0]) == 1
@@ -2804,20 +3017,30 @@ def test_duplicate_peptide_scores(tiny_config):
         1, vocab, (batch * beam, step), device=device
     )
 
-    pred_cache = collections.OrderedDict((i, []) for i in range(batch))
+    cache_tokens = torch.full(
+        (batch, beam, length, length), 0, dtype=torch.int32, device=device
+    )
+    cache_scores = torch.full(
+        (batch, beam, length, length), 0.0, dtype=scores.dtype, device=device
+    )
 
     model._cache_finished_beams(
         tokens,
         scores,
         step,
         torch.ones(batch * beam, dtype=torch.bool, device=device),
-        pred_cache,
+        cache_tokens,
+        cache_scores,
     )
 
-    for _, preds in pred_cache.items():
-        assert len(preds) == beam
-        vals = [p[0] for p in preds]
-        assert np.allclose(vals, vals[0])
+    # All beams used identical scores, so every cached candidate should have
+    # the same peptide score.
+    for i in range(batch):
+        cached_scores = cache_scores[i, :, step, : step + 1]
+        cached_mask = cached_scores.any(dim=-1)
+        vals = cached_scores[cached_mask].sum(dim=-1)
+        assert cached_mask.sum() == beam
+        assert torch.allclose(vals, vals[0])
 
 
 class MiniTok:
@@ -2966,7 +3189,8 @@ def test_mgf_scan_alias_scan_field(tmp_path):
 
     mgf_file = tmp_path / "alias_scan.mgf"
     mgf_file.write_text(
-        "BEGIN IONS\nSCAN=99\nPEPMASS=400.2\nCHARGE=2+\n200.0 1.0\nEND IONS\n"
+        "BEGIN IONS\nSCAN=99\nPEPMASS=400.2\nCHARGE=2+\n200.0 1.0\nEND IONS\n",
+        encoding="utf-8",
     )
     result = dict(_build_mgf_scan_index(str(mgf_file)))
     assert result == {"index=0": "99"}
@@ -2981,7 +3205,8 @@ def test_mgf_scan_alias_scan_id_field(tmp_path):
 
     mgf_file = tmp_path / "alias_scan_id.mgf"
     mgf_file.write_text(
-        "BEGIN IONS\nSCAN ID=42\nPEPMASS=400.2\nCHARGE=2+\n200.0 1.0\nEND IONS\n"
+        "BEGIN IONS\nSCAN ID=42\nPEPMASS=400.2\nCHARGE=2+\n200.0 1.0\nEND IONS\n",
+        encoding="utf-8",
     )
     result = dict(_build_mgf_scan_index(str(mgf_file)))
     assert result == {"index=0": "42"}
@@ -2995,7 +3220,8 @@ def test_scan_num_in_mztab_spectra_ref(tmp_path):
     # Create a minimal MGF with SCANS=17 for the first spectrum.
     mgf_file = tmp_path / "test.mgf"
     mgf_file.write_text(
-        "BEGIN IONS\nSCANS=17\nPEPMASS=400.2\nCHARGE=2+\n200.0 1.0\nEND IONS\n"
+        "BEGIN IONS\nSCANS=17\nPEPMASS=400.2\nCHARGE=2+\n200.0 1.0\nEND IONS\n",
+        encoding="utf-8",
     )
 
     results_path = str(tmp_path / "results.mztab")
@@ -3138,7 +3364,7 @@ def test_data_module_per_file_validation(mgf_small, tmp_path):
     mgf_small2 = tmp_path / "mgf_small2.mgf"
     shutil.copy(mgf_small, mgf_small2)
     data_module = DeNovoDataModule(
-        lance_dir=tmp_path.name,
+        lance_dir=str(tmp_path),
         valid_paths=[mgf_small, mgf_small2],
         tracking_paths=[mgf_small],
         min_peaks=0,
@@ -3223,3 +3449,16 @@ def test_train_cli_tracking_peak_path(tmp_path, mgf_small, monkeypatch):
     )
     assert result.exit_code == 0, result.output
     assert str(mgf_small) in captured.get("tracking", ())
+
+
+def test_optimizer_kwargs_exclude_non_adam():
+    """Non-optimizer config values must not reach the Adam optimizer."""
+    model = Spec2Pep(
+        lr=1e-3,
+        weight_decay=1e-5,
+        precursor_mass_tol=50.0,
+        isotope_error_range=(0, 1),
+    )
+    assert model.opt_kwargs == {"lr": 1e-3, "weight_decay": 1e-5}
+    optimizers, _ = model.configure_optimizers()
+    assert isinstance(optimizers[0], torch.optim.Adam)
