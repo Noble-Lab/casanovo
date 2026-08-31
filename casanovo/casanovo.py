@@ -46,6 +46,7 @@ logger = logging.getLogger("casanovo")
 click.rich_click.USE_MARKDOWN = True
 click.rich_click.STYLE_HELPTEXT = ""
 click.rich_click.SHOW_ARGUMENTS = True
+WEIGHTS_HEAD_TIMEOUT_SECONDS = 30
 
 
 class _SharedFileIOParams(click.RichCommand):
@@ -953,7 +954,9 @@ def _get_weights_from_url(
         url_last_modified = 0
 
         try:
-            file_response = requests.head(file_url)
+            file_response = requests.head(
+                file_url, timeout=WEIGHTS_HEAD_TIMEOUT_SECONDS
+            )
             if file_response.ok:
                 if "Last-Modified" in file_response.headers:
                     url_last_modified = datetime.datetime.strptime(

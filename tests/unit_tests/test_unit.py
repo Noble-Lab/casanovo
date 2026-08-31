@@ -445,8 +445,10 @@ class MockResponseHead:
         self.last_modified = None
         self.is_ok = True
         self.fail = False
+        self.request_kwargs = []
 
-    def __call__(self, url):
+    def __call__(self, url, **kwargs):
+        self.request_kwargs.append(kwargs)
         if self.fail:
             raise requests.ConnectionError
 
@@ -786,6 +788,9 @@ def test_get_weights_from_url(monkeypatch):
         result_path = casanovo._get_weights_from_url(file_url, cache_dir)
         assert result_path.resolve() == cache_file_path.resolve()
         assert mock_get.request_counter == 1
+        assert mock_head.request_kwargs == [
+            {"timeout": casanovo.WEIGHTS_HEAD_TIMEOUT_SECONDS}
+        ]
 
         # Test force downloading the file
         result_path = casanovo._get_weights_from_url(
