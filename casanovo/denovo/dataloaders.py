@@ -723,7 +723,7 @@ class DeNovoDataModule(pl.LightningDataModule):
 
         if cycle_time is None:
             raise ValueError(
-                f"{mzml_file} does not contain MS1 scans required for DIA extraction"
+                f"{mzml_file} does not contain at least two MS1 scans for DIA extraction"
             )
 
         if window_size is None:
