@@ -498,7 +498,11 @@ class DeNovoDataModule(pl.LightningDataModule):
         mzs = spec["m/z array"]
         intensities = spec["intensity array"]
 
-        top_idx = np.argsort(intensities)[-self.max_peaks :]
+        if self.max_peaks is None:
+            top_idx = np.arange(len(intensities))
+        else:
+            top_idx = np.argsort(intensities)[-self.max_peaks :]
+
         mzs, intensities = mzs[top_idx], intensities[top_idx]
 
         mz_order = np.argsort(mzs)
@@ -512,6 +516,7 @@ class DeNovoDataModule(pl.LightningDataModule):
         return mzs, intensities
 
     def _accumulate_scan(
+        self,
         prec_to_spec,
         key,
         scans_key,
@@ -561,7 +566,7 @@ class DeNovoDataModule(pl.LightningDataModule):
         for (scan_window, scan_rt), entries in f_to_mzrt_to_pep[part].items():
             bins_by_rt.setdefault(scan_rt, {})[scan_window] = entries
 
-        with pyteomics.mzml.read(mzml_file) as reader:
+        with pyteomics.mzml.read(str(mzml_file)) as reader:
             for spec in reader:
                 cur_rt = 60 * spec["scanList"]["scan"][0]["scan start time"]
 
@@ -677,7 +682,9 @@ class DeNovoDataModule(pl.LightningDataModule):
         last_rt = None
         cycle_time = None
         window_size = None
-        with pyteomics.mzml.read(mzml_file, decode_binary=False) as reader:
+        with pyteomics.mzml.read(
+            str(mzml_file), decode_binary=False
+        ) as reader:
             for spec in reader:
                 if spec["ms level"] == 1:
                     cur_rt = (

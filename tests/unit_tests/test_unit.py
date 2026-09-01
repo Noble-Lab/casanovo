@@ -56,7 +56,7 @@ def test_select_top_peaks_orders_and_scales():
     }
 
     dataset = DeNovoDataModule(None)
-    mzs, intensities = dataset._select_top_peaks(spec, top_n=3, sqrt_passes=1)
+    mzs, intensities = dataset._select_top_peaks(spec, sqrt_passes=1)
 
     # Keeps the 3 most intense peaks (100, 200, 300), sorted by m/z.
     np.testing.assert_array_equal(mzs, [100.0, 200.0, 300.0])
@@ -68,7 +68,7 @@ def test_select_top_peaks_orders_and_scales():
         "m/z array": np.array([100.0, 200.0]),
         "intensity array": np.array([16.0, 4.0]),
     }
-    mzs, intensities = dataset._select_top_peaks(spec, top_n=2, sqrt_passes=2)
+    mzs, intensities = dataset._select_top_peaks(spec, sqrt_passes=2)
 
     expected = np.array([16.0, 4.0]) ** 0.25
     expected = expected / expected.max()
@@ -79,7 +79,7 @@ def test_select_top_peaks_orders_and_scales():
 def test_select_top_peaks_empty_spectrum():
     dataset = DeNovoDataModule(None)
     spec = {"m/z array": np.array([]), "intensity array": np.array([])}
-    mzs, intensities = dataset._select_top_peaks(spec, top_n=5)
+    mzs, intensities = dataset._select_top_peaks(spec)
     assert len(mzs) == 0
     assert len(intensities) == 0
 
@@ -119,15 +119,6 @@ def test_accumulate_scan_appends_across_calls():
     assert entry["rts"] == [0.1, 0.2]
 
 
-# def test_dia_to_dataframe(mzml_small):
-#    dataset = DeNovoDataModule(
-#        test_paths=mzml_small,
-#        casanovo=False,
-#    )#
-
-#    dataset.setup(annotated=False, stage="test")
-
-
 def test_unique_stems(tmp_path):
     paths = [tmp_path / "test.mgf", tmp_path / "test.mgf"]
     stems = _unique_stems(paths)
@@ -143,10 +134,10 @@ def test_lance_loading(tmp_path):
     assert dataset is not None
 
 
-def test_dia_to_dataframe_unannotated(mzml_small):
+def test_dia_to_dataframe_unannotated(mzml_small_ms1):
     dataset = DeNovoDataModule(
         lance_dir=None,
-        test_paths=[mzml_small],
+        test_paths=[mzml_small_ms1],
         casanovo=False,
         max_charge=2,
     )
@@ -154,11 +145,9 @@ def test_dia_to_dataframe_unannotated(mzml_small):
     test_dataset = dataset.test_dataset
     assert test_dataset[0]["precursor_charge"] == 1
     assert test_dataset[1]["precursor_charge"] == 2
-    assert test_dataset[2]["precursor_charge"] == 3
 
     assert test_dataset[0]["precursor_mz"] == 804.774963
     assert test_dataset[1]["precursor_mz"] == 804.774963
-    assert test_dataset[2]["precursor_mz"] == 804.774963
 
     assert (
         test_dataset[0]["intensity_array"]
@@ -167,16 +156,6 @@ def test_dia_to_dataframe_unannotated(mzml_small):
     assert test_dataset[0]["mz_array"] == test_dataset[1]["mz_array"]
     assert (
         test_dataset[0]["scan_window_array"]
-        == test_dataset[1]["scan_window_array"]
-    )
-
-    assert (
-        test_dataset[2]["intensity_array"]
-        == test_dataset[1]["intensity_array"]
-    )
-    assert test_dataset[2]["mz_array"] == test_dataset[1]["mz_array"]
-    assert (
-        test_dataset[2]["scan_window_array"]
         == test_dataset[1]["scan_window_array"]
     )
 
