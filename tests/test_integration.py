@@ -9,8 +9,29 @@ import yaml
 from click.testing import CliRunner
 
 from casanovo import casanovo
+from casanovo import cascadia
 
 TEST_DIR = Path(__file__).resolve().parent
+
+
+def test_auxilliary_cli_cascadia(tmp_path, monkeypatch):
+    """Test the secondary CLI commands."""
+    run = functools.partial(
+        CliRunner().invoke, cascadia.main, catch_exceptions=False
+    )
+
+    monkeypatch.chdir(tmp_path)
+    run("configure")
+    assert Path("casanovo.yaml").exists()
+
+    run(["configure", "-o", "test.yaml"])
+    assert Path("test.yaml").exists()
+
+    with pytest.raises(FileExistsError):
+        run(["configure", "-o", "test.yaml"])
+
+    res = run("version")
+    assert res.output
 
 
 def test_train_and_run(

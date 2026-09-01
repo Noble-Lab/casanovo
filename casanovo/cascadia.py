@@ -141,7 +141,7 @@ def configure(
     output_path, _ = _setup_output(
         output_dir, output_root, force_overwrite, verbosity, "cascadia"
     )
-    config_fname = output_root if output_root is not None else "cascadia"
+    config_fname = output_root if output_root is not None else "casanovo"
     config_fname = Path(config_fname).with_suffix(".yaml")
     if not force_overwrite:
         utils.check_dir_file_exists(output_path, str(config_fname))
