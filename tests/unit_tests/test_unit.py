@@ -27,20 +27,289 @@ import pytest
 import requests
 import torch
 import pyteomics.mztab
+import pyteomics.mzml
 import pyteomics.proforma
 
-from casanovo import casanovo, denovo, utils
+from casanovo import casanovo, denovo, utils, shared_loading
 from casanovo.casanovo import _SharedFileIOParams
 from casanovo.config import Config
 from casanovo.data import db_utils, ms_io, psm
-from casanovo.denovo.dataloaders import DeNovoDataModule
-from casanovo.denovo.evaluate import aa_match, aa_match_batch, aa_match_metrics
+from casanovo.denovo.dataloaders import DeNovoDataModule, _unique_stems
+from casanovo.denovo.evaluate import (
+    aa_match,
+    aa_match_batch,
+    aa_match_metrics,
+)
 from casanovo.denovo.model import (
     DbSpec2Pep,
     Spec2Pep,
     _calc_match_score,
     _peptide_score,
 )
+from casanovo.casanovo import _CKPT_CASANOVO
+from casanovo.cascadia import _CKPT_CASCADIA
+
+
+def test_select_top_peaks_orders_and_scales():
+    spec = {
+        "m/z array": np.array([300.0, 100.0, 200.0, 400.0]),
+        "intensity array": np.array([10.0, 40.0, 20.0, 5.0]),
+    }
+
+    dataset = DeNovoDataModule(None)
+    mzs, intensities = dataset._select_top_peaks(spec, sqrt_passes=1)
+
+    np.testing.assert_array_equal(mzs, [100.0, 200.0, 300.0, 400.0])
+    expected = np.sqrt([40.0, 20.0, 10.0, 5.0])
+    expected = expected / expected.max()
+    np.testing.assert_allclose(intensities, expected)
+
+    spec = {
+        "m/z array": np.array([100.0, 200.0]),
+        "intensity array": np.array([16.0, 4.0]),
+    }
+    mzs, intensities = dataset._select_top_peaks(spec, sqrt_passes=2)
+
+    expected = np.array([16.0, 4.0]) ** 0.25
+    expected = expected / expected.max()
+    np.testing.assert_array_equal(mzs, [100.0, 200.0])
+    np.testing.assert_allclose(intensities, expected)
+
+
+def test_select_top_peaks_none_keeps_all():
+    dataset = DeNovoDataModule(
+        max_peaks=None,
+        lance_dir=None,
+    )
+    spec = {
+        "m/z array": np.array([300.0, 100.0, 200.0]),
+        "intensity array": np.array([10.0, 30.0, 20.0]),
+    }
+    mzs, intensities = dataset._select_top_peaks(spec, sqrt_passes=1)
+
+    np.testing.assert_array_equal(
+        mzs,
+        np.array([100.0, 200.0, 300.0]),
+    )
+
+    intensities_true = np.array([30.0, 20.0, 10.0]) ** 0.5
+    intensities_true = intensities_true / intensities_true.max()
+
+    np.testing.assert_allclose(
+        intensities,
+        intensities_true,
+    )
+
+
+def test_select_top_peaks_empty_spectrum():
+    dataset = DeNovoDataModule(None)
+    spec = {"m/z array": np.array([]), "intensity array": np.array([])}
+    mzs, intensities = dataset._select_top_peaks(spec)
+    assert len(mzs) == 0
+    assert len(intensities) == 0
+
+
+def test_accumulate_scan_appends_across_calls():
+    prec_to_spec = {}
+    key = (450.0, 5.0, 2)
+
+    dataset = DeNovoDataModule(None)
+    dataset._accumulate_scan(
+        prec_to_spec,
+        key,
+        "scans",
+        "rts",
+        mzs=[100.0, 101.0],
+        intensities=[0.5, 0.9],
+        rt_offset=0.1,
+        window_width=2.0,
+    )
+    dataset._accumulate_scan(
+        prec_to_spec,
+        key,
+        "scans",
+        "rts",
+        mzs=[102.0],
+        intensities=[0.3],
+        rt_offset=0.2,
+        window_width=999.0,
+    )
+
+    entry = prec_to_spec[key]
+    assert entry["window_width"] == 2.0
+    assert entry["scans"] == [
+        [(100.0, 0.5), (101.0, 0.9)],
+        [(102.0, 0.3)],
+    ]
+    assert entry["rts"] == [0.1, 0.2]
+
+
+def test_unique_stems(tmp_path):
+    paths = [
+        tmp_path / "test.mgf",
+        tmp_path / "test.mgf",
+        tmp_path / "test.mgf",
+    ]
+    stems = _unique_stems(paths)
+    assert stems == ["test", "test_1", "test_2"]
+
+
+def test_lance_loading(mgf_small, tmp_path):
+    dataset = DeNovoDataModule(
+        test_paths=[mgf_small],
+        lance_dir=tmp_path,
+    )
+    dataset.setup(None)
+
+    lance_path = tmp_path / "test.lance"
+    load_dataset = DeNovoDataModule(
+        test_paths=[lance_path],
+        lance_dir=tmp_path,
+    )
+
+    load_dataset.setup(annotated=False, stage="test")
+    assert load_dataset.test_dataset is not None
+
+
+def test_missing_ms1_warning(caplog):
+    dataset = DeNovoDataModule(
+        lance_dir=None,
+        test_paths=[],
+        casanovo=False,
+        max_charge=2,
+    )
+
+    dataset._get_centers = lambda _: (
+        {},  # f_to_mzrt_to_pep
+        0,  # max_mz
+        10,  # window_size
+        1,  # cycle_time
+    )
+
+    dataset._extract_spectra = lambda *args: {
+        (500.0, 100.0, 1): {
+            "scans": [[(100.0, 200.0)]],
+            "rts": [0.0],
+            "window_width": 10.0,
+            "center_scan_id": "scan1",
+        },
+        (600.0, 200.0, 1): {
+            "scans": [[(100.0, 200.0)]],
+            "rts": [0.0],
+            "window_width": 10.0,
+            "center_scan_id": "scan2",
+        },
+    }
+
+    with caplog.at_level(logging.WARNING):
+        dataset._dia_to_dataframe(["test.mzML"], annotated=False)
+
+    assert "2 spectra were skipped due to missing MS1 scans" in caplog.text
+
+
+def test_get_centers_no_ms1(mzml_small_ms1, monkeypatch):
+    dataset = DeNovoDataModule(
+        lance_dir=None,
+        test_paths=[mzml_small_ms1],
+        casanovo=False,
+        max_charge=2,
+    )
+
+    ms2_spec = {
+        "ms level": 2,
+        "scanList": {"scan": [{"scan start time": 1.0}]},
+        "precursorList": {
+            "precursor": [
+                {
+                    "isolationWindow": {
+                        "isolation window target m/z": 500.0,
+                        "isolation window lower offset": 10.0,
+                        "isolation window upper offset": 10.0,
+                    }
+                }
+            ]
+        },
+    }
+
+    class MockReader:
+        def __enter__(self):
+            return iter([ms2_spec])
+
+        def __exit__(self, *args):
+            pass
+
+    monkeypatch.setattr(
+        pyteomics.mzml,
+        "read",
+        lambda *args, **kwargs: MockReader(),
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="does not contain at least two MS1 scans for DIA extraction",
+    ):
+        dataset._get_centers(mzml_small_ms1)
+
+
+def test_get_centers_no_ms2(mzml_small_ms1, monkeypatch):
+    dataset = DeNovoDataModule(
+        lance_dir=None,
+        test_paths=[mzml_small_ms1],
+        casanovo=False,
+        max_charge=2,
+    )
+
+    ms1_spec_1 = {
+        "ms level": 1,
+        "scanList": {"scan": [{"scan start time": 1.0}]},
+    }
+
+    ms1_spec_2 = {
+        "ms level": 1,
+        "scanList": {"scan": [{"scan start time": 2.0}]},
+    }
+
+    class MockReader:
+        def __enter__(self):
+            return iter([ms1_spec_1, ms1_spec_2])
+
+        def __exit__(self, *args):
+            pass
+
+    monkeypatch.setattr(
+        pyteomics.mzml,
+        "read",
+        lambda *args, **kwargs: MockReader(),
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="does not contain MS2 scans required",
+    ):
+        dataset._get_centers(mzml_small_ms1)
+
+
+def test_dia_to_dataframe_unannotated(mzml_small_ms1):
+    dataset = DeNovoDataModule(
+        lance_dir=None,
+        test_paths=[mzml_small_ms1],
+        casanovo=False,
+        max_charge=2,
+    )
+
+    dataset.setup(annotated=False, stage="test")
+    test_dataset = dataset.test_dataset
+
+    assert test_dataset[0]["precursor_charge"] == 1
+    assert test_dataset[1]["precursor_charge"] == 2
+
+    assert test_dataset[0]["precursor_mz"] == 804.774963
+    assert test_dataset[1]["precursor_mz"] == 804.774963
+
+    torch.testing.assert_close(
+        test_dataset[0]["intensity_array"],
+        test_dataset[1]["intensity_array"],
+    )
 
 
 def test_forward_reverse():
@@ -305,11 +574,11 @@ def test_version():
 )
 def test_is_valid_model(model_file, expectation, log_message, caplog):
     if expectation is None:
-        casanovo._is_valid_model(model_file, load_all_states=True)
+        shared_loading._is_valid_model(model_file, load_all_states=True)
         assert log_message in caplog.text
     else:
         with expectation:
-            casanovo._is_valid_model(model_file, load_all_states=True)
+            shared_loading._is_valid_model(model_file, load_all_states=True)
 
 
 @pytest.mark.skip(reason="Skipping due to Linux deadlock issue")
@@ -392,6 +661,7 @@ class MockRepo:
                 "casanovo_non-enzy.ckpt",
                 "v3.0.0.zip",
                 "v3.0.0.tar.gz",
+                "cascadia_orbitrap_v3-0-0.ckpt",
             ],
             "v3.1.0": ["v3.1.0.zip", "v3.1.0.tar.gz"],
             "v3.2.0": ["v3.2.0.zip", "v3.2.0.tar.gz"],
@@ -462,13 +732,14 @@ class MockResponseHead:
 
 
 @pytest.mark.parametrize(
-    ("model_arg", "expected_filename"),
+    ("model_arg", "expected_filename", "ckpt_regex"),
     [
-        (None, "casanovo_orbitrap_v3-0-0.ckpt"),
-        ("timstof", "casanovo_timstof_v3-0-0.ckpt"),
+        (None, "casanovo_orbitrap_v3-0-0.ckpt", _CKPT_CASANOVO),
+        ("timstof", "casanovo_timstof_v3-0-0.ckpt", _CKPT_CASANOVO),
+        (None, "cascadia_orbitrap_v3-0-0.ckpt", _CKPT_CASCADIA),
     ],
 )
-def test_setup_model(monkeypatch, model_arg, expected_filename):
+def test_setup_model(monkeypatch, model_arg, expected_filename, ckpt_regex):
     test_releases = ["3.0.0", "3.0.999", "3.999.999"]
     mock_get = MockResponseGet()
     mock_github = functools.partial(MockGithub, test_releases)
@@ -485,8 +756,8 @@ def test_setup_model(monkeypatch, model_arg, expected_filename):
         filename = pathlib.Path(tmp_dir) / expected_filename
 
         assert not filename.is_file()
-        _, result_path = casanovo.setup_model(
-            model_arg, None, None, None, False
+        _, result_path = shared_loading.setup_model(
+            model_arg, None, None, None, False, ckpt_regex, version
         )
         assert result_path.resolve() == filename.resolve()
         assert filename.is_file()
@@ -494,7 +765,9 @@ def test_setup_model(monkeypatch, model_arg, expected_filename):
         os.remove(result_path)
 
         assert not filename.is_file()
-        _, result = casanovo.setup_model(None, None, None, None, True)
+        _, result = shared_loading.setup_model(
+            None, None, None, None, True, ckpt_regex, version
+        )
         assert result is None
         assert not filename.is_file()
         assert mock_get.request_counter == 1
@@ -516,8 +789,8 @@ def test_setup_model(monkeypatch, model_arg, expected_filename):
         cache_file_path = cache_file_dir / cache_file_name
 
         assert not cache_file_path.is_file()
-        _, result_path = casanovo.setup_model(
-            file_url, None, None, None, False
+        _, result_path = shared_loading.setup_model(
+            file_url, None, None, None, False, ckpt_regex, version
         )
         assert cache_file_path.is_file()
         assert result_path.resolve() == cache_file_path.resolve()
@@ -525,8 +798,8 @@ def test_setup_model(monkeypatch, model_arg, expected_filename):
         os.remove(result_path)
 
         assert not cache_file_path.is_file()
-        _, result_path = casanovo.setup_model(
-            file_url, None, None, None, False
+        _, result_path = shared_loading.setup_model(
+            file_url, None, None, None, False, ckpt_regex, version
         )
         assert cache_file_path.is_file()
         assert result_path.resolve() == cache_file_path.resolve()
@@ -544,14 +817,14 @@ def test_setup_model(monkeypatch, model_arg, expected_filename):
         mnk.setattr(requests, "get", mock_get)
 
         temp_file_path = temp_file.name
-        _, result = casanovo.setup_model(
-            temp_file_path, None, None, None, False
+        _, result = shared_loading.setup_model(
+            temp_file_path, None, None, None, False, ckpt_regex, version
         )
         assert mock_get.request_counter == 3
         assert result == pathlib.Path(temp_file_path)
 
-        _, result = casanovo.setup_model(
-            temp_file_path, None, None, None, True
+        _, result = shared_loading.setup_model(
+            temp_file_path, None, None, None, True, ckpt_regex, version
         )
         assert mock_get.request_counter == 3
         assert result == pathlib.Path(temp_file_path)
@@ -567,19 +840,23 @@ def test_setup_model(monkeypatch, model_arg, expected_filename):
         mnk.setattr(requests, "get", mock_get)
 
         with pytest.raises(ValueError):
-            casanovo.setup_model("FooBar", None, None, None, False)
+            shared_loading.setup_model(
+                "FooBar", None, None, None, False, ckpt_regex, version
+            )
 
         assert mock_get.request_counter == 3
 
         with pytest.raises(ValueError):
-            casanovo.setup_model("FooBar", None, None, None, False)
+            shared_loading.setup_model(
+                "FooBar", None, None, None, False, ckpt_regex, version
+            )
 
         assert mock_get.request_counter == 3
 
 
 @pytest.mark.parametrize("model_arg", [None, "timstof"])
 def test_rate_limit_exception(monkeypatch, model_arg):
-    def mock_get_model_weights(selector, cache_dir, casanovo_version):
+    def mock_get_model_weights(selector, cache_dir, casanovo_version, ckpt_re):
         raise github.RateLimitExceededException(403, "rate limit exceeded", {})
 
     with (
@@ -588,22 +865,29 @@ def test_rate_limit_exception(monkeypatch, model_arg):
     ):
         mnk.setattr(casanovo, "__version__", "3.0.0")
         mnk.setattr("appdirs.user_cache_dir", lambda n, a, opinion: tmp_dir)
-        mnk.setattr(casanovo, "_get_model_weights", mock_get_model_weights)
+        mnk.setattr(
+            shared_loading, "_get_model_weights", mock_get_model_weights
+        )
 
         with pytest.raises(
             PermissionError, match="GitHub API rate limit exceeded"
         ):
-            casanovo.setup_model(model_arg, None, None, None, False)
+            shared_loading.setup_model(
+                model_arg, None, None, None, False, _CKPT_CASANOVO, "3.0.0"
+            )
 
 
 @pytest.mark.parametrize(
-    "selector, expected_filename",
+    ("selector", "expected_filename", "ckpt_model"),
     [
-        ("orbitrap", "casanovo_orbitrap_v3-0-0.ckpt"),
-        ("timstof", "casanovo_timstof_v3-0-0.ckpt"),
+        ("orbitrap", "casanovo_orbitrap_v3-0-0.ckpt", _CKPT_CASANOVO),
+        ("timstof", "casanovo_timstof_v3-0-0.ckpt", _CKPT_CASANOVO),
+        ("orbitrap", "cascadia_orbitrap_v3-0-0.ckpt", _CKPT_CASCADIA),
     ],
 )
-def test_get_model_weights(monkeypatch, selector, expected_filename):
+def test_get_model_weights(
+    monkeypatch, selector, expected_filename, ckpt_model
+):
     test_releases = ["3.0.0", "3.0.999", "3.999.999"]
     mock_get = MockResponseGet()
     mock_github = functools.partial(MockGithub, test_releases)
@@ -627,14 +911,14 @@ def test_get_model_weights(monkeypatch, selector, expected_filename):
             tmp_path = pathlib.Path(tmp_dir)
             filename = tmp_path / expected_filename
             assert not filename.is_file()
-            result_path = casanovo._get_model_weights(
-                selector, tmp_path, version_tup
+            result_path = shared_loading._get_model_weights(
+                selector, tmp_path, version_tup, ckpt_model
             )
             assert result_path == filename
             assert filename.is_file()
             # Second call should use cache, no extra download.
-            result_path = casanovo._get_model_weights(
-                selector, tmp_path, version_tup
+            result_path = shared_loading._get_model_weights(
+                selector, tmp_path, version_tup, ckpt_model
             )
             assert result_path == filename
 
@@ -653,10 +937,11 @@ def test_get_model_weights(monkeypatch, selector, expected_filename):
             mnk.setattr(github, "Github", mock_github)
             mnk.setattr(requests, "get", mock_get)
             with pytest.raises(ValueError):
-                casanovo._get_model_weights(
+                shared_loading._get_model_weights(
                     selector,
                     pathlib.Path(tmp_dir),
                     version_tup,
+                    ckpt_model,
                 )
 
     # Test GitHub API rate limit.
@@ -674,11 +959,45 @@ def test_get_model_weights(monkeypatch, selector, expected_filename):
         mnk.setattr(requests, "get", mock_get)
         mock_get.request_counter = 0
         with pytest.raises(github.RateLimitExceededException):
-            casanovo._get_model_weights(
-                selector, pathlib.Path(tmp_dir), (3, 0, 0)
+            shared_loading._get_model_weights(
+                selector, pathlib.Path(tmp_dir), (3, 0, 0), ckpt_model
             )
 
         assert mock_get.request_counter == 0
+
+
+def test_get_model_weights_no_github_checkpoints(monkeypatch, tmp_path):
+    class MockRepo:
+        def get_releases(self):
+            return []
+
+    class MockGithub:
+        def get_repo(self, name):
+            return MockRepo()
+
+    monkeypatch.setattr(github, "Github", MockGithub)
+
+    with pytest.raises(
+        ValueError,
+        match="No canonical model checkpoints found on GitHub",
+    ):
+        shared_loading._get_model_weights(
+            selector="timstof",
+            cache_dir=tmp_path,
+            casanovo_version=(5, 0, 1),
+            ckpt_regex=_CKPT_CASANOVO,
+        )
+
+
+def test_resolve_selector_unknown_model():
+    with pytest.raises(
+        ValueError,
+        match="Unknown model selector",
+    ):
+        shared_loading._resolve_selector(
+            "foobar",
+            ["timstof", "orbitrap"],
+        )
 
 
 @pytest.mark.parametrize(
@@ -700,7 +1019,7 @@ def test_get_model_weights(monkeypatch, selector, expected_filename):
     ],
 )
 def test_resolve_selector_success(selector, candidates, expected):
-    assert casanovo._resolve_selector(selector, candidates) == expected
+    assert shared_loading._resolve_selector(selector, candidates) == expected
 
 
 @pytest.mark.parametrize(
@@ -717,38 +1036,61 @@ def test_resolve_selector_success(selector, candidates, expected):
 )
 def test_resolve_selector_failure(selector, candidates):
     with pytest.raises(ValueError):
-        casanovo._resolve_selector(selector, candidates)
+        shared_loading._resolve_selector(selector, candidates)
 
 
 @pytest.mark.parametrize(
-    "filename, expected",
+    ("filename", "expected", "ckpt_regex"),
     [
-        ("casanovo_orbitrap_v5-0-0.ckpt", ("orbitrap", (5, 0, 0))),
-        ("casanovo_timstof_v5-2-0.ckpt", ("timstof", (5, 2, 0))),
-        ("casanovo_orbitrap-tmt_v6-0-1.ckpt", ("orbitrap-tmt", (6, 0, 1))),
+        (
+            "casanovo_orbitrap_v5-0-0.ckpt",
+            ("orbitrap", (5, 0, 0)),
+            _CKPT_CASANOVO,
+        ),
+        (
+            "casanovo_timstof_v5-2-0.ckpt",
+            ("timstof", (5, 2, 0)),
+            _CKPT_CASANOVO,
+        ),
+        (
+            "casanovo_orbitrap-tmt_v6-0-1.ckpt",
+            ("orbitrap-tmt", (6, 0, 1)),
+            _CKPT_CASANOVO,
+        ),
         # Path prefix is stripped correctly
-        ("/some/dir/casanovo_orbitrap_v3-0-0.ckpt", ("orbitrap", (3, 0, 0))),
-        ("casanovo_Orbitrap_v3-0-0.ckpt", ("orbitrap", (3, 0, 0))),
+        (
+            "/some/dir/casanovo_orbitrap_v3-0-0.ckpt",
+            ("orbitrap", (3, 0, 0)),
+            _CKPT_CASANOVO,
+        ),
+        (
+            "casanovo_Orbitrap_v3-0-0.ckpt",
+            ("orbitrap", (3, 0, 0)),
+            _CKPT_CASANOVO,
+        ),
     ],
 )
-def test_parse_ckpt_valid(filename, expected):
-    assert casanovo._parse_ckpt(filename) == expected
+def test_parse_ckpt_valid(filename, expected, ckpt_regex):
+    assert shared_loading._parse_ckpt(filename, ckpt_regex) == expected
 
 
 @pytest.mark.parametrize(
-    "filename",
+    ("filename", "ckpt_regex"),
     [
-        "casanovo_massivekb.ckpt",  # old format, no version
-        "casanovo_timstof.ckpt",  # old format, no version
-        "casanovo_non-enzy.checkpt",  # wrong extension
-        "casanovo__v3-0-0.ckpt",  # empty model ID
-        "casanovo_orbitrap_v3.0.0.ckpt",  # dots instead of dashes in version
-        "v3.0.0.zip",
-        "model.ckpt",
+        ("casanovo_massivekb.ckpt", _CKPT_CASANOVO),  # old format, no version
+        ("casanovo_timstof.ckpt", _CKPT_CASANOVO),  # old format, no version
+        ("casanovo_non-enzy.checkpt", _CKPT_CASANOVO),  # wrong extension
+        ("casanovo__v3-0-0.ckpt", _CKPT_CASANOVO),  # empty model ID
+        (
+            "casanovo_orbitrap_v3.0.0.ckpt",
+            _CKPT_CASANOVO,
+        ),  # dots instead of dashes in version
+        ("v3.0.0.zip", _CKPT_CASANOVO),
+        ("model.ckpt", _CKPT_CASANOVO),
     ],
 )
-def test_parse_ckpt_invalid(filename):
-    assert casanovo._parse_ckpt(filename) is None
+def test_parse_ckpt_invalid(filename, ckpt_regex):
+    assert shared_loading._parse_ckpt(filename, ckpt_regex) is None
 
 
 def test_best_ckpt_no_cross_family():
@@ -756,7 +1098,7 @@ def test_best_ckpt_no_cross_family():
     # Caller is responsible for pre-filtering by family; _best_ckpt only
     # sees one family's checkpoints. Confirm it returns None rather than
     # picking something from a different family if the list is empty.
-    assert casanovo._best_ckpt([], (4, 3, 2)) is None
+    assert shared_loading._best_ckpt([], (4, 3, 2)) is None
 
 
 def test_get_weights_from_url(monkeypatch):
@@ -779,25 +1121,32 @@ def test_get_weights_from_url(monkeypatch):
 
         # Test downloading and caching the file
         assert not cache_file_path.is_file()
-        result_path = casanovo._get_weights_from_url(file_url, cache_dir)
+        result_path = shared_loading._get_weights_from_url(file_url, cache_dir)
         assert cache_file_path.is_file()
         assert result_path.resolve() == cache_file_path.resolve()
         assert mock_get.request_counter == 1
-        assert mock_get.timeouts == [casanovo._MODEL_WEIGHT_REQUEST_TIMEOUT]
+        assert mock_get.timeouts == [
+            shared_loading._MODEL_WEIGHT_REQUEST_TIMEOUT
+        ]
 
         # Test that cached file is used
-        result_path = casanovo._get_weights_from_url(file_url, cache_dir)
+        result_path = shared_loading._get_weights_from_url(file_url, cache_dir)
         assert result_path.resolve() == cache_file_path.resolve()
         assert mock_get.request_counter == 1
-        assert mock_head.timeouts == [casanovo._MODEL_WEIGHT_REQUEST_TIMEOUT]
+        assert mock_head.timeouts == [
+            shared_loading._MODEL_WEIGHT_REQUEST_TIMEOUT
+        ]
 
         # Test force downloading the file
-        result_path = casanovo._get_weights_from_url(
+        result_path = shared_loading._get_weights_from_url(
             file_url, cache_dir, force_download=True
         )
         assert result_path.resolve() == cache_file_path.resolve()
         assert mock_get.request_counter == 2
-        assert mock_get.timeouts[-1] == casanovo._MODEL_WEIGHT_REQUEST_TIMEOUT
+        assert (
+            mock_get.timeouts[-1]
+            == shared_loading._MODEL_WEIGHT_REQUEST_TIMEOUT
+        )
 
         # Test that file is re-downloaded if last modified is newer than
         # file last modified
@@ -806,7 +1155,7 @@ def test_get_weights_from_url(monkeypatch):
         mock_head.last_modified = (
             curr_utc + datetime.timedelta(days=365.0)
         ).strftime("%a, %d %b %Y %H:%M:%S GMT")
-        result_path = casanovo._get_weights_from_url(file_url, cache_dir)
+        result_path = shared_loading._get_weights_from_url(file_url, cache_dir)
         assert result_path.resolve() == cache_file_path.resolve()
         assert mock_get.request_counter == 3
 
@@ -814,14 +1163,14 @@ def test_get_weights_from_url(monkeypatch):
         mock_head.last_modified = (
             curr_utc - datetime.timedelta(days=365.0)
         ).strftime("%a, %d %b %Y %H:%M:%S GMT")
-        result_path = casanovo._get_weights_from_url(file_url, cache_dir)
+        result_path = shared_loading._get_weights_from_url(file_url, cache_dir)
         assert result_path.resolve() == cache_file_path.resolve()
         assert mock_get.request_counter == 3
 
         # Test that error is raised if file get response is not OK
         mock_get.is_ok = False
         with pytest.raises(requests.HTTPError):
-            casanovo._get_weights_from_url(
+            shared_loading._get_weights_from_url(
                 file_url, cache_dir, force_download=True
             )
         mock_get.is_ok = True
@@ -833,14 +1182,14 @@ def test_get_weights_from_url(monkeypatch):
         mock_head.last_modified = (
             curr_utc + datetime.timedelta(days=365.0)
         ).strftime("%a, %d %b %Y %H:%M:%S GMT")
-        result_path = casanovo._get_weights_from_url(file_url, cache_dir)
+        result_path = shared_loading._get_weights_from_url(file_url, cache_dir)
         assert result_path.resolve() == cache_file_path.resolve()
         assert mock_get.request_counter == 4
         mock_head.is_ok = True
 
         # Test that cached file is used if head request fails
         mock_head.fail = True
-        result_path = casanovo._get_weights_from_url(file_url, cache_dir)
+        result_path = shared_loading._get_weights_from_url(file_url, cache_dir)
         assert result_path.resolve() == cache_file_path.resolve()
         assert mock_get.request_counter == 4
         mock_head.fail = False
@@ -848,12 +1197,13 @@ def test_get_weights_from_url(monkeypatch):
         # Test invalid URL
         with pytest.raises(ValueError):
             bad_url = "foobar"
-            casanovo._get_weights_from_url(bad_url, cache_dir)
+            shared_loading._get_weights_from_url(bad_url, cache_dir)
 
 
 def test_is_valid_url():
-    assert casanovo._is_valid_url("https://www.washington.edu/")
-    assert not casanovo._is_valid_url("foobar")
+    assert shared_loading._is_valid_url("https://www.washington.edu/")
+    assert not shared_loading._is_valid_url("foobar")
+    assert not shared_loading._is_valid_url("http://[invalid")
 
 
 @pytest.mark.parametrize(
@@ -2367,15 +2717,15 @@ def test_check_dir(tmp_path):
 def test_setup_output(tmp_path, monkeypatch):
     with monkeypatch.context() as mnk:
         mnk.setattr(pathlib.Path, "cwd", lambda: tmp_path)
-        output_path, output_root = casanovo._setup_output(
-            None, None, False, "info"
+        output_path, output_root = shared_loading._setup_output(
+            None, None, False, "info", "casanovo"
         )
         assert output_path.resolve() == tmp_path.resolve()
         assert re.fullmatch(r"casanovo_\d+", output_root) is not None
 
         target_path = tmp_path / "foo"
-        output_path, output_root = casanovo._setup_output(
-            str(target_path), "bar", False, "info"
+        output_path, output_root = shared_loading._setup_output(
+            str(target_path), "bar", False, "info", "casanovo"
         )
 
         assert output_path.resolve() == target_path.resolve()
@@ -3378,7 +3728,9 @@ def test_validation_step_logs_per_file():
 
 def test_train_cli_tracking_peak_path(tmp_path, mgf_small, monkeypatch):
     """-t/--tracking_peak_path CLI option is forwarded to ModelRunner.train()."""
-    from casanovo.denovo.model_runner import ModelRunner as _ModelRunner
+    from casanovo.denovo.model_runner import (
+        ModelRunner as _ModelRunner,
+    )
 
     captured = {}
 
@@ -3388,12 +3740,12 @@ def test_train_cli_tracking_peak_path(tmp_path, mgf_small, monkeypatch):
     monkeypatch.setattr(_ModelRunner, "train", fake_train)
     monkeypatch.setattr(casanovo, "_is_valid_model", lambda *a, **kw: None)
     monkeypatch.setattr(
-        casanovo, "_setup_output", lambda *a, **kw: (tmp_path, "out")
+        shared_loading, "_setup_output", lambda *a, **kw: (tmp_path, "out")
     )
     monkeypatch.setattr(
-        casanovo, "setup_model", lambda *a, **kw: (Config(), None)
+        shared_loading, "setup_model", lambda *a, **kw: (Config(), None)
     )
-    monkeypatch.setattr(utils, "log_system_info", lambda: None)
+    monkeypatch.setattr(utils, "log_system_info", lambda *a, **kw: None)
     monkeypatch.setattr(utils, "log_run_report", lambda **kw: None)
 
     result = click.testing.CliRunner().invoke(

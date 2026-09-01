@@ -25,7 +25,7 @@ from ..denovo.dataloaders import DeNovoDataModule
 from ..denovo.evaluate import aa_match_batch, aa_match_metrics
 from ..denovo.model import DbSpec2Pep, Spec2Pep
 
-logger = logging.getLogger("casanovo")
+logger = logging.getLogger(__name__)
 
 
 class ModelRunner:
@@ -48,6 +48,8 @@ class ModelRunner:
     overwrite_ckpt_check: bool, optional
         Whether to check output_dir (if not `None`) for conflicting
         checkpoint files.
+    casanovo: bool, optional
+        Whether or not to load data for the Casanovo or Cascadia models
     """
 
     def __init__(
@@ -57,6 +59,7 @@ class ModelRunner:
         output_dir: Optional[Path | None] = None,
         output_rootname: Optional[str | None] = None,
         overwrite_ckpt_check: Optional[bool] = True,
+        casanovo: Optional[bool] = True,
     ) -> None:
         """Initialize a ModelRunner."""
         self.config = config
@@ -64,6 +67,7 @@ class ModelRunner:
         self.output_dir = output_dir
         self.output_rootname = output_rootname
         self.overwrite_ckpt_check = overwrite_ckpt_check
+        self.casanovo = casanovo
 
         # Initialized later.
         self.tmp_dir = None
@@ -658,6 +662,8 @@ class ModelRunner:
             shuffle_buffer_size=self.config.shuffle_buffer_size,
             n_workers=self.config.n_workers,
             lance_dir=lance_dir,
+            casanovo=self.casanovo,
+            scan_width=self.config.width,
         )
 
     @staticmethod

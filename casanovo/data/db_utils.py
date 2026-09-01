@@ -15,7 +15,7 @@ import pandas as pd
 import pyteomics.fasta
 import pyteomics.parser
 
-logger = logging.getLogger("casanovo")
+logger = logging.getLogger(__name__)
 
 # CONSTANTS
 PROTON = 1.00727646677
