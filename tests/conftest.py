@@ -9,7 +9,7 @@ import pathlib
 
 
 @pytest.fixture
-def mzml_small():
+def mzml_small_ms1():
     return (
         pathlib.Path(__file__).parent
         / ".."
