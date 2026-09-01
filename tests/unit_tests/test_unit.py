@@ -33,7 +33,7 @@ from casanovo import casanovo, denovo, utils, shared_loading
 from casanovo.casanovo import _SharedFileIOParams
 from casanovo.config import Config
 from casanovo.data import db_utils, ms_io, psm
-from casanovo.denovo.dataloaders import DeNovoDataModule
+from casanovo.denovo.dataloaders import DeNovoDataModule, _unique_stems
 from casanovo.denovo.evaluate import (
     aa_match,
     aa_match_batch,
@@ -47,7 +47,138 @@ from casanovo.denovo.model import (
 )
 from casanovo.casanovo import _CKPT_CASANOVO
 from casanovo.cascadia import _CKPT_CASCADIA
-import casanovo.shared_loading as shared_loading
+
+
+def test_select_top_peaks_orders_and_scales():
+    spec = {
+        "m/z array": np.array([300.0, 100.0, 200.0, 400.0]),
+        "intensity array": np.array([10.0, 40.0, 20.0, 5.0]),
+    }
+
+    dataset = DeNovoDataModule(None)
+    mzs, intensities = dataset._select_top_peaks(spec, top_n=3, sqrt_passes=1)
+
+    # Keeps the 3 most intense peaks (100, 200, 300), sorted by m/z.
+    np.testing.assert_array_equal(mzs, [100.0, 200.0, 300.0])
+    expected = np.sqrt([40.0, 20.0, 10.0])
+    expected = expected / expected.max()
+    np.testing.assert_allclose(intensities, expected)
+
+    spec = {
+        "m/z array": np.array([100.0, 200.0]),
+        "intensity array": np.array([16.0, 4.0]),
+    }
+    mzs, intensities = dataset._select_top_peaks(spec, top_n=2, sqrt_passes=2)
+
+    expected = np.array([16.0, 4.0]) ** 0.25
+    expected = expected / expected.max()
+    np.testing.assert_array_equal(mzs, [100.0, 200.0])
+    np.testing.assert_allclose(intensities, expected)
+
+
+def test_select_top_peaks_empty_spectrum():
+    dataset = DeNovoDataModule(None)
+    spec = {"m/z array": np.array([]), "intensity array": np.array([])}
+    mzs, intensities = dataset._select_top_peaks(spec, top_n=5)
+    assert len(mzs) == 0
+    assert len(intensities) == 0
+
+
+def test_accumulate_scan_appends_across_calls():
+    prec_to_spec = {}
+    key = (450.0, 5.0, 2)
+
+    dataset = DeNovoDataModule(None)
+    dataset._accumulate_scan(
+        prec_to_spec,
+        key,
+        "scans",
+        "rts",
+        mzs=[100.0, 101.0],
+        intensities=[0.5, 0.9],
+        rt_offset=0.1,
+        window_width=2.0,
+    )
+    dataset._accumulate_scan(
+        prec_to_spec,
+        key,
+        "scans",
+        "rts",
+        mzs=[102.0],
+        intensities=[0.3],
+        rt_offset=0.2,
+        window_width=999.0,
+    )
+
+    entry = prec_to_spec[key]
+    assert entry["window_width"] == 2.0
+    assert entry["scans"] == [
+        [(100.0, 0.5), (101.0, 0.9)],
+        [(102.0, 0.3)],
+    ]
+    assert entry["rts"] == [0.1, 0.2]
+
+
+# def test_dia_to_dataframe(mzml_small):
+#    dataset = DeNovoDataModule(
+#        test_paths=mzml_small,
+#        casanovo=False,
+#    )#
+
+#    dataset.setup(annotated=False, stage="test")
+
+
+def test_unique_stems(tmp_path):
+    paths = [tmp_path / "test.mgf", tmp_path / "test.mgf"]
+    stems = _unique_stems(paths)
+    assert stems == ["test", "test_1"]
+
+
+def test_lance_loading(tmp_path):
+    lance_path = tmp_path / "test.lance"
+    dataset = DeNovoDataModule(
+        test_paths=lance_path,
+        lance_dir=None,
+    )
+    assert dataset is not None
+
+
+def test_dia_to_dataframe_unannotated(mzml_small):
+    dataset = DeNovoDataModule(
+        lance_dir=None,
+        test_paths=[mzml_small],
+        casanovo=False,
+        max_charge=2,
+    )
+    dataset.setup(annotated=False, stage="test")
+    test_dataset = dataset.test_dataset
+    assert test_dataset[0]["precursor_charge"] == 1
+    assert test_dataset[1]["precursor_charge"] == 2
+    assert test_dataset[2]["precursor_charge"] == 3
+
+    assert test_dataset[0]["precursor_mz"] == 804.774963
+    assert test_dataset[1]["precursor_mz"] == 804.774963
+    assert test_dataset[2]["precursor_mz"] == 804.774963
+
+    assert (
+        test_dataset[0]["intensity_array"]
+        == test_dataset[1]["intensity_array"]
+    )
+    assert test_dataset[0]["mz_array"] == test_dataset[1]["mz_array"]
+    assert (
+        test_dataset[0]["scan_window_array"]
+        == test_dataset[1]["scan_window_array"]
+    )
+
+    assert (
+        test_dataset[2]["intensity_array"]
+        == test_dataset[1]["intensity_array"]
+    )
+    assert test_dataset[2]["mz_array"] == test_dataset[1]["mz_array"]
+    assert (
+        test_dataset[2]["scan_window_array"]
+        == test_dataset[1]["scan_window_array"]
+    )
 
 
 def test_forward_reverse():

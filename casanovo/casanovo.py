@@ -379,10 +379,10 @@ def configure(
 
     The Casanovo configuration file is in the YAML format.
     """
-    utils.log_system_info(model="Casanovo", version=__version__)
     output_path, _ = _setup_output(
         output_dir, output_root, force_overwrite, verbosity, "casanovo"
     )
+    utils.log_system_info(model="Casanovo", version=__version__)
     config_fname = output_root if output_root is not None else "casanovo"
     config_fname = Path(config_fname).with_suffix(".yaml")
     if not force_overwrite:

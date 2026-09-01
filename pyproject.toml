@@ -26,6 +26,7 @@ dependencies = [
     "natsort",
     "numpy<2.0",
     "pandas",
+    "polars",
     "psutil",
     "PyGithub",
     "pylance==0.15.0",
