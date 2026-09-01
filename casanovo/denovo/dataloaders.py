@@ -398,7 +398,6 @@ class DeNovoDataModule(pl.LightningDataModule):
                     spectra,
                     f_to_mzrt_to_pep,
                     part,
-                    self.max_peaks,
                     (self.scan_width + 1) * cycle_time,
                 )
                 for key, value in prec_to_spec.items():
@@ -450,7 +449,7 @@ class DeNovoDataModule(pl.LightningDataModule):
 
                         record = {
                             "peak_file": pathlib.Path(spectra).name,
-                            "scan_id": value["center_scan_id"],
+                            "scan_id": value["center_scan_id"] or "0",
                             "ms_level": self.ms_level,
                             "precursor_mz": prec,
                             "mz_array": np.asarray(mz_array, dtype=np.float32),
