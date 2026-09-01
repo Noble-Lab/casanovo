@@ -966,6 +966,40 @@ def test_get_model_weights(
         assert mock_get.request_counter == 0
 
 
+def test_get_model_weights_no_github_checkpoints(monkeypatch, tmp_path):
+    class MockRepo:
+        def get_releases(self):
+            return []
+
+    class MockGithub:
+        def get_repo(self, name):
+            return MockRepo()
+
+    monkeypatch.setattr(github, "Github", MockGithub)
+
+    with pytest.raises(
+        ValueError,
+        match="No canonical model checkpoints found on GitHub",
+    ):
+        shared_loading._get_model_weights(
+            selector="timstof",
+            cache_dir=tmp_path,
+            casanovo_version=(5, 0, 1),
+            ckpt_regex=_CKPT_CASANOVO,
+        )
+
+
+def test_resolve_selector_unknown_model():
+    with pytest.raises(
+        ValueError,
+        match="Unknown model selector",
+    ):
+        shared_loading._resolve_selector(
+            "foobar",
+            ["timstof", "orbitrap"],
+        )
+
+
 @pytest.mark.parametrize(
     "selector, candidates, expected",
     [
@@ -1169,6 +1203,7 @@ def test_get_weights_from_url(monkeypatch):
 def test_is_valid_url():
     assert shared_loading._is_valid_url("https://www.washington.edu/")
     assert not shared_loading._is_valid_url("foobar")
+    assert not shared_loading._is_valid_url("http://[invalid")
 
 
 @pytest.mark.parametrize(

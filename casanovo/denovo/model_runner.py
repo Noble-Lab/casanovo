@@ -663,6 +663,7 @@ class ModelRunner:
             n_workers=self.config.n_workers,
             lance_dir=lance_dir,
             casanovo=self.casanovo,
+            scan_width=self.config.width,
         )
 
     @staticmethod
