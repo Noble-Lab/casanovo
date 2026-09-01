@@ -370,7 +370,7 @@ class DeNovoDataModule(pl.LightningDataModule):
 
         return dataset
 
-    def _dia_to_dataframe(self, paths, annotated) -> Iterator[pl.DataFrame]:
+    def _dia_to_dataframe(self, paths, annotated) -> plr.DataFrame:
         """
         Make spectrum dataframes.
 
