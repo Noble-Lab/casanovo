@@ -76,6 +76,28 @@ def test_select_top_peaks_orders_and_scales():
     np.testing.assert_allclose(intensities, expected)
 
 
+def test_select_top_peaks_none_keeps_all():
+    dataset = DeNovoDataModule(
+        max_peaks=None,
+        lance_dir=None,
+    )
+    spec = {
+        "m/z array": np.array([300.0, 100.0, 200.0]),
+        "intensity array": np.array([10.0, 30.0, 20.0]),
+    }
+    mzs, intensities = dataset._select_top_peaks(spec)
+
+    np.testing.assert_array_equal(
+        mzs,
+        np.array([100.0, 200.0, 300.0]),
+    )
+
+    np.testing.assert_allclose(
+        intensities,
+        np.array([30.0, 20.0, 10.0]) / 30.0,
+    )
+
+
 def test_select_top_peaks_empty_spectrum():
     dataset = DeNovoDataModule(None)
     spec = {"m/z array": np.array([]), "intensity array": np.array([])}
@@ -131,6 +153,7 @@ def test_lance_loading(tmp_path):
         test_paths=lance_path,
         lance_dir=None,
     )
+    dataset.setup(None)
     assert dataset is not None
 
 
