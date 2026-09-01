@@ -10,6 +10,7 @@ from typing import Optional, Sequence, Iterator
 import lance
 import lightning.pytorch as pl
 import numpy as np
+import polars as plr
 import pyteomics
 import pyarrow as pa
 import spectrum_utils.spectrum as sus
@@ -250,7 +251,7 @@ class DeNovoDataModule(pl.LightningDataModule):
                         [path],
                         annotated=True,
                         mode=f"tracking_{i}",
-                        shuffle=False,  # better design choice for this?
+                        shuffle=False,
                     )
                 )
             self.n_main_loaders = len(self.valid_datasets)
@@ -369,7 +370,7 @@ class DeNovoDataModule(pl.LightningDataModule):
 
         return dataset
 
-    def _dia_to_dataframe(self, paths, annotated) -> Iterator[pa.RecordBatch]:
+    def _dia_to_dataframe(self, paths, annotated) -> Iterator[pl.DataFrame]:
         """
         Make spectrum dataframes.
 
@@ -386,8 +387,8 @@ class DeNovoDataModule(pl.LightningDataModule):
         Iterator[pl.DataFrame]
             An iterator of dataframes with the centered spectra.
         """
+        overall_records = []
         for spectra in paths:
-            file_records = []
             skipped = 0
             f_to_mzrt_to_pep, max_mz, _window_size, cycle_time = (
                 self._get_centers(spectra)
@@ -450,7 +451,7 @@ class DeNovoDataModule(pl.LightningDataModule):
                         record = {
                             "peak_file": pathlib.Path(spectra).name,
                             "scan_id": value["center_scan_id"],
-                            "ms_level": 2,
+                            "ms_level": self.ms_level,
                             "precursor_mz": prec,
                             "mz_array": np.asarray(mz_array, dtype=np.float32),
                             "intensity_array": np.asarray(
@@ -465,7 +466,7 @@ class DeNovoDataModule(pl.LightningDataModule):
                         if not annotated:
                             record["precursor_charge"] = charge
 
-                        file_records.append(record)
+                        overall_records.append(record)
 
             if skipped > 0:
                 logger.warning(
@@ -474,9 +475,9 @@ class DeNovoDataModule(pl.LightningDataModule):
                     spectra,
                 )
 
-            yield pa.RecordBatch.from_pylist(file_records, schema=DIA_SCHEMA)
+        return plr.DataFrame(overall_records)
 
-    def _select_top_peaks(self, spec, top_n, sqrt_passes=1):
+    def _select_top_peaks(self, spec, sqrt_passes=1):
         """Select the top-n most intense peaks, sort by m/z, scale intensities.
 
         Parameters
@@ -497,7 +498,7 @@ class DeNovoDataModule(pl.LightningDataModule):
         mzs = spec["m/z array"]
         intensities = spec["intensity array"]
 
-        top_idx = np.argsort(intensities)[-top_n:]
+        top_idx = np.argsort(intensities)[-self.max_peaks :]
         mzs, intensities = mzs[top_idx], intensities[top_idx]
 
         mz_order = np.argsort(mzs)
@@ -511,7 +512,6 @@ class DeNovoDataModule(pl.LightningDataModule):
         return mzs, intensities
 
     def _accumulate_scan(
-        self,
         prec_to_spec,
         key,
         scans_key,
@@ -523,12 +523,17 @@ class DeNovoDataModule(pl.LightningDataModule):
     ):
         """Append one scan's selected peaks onto the record for `key`,
         creating it with any one-time metadata (extra) on first use."""
-        entry = prec_to_spec.setdefault(key, dict(extra))
+        entry = prec_to_spec.setdefault(key, {})
+
+        for name, value in extra.items():
+            entry.setdefault(name, value)
+
         entry.setdefault(scans_key, []).append(list(zip(mzs, intensities)))
+
         entry.setdefault(rts_key, []).append(rt_offset)
 
     def _extract_spectra(
-        self, mzml_file, f_to_mzrt_to_pep, part, top_n, time_width
+        self, mzml_file, f_to_mzrt_to_pep, part, time_width
     ) -> dict[tuple, dict[str, tuple]]:
         """Creates a dictionary of precursors with at least one matched scan
 
@@ -562,7 +567,7 @@ class DeNovoDataModule(pl.LightningDataModule):
 
                 if spec["ms level"] == 1:
                     mzs, intensities = self._select_top_peaks(
-                        spec, top_n, sqrt_passes=2
+                        spec, sqrt_passes=2
                     )
                     for scan_rt in range(
                         int(cur_rt / 10) - 1, int(cur_rt / 10) + 2
@@ -593,7 +598,7 @@ class DeNovoDataModule(pl.LightningDataModule):
 
                 elif spec["ms level"] == 2:
                     mzs, intensities = self._select_top_peaks(
-                        spec, top_n, sqrt_passes=1
+                        spec, sqrt_passes=1
                     )
                     window = spec["precursorList"]["precursor"][0][
                         "isolationWindow"

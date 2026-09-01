@@ -5,6 +5,17 @@ import psims
 import pytest
 import yaml
 from pyteomics.mass import calculate_mass, fast_mass, std_aa_mass
+import pathlib
+
+
+@pytest.fixture
+def mzml_small():
+    return (
+        pathlib.Path(__file__).parent
+        / ".."
+        / "sample_data"
+        / "sample_preprocessed_spectra.mzML"
+    )
 
 
 @pytest.fixture
