@@ -450,7 +450,7 @@ class DeNovoDataModule(pl.LightningDataModule):
 
                     record = {
                         "peak_file": pathlib.Path(spectra).name,
-                        "scan_id": value["center_scan_id"] or 0,
+                        "scan_id": value["center_scan_id"],
                         "ms_level": self.ms_level,
                         "precursor_mz": prec,
                         "mz_array": np.asarray(mz_array, dtype=np.float32),
@@ -594,9 +594,7 @@ class DeNovoDataModule(pl.LightningDataModule):
                                     mzs,
                                     intensities,
                                     cur_rt - rt,
-                                    center_scan_id=spec.get("params", {}).get(
-                                        "id"
-                                    ),
+                                    center_scan_id=spec.get("id", 0),
                                 )
 
                 elif spec["ms level"] == 2:
@@ -723,10 +721,14 @@ class DeNovoDataModule(pl.LightningDataModule):
                             (window_center, cur_rt, 1)
                         ]
 
-        if cycle_time is None or window_size is None:
+        if cycle_time is None:
             raise ValueError(
-                f"{mzml_file} does not contain the MS1/MS2 scans required "
-                "for DIA extraction"
+                f"{mzml_file} does not contain MS1 scans required for DIA extraction"
+            )
+
+        if window_size is None:
+            raise ValueError(
+                f"{mzml_file} does not contain MS2 scans required for DIA extraction"
             )
 
         return f_to_mzrt_to_pep, max_mz, window_size, cycle_time

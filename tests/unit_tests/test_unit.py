@@ -27,6 +27,7 @@ import pytest
 import requests
 import torch
 import pyteomics.mztab
+import pyteomics.mzml
 import pyteomics.proforma
 
 from casanovo import casanovo, denovo, utils, shared_loading
@@ -58,7 +59,6 @@ def test_select_top_peaks_orders_and_scales():
     dataset = DeNovoDataModule(None)
     mzs, intensities = dataset._select_top_peaks(spec, sqrt_passes=1)
 
-    # Keeps the 3 most intense peaks (100, 200, 300), sorted by m/z.
     np.testing.assert_array_equal(mzs, [100.0, 200.0, 300.0, 400.0])
     expected = np.sqrt([40.0, 20.0, 10.0, 5.0])
     expected = expected / expected.max()
@@ -145,9 +145,13 @@ def test_accumulate_scan_appends_across_calls():
 
 
 def test_unique_stems(tmp_path):
-    paths = [tmp_path / "test.mgf", tmp_path / "test.mgf"]
+    paths = [
+        tmp_path / "test.mgf",
+        tmp_path / "test.mgf",
+        tmp_path / "test.mgf",
+    ]
     stems = _unique_stems(paths)
-    assert stems == ["test", "test_1"]
+    assert stems == ["test", "test_1", "test_2"]
 
 
 def test_lance_loading(mgf_small, tmp_path):
@@ -156,7 +160,133 @@ def test_lance_loading(mgf_small, tmp_path):
         lance_dir=tmp_path,
     )
     dataset.setup(None)
-    assert dataset is not None
+
+    lance_path = tmp_path / "test.lance"
+    load_dataset = DeNovoDataModule(
+        test_paths=[lance_path],
+        lance_dir=tmp_path,
+    )
+
+    load_dataset.setup(annotated=False, stage="test")
+    assert load_dataset.test_dataset is not None
+
+
+def test_missing_ms1_warning(caplog):
+    dataset = DeNovoDataModule(
+        lance_dir=None,
+        test_paths=[],
+        casanovo=False,
+        max_charge=2,
+    )
+
+    dataset._get_centers = lambda _: (
+        {},  # f_to_mzrt_to_pep
+        0,  # max_mz
+        10,  # window_size
+        1,  # cycle_time
+    )
+
+    dataset._extract_spectra = lambda *args: {
+        (500.0, 100.0, 1): {
+            "scans": [[(100.0, 200.0)]],
+            "rts": [0.0],
+            "window_width": 10.0,
+            "center_scan_id": "scan1",
+        },
+        (600.0, 200.0, 1): {
+            "scans": [[(100.0, 200.0)]],
+            "rts": [0.0],
+            "window_width": 10.0,
+            "center_scan_id": "scan2",
+        },
+    }
+
+    with caplog.at_level(logging.WARNING):
+        dataset._dia_to_dataframe(["test.mzML"], annotated=False)
+
+    assert "2 spectra were skipped due to missing MS1 scans" in caplog.text
+
+
+def test_get_centers_no_ms1(mzml_small_ms1, monkeypatch):
+    dataset = DeNovoDataModule(
+        lance_dir=None,
+        test_paths=[mzml_small_ms1],
+        casanovo=False,
+        max_charge=2,
+    )
+
+    ms2_spec = {
+        "ms level": 2,
+        "scanList": {"scan": [{"scan start time": 1.0}]},
+        "precursorList": {
+            "precursor": [
+                {
+                    "isolationWindow": {
+                        "isolation window target m/z": 500.0,
+                        "isolation window lower offset": 10.0,
+                        "isolation window upper offset": 10.0,
+                    }
+                }
+            ]
+        },
+    }
+
+    class MockReader:
+        def __enter__(self):
+            return iter([ms2_spec])
+
+        def __exit__(self, *args):
+            pass
+
+    monkeypatch.setattr(
+        pyteomics.mzml,
+        "read",
+        lambda *args, **kwargs: MockReader(),
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="does not contain MS1 scans required",
+    ):
+        dataset._get_centers(mzml_small_ms1)
+
+
+def test_get_centers_no_ms2(mzml_small_ms1, monkeypatch):
+    dataset = DeNovoDataModule(
+        lance_dir=None,
+        test_paths=[mzml_small_ms1],
+        casanovo=False,
+        max_charge=2,
+    )
+
+    ms1_spec_1 = {
+        "ms level": 1,
+        "scanList": {"scan": [{"scan start time": 1.0}]},
+    }
+
+    ms1_spec_2 = {
+        "ms level": 1,
+        "scanList": {"scan": [{"scan start time": 2.0}]},
+    }
+
+    class MockReader:
+        def __enter__(self):
+            return iter([ms1_spec_1, ms1_spec_2])
+
+        def __exit__(self, *args):
+            pass
+
+    monkeypatch.setattr(
+        pyteomics.mzml,
+        "read",
+        lambda *args, **kwargs: MockReader(),
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="does not contain MS2 scans required",
+    ):
+        dataset._get_centers(mzml_small_ms1)
 
 
 def test_dia_to_dataframe_unannotated(mzml_small_ms1):
