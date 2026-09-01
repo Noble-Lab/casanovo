@@ -246,7 +246,7 @@ def test_get_centers_no_ms1(mzml_small_ms1, monkeypatch):
 
     with pytest.raises(
         ValueError,
-        match="does not contain MS1 scans required",
+        match="does not contain at least two MS1 scans for DIA extraction",
     ):
         dataset._get_centers(mzml_small_ms1)
 
