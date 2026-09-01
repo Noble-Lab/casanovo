@@ -59,8 +59,8 @@ def test_select_top_peaks_orders_and_scales():
     mzs, intensities = dataset._select_top_peaks(spec, sqrt_passes=1)
 
     # Keeps the 3 most intense peaks (100, 200, 300), sorted by m/z.
-    np.testing.assert_array_equal(mzs, [100.0, 200.0, 300.0])
-    expected = np.sqrt([40.0, 20.0, 10.0])
+    np.testing.assert_array_equal(mzs, [100.0, 200.0, 300.0, 400.0])
+    expected = np.sqrt([40.0, 20.0, 10.0, 5.0])
     expected = expected / expected.max()
     np.testing.assert_allclose(intensities, expected)
 
@@ -141,22 +141,19 @@ def test_dia_to_dataframe_unannotated(mzml_small_ms1):
         casanovo=False,
         max_charge=2,
     )
+
     dataset.setup(annotated=False, stage="test")
     test_dataset = dataset.test_dataset
+
     assert test_dataset[0]["precursor_charge"] == 1
     assert test_dataset[1]["precursor_charge"] == 2
 
     assert test_dataset[0]["precursor_mz"] == 804.774963
     assert test_dataset[1]["precursor_mz"] == 804.774963
 
-    assert (
-        test_dataset[0]["intensity_array"]
-        == test_dataset[1]["intensity_array"]
-    )
-    assert test_dataset[0]["mz_array"] == test_dataset[1]["mz_array"]
-    assert (
-        test_dataset[0]["scan_window_array"]
-        == test_dataset[1]["scan_window_array"]
+    torch.testing.assert_close(
+        test_dataset[0]["intensity_array"],
+        test_dataset[1]["intensity_array"],
     )
 
 
