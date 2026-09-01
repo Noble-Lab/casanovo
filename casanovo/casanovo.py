@@ -33,7 +33,7 @@ from .shared_loading import (
     setup_model,
 )
 
-from . import utils
+from . import __version__, utils
 from .config import Config
 from .denovo import ModelRunner
 
@@ -42,10 +42,6 @@ logger = logging.getLogger(__name__)
 click.rich_click.USE_MARKDOWN = True
 click.rich_click.STYLE_HELPTEXT = ""
 click.rich_click.SHOW_ARGUMENTS = True
-
-from .version import _get_version
-
-__version__ = _get_version("casanovo")
 
 _CKPT_CASANOVO = re.compile(
     r"^casanovo_([a-z0-9][a-z0-9-]*)_v([0-9]+)-([0-9]+)-([0-9]+)\.ckpt$"

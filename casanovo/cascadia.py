@@ -18,7 +18,7 @@ import requests
 import rich_click as click
 import tqdm
 
-from . import utils
+from . import __version__, utils
 from .config import Config
 from .denovo import ModelRunner
 from .shared_loading import (
@@ -27,15 +27,12 @@ from .shared_loading import (
     _setup_output,
     setup_model,
 )
-from .version import _get_version
 
 logger = logging.getLogger(__name__)
 
 click.rich_click.USE_MARKDOWN = True
 click.rich_click.STYLE_HELPTEXT = ""
 click.rich_click.SHOW_ARGUMENTS = True
-
-__version__ = "0.1.0"
 
 _CKPT_CASCADIA = re.compile(
     r"^cascadia_([a-z0-9][a-z0-9-]*)_v([0-9]+)-([0-9]+)-([0-9]+)\.ckpt$"

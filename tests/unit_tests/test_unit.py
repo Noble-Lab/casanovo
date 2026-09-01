@@ -85,16 +85,19 @@ def test_select_top_peaks_none_keeps_all():
         "m/z array": np.array([300.0, 100.0, 200.0]),
         "intensity array": np.array([10.0, 30.0, 20.0]),
     }
-    mzs, intensities = dataset._select_top_peaks(spec)
+    mzs, intensities = dataset._select_top_peaks(spec, sqrt_passes=1)
 
     np.testing.assert_array_equal(
         mzs,
         np.array([100.0, 200.0, 300.0]),
     )
 
+    intensities_true = np.array([30.0, 20.0, 10.0]) ** 0.5
+    intensities_true = intensities_true / intensities_true.max()
+
     np.testing.assert_allclose(
         intensities,
-        np.array([30.0, 20.0, 10.0]) / 30.0,
+        intensities_true,
     )
 
 
@@ -147,11 +150,10 @@ def test_unique_stems(tmp_path):
     assert stems == ["test", "test_1"]
 
 
-def test_lance_loading(tmp_path):
-    lance_path = tmp_path / "test.lance"
+def test_lance_loading(mgf_small, tmp_path):
     dataset = DeNovoDataModule(
-        test_paths=lance_path,
-        lance_dir=None,
+        test_paths=[mgf_small],
+        lance_dir=tmp_path,
     )
     dataset.setup(None)
     assert dataset is not None

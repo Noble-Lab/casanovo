@@ -89,7 +89,7 @@ class MztabWriter:
 
     def __init__(self, filename: str, model: str = "Casanovo"):
         self.filename = filename
-        self.model_version = _get_version(model)
+        self.package_version = _get_version()
         self.model = model
         self.metadata = [
             ("mzTab-version", "1.0.0"),
@@ -102,7 +102,7 @@ class MztabWriter:
             ),
             (
                 "software[1]",
-                f"[MS, MS:1003281, {model}, {self.model_version}]",
+                f"[MS, MS:1003281, {model}, {self.package_version}]",
             ),
             (
                 "psm_search_engine_score[1]",
@@ -293,7 +293,7 @@ class MztabWriter:
                     "null",  # unique
                     self.database,  # database
                     self.database_version,  # database_version
-                    f"[MS, MS:1003281, {self.model}, {self.model_version}]",
+                    f"[MS, MS:1003281, {self.model}, {self.package_version}]",
                     psm.peptide_score,  # search_engine_score[1]
                     # FIXME: Modifications should be specified as
                     #  controlled vocabulary terms.
