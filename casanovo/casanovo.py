@@ -8,6 +8,7 @@ import os
 import re
 import shutil
 import sys
+import tempfile
 import time
 import urllib.parse
 import warnings
@@ -1028,13 +1029,25 @@ def _download_weights(file_url: str, download_path: Path) -> None:
         response.raw.read, decode_content=True
     )
 
-    with (
-        tqdm.tqdm.wrapattr(
-            response.raw, "read", total=file_size, desc=desc
-        ) as r_raw,
-        open(download_path, "wb") as file,
-    ):
-        shutil.copyfileobj(r_raw, file)
+    temp_file = tempfile.NamedTemporaryFile(
+        dir=download_file_dir,
+        prefix=f"{download_path.name}.",
+        suffix=".tmp",
+        delete=False,
+    )
+    temp_path = Path(temp_file.name)
+    try:
+        with (
+            tqdm.tqdm.wrapattr(
+                response.raw, "read", total=file_size, desc=desc
+            ) as r_raw,
+            temp_file,
+        ):
+            shutil.copyfileobj(r_raw, temp_file)
+        os.replace(temp_path, download_path)
+    except Exception:
+        temp_path.unlink(missing_ok=True)
+        raise
 
 
 def _is_valid_url(file_url: str) -> bool:

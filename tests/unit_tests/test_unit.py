@@ -421,10 +421,17 @@ class MockResponseGet:
         def read(self, *args, **kwargs):
             return super().read(*args)
 
-    def __init__(self):
+    class FailingRaw(io.BytesIO):
+        def read(self, *args, **kwargs):
+            if self.tell() == 0:
+                return super().read(4)
+            raise requests.Timeout
+
+    def __init__(self, fail_after_first_chunk=False):
         self.request_counter = 0
         self.is_ok = True
         self.timeouts = []
+        self.fail_after_first_chunk = fail_after_first_chunk
 
     def raise_for_status(self):
         if not self.is_ok:
@@ -436,7 +443,10 @@ class MockResponseGet:
         response = unittest.mock.MagicMock()
         response.raise_for_status = self.raise_for_status
         response.headers = {"Content-Length": str(len(self.file_content))}
-        response.raw = MockResponseGet.MockRaw(self.file_content)
+        if self.fail_after_first_chunk:
+            response.raw = MockResponseGet.FailingRaw(self.file_content)
+        else:
+            response.raw = MockResponseGet.MockRaw(self.file_content)
         return response
 
 
@@ -849,6 +859,39 @@ def test_get_weights_from_url(monkeypatch):
         with pytest.raises(ValueError):
             bad_url = "foobar"
             casanovo._get_weights_from_url(bad_url, cache_dir)
+
+
+def test_get_weights_from_url_discards_partial_download(monkeypatch):
+    file_url = "http://example.com/model_weights.ckpt"
+
+    with (
+        monkeypatch.context() as mnk,
+        tempfile.TemporaryDirectory() as tmp_dir,
+    ):
+        failing_get = MockResponseGet(fail_after_first_chunk=True)
+        mnk.setattr(requests, "get", failing_get)
+
+        cache_dir = pathlib.Path(tmp_dir)
+        url_hash = hashlib.shake_256(file_url.encode("utf-8")).hexdigest(5)
+        cache_file_dir = cache_dir / url_hash
+        cache_file_path = cache_file_dir / "model_weights.ckpt"
+
+        with pytest.raises(requests.Timeout):
+            casanovo._get_weights_from_url(file_url, cache_dir)
+
+        assert not cache_file_path.exists()
+        assert not list(cache_file_dir.glob("model_weights.ckpt.*.tmp"))
+
+        successful_get = MockResponseGet()
+        mock_head = MockResponseHead()
+        mnk.setattr(requests, "get", successful_get)
+        mnk.setattr(requests, "head", mock_head)
+
+        result_path = casanovo._get_weights_from_url(file_url, cache_dir)
+
+        assert result_path.resolve() == cache_file_path.resolve()
+        assert cache_file_path.read_bytes() == MockResponseGet.file_content
+        assert successful_get.request_counter == 1
 
 
 def test_is_valid_url():
