@@ -894,6 +894,28 @@ def test_get_weights_from_url_discards_partial_download(monkeypatch):
         assert successful_get.request_counter == 1
 
 
+def test_download_weights_discards_temp_file_on_keyboard_interrupt(
+    monkeypatch, tmp_path
+):
+    download_path = tmp_path / "model_weights.ckpt"
+    mock_get = MockResponseGet()
+    monkeypatch.setattr(requests, "get", mock_get)
+
+    def fail_copyfileobj(source, destination):
+        destination.write(b"partial")
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(shutil, "copyfileobj", fail_copyfileobj)
+
+    with pytest.raises(KeyboardInterrupt):
+        casanovo._download_weights(
+            "http://example.com/model_weights.ckpt", download_path
+        )
+
+    assert not download_path.exists()
+    assert not list(tmp_path.glob("model_weights.ckpt.*.tmp"))
+
+
 def test_is_valid_url():
     assert casanovo._is_valid_url("https://www.washington.edu/")
     assert not casanovo._is_valid_url("foobar")

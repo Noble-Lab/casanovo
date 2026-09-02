@@ -1036,6 +1036,7 @@ def _download_weights(file_url: str, download_path: Path) -> None:
         delete=False,
     )
     temp_path = Path(temp_file.name)
+    completed = False
     try:
         with (
             tqdm.tqdm.wrapattr(
@@ -1045,9 +1046,10 @@ def _download_weights(file_url: str, download_path: Path) -> None:
         ):
             shutil.copyfileobj(r_raw, temp_file)
         os.replace(temp_path, download_path)
-    except Exception:
-        temp_path.unlink(missing_ok=True)
-        raise
+        completed = True
+    finally:
+        if not completed:
+            temp_path.unlink(missing_ok=True)
 
 
 def _is_valid_url(file_url: str) -> bool:
