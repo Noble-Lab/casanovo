@@ -139,6 +139,9 @@ class Spec2Pep(pl.LightningModule):
         # `configure_optimizers`.
         self.warmup_iters = warmup_iters
         self.cosine_schedule_period_iters = None
+        # Fallback total step count, attached by `ModelRunner.train`,
+        # for when Lightning cannot estimate it (streaming dataloader).
+        self.total_train_steps = None
         # `kwargs` will contain additional arguments as well as
         # unrecognized arguments, including deprecated ones. Remove the
         # deprecated ones.
@@ -1126,6 +1129,16 @@ class Spec2Pep(pl.LightningModule):
 
     def on_train_start(self):
         """Log optimizer settings."""
+        # Resuming from a checkpoint restores the scheduler state,
+        # including the cosine period of the previous run; re-impose the
+        # period derived for the current run so an extended `max_epochs`
+        # stretches the schedule instead of training past its end. When
+        # the configuration is unchanged, the two are identical.
+        scheduler = self.lr_schedulers()
+        if isinstance(scheduler, CosineWarmupScheduler):
+            scheduler.cosine_schedule_period_iters = (
+                self.cosine_schedule_period_iters
+            )
         self.log("hp/optimizer_warmup_iters", self.warmup_iters)
         self.log(
             "hp/optimizer_cosine_schedule_period_iters",
@@ -1180,9 +1193,20 @@ class Spec2Pep(pl.LightningModule):
             The initialized Adam optimizer and its learning rate
             scheduler.
         """
-        self.cosine_schedule_period_iters = int(
-            self.trainer.estimated_stepping_batches
-        )
+        # A streaming training dataloader has no length, in which case
+        # Lightning returns `Trainer.max_steps` (-1 by default) instead
+        # of a usable estimate; fall back to the step count that
+        # `ModelRunner.train` computed from the dataset size.
+        period = self.trainer.estimated_stepping_batches
+        if not 0 < period < float("inf"):
+            period = self.total_train_steps
+        if period is None or not 0 < period < float("inf"):
+            raise ValueError(
+                "Unable to determine the total number of training steps "
+                "for the learning rate schedule; set `max_steps` on the "
+                "trainer or `total_train_steps` on the model."
+            )
+        self.cosine_schedule_period_iters = int(period)
         optimizer = torch.optim.Adam(self.parameters(), **self.opt_kwargs)
         # Apply learning rate scheduler per step.
         lr_scheduler = CosineWarmupScheduler(

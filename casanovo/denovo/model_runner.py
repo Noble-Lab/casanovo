@@ -3,6 +3,7 @@ model."""
 
 import glob
 import logging
+import math
 import os
 import tempfile
 import warnings
@@ -219,6 +220,19 @@ class ModelRunner:
         # are passed directly to trainer.fit(), so we attach metadata here.
         self.model.val_stems = self.loaders.val_stems
         self.model.n_main_loaders = self.loaders.n_main_loaders
+
+        # The streaming training dataloader has no length, so Lightning
+        # cannot estimate the total number of stepping batches for the
+        # learning rate schedule; compute it from the dataset size.
+        steps_per_epoch = math.ceil(
+            self.loaders._get_n_spectra(self.loaders.train_dataset)
+            / self.config.train_batch_size
+        )
+        self.model.total_train_steps = math.ceil(
+            steps_per_epoch
+            * self.config.max_epochs
+            / self.config.accumulate_grad_batches
+        )
 
         if ckpt_path is None:
             self.trainer.fit(

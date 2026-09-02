@@ -209,7 +209,11 @@ def test_save_and_load_weights_deprecated(tmp_path, mgf_small, tiny_config):
             runner.train([mgf_small], [mgf_small])
             assert "max_iters" not in runner.model.opt_kwargs
             # The schedule is derived from the total number of steps.
-            total = runner.trainer.estimated_stepping_batches
+            # The streaming dataloader has no length, so Lightning
+            # cannot estimate it and the fallback computed by
+            # `ModelRunner.train` from the dataset size is used.
+            total = runner.model.total_train_steps
+            assert total > 0
             assert runner.model.cosine_schedule_period_iters == total
 
 
