@@ -79,9 +79,14 @@ def test_train_and_run(
         ]
 
         result = run(train_args)
-        best_model = tmp_path / "train_resuming.best.ckpt"
+        # With the derived schedule, the resumed run continues at a
+        # decayed learning rate, so it is not guaranteed to beat the
+        # restored best validation score (which a new best checkpoint
+        # would require); assert that training extended to the new
+        # max_epochs instead.
+        resumed_model = tmp_path / "train_resuming.epoch=39-step=40.ckpt"
         assert result.exit_code == 0
-        assert best_model.exists()
+        assert resumed_model.exists()
     finally:
         if original_max_epochs is None:
             config_data.pop("max_epochs", None)

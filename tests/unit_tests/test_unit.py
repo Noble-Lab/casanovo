@@ -25,6 +25,7 @@ import numpy as np
 import pandas as pd
 import pytest
 import requests
+import lightning.pytorch
 import torch
 import pyteomics.mztab
 import pyteomics.proforma
@@ -3413,5 +3414,31 @@ def test_optimizer_kwargs_exclude_non_adam():
         isotope_error_range=(0, 1),
     )
     assert model.opt_kwargs == {"lr": 1e-3, "weight_decay": 1e-5}
+    # `configure_optimizers` derives the cosine schedule period from the
+    # trainer, so one needs to be attached.
+    trainer = lightning.pytorch.Trainer(max_epochs=-1, max_steps=600)
+    model.trainer = trainer
     optimizers, _ = model.configure_optimizers()
     assert isinstance(optimizers[0], torch.optim.Adam)
+    assert model.cosine_schedule_period_iters == 600
+
+
+def test_cosine_schedule_period_fallback():
+    """When Lightning cannot estimate the stepping batches (streaming
+    dataloader without a length and no `max_steps`), the cosine schedule
+    period must fall back to `total_train_steps` instead of silently
+    adopting an invalid value such as -1."""
+    # Without `max_steps`, this trainer's estimate is unusable (inf).
+    trainer = lightning.pytorch.Trainer(max_epochs=-1)
+
+    model = Spec2Pep(lr=1e-3, weight_decay=1e-5)
+    model.trainer = trainer
+    model.total_train_steps = 1_234
+    model.configure_optimizers()
+    assert model.cosine_schedule_period_iters == 1_234
+
+    # Without a fallback either, deriving the schedule must fail loudly.
+    model = Spec2Pep(lr=1e-3, weight_decay=1e-5)
+    model.trainer = trainer
+    with pytest.raises(ValueError, match="total number of training steps"):
+        model.configure_optimizers()
