@@ -13,6 +13,7 @@ import tempfile
 import types
 import unittest
 import unittest.mock
+from typing import NoReturn
 
 import click
 import click.testing
@@ -901,7 +902,7 @@ def test_download_weights_discards_temp_file_on_keyboard_interrupt(
     mock_get = MockResponseGet()
     monkeypatch.setattr(requests, "get", mock_get)
 
-    def fail_copyfileobj(source, destination):
+    def fail_copyfileobj(_source, destination) -> NoReturn:
         destination.write(b"partial")
         raise KeyboardInterrupt
 
