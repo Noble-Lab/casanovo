@@ -986,15 +986,18 @@ def test_get_model_weights_no_github_checkpoints(monkeypatch, tmp_path):
             ckpt_regex=_CKPT_CASANOVO,
         )
 
+    model_path = tmp_path / "casanovo_timstof_v5-1-0.ckpt"
+    model_path.write_text("sample")
 
-def test_resolve_selector_unknown_model():
     with pytest.raises(
         ValueError,
         match="Unknown model selector",
     ):
-        shared_loading._resolve_selector(
-            "foobar",
-            ["timstof", "orbitrap"],
+        shared_loading._get_model_weights(
+            selector="foobar",
+            cache_dir=tmp_path,
+            casanovo_version=(5, 0, 1),
+            ckpt_regex=_CKPT_CASANOVO,
         )
 
 
