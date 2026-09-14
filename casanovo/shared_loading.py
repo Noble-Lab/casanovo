@@ -343,7 +343,7 @@ def _get_model_weights(
 
     if not github_ckpts:
         raise ValueError(
-            "No canonical model checkpoints found on GitHub. "
+            "No compatible model checkpoints found on GitHub. "
             "Specify weights explicitly with '--model'."
         )
 

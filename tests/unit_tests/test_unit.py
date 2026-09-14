@@ -964,39 +964,48 @@ def test_get_model_weights(
         assert mock_get.request_counter == 0
 
 
-def test_get_model_weights_no_github_checkpoints(monkeypatch, tmp_path):
-    class MockRepo:
-        def get_releases(self):
-            return []
+def test_get_model_weights_unknown_selector(monkeypatch, tmp_path):
+    monkeypatch.setattr(
+        github,
+        "Github",
+        lambda *a, **kw: MockGithub(
+            releases={
+                "v4.0.0": [
+                    "casanovo_orbitrap_v4-0-0.ckpt",
+                    "casanovo_timstof_v4-0-0.ckpt",
+                ]
+            }
+        ),
+    )
 
-    class MockGithub:
-        def get_repo(self, name):
-            return MockRepo()
-
-    monkeypatch.setattr(github, "Github", MockGithub)
-
-    with pytest.raises(
-        ValueError,
-        match="No canonical model checkpoints found on GitHub",
-    ):
-        shared_loading._get_model_weights(
-            selector="timstof",
-            cache_dir=tmp_path,
-            casanovo_version=(5, 0, 1),
-            ckpt_regex=_CKPT_CASANOVO,
-        )
-
-    model_path = tmp_path / "casanovo_timstof_v5-1-0.ckpt"
-    model_path.write_text("sample")
-
-    with pytest.raises(
-        ValueError,
-        match="Unknown model selector",
-    ):
+    with pytest.raises(ValueError, match="Unknown model selector"):
         shared_loading._get_model_weights(
             selector="foobar",
             cache_dir=tmp_path,
-            casanovo_version=(5, 0, 1),
+            casanovo_version=(4, 0, 0),
+            ckpt_regex=_CKPT_CASANOVO,
+        )
+
+
+def test_get_model_weights_no_compatible_version(monkeypatch, tmp_path):
+    monkeypatch.setattr(
+        github,
+        "Github",
+        lambda *a, **kw: MockGithub(
+            releases={
+                "v3.0.0": ["casanovo_orbitrap_v3-0-0.ckpt"],
+            }
+        ),
+    )
+
+    with pytest.raises(
+        ValueError,
+        match=r"No compatible 'orbitrap' checkpoint found for Casanovo 99\.0\.0",
+    ):
+        shared_loading._get_model_weights(
+            selector="orbitrap",
+            cache_dir=tmp_path,
+            casanovo_version=(99, 0, 0),
             ckpt_regex=_CKPT_CASANOVO,
         )
 
