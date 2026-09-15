@@ -23,7 +23,7 @@ from ..config import Config
 from ..data import db_utils, ms_io
 from ..denovo.dataloaders import DeNovoDataModule
 from ..denovo.evaluate import aa_match_batch, aa_match_metrics
-from ..denovo.model import DbSpec2Pep, Spec2Pep, AugmentedSpec2Pep
+from ..denovo.model import DbSpec2Pep, Spec2Pep
 
 logger = logging.getLogger(__name__)
 

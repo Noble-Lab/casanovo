@@ -20,8 +20,6 @@ from ..data.db_utils import PROTON
 from ..denovo.transformers import (
     PeptideDecoder,
     SpectrumEncoder,
-    AugmentedSpectrumEncoder,
-    AugmentedPeakEncoder,
 )
 from . import evaluate
 
