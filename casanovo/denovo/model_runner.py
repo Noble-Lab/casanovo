@@ -23,7 +23,7 @@ from ..config import Config
 from ..data import db_utils, ms_io
 from ..denovo.dataloaders import DeNovoDataModule
 from ..denovo.evaluate import aa_match_batch, aa_match_metrics
-from ..denovo.model import DbSpec2Pep, Spec2Pep
+from ..denovo.model import DbSpec2Pep, Spec2Pep, AugmentedSpec2Pep
 
 logger = logging.getLogger(__name__)
 
@@ -519,6 +519,7 @@ class ModelRunner:
             if train:
                 self.model = Spec2Pep(**model_params)
                 return
+
             # Else we're not training, so a model file must be provided.
             else:
                 logger.error("A model file must be provided")
