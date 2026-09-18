@@ -545,7 +545,13 @@ class ModelRunner:
         # First try loading model details from the weights file,
         # otherwise use the provided configuration.
         device = torch.empty(1).device  # Use the default device.
-        model_clss = DbSpec2Pep if db_search else Spec2Pep
+        if db_search:
+            model_clss = DbSpec2Pep
+        elif self.casanovo:
+            model_clss = Spec2Pep
+        else:
+            model_clss = AugmentedSpec2Pep
+
         try:
             self.model = model_clss.load_from_checkpoint(
                 self.model_filename,
