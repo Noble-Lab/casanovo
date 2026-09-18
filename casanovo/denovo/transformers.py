@@ -155,7 +155,7 @@ class AugmentedPeakEncoder(torch.nn.Module):
         time = X[:, :, 2]
         level = X[:, :, 3]
 
-mz_time = self.mz_time_encoder(torch.stack([mz, time], dim=-1))
+        mz_time = self.mz_time_encoder(torch.stack([mz, time], dim=-1))
 
         level_intensity = self.level_intensity_encoder(
             torch.stack([level, intensity], dim=-1)
