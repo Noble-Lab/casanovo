@@ -103,6 +103,8 @@ class Config:
         residues=dict,
         new_token_init=dict,
         width=int,
+        frag_class_weights=float,
+        frag_weight=float,
     )
 
     def __init__(self, config_file: Optional[str] = None):

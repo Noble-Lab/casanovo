@@ -375,6 +375,8 @@ def _get_config_file(file_path, file_name, additional_cfg=None):
         },
         "new_token_init": {},
         "width": 2,
+        "frag_class_weights": 20,
+        "frag_weight": 1e-3,
     }
 
     if additional_cfg is not None:

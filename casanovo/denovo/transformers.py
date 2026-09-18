@@ -114,6 +114,121 @@ class PeptideDecoder(AnalyteTransformerDecoder):
         return precursors
 
 
+class AugmentedPeakEncoder(torch.nn.Module):
+    """Encode an augmented spectra with m/z, intensity, retention time, and
+    MS level.
+
+
+    Parameters
+    ----------
+    d_model : int
+        The number of features to output.
+    min_rt_wavelength : float, optional
+        The minimum wavelength to use for m/z.
+    max_rt_wavelength : float, optional
+        The maximum wavelength to use for m/z.
+    """
+
+    def __init__(
+        self,
+        d_model: int = 128,
+    ) -> None:
+        """Initialize the MzEncoder."""
+        super().__init__()
+        self.d_model = d_model
+        """
+
+        self.peak_encoder = PeakEncoder(
+            d_model,
+        )
+
+
+        self.rt_encoder = FloatEncoder(
+            d_model,
+            min_wavelength=min_rt_wavelength,
+            max_wavelength=max_rt_wavelength
+        )
+
+
+        self.level_encoder = torch.nn.Embedding(3, d_model)
+
+
+        self.combiner = torch.nn.Linear(3 * d_model, d_model, bias=False)
+        """
+
+        # Paper implementation
+
+        self.mz_time_encoder = PeakEncoder(
+            d_model,
+        )
+
+        self.level_intensity_encoder = torch.nn.Linear(2, d_model, bias=False)
+
+        self.combiner = torch.nn.Linear(
+            2 * d_model,
+            d_model,
+            bias=False,
+        )
+
+    def forward(self, X: torch.Tensor) -> torch.Tensor:
+        """Encode m/z values, intensities, retention times,
+        and MS levels
+
+
+        Note that we expect intensities to fall within the interval [0, 1].
+
+
+        Parameters
+        ----------
+        X : torch.Tensor of shape (n_spectra, n_peaks, 4)
+            The spectra to embed. Axis 0 represents a mass spectrum, axis 1
+            contains the peaks in the mass spectrum, and axis 2 is a 4-tuple
+            specifying the (m/z, intensity, retention time, ms level) for each peak.
+            These are zero-padded, such that all of the spectra in the batch
+            are the same length.
+
+
+        Returns
+        -------
+        torch.Tensor of shape (n_spectra, n_peaks, d_model)
+            The encoded features for the augmented mass spectra.
+        """
+        """
+
+        encoded = torch.cat(
+            [
+                self.peak_encoder(X),
+                self.rt_encoder(X[:, :, 2]),
+                self.level_encoder(X[:, :, 3].int())
+            ],
+            dim=2,
+        )
+
+
+        return self.combiner(encoded)
+       
+        # Paper implementation
+        """
+
+        mz = X[:, :, 0]
+        intensity = X[:, :, 1]
+        time = X[:, :, 2]
+        level = X[:, :, 3]
+
+        mz_time = self.mz_time_encoder(mz, time)
+
+        level_intensity = self.level_intensity_encoder(
+            torch.stack([level, intensity], dim=-1)
+        )
+
+        encoded = torch.cat(
+            [mz_time, level_intensity],
+            dim=-1,
+        )
+
+        return self.combiner(encoded)
+
+
 class SpectrumEncoder(SpectrumTransformerEncoder):
     """
     A Transformer encoder for input mass spectra.
@@ -184,3 +299,49 @@ class SpectrumEncoder(SpectrumTransformerEncoder):
 
         """
         return self.latent_spectrum.squeeze(0).expand(mz_array.shape[0], -1)
+
+
+class AugmentedSpectrumEncoder(SpectrumEncoder):
+
+    def forward(
+        self,
+        mz_array: torch.Tensor,
+        intensity_array: torch.Tensor,
+        scan_window_array: torch.Tensor,
+        ms_array: torch.Tensor,
+        *args: torch.Tensor,
+        mask: torch.Tensor | None = None,
+        **kwargs: dict,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        spectra = torch.stack(
+            [mz_array, intensity_array, scan_window_array, ms_array], dim=2
+        )  # need this otherwise wont get passed at all then kersplunk
+
+        # Create the padding mask:
+        src_key_padding_mask = spectra.sum(dim=2) == 0
+        global_token_mask = torch.tensor([[False]] * spectra.shape[0]).type_as(
+            src_key_padding_mask
+        )
+        src_key_padding_mask = torch.cat(
+            [global_token_mask, src_key_padding_mask], dim=1
+        )
+
+        # Encode the peaks
+        peaks = self.peak_encoder(spectra)
+
+        # Add the precursor information:
+        latent_spectra = self.global_token_hook(
+            *args,
+            mz_array=mz_array,
+            intensity_array=intensity_array,
+            **kwargs,
+        )
+
+        peaks = torch.cat([latent_spectra[:, None, :], peaks], dim=1)
+        out = self.transformer_encoder(
+            peaks,
+            mask=mask,
+            src_key_padding_mask=src_key_padding_mask,
+        )
+
+        return out, src_key_padding_mask

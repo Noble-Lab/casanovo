@@ -413,6 +413,7 @@ class DeNovoDataModule(pl.LightningDataModule):
                 rts = np.array(value["rts"])
                 ms1_scans = np.array(value["ms1_scans"], dtype=object)
                 ms1_rts = np.array(value["ms1_rts"])
+                window_width = value["window_width"]
 
                 abs_rts = [np.abs(x) for x in rts]
                 sorted_rt_idxs = np.argsort(abs_rts)[: self.scan_width]
@@ -423,9 +424,6 @@ class DeNovoDataModule(pl.LightningDataModule):
                 sorted_ms1_rt_idxs = np.argsort(abs_ms1_rts)[: self.scan_width]
                 ms1_rts = ms1_rts[sorted_ms1_rt_idxs]
                 ms1_scans = ms1_scans[sorted_ms1_rt_idxs]
-
-                lower_offset = value["lower_offset"]
-                upper_offset = value["upper_offset"]
 
                 for charge in self.valid_charge:
                     mz_array = []
@@ -442,10 +440,7 @@ class DeNovoDataModule(pl.LightningDataModule):
 
                     for scan, cur_rt in zip(ms1_scans, ms1_rts):
                         for mz, intensity in scan:
-                            if (
-                                abs(mz - prec)
-                                > max(lower_offset, upper_offset) + 1
-                            ):
+                            if abs(mz - prec) > window_width + 1:
                                 continue
 
                             mz_array.append(mz)
@@ -466,8 +461,6 @@ class DeNovoDataModule(pl.LightningDataModule):
                             scan_window_array, dtype=np.float32
                         ),
                         "ms_array": np.asarray(ms_array, dtype=np.int8),
-                        "window_low": prec - lower_offset,
-                        "window_high": prec + upper_offset,
                     }
 
                     if not annotated:
@@ -647,8 +640,9 @@ class DeNovoDataModule(pl.LightningDataModule):
                                     mzs,
                                     intensities,
                                     cur_rt - rt,
-                                    lower_offset=lower_offset,
-                                    upper_offset=upper_offset,
+                                    window_width=max(
+                                        lower_offset, upper_offset
+                                    ),
                                 )
 
         return prec_to_spec
