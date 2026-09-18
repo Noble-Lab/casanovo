@@ -27,20 +27,6 @@ from torch.utils.data.datapipes.iter.combinatorics import ShufflerIterDataPipe
 
 logger = logging.getLogger(__name__)
 
-DIA_SCHEMA = pa.schema(
-    [
-        pa.field("peak_file", pa.string()),
-        pa.field("scan_id", pa.string()),
-        pa.field("ms_level", pa.uint8()),
-        pa.field("precursor_mz", pa.float64()),
-        pa.field("precursor_charge", pa.int16()),
-        pa.field("mz_array", pa.list_(pa.float64())),
-        pa.field("intensity_array", pa.list_(pa.float64())),
-        pa.field("scan_window_array", pa.list_(pa.float32())),
-        pa.field("ms_array", pa.list_(pa.int8())),
-    ]
-)
-
 
 def _unique_stems(paths: list) -> list:
     """Return unique file stems for a list of paths.

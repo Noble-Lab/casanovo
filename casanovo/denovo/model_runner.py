@@ -492,8 +492,6 @@ class ModelRunner:
             calculate_precision=self.config.calculate_precision,
             out_writer=self.writer,
             tokenizer=tokenizer,
-            frag_class_weights=self.config.frag_class_weights,
-            frag_weight=self.config.frag_weight,
         )
 
         # Reconfigurable non-architecture related parameters for a
@@ -519,13 +517,16 @@ class ModelRunner:
                 raise ValueError("A model file must be provided for DB search")
             # Train a model from scratch if no model file is provided.
             if train and self.casanovo:
-                model_params.pop("frag_class_weights", None)
-                model_params.pop("frag_weight", None)
                 self.model = Spec2Pep(**model_params)
                 return
 
             if train and not self.casanovo:
+                model_params["frag_class_weights"] = (
+                    self.config.frag_class_weights
+                )
+                model_params["frag_weight"] = self.config.frag_weight
                 self.model = AugmentedSpec2Pep(**model_params)
+                return
 
             # Else we're not training, so a model file must be provided.
             else:
@@ -561,9 +562,6 @@ class ModelRunner:
             architecture_params = set(model_params.keys()) - set(
                 loaded_model_params.keys()
             )
-            if self.casanovo:
-                architecture_params.discard("frag_class_weights")
-                architecture_params.discard("frag_weight")
 
             for param in architecture_params:
                 if model_params[param] != self.model.hparams[param]:

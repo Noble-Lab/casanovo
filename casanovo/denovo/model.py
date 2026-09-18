@@ -1225,29 +1225,50 @@ class AugmentedSpec2Pep(Spec2Pep):
         frag_weight: float = 1e-3,
         **kwargs: Dict,
     ):
-        super().__init__()
+        super().__init__(
+            dim_model=dim_model,
+            n_head=n_head,
+            dim_feedforward=dim_feedforward,
+            n_layers=n_layers,
+            dropout=dropout,
+            max_peptide_len=max_peptide_len,
+            residues=residues,
+            max_charge=max_charge,
+            min_peptide_len=min_peptide_len,
+            n_beams=n_beams,
+            top_match=top_match,
+            n_log=n_log,
+            train_label_smoothing=train_label_smoothing,
+            warmup_iters=warmup_iters,
+            cosine_schedule_period_iters=cosine_schedule_period_iters,
+            out_writer=out_writer,
+            calculate_precision=calculate_precision,
+            tokenizer=tokenizer,
+            **kwargs,
+        )
+
         self.encoder = AugmentedSpectrumEncoder(
             d_model=dim_model,
             n_head=n_head,
             dim_feedforward=dim_feedforward,
             n_layers=n_layers,
             dropout=dropout,
-            peak_encoder=AugmentedPeakEncoder,
+            peak_encoder=AugmentedPeakEncoder(dim_model),
         )
 
         self.frag_layer = torch.nn.Linear(
-            self.dim_model, 2
+            dim_model, 2
         )  # 2 classes for ion or not and then dimensions of encoding, dim_model
 
         self.CELoss = torch.nn.CrossEntropyLoss(ignore_index=0)
 
         self.register_buffer(
-            "frag_class_weights",
+            "frag_class_weights_tensor",
             torch.tensor([1.0, frag_class_weights]),
         )
 
         self.fragCELoss = torch.nn.CrossEntropyLoss(
-            weight=self.frag_class_weights
+            weight=self.frag_class_weights_tensor
         )
 
         self.frag_weight = frag_weight
@@ -1330,7 +1351,7 @@ class AugmentedSpec2Pep(Spec2Pep):
         pred_frag = pred_frag[:, 1:, :].reshape(-1, 2)
         frag_labels = frag_labels.reshape(-1).long()
 
-        frag_loss = self.alpha * self.fragCELoss(
+        frag_loss = self.frag_weight * self.fragCELoss(
             pred_frag,
             frag_labels,
         )

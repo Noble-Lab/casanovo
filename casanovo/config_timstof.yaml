@@ -12,6 +12,20 @@
 width: 2
 
 ###
+# The following parameters are unique to training
+# Cascadia. Other parameters such as training batch size, 
+# inference batch size, etc. will be used from those sections 
+# of the config file when running inference with Cascadia.
+###
+# How much the fragment class weighs more than the non-fragment class 
+# in the auxiliary classification task
+frag_class_weights: 20
+
+# How much to weight the auxiliary task in computing the loss
+frag_weight: 1e-3
+
+
+###
 # The following parameters can be modified when running inference or when
 # fine-tuning an existing Casanovo model. They also affect database search
 # parameters when running Casanovo in database search mode.

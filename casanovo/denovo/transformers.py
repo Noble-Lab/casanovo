@@ -136,27 +136,6 @@ class AugmentedPeakEncoder(torch.nn.Module):
         """Initialize the MzEncoder."""
         super().__init__()
         self.d_model = d_model
-        """
-
-        self.peak_encoder = PeakEncoder(
-            d_model,
-        )
-
-
-        self.rt_encoder = FloatEncoder(
-            d_model,
-            min_wavelength=min_rt_wavelength,
-            max_wavelength=max_rt_wavelength
-        )
-
-
-        self.level_encoder = torch.nn.Embedding(3, d_model)
-
-
-        self.combiner = torch.nn.Linear(3 * d_model, d_model, bias=False)
-        """
-
-        # Paper implementation
 
         self.mz_time_encoder = PeakEncoder(
             d_model,
@@ -171,45 +150,6 @@ class AugmentedPeakEncoder(torch.nn.Module):
         )
 
     def forward(self, X: torch.Tensor) -> torch.Tensor:
-        """Encode m/z values, intensities, retention times,
-        and MS levels
-
-
-        Note that we expect intensities to fall within the interval [0, 1].
-
-
-        Parameters
-        ----------
-        X : torch.Tensor of shape (n_spectra, n_peaks, 4)
-            The spectra to embed. Axis 0 represents a mass spectrum, axis 1
-            contains the peaks in the mass spectrum, and axis 2 is a 4-tuple
-            specifying the (m/z, intensity, retention time, ms level) for each peak.
-            These are zero-padded, such that all of the spectra in the batch
-            are the same length.
-
-
-        Returns
-        -------
-        torch.Tensor of shape (n_spectra, n_peaks, d_model)
-            The encoded features for the augmented mass spectra.
-        """
-        """
-
-        encoded = torch.cat(
-            [
-                self.peak_encoder(X),
-                self.rt_encoder(X[:, :, 2]),
-                self.level_encoder(X[:, :, 3].int())
-            ],
-            dim=2,
-        )
-
-
-        return self.combiner(encoded)
-       
-        # Paper implementation
-        """
-
         mz = X[:, :, 0]
         intensity = X[:, :, 1]
         time = X[:, :, 2]
@@ -302,7 +242,6 @@ class SpectrumEncoder(SpectrumTransformerEncoder):
 
 
 class AugmentedSpectrumEncoder(SpectrumEncoder):
-
     def forward(
         self,
         mz_array: torch.Tensor,

@@ -46,7 +46,7 @@ def main() -> None:
     ========
     Cascadia is a state-of-the-art deep learning tool designed for de
     novo peptide sequencing with DIA data. Powered by a transformer
-    neural network, Casanovo "translates" peaks in MS/MS spectra into
+    neural network, Cascadia "translates" peaks in MS/MS spectra into
     amino acid sequences.
 
     Links:
@@ -54,7 +54,7 @@ def main() -> None:
     - Documentation: https://cascadia.readthedocs.io/en/latest/index.html
     - Official code repository: https://github.com/Noble-Lab/cascadia
 
-    If you use Casanovo in your work, please cite:
+    If you use Cascadia in your work, please cite:
     - Sanders, Justin, et al.
     ‘A Transformer Model for de Novo Sequencing of
     Data-Independent Acquisition Mass Spectrometry Data’. bioRxiv, Cold Spring
@@ -69,6 +69,12 @@ def main() -> None:
     required=True,
     nargs=-1,
     type=click.Path(exists=True, dir_okay=True),
+)
+@click.option(
+    "--evaluate",
+    is_flag=True,
+    default=False,
+    help="Run in evaluation mode. ",
 )
 def sequence(
     peak_path: Tuple[str],
@@ -134,12 +140,13 @@ def configure(
 
     The Cascadia configuration file is in the YAML format.
     """
-    utils.log_system_info(model="Cascadia", version=__version__)
     output_path, _ = _setup_output(
         output_dir, output_root, force_overwrite, verbosity, "cascadia"
     )
+    utils.log_system_info(model="Cascadia", version=__version__)
     config_fname = output_root if output_root is not None else "casanovo"
     config_fname = Path(config_fname).with_suffix(".yaml")
+
     if not force_overwrite:
         utils.check_dir_file_exists(output_path, str(config_fname))
 

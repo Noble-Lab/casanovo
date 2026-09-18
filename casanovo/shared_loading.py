@@ -404,6 +404,10 @@ def setup_model(
     is_train : bool
         Are we training? If not, we need to retrieve weights when the
         model is None.
+    ckpt_model : re.Pattern
+        The regex pattern used to match for the specific model.
+    version : str
+        The extracted version of the model.
 
     Return
     ------
@@ -417,7 +421,9 @@ def setup_model(
     cache_dir = Path(appdirs.user_cache_dir("casanovo", False, opinion=False))
     resolved_model: Optional[Path] = None
 
-    version = tuple(int(x) if x else 0 for x in utils.split_version(version))
+    version_tuple = tuple(
+        int(x) if x else 0 for x in utils.split_version(version)
+    )
 
     if model and Path(model).is_file():
         resolved_model = Path(model)
@@ -427,7 +433,7 @@ def setup_model(
         else:
             try:
                 resolved_model = _get_model_weights(
-                    model, cache_dir, version, ckpt_model
+                    model, cache_dir, version_tuple, ckpt_model
                 )
             except github.RateLimitExceededException:
                 logger.error(
@@ -453,7 +459,7 @@ def setup_model(
         model = _DEFAULT_MODEL_ID
         try:
             resolved_model = _get_model_weights(
-                model, cache_dir, version, ckpt_model
+                model, cache_dir, version_tuple, ckpt_model
             )
         except github.RateLimitExceededException:
             logger.error(
@@ -469,7 +475,9 @@ def setup_model(
                 "the model weights"
             ) from None
 
-    logger.info("Cascadia/Casanovo version %s", str(version))
+    logger.info(
+        "Casanovo/Cascadia Version %s", ".".join(map(str, version_tuple))
+    )
     logger.debug("model = %s", resolved_model)
     logger.debug("config = %s", config.file)
     logger.debug("output directory = %s", output_dir)
