@@ -375,15 +375,15 @@ class DeNovoDataModule(pl.LightningDataModule):
         """
         overall_records = []
 
-        for spectra in paths:
+        for path in paths:
             skipped = 0
 
             f_to_mzrt_to_pep, max_mz, _window_size, cycle_time = (
-                self._get_centers(spectra)
+                self._get_centers(path)
             )
 
             prec_to_spec = self._extract_spectra(
-                spectra,
+                path,
                 f_to_mzrt_to_pep,
                 (self.scan_width + 1) * cycle_time,
             )
@@ -435,7 +435,7 @@ class DeNovoDataModule(pl.LightningDataModule):
                             ms_array.append(1)
 
                     record = {
-                        "peak_file": pathlib.Path(spectra).name,
+                        "peak_file": pathlib.Path(path).name,
                         "scan_id": value["center_scan_id"],
                         "ms_level": self.ms_level,
                         "precursor_mz": prec,
@@ -458,7 +458,7 @@ class DeNovoDataModule(pl.LightningDataModule):
                 logger.warning(
                     "%d spectra were skipped due to missing MS1 scans for file %s",
                     skipped,
-                    spectra,
+                    path,
                 )
 
         return plr.DataFrame(overall_records)
