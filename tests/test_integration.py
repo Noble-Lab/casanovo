@@ -43,7 +43,7 @@ def test_train_and_run(
     ]
 
     result = run(train_args)
-    model_file = tmp_path / "train.epoch=19-step=20.ckpt"
+    model_file = tmp_path / "train.epoch=299-step=300.ckpt"
     best_model = tmp_path / "train.best.ckpt"
     assert result.exit_code == 0
     assert model_file.exists()
@@ -194,7 +194,8 @@ def test_train_and_run(
         "FSGSGSGTDFTLTISSLQPEDFAVYYCQQDYNLP",
     ]
 
-    mods = psms["modifications"].to_list()
+    # pyteomics 5 parses "null" cells as NaN where 4 gave None.
+    mods = [m if isinstance(m, str) else None for m in psms["modifications"]]
     assert mods == [
         None,
         "5-Carbamidomethyl (C):UNIMOD:4",

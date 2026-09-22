@@ -98,3 +98,9 @@ uv.lock
 
 # Virtual environments
 .venv/
+
+# Lance datasets pytest writes beside the tests. The three test_*0 names
+# come from tmp_path, so anything ending in a digit after a test name is
+# one of these; the glob keeps a future test from committing its own.
+/test_*0/
+/test.mztab

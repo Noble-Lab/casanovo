@@ -14,14 +14,21 @@
 # peptide score.
 # database search: Select candidate peptides within the specified precursor m/z
 # tolerance.
-# Set to "inf" (with quotation marks) to disable the filter entirely.
+# Set to "inf" (with quotation marks) to disable the filter entirely, which
+# is also how precise mass control (PMC) is turned off.
 precursor_mass_tol: 50  # ppm
 # Isotopes to consider when comparing predicted and observed precursor m/z's.
-isotope_error_range: [0, 1]
-# The minimum length of considered peptides.
+# PMC needs [0, 3]: precursors are often picked at the +2 or +3 isotope peak.
+isotope_error_range: [0, 3]
+# The minimum length of considered peptides. Database search only: this model
+# does not filter what it decodes, as the autoregressive one did.
 min_peptide_len: 6
-# The maximum length of considered peptides.
+# The maximum length of considered peptides. Database search only, and the
+# floor for decoder_frames.
 max_peptide_len: 100
+# CTC frames the decoder emits: a compute budget, not a length limit. Must
+# cover a peptide's length plus one frame per repeated residue.
+decoder_frames: 100
 # Number of spectra in one inference batch.
 predict_batch_size: 1024
 # Number of PSMs for each spectrum.
@@ -127,10 +134,19 @@ dim_intensity:
 warmup_iters: 100_000
 # The number of iterations for the cosine half period of the learning rate.
 cosine_schedule_period_iters: 600_000
-# Learning rate for weight updates during training.
+# Learning rate for the AdamW group: embeddings, output head, and vectors.
 learning_rate: 5e-4
 # Regularization term for weight updates.
 weight_decay: 1e-5
+# Learning rate for the Muon group (hidden matrices), on its own scale.
+muon_lr: 0.002
+# Momentum for the Muon group.
+muon_momentum: 0.95
+# Decoder layers (1-based) that also score their hidden states for an
+# auxiliary CTC loss. Empty disables it.
+inter_ctc_layers: [1, 3, 5, 7]
+# Share of the training loss carried by those auxiliary predictions.
+inter_ctc_weight: 0.5
 # Amount of label smoothing when computing the training loss.
 train_label_smoothing: 0.01
 
@@ -152,10 +168,10 @@ calculate_precision: false
 # Accumulates gradients over `k` batches before stepping the optimizer.
 accumulate_grad_batches: 1
 # The value at which to clip gradients. `None` disables gradient clipping.
-gradient_clip_val:
+gradient_clip_val: 2.0
 # The gradient clipping algorithm to use.
 # Must be one of: "value", "norm", or `None`.
-gradient_clip_algorithm:
+gradient_clip_algorithm: 'norm'
 # Floating point precision.
 # Must be one of: "16-true", "16-mixed", "bf16-true", "bf16-mixed", "32-true",
 # "64-true", "64", "32", "16", or "bf16".

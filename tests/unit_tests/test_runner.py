@@ -103,6 +103,7 @@ def test_save_and_load_weights(tmp_path, mgf_small, tiny_config):
     # Try changing model arch:
     other_config = Config(tiny_config)
     other_config.n_layers = 50  # lol
+    other_config.inter_ctc_layers = [1]
     other_config.n_beams = 12
     other_config.cosine_schedule_period_iters = 2
     with torch.device("meta"):
@@ -114,6 +115,7 @@ def test_save_and_load_weights(tmp_path, mgf_small, tiny_config):
 
     obs_layers = runner.model.encoder.transformer_encoder.num_layers
     assert obs_layers == 1  # Match the original arch.
+    assert runner.model.inter_ctc_layers == ()  # Match the original arch.
     assert runner.model.n_beams == 12  # Match the config
     assert runner.model.cosine_schedule_period_iters == 2  # Match the config
     assert next(runner.model.parameters()).device == torch.device("meta")
@@ -228,6 +230,9 @@ def test_save_final_model(tmp_path, mgf_small, tiny_config):
     """Test that final model checkpoints are saved."""
     # Test checkpoint saving when val_check_interval is greater than training steps
     config = Config(tiny_config)
+    # The checkpoint names below assume 20 epochs of one batch each;
+    # tiny_config's max_epochs is set for tests that need to converge.
+    config.max_epochs = 20
     config.val_check_interval = 50
     model_file = tmp_path / "epoch=19-step=20.ckpt"
     with ModelRunner(config, output_dir=tmp_path) as runner:

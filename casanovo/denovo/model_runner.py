@@ -25,7 +25,6 @@ from ..denovo.dataloaders import DeNovoDataModule
 from ..denovo.evaluate import aa_match_batch, aa_match_metrics
 from ..denovo.model import DbSpec2Pep, Spec2Pep
 
-
 logger = logging.getLogger("casanovo")
 
 
@@ -103,7 +102,7 @@ class ModelRunner:
             ),
             ModelCheckpoint(
                 dirpath=output_dir,
-                monitor="valid_CELoss",
+                monitor="valid_CTCLoss",
                 filename=best_filename,
                 enable_version_counter=False,
             ),
@@ -445,6 +444,7 @@ class ModelRunner:
             precursor_mass_tol=self.config.precursor_mass_tol,
             isotope_error_range=self.config.isotope_error_range,
             min_peptide_len=self.config.min_peptide_len,
+            decoder_frames=self.config.decoder_frames,
             top_match=self.config.top_match,
             n_beams=self.config.n_beams,
             n_log=self.config.n_log,
@@ -458,6 +458,10 @@ class ModelRunner:
             cosine_schedule_period_iters=self.config.cosine_schedule_period_iters,
             lr=self.config.learning_rate,
             weight_decay=self.config.weight_decay,
+            muon_lr=self.config.muon_lr,
+            muon_momentum=self.config.muon_momentum,
+            inter_ctc_layers=self.config.inter_ctc_layers,
+            inter_ctc_weight=self.config.inter_ctc_weight,
             train_label_smoothing=self.config.train_label_smoothing,
             calculate_precision=self.config.calculate_precision,
             out_writer=self.writer,
@@ -470,7 +474,7 @@ class ModelRunner:
             precursor_mass_tol=self.config.precursor_mass_tol,
             isotope_error_range=self.config.isotope_error_range,
             min_peptide_len=self.config.min_peptide_len,
-            max_peptide_len=self.config.max_peptide_len,
+            decoder_frames=self.config.decoder_frames,
             top_match=self.config.top_match,
             n_beams=self.config.n_beams,
             n_log=self.config.n_log,
@@ -478,6 +482,9 @@ class ModelRunner:
             cosine_schedule_period_iters=self.config.cosine_schedule_period_iters,
             lr=self.config.learning_rate,
             weight_decay=self.config.weight_decay,
+            muon_lr=self.config.muon_lr,
+            muon_momentum=self.config.muon_momentum,
+            inter_ctc_weight=self.config.inter_ctc_weight,
             train_label_smoothing=self.config.train_label_smoothing,
             calculate_precision=self.config.calculate_precision,
             out_writer=self.writer,
@@ -523,6 +530,8 @@ class ModelRunner:
                 loaded_model_params.keys()
             )
             for param in architecture_params:
+                if param not in self.model.hparams:
+                    continue
                 if model_params[param] != self.model.hparams[param]:
                     if param == "tokenizer":
                         self._verify_tokenizer(

@@ -10,7 +10,6 @@ import yaml
 
 from . import utils
 
-
 logger = logging.getLogger("casanovo")
 
 
@@ -54,6 +53,7 @@ class Config:
         isotope_error_range=lambda min_max: (int(min_max[0]), int(min_max[1])),
         min_peptide_len=int,
         max_peptide_len=int,
+        decoder_frames=int,
         predict_batch_size=int,
         top_match=int,
         accelerator=str,
@@ -89,6 +89,10 @@ class Config:
         cosine_schedule_period_iters=int,
         learning_rate=float,
         weight_decay=float,
+        muon_lr=float,
+        muon_momentum=float,
+        inter_ctc_layers=list,
+        inter_ctc_weight=float,
         train_label_smoothing=float,
         train_batch_size=int,
         max_epochs=int,
@@ -150,6 +154,16 @@ class Config:
         # Validate.
         for key, val in self._config_types.items():
             self.validate_param(key, val)
+
+        # CTC needs a frame per residue, so the budget has to cover the
+        # longest peptide considered. Repeats need one more each, which
+        # only the data knows; training warns about those.
+        if self._params["decoder_frames"] < self._params["max_peptide_len"]:
+            raise ValueError(
+                f"decoder_frames ({self._params['decoder_frames']}) is below "
+                f"max_peptide_len ({self._params['max_peptide_len']}); "
+                "peptides that long could not be decoded"
+            )
 
         self._params["n_workers"] = utils.n_workers()
 
