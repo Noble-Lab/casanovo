@@ -1511,7 +1511,7 @@ class AugmentedSpec2Pep(Spec2Pep):
         pred_frag = pred_frag[:, 1:, :].reshape(-1, 2)
         frag_labels = frag_labels.reshape(-1).long()
 
-        frag_loss = self.alpha * self.fragCELoss(
+        frag_loss = self.frag_weight * self.fragCELoss(
             pred_frag,
             frag_labels,
         )

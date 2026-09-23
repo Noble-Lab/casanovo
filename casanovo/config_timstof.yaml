@@ -18,11 +18,15 @@ width: 2
 # of the config file when running inference with Cascadia.
 ###
 # How much the fragment class weighs more than the non-fragment class 
-# in the auxiliary classification task
+# in the auxiliary classification task.
 frag_class_weights: 20
 
-# How much to weight the auxiliary task in computing the loss
+# How much to weight the auxiliary task in computing the loss.
 frag_weight: 1e-3
+
+# What fraction of fragments must be covered for a training example 
+# to be included.
+min_fragment_coverage: 0.25
 
 ###
 # The following parameters can be modified when running inference or when

@@ -202,7 +202,7 @@ def test_missing_ms1_warning(caplog):
     }
 
     with caplog.at_level(logging.WARNING):
-        dataset._dia_to_dataframe(["test.mzML"], annotated=False)
+        dataset._dia_to_dataframe(["test.mzML"], annotated=False, mode="test")
 
     assert "2 spectra were skipped due to missing MS1 scans" in caplog.text
 
@@ -303,8 +303,8 @@ def test_dia_to_dataframe_unannotated(mzml_small_ms1):
     assert test_dataset[0]["precursor_charge"] == 1
     assert test_dataset[1]["precursor_charge"] == 2
 
-    assert test_dataset[0]["precursor_mz"] == 804.774963
-    assert test_dataset[1]["precursor_mz"] == 804.774963
+    assert test_dataset[0]["precursor_mz"] == 659.0
+    assert test_dataset[1]["precursor_mz"] == 659.0
 
     torch.testing.assert_close(
         test_dataset[0]["intensity_array"],

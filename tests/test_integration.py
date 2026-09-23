@@ -14,6 +14,91 @@ from casanovo import cascadia
 TEST_DIR = Path(__file__).resolve().parent
 
 
+def test_train_and_run_cascadia(
+    mzml_small_ms1,
+    tsv_small,
+    tiny_config,
+    tmp_path,
+):
+    run = functools.partial(
+        CliRunner().invoke, cascadia.main, catch_exceptions=False
+    )
+
+    # Run Casanovo to train a tiny model.
+    train_args = [
+        "train",
+        str(mzml_small_ms1),
+        "--config",
+        tiny_config,
+        "--output_dir",
+        str(tmp_path),
+        "--output_root",
+        "train",  # <-- give it the value it expects
+        "--annotation_path",
+        str(tsv_small),
+    ]
+
+    result = run(train_args)
+    model_file = tmp_path / "train.epoch=29-step=30.ckpt"
+    best_model = tmp_path / "train.best.ckpt"
+
+    assert (
+        result.exit_code == 0
+    ), f"CLI failed (exit={result.exit_code}):\n{result.output}"
+    assert model_file.exists()
+    assert best_model.exists()
+
+    # Run cascadia in de novo prediction mode.
+    output_rootname = "test"
+    output_filename = (tmp_path / output_rootname).with_suffix(".mztab")
+    predict_args = [
+        "sequence",
+        "--model",
+        str(model_file),
+        "--config",
+        tiny_config,
+        "--output_dir",
+        str(tmp_path),
+        "--output_root",
+        output_rootname,
+        str(mzml_small_ms1),
+    ]
+
+    result = run(predict_args)
+    assert result.exit_code == 0
+    assert output_filename.is_file()
+
+    with pytest.raises(FileExistsError):
+        result = run(predict_args)
+
+    force_predict_args = predict_args.copy()
+    force_predict_args.insert(1, "--force_overwrite")
+    result = run(force_predict_args)
+    assert result.exit_code == 0
+    assert output_filename.is_file()
+
+    # Verify that the output file is correct.
+    mztab = pyteomics.mztab.MzTab(str(output_filename))
+    # Verify that both input peak files are listed in the metadata.
+    for i, filename in enumerate(["sample_preprocessed_spectra.mzML"], 1):
+        assert f"ms_run[{i}]-location" in mztab.metadata
+        assert mztab.metadata[f"ms_run[{i}]-location"].endswith(filename)
+
+    psms = mztab.spectrum_match_table
+
+    assert psms.loc[1, "sequence"] == "LESLLEK"
+    assert psms.loc[1, "spectra_ref"] == "ms_run[1]:index=0"
+    assert psms.loc[2, "sequence"] == "PEPTLDEK"
+    assert psms.loc[2, "spectra_ref"] == "ms_run[1]:index=1"
+    assert psms.loc[3, "sequence"] == "PEPTLDEK"
+    assert (
+        psms.loc[3, "spectra_ref"]
+        == "ms_run[2]:merged=11 frame=12 scanStart=763 scanEnd=787"
+    )
+    assert psms.loc[4, "sequence"] == "LESLLEK"
+    assert psms.loc[4, "spectra_ref"] == "ms_run[2]:scan=17"
+
+
 def test_auxilliary_cli_cascadia(tmp_path, monkeypatch):
     """Test the secondary CLI commands."""
     run = functools.partial(

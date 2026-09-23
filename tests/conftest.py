@@ -19,6 +19,16 @@ def mzml_small_ms1():
 
 
 @pytest.fixture
+def tsv_small():
+    return (
+        pathlib.Path(__file__).parent
+        / ".."
+        / "sample_data"
+        / "annotations_tsv.tsv"
+    )
+
+
+@pytest.fixture
 def mgf_small(tmp_path):
     """An MGF file with 2 annotated spectra."""
     peptides = ["LESLIEK", "PEPTIDEK"]
@@ -377,6 +387,7 @@ def _get_config_file(file_path, file_name, additional_cfg=None):
         "width": 2,
         "frag_class_weights": 20,
         "frag_weight": 1e-3,
+        "min_fragment_coverage": 0.25,
     }
 
     if additional_cfg is not None:

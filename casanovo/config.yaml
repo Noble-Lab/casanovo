@@ -25,6 +25,10 @@ frag_class_weights: 20
 # How much to weight the auxiliary task in computing the loss
 frag_weight: 1e-3
 
+# What fraction of fragments must be covered for a training example 
+# to be included.
+min_fragment_coverage: 0.25
+
 ###
 # The following parameters can be modified when running inference or when
 # fine-tuning an existing Casanovo model. They also affect database search

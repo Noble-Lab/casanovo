@@ -13,6 +13,8 @@ import numpy as np
 import polars as plr
 import pyteomics
 import pyarrow as pa
+import pyarrow.csv
+import time
 import spectrum_utils.spectrum as sus
 import torch.utils.data._utils.collate
 from depthcharge.data import (
@@ -126,6 +128,7 @@ class DeNovoDataModule(pl.LightningDataModule):
         valid_paths: Optional[Sequence[str]] = None,
         test_paths: Optional[Sequence[str]] = None,
         tracking_paths: Optional[Sequence[str]] = None,
+        annotation_path: Optional[str] = None,
         train_batch_size: int = 128,
         eval_batch_size: int = 1028,
         min_peaks: Optional[int] = 20,
@@ -134,6 +137,7 @@ class DeNovoDataModule(pl.LightningDataModule):
         max_mz: float = 2500.0,
         min_intensity: float = 0.01,
         remove_precursor_tol: float = 2.0,
+        min_fragment_coverage: float = 0.25,
         max_charge: Optional[int] = 10,
         tokenizer: Optional[PeptideTokenizer] = None,
         shuffle: Optional[bool] = True,
@@ -145,6 +149,10 @@ class DeNovoDataModule(pl.LightningDataModule):
     ):
         super().__init__()
 
+        self.rt_tolerance = 1e-5
+        self.mz_tolerance = 1e-5
+        self.min_fragment_coverage = min_fragment_coverage
+
         self.lance_dir = lance_dir
         self.casanovo = casanovo
         self.train_paths = train_paths
@@ -154,6 +162,14 @@ class DeNovoDataModule(pl.LightningDataModule):
 
         self.train_batch_size = train_batch_size
         self.eval_batch_size = eval_batch_size
+        if annotation_path is None:
+            self.annotation_data_frame = None
+        else:
+            self.annotation_data_frame = plr.read_csv(
+                annotation_path, separator="\t"
+            )
+            if self.annotation_data_frame is not None:
+                self._build_dia_annotation_index()
 
         # Spectrum preprocessing functions.
         self.preprocessing_fn = [
@@ -182,6 +198,22 @@ class DeNovoDataModule(pl.LightningDataModule):
         self.custom_field_anno = CustomField(
             "seq", lambda x: x["params"]["seq"], pa.string()
         )
+        self.custom_field_scan_window = CustomField(
+            "scan_window_array",
+            lambda x: x["scan_window_array"],
+            pa.list_(pa.float32()),
+            pad=True,
+        )
+        self.custom_field_ms = CustomField(
+            "ms_array", lambda x: x["ms_array"], pa.list_(pa.int8()), pad=True
+        )
+        self.custom_field_frag = CustomField(
+            "frag_labels",
+            lambda x: x["frag_labels"],
+            pa.list_(pa.int8()),
+            pad=True,
+        )
+
         self.train_dataset = None
         # Per-file validation datasets: main (monitored) + tracking (log-only).
         self.valid_datasets: list = []
@@ -204,7 +236,7 @@ class DeNovoDataModule(pl.LightningDataModule):
             prepared by default.
         annotated: bool
             True if peptide sequence annotations are available for the
-            test data.
+            test data or in the TSV for the test data for DIA data.
         """
         if stage in (None, "fit", "validate"):
             if self.train_paths is not None:
@@ -294,7 +326,8 @@ class DeNovoDataModule(pl.LightningDataModule):
             Paths to read the spectrum input data from.
         annotated: bool
             True if peptide sequence annotations are available for the
-            test data.
+            test data and for DIA mode whether the train annotations
+            are available in the TSV.
         mode: str {"train", "valid", "test"}
             The mode indicating name of lance instance
         shuffle: bool
@@ -305,7 +338,17 @@ class DeNovoDataModule(pl.LightningDataModule):
         torch.utils.data.Dataset
             A PyTorch Dataset for the given peak files.
         """
-        custom_fields = [self.custom_field_anno] if annotated else []
+        custom_fields = []
+        if not self.casanovo:
+            custom_fields.append(self.custom_field_scan_window)
+            custom_fields.append(self.custom_field_ms)
+
+        if not self.casanovo and annotated:
+            custom_fields.append(self.custom_field_frag)
+
+        if annotated:
+            custom_fields.append(self.custom_field_anno)
+
         lance_path = pathlib.Path(f"{self.lance_dir}/{mode}.lance")
 
         parse_params = dict(
@@ -339,7 +382,7 @@ class DeNovoDataModule(pl.LightningDataModule):
             dataset = Dataset.from_lance(paths[0], **params)
         else:
             if not self.casanovo:
-                paths = self._dia_to_dataframe(paths, annotated)
+                paths = self._dia_to_dataframe(paths, annotated, mode)
 
             dataset = Dataset(
                 spectra=paths,
@@ -356,7 +399,9 @@ class DeNovoDataModule(pl.LightningDataModule):
 
         return dataset
 
-    def _dia_to_dataframe(self, paths, annotated) -> Iterator[pa.RecordBatch]:
+    def _dia_to_dataframe(
+        self, paths, annotated, mode
+    ) -> Iterator[pa.RecordBatch]:
         """
         Make spectrum dataframes.
 
@@ -366,7 +411,7 @@ class DeNovoDataModule(pl.LightningDataModule):
             Paths to read the spectrum input data from.
         annotated: bool
             True if peptide sequence annotations are available for the
-            test data.
+            test data and train data in the TSV for DIA data.
 
         Returns
         -------
@@ -374,6 +419,7 @@ class DeNovoDataModule(pl.LightningDataModule):
             An iterator of dataframes with the centered spectra.
         """
         overall_records = []
+        scan_id = 0
 
         for path in paths:
             skipped = 0
@@ -411,48 +457,92 @@ class DeNovoDataModule(pl.LightningDataModule):
                 ms1_rts = ms1_rts[sorted_ms1_rt_idxs]
                 ms1_scans = ms1_scans[sorted_ms1_rt_idxs]
 
-                for charge in self.valid_charge:
-                    mz_array = []
-                    intensity_array = []
-                    scan_window_array = []
-                    ms_array = []
+                mz_array = []
+                intensity_array = []
+                scan_window_array = []
+                ms_array = []
 
-                    for scan, cur_rt in zip(scans, rts):
-                        for mz, intensity in scan:
-                            mz_array.append(mz)
-                            intensity_array.append(intensity)
-                            scan_window_array.append(cur_rt)
-                            ms_array.append(2)
+                for scan, cur_rt in zip(scans, rts):
+                    for mz, intensity in scan:
+                        mz_array.append(mz)
+                        intensity_array.append(intensity)
+                        scan_window_array.append(cur_rt)
+                        ms_array.append(2)
 
-                    for scan, cur_rt in zip(ms1_scans, ms1_rts):
-                        for mz, intensity in scan:
-                            if abs(mz - prec) > window_width + 1:
+                for scan, cur_rt in zip(ms1_scans, ms1_rts):
+                    for mz, intensity in scan:
+                        if abs(mz - prec) > window_width + 1:
+                            continue
+
+                        mz_array.append(mz)
+                        intensity_array.append(intensity)
+                        scan_window_array.append(cur_rt)
+                        ms_array.append(1)
+
+                base_record = {
+                    "peak_file": pathlib.Path(path).name,
+                    "ms_level": self.ms_level,
+                    "precursor_mz": prec,
+                    "retention_time": rt,
+                    "mz_array": np.asarray(mz_array, dtype=np.float32),
+                    "intensity_array": np.asarray(
+                        intensity_array, dtype=np.float32
+                    ),
+                    "scan_window_array": np.asarray(
+                        scan_window_array, dtype=np.float32
+                    ),
+                    "ms_array": np.asarray(ms_array, dtype=np.int8),
+                }
+
+                if annotated and self.annotation_data_frame is None:
+                    raise ValueError(
+                        "annotation_path is required when annotated=True"
+                    )
+
+                if annotated:
+                    if mode == "train" or "valid" in mode:
+                        annotations = self._dia_annotate(base_record)
+
+                        for seq, charge in annotations:
+                            record = dict(base_record)
+                            record["seq"] = seq
+                            record["precursor_charge"] = charge
+                            record["scan_id"] = scan_id
+
+                            record = self._apply_preprocessing(record)
+                            if record is None:
                                 continue
 
-                            mz_array.append(mz)
-                            intensity_array.append(intensity)
-                            scan_window_array.append(cur_rt)
-                            ms_array.append(1)
+                            coverage, frag_labels = self._annotate_fragments(
+                                record
+                            )
 
-                    record = {
-                        "peak_file": pathlib.Path(path).name,
-                        "scan_id": value["center_scan_id"],
-                        "ms_level": self.ms_level,
-                        "precursor_mz": prec,
-                        "mz_array": np.asarray(mz_array, dtype=np.float32),
-                        "intensity_array": np.asarray(
-                            intensity_array, dtype=np.float32
-                        ),
-                        "scan_window_array": np.asarray(
-                            scan_window_array, dtype=np.float32
-                        ),
-                        "ms_array": np.asarray(ms_array, dtype=np.int8),
-                    }
+                            if coverage < self.min_fragment_coverage:
+                                continue
 
-                    if not annotated:
+                            record["frag_labels"] = frag_labels
+
+                            overall_records.append(record)
+
+                            scan_id += 1
+                    else:
+                        raise ValueError(
+                            "Cascadia currently does not support evaluation mode for "
+                            "de novo sequencing."
+                        )
+
+                else:
+                    for charge in self.valid_charge:
+                        record = dict(base_record)
                         record["precursor_charge"] = charge
+                        record["scan_id"] = scan_id
 
-                    overall_records.append(record)
+                        record = self._apply_preprocessing(record)
+                        if record is None:
+                            continue
+
+                        overall_records.append(record)
+                        scan_id += 1
 
             if skipped > 0:
                 logger.warning(
@@ -462,6 +552,223 @@ class DeNovoDataModule(pl.LightningDataModule):
                 )
 
         return plr.DataFrame(overall_records)
+
+    def _passes_fragment_coverage(self, record, min_fragment_coverage):
+        """Check whether a spectrum has sufficient b/y fragment-ion coverage.
+
+        Coverage is the fraction of theoretical b/y fragment ions at +1 and +2
+        charge states that have a matching experimental peak.
+
+        Parameters
+        ----------
+        record : dict
+            Spectrum record containing ``mz_array`` and ``seq``.
+        min_coverage : float
+            Minimum required theoretical-ion coverage.
+
+        Returns
+        -------
+        bool
+            Whether the spectrum meets the coverage requirement.
+        """
+        spec = sus.MsmsSpectrum(
+            mz=record["mz_array"],
+            identifier=str(record["scan_id"]),
+            intensity=record["intensity_array"],
+            retention_time=record.get("retention_time"),
+            precursor_mz=record.get("precursor_mz"),
+            precursor_charge=record.get("precursor_charge"),
+        )
+
+        spec.annotate_proforma(
+            record["seq"],
+            0.05,
+            "Da",
+            ion_types="by",
+            max_ion_charge=2,
+        )
+
+        observed_ions = set()
+
+        for annotation in spec.annotation:
+            if annotation is None:
+                continue
+
+            for ion in annotation:
+                observed_ions.add(str(ion))
+
+        # A peptide of length L has L-1 cleavage positions.
+        # For b/y ions at +1 and +2:
+        #   2 ion types × 2 charges × (L - 1)
+        peptide_length = len(record["seq"])
+        theoretical_ions = 4 * (peptide_length - 1)
+
+        coverage = len(observed_ions) / theoretical_ions
+
+        return coverage >= min_fragment_coverage
+
+    def _apply_preprocessing(self, base_record):
+        """Run self.preprocessing_fn on a DIA record. Returns the updated
+        record, or None if the spectrum was rejected (e.g. by
+        _discard_low_quality)."""
+        mz = base_record["mz_array"]
+        intensity = base_record["intensity_array"]
+        scan_window = base_record["scan_window_array"]
+        ms_level_arr = base_record["ms_array"]
+
+        sort_idx = np.argsort(mz, kind="stable")
+        sorted_mz = mz[sort_idx]
+        sorted_intensity = intensity[sort_idx]
+        sorted_scan_window = scan_window[sort_idx]
+        sorted_ms_level = ms_level_arr[sort_idx]
+
+        spec = sus.MsmsSpectrum(
+            mz=sorted_mz,
+            intensity=sorted_intensity,
+            retention_time=base_record.get("retention_time"),
+            precursor_mz=base_record.get("precursor_mz"),
+            identifier=str(base_record["scan_id"]),
+            precursor_charge=base_record.get("precursor_charge"),
+        )
+
+        try:
+            for processor in self.preprocessing_fn:
+                spec = processor(spec)
+        except ValueError:
+            return None
+
+        # Create a mask to retain the peaks in the scan_window and ms_level arrays
+        keep_idx = np.empty(len(spec.mz), dtype=int)
+        j = 0
+        for i, m in enumerate(spec.mz):
+            while np.isclose(sorted_mz[j], m):
+                j += 1
+            keep_idx[i] = j
+            j += 1
+
+        base_record["mz_array"] = spec.mz
+        base_record["intensity_array"] = spec.intensity
+        base_record["scan_window_array"] = sorted_scan_window[keep_idx]
+        base_record["ms_array"] = sorted_ms_level[keep_idx]
+        return base_record
+
+    def _annotate_fragments(self, record):
+        t0 = time.perf_counter()
+
+        spec = sus.MsmsSpectrum(
+            mz=record["mz_array"],
+            intensity=record["intensity_array"],
+            retention_time=record.get("retention_time"),
+            precursor_mz=record.get("precursor_mz"),
+            precursor_charge=record.get("precursor_charge"),
+            identifier=str(record["scan_id"]),
+        )
+
+        t1 = time.perf_counter()
+
+        spec.annotate_proforma(
+            record["seq"],
+            0.05,
+            "Da",
+            ion_types="by",
+            max_ion_charge=2,
+        )
+
+        t2 = time.perf_counter()
+
+        annotations = spec.annotation
+
+        frag_labels = np.zeros(len(annotations), dtype=np.int8)
+        observed_ions = set()
+
+        for i, annotation in enumerate(annotations):
+            if annotation is None:
+                continue
+
+            has_charge_one = False
+
+            for ion in annotation:
+                if ion.charge in (1, 2):
+                    observed_ions.add(str(ion))
+
+                if ion.charge == 1:
+                    has_charge_one = True
+
+            if has_charge_one:
+                frag_labels[i] = 1
+
+        t3 = time.perf_counter()
+
+        peptide_length = len(record["seq"])
+        theoretical_ions = 4 * (peptide_length - 1)
+
+        coverage = (
+            len(observed_ions) / theoretical_ions if theoretical_ions else 0.0
+        )
+
+        print(
+            f"build={t1-t0:.4f}s "
+            f"annotate={t2-t1:.4f}s "
+            f"parse={t3-t2:.4f}s",
+            flush=True,
+        )
+
+        return coverage, frag_labels
+
+    def _dia_annotate(self, record):
+        """Find peptide annotations matching a DIA spectrum."""
+
+        rt = record["retention_time"]
+        mz = record["precursor_mz"]
+        peak_file = record["peak_file"]
+
+        rt_bin = int(rt / self.rt_tolerance)
+        mz_bin = int(mz / self.mz_tolerance)
+
+        matches = []
+
+        # Check neighboring bins because a valid match can fall
+        # across a bin boundary.
+        for rt_offset in (-1, 0, 1):
+            for mz_offset in (-1, 0, 1):
+                key = (
+                    peak_file,
+                    rt_bin + rt_offset,
+                    mz_bin + mz_offset,
+                )
+
+                for (
+                    seq,
+                    charge,
+                    candidate_rt,
+                    candidate_mz,
+                ) in self._dia_annotation_index.get(key, []):
+                    if (
+                        abs(candidate_rt - rt) <= self.rt_tolerance
+                        and abs(candidate_mz - mz) <= self.mz_tolerance
+                    ):
+                        matches.append((seq, charge))
+
+        return matches
+
+    def _build_dia_annotation_index(self):
+        """Build a fast lookup index for DIA annotations."""
+        self._dia_annotation_index = {}
+
+        for row in self.annotation_data_frame.iter_rows(named=True):
+            rt_bin = int(row["retention_time"] / self.rt_tolerance)
+            mz_bin = int(row["precursor_mz"] / self.mz_tolerance)
+
+            key = (row["peak_file"], rt_bin, mz_bin)
+
+            self._dia_annotation_index.setdefault(key, []).append(
+                (
+                    row["seq"],
+                    row["charge"],
+                    row["retention_time"],
+                    row["precursor_mz"],
+                )
+            )
 
     def _select_top_peaks(self, spec, sqrt_passes=1):
         """Select the top-n most intense peaks, sort by m/z, scale intensities.
@@ -482,10 +789,14 @@ class DeNovoDataModule(pl.LightningDataModule):
         mzs = spec["m/z array"]
         intensities = spec["intensity array"]
 
-        if self.max_peaks is None:
-            top_idx = np.arange(len(intensities))
+        if self.max_peaks is not None and len(intensities) > self.max_peaks:
+            # Find the top max_peaks without fully sorting all intensities.
+            top_idx = np.argpartition(
+                intensities,
+                -self.max_peaks,
+            )[-self.max_peaks :]
         else:
-            top_idx = np.argsort(intensities)[-self.max_peaks :]
+            top_idx = np.arange(len(intensities))
 
         mzs, intensities = mzs[top_idx], intensities[top_idx]
 
@@ -494,8 +805,13 @@ class DeNovoDataModule(pl.LightningDataModule):
 
         for _ in range(sqrt_passes):
             intensities = intensities**0.5
+
         if len(intensities):
-            intensities = intensities / np.max(intensities)
+            max_intensity = np.max(intensities)
+            if max_intensity > 0:
+                intensities = intensities / max_intensity
+            else:
+                raise ValueError("All intensities in a spectrum cannot be 0.")
 
         return mzs, intensities
 

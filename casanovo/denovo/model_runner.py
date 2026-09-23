@@ -52,6 +52,8 @@ class ModelRunner:
         Whether or not to load data for the Casanovo or Cascadia models
     """
 
+    casanovo: bool = True
+
     def __init__(
         self,
         config: Config,
@@ -180,6 +182,7 @@ class ModelRunner:
         valid_peak_path: Iterable[str],
         ckpt_path: Optional[str] = None,
         tracking_peak_path: Iterable[str] = (),
+        annotation_path: str = None,
     ) -> None:
         """
         Train the Casanovo model.
@@ -201,6 +204,8 @@ class ModelRunner:
             monitoring purposes (e.g. detecting catastrophic forgetting)
             but is excluded from the aggregate used for checkpoint
             selection.
+        annotation_path : str
+            The path with the DIA annotations.
         """
         self.initialize_trainer(train=True)
         self.initialize_tokenizer()
@@ -213,8 +218,14 @@ class ModelRunner:
             if tracking_peak_path
             else []
         )
+        annotation_path = self._get_input_annotation_paths(
+            annotation_path, "train"
+        )
         self.initialize_data_module(
-            train_paths, valid_paths, tracking_paths=tracking_paths
+            train_paths,
+            valid_paths,
+            tracking_paths=tracking_paths,
+            annotation_path=annotation_path,
         )
         self.loaders.setup()
 
@@ -294,6 +305,7 @@ class ModelRunner:
         self,
         peak_path: Iterable[str],
         results_path: str,
+        annotation_path: str = None,
         evaluate: bool = False,
     ) -> None:
         """
@@ -314,6 +326,8 @@ class ModelRunner:
             Note: peak_path must point to annotated MS data files when
             running model evaluation. Files that are not an annotated
             peak file format will be ignored if evaluate is set to true.
+        annotation_path : str
+            The path with the DIA annotations.
         """
         self.writer = ms_io.MztabWriter(results_path)
         self.writer.set_metadata(
@@ -328,8 +342,13 @@ class ModelRunner:
         self.model.out_writer = self.writer
 
         test_paths = self._get_input_paths(peak_path, False, "test")
+        annotation_path = self._get_input_annotation_paths(
+            annotation_path, "test"
+        )
         self.writer.set_ms_run(test_paths)
-        self.initialize_data_module(test_paths=test_paths)
+        self.initialize_data_module(
+            test_paths=test_paths, annotation_path=annotation_path
+        )
 
         try:
             self.loaders.setup(stage="test", annotated=evaluate)
@@ -351,7 +370,7 @@ class ModelRunner:
         predict_dataloader = self.loaders.predict_dataloader()
         self.trainer.predict(self.model, predict_dataloader)
 
-        if evaluate:
+        if evaluate and not self.casanovo:
             self.log_metrics(predict_dataloader)
 
     def initialize_trainer(
@@ -622,6 +641,7 @@ class ModelRunner:
         valid_paths: Sequence[str] | None = None,
         test_paths: Sequence[str] | None = None,
         tracking_paths: Sequence[str] | None = None,
+        annotation_path: str | None = None,
     ) -> None:
         """Initialize the data module.
 
@@ -664,6 +684,7 @@ class ModelRunner:
             valid_paths=valid_paths,
             test_paths=test_paths,
             tracking_paths=tracking_paths,
+            annotation_path=annotation_path,
             train_batch_size=train_batch_size,
             eval_batch_size=eval_batch_size,
             min_peaks=self.config.min_peaks,
@@ -700,6 +721,19 @@ class ModelRunner:
             mismatch_reason,
         )
 
+    def _get_input_annotation_paths(self, annotation_path: str, mode: str):
+        ext = ".tsv"
+        if annotation_path is None:
+            return None
+
+        filenames = _get_peak_filenames([annotation_path], ext)
+        if not filenames:
+            error_message = f"Could not find DIA annotation files for {mode}"
+            logger.error(error_message + " from %s", annotation_path)
+            raise FileNotFoundError(error_message)
+
+        return filenames[0]
+
     def _get_input_paths(
         self,
         peak_path: Iterable[str],
@@ -724,9 +758,14 @@ class ModelRunner:
         List[str]
             The input spectrum paths for the specified mode.
         """
-        ext = (".mgf", ".lance")
-        if not annotated:
-            ext += (".mzml", ".mzxml", ".d")
+        ext = (".lance",)
+
+        if self.casanovo:
+            ext += (".mgf",)
+            if not annotated:
+                ext += (".mzml", ".mzxml", ".d")
+        else:
+            ext += (".mzml",)
 
         filenames = _get_peak_filenames(peak_path, ext)
         if not filenames:
