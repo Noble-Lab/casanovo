@@ -2388,6 +2388,21 @@ def test_setup_logging_warnings(tmp_path):
     """Warnings are logged once, on a single line."""
     root_logger = logging.getLogger()
     original_handlers = list(root_logger.handlers)
+    original_root_level = root_logger.level
+    logger_names = [
+        "depthcharge",
+        "fsspec",
+        "github",
+        "h5py",
+        "numba",
+        "pytorch_lightning",
+        "torch",
+        "urllib3",
+    ]
+    original_levels = {}
+    for name in logger_names:
+        original_levels[name] = logging.getLogger(name).level
+
     log_path = tmp_path / "test.log"
     try:
         logging.captureWarnings(False)
@@ -2399,6 +2414,9 @@ def test_setup_logging_warnings(tmp_path):
                 root_logger.removeHandler(handler)
                 handler.close()
         logging.captureWarnings(False)
+        root_logger.setLevel(original_root_level)
+        for name, level in original_levels.items():
+            logging.getLogger(name).setLevel(level)
     lines = log_path.read_text().splitlines()
     matching = []
     for line in lines:
