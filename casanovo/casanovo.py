@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Optional, Tuple, List
 
 warnings.formatwarning = lambda message, category, *args, **kwargs: (
-    f"{category.__name__}: {message}"
+    f"{category.__name__}: {' '.join(str(message).split())}"
 )
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 warnings.filterwarnings(
@@ -496,7 +496,6 @@ def setup_logging(
     logging.captureWarnings(True)
     root_logger = logging.getLogger()
     root_logger.setLevel(logging.DEBUG)
-    warnings_logger = logging.getLogger("py.warnings")
 
     # Formatters for file vs console:
     console_formatter = logging.Formatter("{levelname}: {message}", style="{")
@@ -510,11 +509,9 @@ def setup_logging(
     console_handler.setLevel(logging_levels[verbosity.lower()])
     console_handler.setFormatter(console_formatter)
     root_logger.addHandler(console_handler)
-    warnings_logger.addHandler(console_handler)
     file_handler = logging.FileHandler(log_file_path, encoding="utf8")
     file_handler.setFormatter(log_formatter)
     root_logger.addHandler(file_handler)
-    warnings_logger.addHandler(file_handler)
 
     # Disable dependency non-critical log messages.
     logging.getLogger("depthcharge").setLevel(
