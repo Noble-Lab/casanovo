@@ -28,7 +28,6 @@ import requests
 import torch
 import pyteomics.mztab
 import pyteomics.proforma
-import unittest.mock
 import warnings
 
 from casanovo import casanovo, denovo, utils
