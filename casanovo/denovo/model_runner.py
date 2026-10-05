@@ -439,9 +439,9 @@ class ModelRunner:
     def initialize_tokenizer(self) -> None:
         """Initialize the peptide tokenizer."""
         if self.config.massivekb_tokenizer:
-            tokenizer_clss = MskbPeptideTokenizer
+            tokenizer_clss = ConfigMskbPeptideTokenizer
         else:
-            tokenizer_clss = PeptideTokenizer
+            tokenizer_clss = ConfigPeptideTokenizer
 
         self.tokenizer = tokenizer_clss(
             residues=self.config.residues,
@@ -663,7 +663,7 @@ class ModelRunner:
 
         logger.warning(
             "Mismatching %s in model checkpoint tokenizer vs config file tokenizer;"
-            " using the checkpoint tokenizer.",
+            " using the config tokenizer.",
             mismatch_reason,
         )
 
@@ -924,3 +924,16 @@ def _get_peak_filenames(
         )
 
     return sorted(list(found_files))
+
+
+class ConfigPeptideTokenizer(PeptideTokenizer):
+    """Use only configured residues instead of extending the default alphabet."""
+
+    # Depthcharge copies this table before adding the configured residues.
+    residues = {}
+
+
+class ConfigMskbPeptideTokenizer(MskbPeptideTokenizer):
+    """Use only configured residues with MassIVE-KB peptide parsing."""
+
+    residues = {}
