@@ -68,10 +68,17 @@ n_beams: 1
 # The following parameters are unique to Casanovo's database search mode.
 ###
 
+# Max absolute difference allowed with respect to observed precursor m/z.
+# Only peptides within the specified precursor m/z tolerance are considered.
+precursor_mass_tol: 50 
+
+# Isotopes to consider when comparing predicted and observed precursor m/z's.
+isotope_error_range: [0, 1]
+
 # Enzyme for in silico digestion, used to generate candidate peptides.
 # See pyteomics.parser.expasy_rules for valid enzymes.
 # Can also take a regex to specify custom digestion rules.
-enzyme: "(?!)"
+enzyme: "trypsin"
 # Digestion type for candidate peptide generation.
 # - full: Standard digestion.
 # - semi: Include products of semi-specific cleavage.
@@ -108,11 +115,11 @@ tb_summarywriter: false
 # Whether to create csv_logs directory.
 log_metrics: false
 # How often to log optimizer parameters in steps.
-log_every_n_steps: 10
+log_every_n_steps: 50
 # Path to save Lance instances.
 lance_dir:
 # Model validation and checkpointing frequency in training steps.
-val_check_interval: 10_000
+val_check_interval: 50_000
 
 # SPECTRUM PROCESSING OPTIONS
 # Minimum number of peaks for a spectrum to be considered valid.
@@ -157,9 +164,14 @@ train_label_smoothing: 0.01
 
 # TRAINING/INFERENCE OPTIONS
 # Number of spectra in one training batch.
-train_batch_size: 32 #98*n_gpus
+# Per-device micro-batch is train_batch_size // n on n devices.
+# Effective optimization batch size is:
+# (per-device micro-batch) * n * accumulate_grad_batches.
+# `train_batch_size` should be >= n and preferably divisible by n; otherwise
+# floor division drops the remainder.
+train_batch_size: 32
 # Max number of training epochs.
-max_epochs: 100
+max_epochs: 30
 # Shuffle dataset during training.
 shuffle: true
 # Number of samples to buffer while randomly shuffling the training data.
@@ -172,11 +184,15 @@ calculate_precision: false
 
 # Accumulates gradients over `k` batches before stepping the optimizer.
 accumulate_grad_batches: 1
-# The value at which to clip gradients. `None` disables gradient clipping.
-gradient_clip_val: 1.0
+# The value at which to clip gradients. Leave blank / set to `None` to disable
+# gradient clipping.
+gradient_clip_val: 1.0 
 # The gradient clipping algorithm to use.
 # Must be one of: "value", "norm", or `None`.
-gradient_clip_algorithm: "value"
+# "value": The gradient values are clipped to the range [-gradient_clip_val, gradient_clip_val]
+# "norm": If the total L2 norm of the gradients exceeds gradient_clip_val, the gradients 
+#         are rescaled so the total L2 norm equals gradient_clip_val
+gradient_clip_algorithm: "norm"
 # Floating point precision.
 # Must be one of: "16-true", "16-mixed", "bf16-true", "bf16-mixed", "32-true",
 # "64-true", "64", "32", "16", or "bf16".
@@ -210,11 +226,11 @@ residues:
   "Y": 163.063329
   "W": 186.079313
   # Amino acid modifications.
-  "M[Oxidation]": 147.035400      # Met oxidation:   131.040485 + 15.994915
-  #"N[Deamidated]": 115.026943     # Asn deamidation: 114.042927 +  0.984016
-  #"Q[Deamidated]": 129.042594     # Gln deamidation: 128.058578 +  0.984016
-  "C[Cysteinyl]": 222.013285  # Cys cysteinylation: 103.009185 + 119.004100
-  "C[Carbamidomethyl]": 160.030649 # 103.009185 + 57.021464 
+  "C[Carbamidomethyl]": 160.030649        # Cys carbamidomethylation: 103.009185 + 57.021464
+  "C[Cysteinyl]": 222.013285              # Cys cysteinylation: 103.009185 + 119.004100
+  "M[Oxidation]": 147.035400              # Met oxidation: 131.040485 + 15.994915
+  "N[Deamidated]": 115.026943             # Asn deamidation: 114.042927 +  0.984016
+  "Q[Deamidated]": 129.042594             # Gln deamidation: 128.058578 +  0.984016
   # N-terminal modifications.
   "[Acetyl]-": 42.010565                  # Acetylation
   #"[Carbamyl]-": 43.005814                # Carbamylation
