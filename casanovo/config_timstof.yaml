@@ -1,7 +1,15 @@
 ###
-# Casanovo configuration.
+# Casanovo/Cascadia configuration.
 # Blank entries are interpreted as `None`.
 ###
+
+###
+# The following parameters are unique to running inference with 
+# Cascadia. Other parameters such as training batch size, 
+# inference batch size, etc. will be used from those sections 
+# of the config file when running inference with Cascadia.
+###
+width: 2
 
 ###
 # The following parameters can be modified when running inference or when

@@ -17,10 +17,13 @@ from depthcharge.tokenizers import PeptideTokenizer
 from .. import config
 from ..data import ms_io, psm
 from ..data.db_utils import PROTON
-from ..denovo.transformers import PeptideDecoder, SpectrumEncoder
+from ..denovo.transformers import (
+    PeptideDecoder,
+    SpectrumEncoder,
+)
 from . import evaluate
 
-logger = logging.getLogger("casanovo")
+logger = logging.getLogger(__name__)
 
 
 class Spec2Pep(pl.LightningModule):
