@@ -11,7 +11,7 @@ import lance
 import lightning.pytorch as pl
 import numpy as np
 import polars as plr
-import pyteomics
+import pyteomics.mzml
 import pyarrow as pa
 import spectrum_utils.spectrum as sus
 import torch.utils.data._utils.collate
