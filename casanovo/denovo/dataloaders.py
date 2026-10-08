@@ -389,7 +389,7 @@ class DeNovoDataModule(pl.LightningDataModule):
             )
 
             for key, value in prec_to_spec.items():
-                prec, rt, _ = key
+                prec, _ = key
 
                 if "ms1_scans" not in value:
                     skipped += 1
@@ -531,14 +531,14 @@ class DeNovoDataModule(pl.LightningDataModule):
         mzml_file : Path
             A path to the mzML file.
         f_to_mzrt_to_pep : dict[int, dict[tuple[int, int], list[tuple[float, float, int]]]]
-            Partitions of the file into 50,000 spectra chunks then separated based on m/z, RT and charge.
+            Partitions of the file into 50,000 spectra chunks then separated based on m/z and RT.
         time_width : int
             Width of scan.
 
         Returns
         -------
         dict[tuple, dict[str, tuple]]
-            Dictionary keyed by m/z, retention time, and charge tuples with one entry per precursor in
+            Dictionary keyed by m/z and retention time tuples with one entry per precursor in
             f_to_mzrt_to_pep that was matched to at least one scan in the mzML file.
         """
         prec_to_spec = {}
@@ -568,19 +568,18 @@ class DeNovoDataModule(pl.LightningDataModule):
                         for scan_window, entries in bins_by_rt.get(
                             scan_rt, {}
                         ).items():
-                            for mz, rt, charge in entries:
+                            for mz, rt, scan_id in entries:
                                 if np.abs(rt - cur_rt) >= time_width:
                                     continue
 
                                 self._accumulate_scan(
                                     prec_to_spec,
-                                    (mz, rt, charge),
+                                    (mz, rt),
                                     "ms1_scans",
                                     "ms1_rts",
                                     mzs,
                                     intensities,
                                     cur_rt - rt,
-                                    center_scan_id=spec.get("id", 0),
                                 )
 
                 elif spec["ms level"] == 2:
@@ -604,7 +603,7 @@ class DeNovoDataModule(pl.LightningDataModule):
                         int(cur_rt / 10) + 2,
                     ):
                         for scan_window in range(lo_bin, hi_bin):
-                            for mz, rt, charge in bins_by_rt.get(
+                            for mz, rt, scan_id in bins_by_rt.get(
                                 scan_rt, {}
                             ).get(scan_window, []):
                                 in_mz = (
@@ -620,7 +619,7 @@ class DeNovoDataModule(pl.LightningDataModule):
 
                                 self._accumulate_scan(
                                     prec_to_spec,
-                                    (mz, rt, charge),
+                                    (mz, rt),
                                     "scans",
                                     "rts",
                                     mzs,
@@ -629,6 +628,7 @@ class DeNovoDataModule(pl.LightningDataModule):
                                     window_width=max(
                                         lower_offset, upper_offset
                                     ),
+                                    center_scan_id=scan_id,
                                 )
 
         return prec_to_spec
@@ -646,8 +646,7 @@ class DeNovoDataModule(pl.LightningDataModule):
         -------
         f_to_mzrt_to_pep : dict[int, dict[tuple[int, int], list[tuple[float, float, int]]]]
             Nested lookup keyed by chunk index then the transformed cycle type.
-            Each value is a list of (window_center, cur_rt, charge) where the charge
-            is a placeholder.
+            Each value is a list of (window_center, cur_rt)
         max_mz : int
             The largest observed isolation-window m/z bin.
         window_size : float
@@ -673,6 +672,7 @@ class DeNovoDataModule(pl.LightningDataModule):
         ) as reader:
             for spec in reader:
                 if spec["ms level"] == 1:
+                    # but what is the ID file?
                     cur_rt = (
                         60 * spec["scanList"]["scan"][0]["scan start time"]
                     )
@@ -680,7 +680,9 @@ class DeNovoDataModule(pl.LightningDataModule):
                         cycle_time = cur_rt - last_rt
 
                     last_rt = cur_rt
+
                 if spec["ms level"] == 2:
+                    scan_id = spec.get("id", 0)
                     window = spec["precursorList"]["precursor"][0][
                         "isolationWindow"
                     ]
@@ -700,11 +702,11 @@ class DeNovoDataModule(pl.LightningDataModule):
                     max_mz = max(max_mz, int(window_center / 10))
                     if key in f_to_mzrt_to_pep[part]:
                         f_to_mzrt_to_pep[part][key].append(
-                            (window_center, cur_rt, 1)
+                            (window_center, cur_rt, scan_id)
                         )
                     else:
                         f_to_mzrt_to_pep[part][key] = [
-                            (window_center, cur_rt, 1)
+                            (window_center, cur_rt, scan_id)
                         ]
 
         if cycle_time is None:
