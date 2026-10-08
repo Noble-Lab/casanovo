@@ -36,7 +36,7 @@ frag_weight: 1e-3
 # database search: Select candidate peptides within the specified precursor m/z
 # tolerance.
 # Set to "inf" (with quotation marks) to disable the filter entirely.
-precursor_mass_tol: "inf"  # ppm
+precursor_mass_tol: 50  # ppm
 # Isotopes to consider when comparing predicted and observed precursor m/z's.
 isotope_error_range: [0, 1]
 # The minimum length of considered peptides.
@@ -235,8 +235,8 @@ residues:
   "[Acetyl]-": 42.010565                  # Acetylation
   #"[Carbamyl]-": 43.005814                # Carbamylation
   "[Ammonia-loss]-": -17.026549           # Ammonia loss
-  #"[+25.980265]-": 25.980265              # Carbamylation and ammonia loss
-  #"[Carbamyl][Ammonia-loss]-": 25.980265  # Carbamylation and ammonia loss
+  #"[+25.979265]-": 25.979265              # Carbamylation and ammonia loss
+  #"[Carbamyl][Ammonia-loss]-": 25.979265  # Carbamylation and ammonia loss
 
 # When fine-tuning with a vocabulary that extends the checkpoint's, map each
 # new token to an existing token whose weights should be used for initialization.
