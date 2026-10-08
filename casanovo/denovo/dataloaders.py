@@ -390,8 +390,9 @@ class DeNovoDataModule(pl.LightningDataModule):
         keep_idx = np.empty(len(spec.mz), dtype=int)
         j = 0
         for i, m in enumerate(spec.mz):
-            while not np.isclose(sorted_mz[j], m):
+            while j < len(sorted_mz) and sorted_mz[j] != m:
                 j += 1
+
             keep_idx[i] = j
             j += 1
 
