@@ -254,7 +254,7 @@ class AugmentedSpectrumEncoder(SpectrumEncoder):
     ) -> tuple[torch.Tensor, torch.Tensor]:
         spectra = torch.stack(
             [mz_array, intensity_array, scan_window_array, ms_array], dim=2
-        )  # need this otherwise wont get passed at all then kersplunk
+        )
 
         # Create the padding mask:
         src_key_padding_mask = spectra.sum(dim=2) == 0

@@ -1258,10 +1258,6 @@ class AugmentedSpec2Pep(Spec2Pep):
 
         self.frag_layer = torch.nn.Linear(dim_model, 2)
 
-        self.CELoss = torch.nn.CrossEntropyLoss(
-            ignore_index=0, train_label_smoothing=train_label_smoothing
-        )
-
         self.register_buffer(
             "frag_class_weights_tensor",
             torch.tensor([1.0, frag_class_weights]),
@@ -1269,7 +1265,7 @@ class AugmentedSpec2Pep(Spec2Pep):
 
         self.fragCELoss = torch.nn.CrossEntropyLoss(
             weight=self.frag_class_weights_tensor,
-            train_label_smoothing=train_label_smoothing,
+            label_smoothing=train_label_smoothing,
         )
 
         self.frag_weight = frag_weight
@@ -1346,7 +1342,7 @@ class AugmentedSpec2Pep(Spec2Pep):
 
         # Peptide loss
         pred = scores[:, :-1, :].reshape(-1, self.vocab_size)
-        peptide_loss = self.CELoss(pred, tokens.flatten())
+        peptide_loss = self.celoss(pred, tokens.flatten())
 
         # Fragment loss
         pred_frag = pred_frag[:, 1:, :].reshape(-1, 2)

@@ -390,7 +390,7 @@ class DeNovoDataModule(pl.LightningDataModule):
         keep_idx = np.empty(len(spec.mz), dtype=int)
         j = 0
         for i, m in enumerate(spec.mz):
-            while np.isclose(sorted_mz[j], m):
+            while not np.isclose(sorted_mz[j], m):
                 j += 1
             keep_idx[i] = j
             j += 1
@@ -400,7 +400,7 @@ class DeNovoDataModule(pl.LightningDataModule):
         base_record["scan_window_array"] = sorted_scan_window[keep_idx]
         base_record["ms_array"] = sorted_ms_level[keep_idx]
         return base_record
-        
+
     def _dia_to_dataframe(self, paths, annotated) -> Iterator[pa.RecordBatch]:
         """
         Make spectrum dataframes.
@@ -434,7 +434,7 @@ class DeNovoDataModule(pl.LightningDataModule):
             )
 
             for key, value in prec_to_spec.items():
-                prec, _ = key
+                prec, rt, scan_id = key
 
                 if "ms1_scans" not in value:
                     skipped += 1
@@ -497,14 +497,13 @@ class DeNovoDataModule(pl.LightningDataModule):
                     for charge in self.valid_charge:
                         record = dict(base_record)
                         record["precursor_charge"] = charge
-                        record["scan_id"] = value["center_scan_id"]
+                        record["scan_id"] = scan_id
 
                         record = self._apply_preprocessing(record)
                         if record is None:
                             continue
 
                         overall_records.append(record)
-
 
             if skipped > 0:
                 logger.warning(
@@ -591,7 +590,7 @@ class DeNovoDataModule(pl.LightningDataModule):
         ----------
         mzml_file : Path
             A path to the mzML file.
-        f_to_mzrt_to_pep : dict[int, dict[tuple[int, int], list[tuple[float, float, int]]]]
+        f_to_mzrt_to_pep : dict[int, dict[tuple[int, int], list[tuple[float, float, str]]]]
             Partitions of the file into 50,000 spectra chunks then separated based on m/z and RT.
         time_width : int
             Width of scan.
@@ -635,7 +634,7 @@ class DeNovoDataModule(pl.LightningDataModule):
 
                                 self._accumulate_scan(
                                     prec_to_spec,
-                                    (mz, rt),
+                                    (mz, rt, scan_id),
                                     "ms1_scans",
                                     "ms1_rts",
                                     mzs,
@@ -680,7 +679,7 @@ class DeNovoDataModule(pl.LightningDataModule):
 
                                 self._accumulate_scan(
                                     prec_to_spec,
-                                    (mz, rt),
+                                    (mz, rt, scan_id),
                                     "scans",
                                     "rts",
                                     mzs,
@@ -689,7 +688,6 @@ class DeNovoDataModule(pl.LightningDataModule):
                                     window_width=max(
                                         lower_offset, upper_offset
                                     ),
-                                    center_scan_id=scan_id,
                                 )
 
         return prec_to_spec
@@ -705,9 +703,9 @@ class DeNovoDataModule(pl.LightningDataModule):
 
         Returns
         -------
-        f_to_mzrt_to_pep : dict[int, dict[tuple[int, int], list[tuple[float, float, int]]]]
+        f_to_mzrt_to_pep : dict[int, dict[tuple[int, int], list[tuple[float, float, str]]]]
             Nested lookup keyed by chunk index then the transformed cycle type.
-            Each value is a list of (window_center, cur_rt)
+            Each value is a list of (window_center, cur_rt, scan_id)
         max_mz : int
             The largest observed isolation-window m/z bin.
         window_size : float
@@ -733,7 +731,6 @@ class DeNovoDataModule(pl.LightningDataModule):
         ) as reader:
             for spec in reader:
                 if spec["ms level"] == 1:
-                    # but what is the ID file?
                     cur_rt = (
                         60 * spec["scanList"]["scan"][0]["scan start time"]
                     )
