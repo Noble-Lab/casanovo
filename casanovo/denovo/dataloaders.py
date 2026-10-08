@@ -356,6 +356,51 @@ class DeNovoDataModule(pl.LightningDataModule):
 
         return dataset
 
+    def _apply_preprocessing(self, base_record):
+        """Run self.preprocessing_fn on a DIA record. Returns the updated
+        record, or None if the spectrum was rejected (e.g. by
+        _discard_low_quality)."""
+        mz = base_record["mz_array"]
+        intensity = base_record["intensity_array"]
+        scan_window = base_record["scan_window_array"]
+        ms_level_arr = base_record["ms_array"]
+
+        sort_idx = np.argsort(mz, kind="stable")
+        sorted_mz = mz[sort_idx]
+        sorted_intensity = intensity[sort_idx]
+        sorted_scan_window = scan_window[sort_idx]
+        sorted_ms_level = ms_level_arr[sort_idx]
+
+        spec = sus.MsmsSpectrum(
+            mz=sorted_mz,
+            intensity=sorted_intensity,
+            retention_time=base_record.get("retention_time"),
+            precursor_mz=base_record.get("precursor_mz"),
+            identifier=str(base_record["scan_id"]),
+            precursor_charge=base_record.get("precursor_charge"),
+        )
+
+        try:
+            for processor in self.preprocessing_fn:
+                spec = processor(spec)
+        except ValueError:
+            return None
+
+        # Create a mask to retain the peaks in the scan_window and ms_level arrays
+        keep_idx = np.empty(len(spec.mz), dtype=int)
+        j = 0
+        for i, m in enumerate(spec.mz):
+            while np.isclose(sorted_mz[j], m):
+                j += 1
+            keep_idx[i] = j
+            j += 1
+
+        base_record["mz_array"] = spec.mz
+        base_record["intensity_array"] = spec.intensity
+        base_record["scan_window_array"] = sorted_scan_window[keep_idx]
+        base_record["ms_array"] = sorted_ms_level[keep_idx]
+        return base_record
+        
     def _dia_to_dataframe(self, paths, annotated) -> Iterator[pa.RecordBatch]:
         """
         Make spectrum dataframes.
@@ -411,48 +456,55 @@ class DeNovoDataModule(pl.LightningDataModule):
                 ms1_rts = ms1_rts[sorted_ms1_rt_idxs]
                 ms1_scans = ms1_scans[sorted_ms1_rt_idxs]
 
-                for charge in self.valid_charge:
-                    mz_array = []
-                    intensity_array = []
-                    scan_window_array = []
-                    ms_array = []
+                mz_array = []
+                intensity_array = []
+                scan_window_array = []
+                ms_array = []
 
-                    for scan, cur_rt in zip(scans, rts):
-                        for mz, intensity in scan:
-                            mz_array.append(mz)
-                            intensity_array.append(intensity)
-                            scan_window_array.append(cur_rt)
-                            ms_array.append(2)
+                for scan, cur_rt in zip(scans, rts):
+                    for mz, intensity in scan:
+                        mz_array.append(mz)
+                        intensity_array.append(intensity)
+                        scan_window_array.append(cur_rt)
+                        ms_array.append(2)
 
-                    for scan, cur_rt in zip(ms1_scans, ms1_rts):
-                        for mz, intensity in scan:
-                            if abs(mz - prec) > window_width + 1:
-                                continue
+                for scan, cur_rt in zip(ms1_scans, ms1_rts):
+                    for mz, intensity in scan:
+                        if abs(mz - prec) > window_width + 1:
+                            continue
 
-                            mz_array.append(mz)
-                            intensity_array.append(intensity)
-                            scan_window_array.append(cur_rt)
-                            ms_array.append(1)
+                        mz_array.append(mz)
+                        intensity_array.append(intensity)
+                        scan_window_array.append(cur_rt)
+                        ms_array.append(1)
 
-                    record = {
-                        "peak_file": pathlib.Path(path).name,
-                        "scan_id": value["center_scan_id"],
-                        "ms_level": self.ms_level,
-                        "precursor_mz": prec,
-                        "mz_array": np.asarray(mz_array, dtype=np.float32),
-                        "intensity_array": np.asarray(
-                            intensity_array, dtype=np.float32
-                        ),
-                        "scan_window_array": np.asarray(
-                            scan_window_array, dtype=np.float32
-                        ),
-                        "ms_array": np.asarray(ms_array, dtype=np.int8),
-                    }
+                base_record = {
+                    "peak_file": pathlib.Path(path).name,
+                    "ms_level": self.ms_level,
+                    "precursor_mz": prec,
+                    "retention_time": rt,
+                    "mz_array": np.asarray(mz_array, dtype=np.float32),
+                    "intensity_array": np.asarray(
+                        intensity_array, dtype=np.float32
+                    ),
+                    "scan_window_array": np.asarray(
+                        scan_window_array, dtype=np.float32
+                    ),
+                    "ms_array": np.asarray(ms_array, dtype=np.int8),
+                }
 
-                    if not annotated:
+                if not annotated:
+                    for charge in self.valid_charge:
+                        record = dict(base_record)
                         record["precursor_charge"] = charge
+                        record["scan_id"] = value["center_scan_id"]
 
-                    overall_records.append(record)
+                        record = self._apply_preprocessing(record)
+                        if record is None:
+                            continue
+
+                        overall_records.append(record)
+
 
             if skipped > 0:
                 logger.warning(
@@ -482,10 +534,14 @@ class DeNovoDataModule(pl.LightningDataModule):
         mzs = spec["m/z array"]
         intensities = spec["intensity array"]
 
-        if self.max_peaks is None:
-            top_idx = np.arange(len(intensities))
+        if self.max_peaks is not None and len(intensities) > self.max_peaks:
+            # Find the top max_peaks without fully sorting all intensities.
+            top_idx = np.argpartition(
+                intensities,
+                -self.max_peaks,
+            )[-self.max_peaks :]
         else:
-            top_idx = np.argsort(intensities)[-self.max_peaks :]
+            top_idx = np.arange(len(intensities))
 
         mzs, intensities = mzs[top_idx], intensities[top_idx]
 
@@ -494,8 +550,13 @@ class DeNovoDataModule(pl.LightningDataModule):
 
         for _ in range(sqrt_passes):
             intensities = intensities**0.5
+
         if len(intensities):
-            intensities = intensities / np.max(intensities)
+            max_intensity = np.max(intensities)
+            if max_intensity > 0:
+                intensities = intensities / max_intensity
+            else:
+                raise ValueError("All intensities in a spectrum cannot be 0.")
 
         return mzs, intensities
 
