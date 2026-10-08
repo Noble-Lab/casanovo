@@ -257,7 +257,7 @@ class AugmentedSpectrumEncoder(SpectrumEncoder):
         )
 
         # Create the padding mask:
-        src_key_padding_mask = spectra.sum(dim=2) == 0
+        src_key_padding_mask = spectra[:, :, 0] = 0
         global_token_mask = torch.tensor([[False]] * spectra.shape[0]).type_as(
             src_key_padding_mask
         )
