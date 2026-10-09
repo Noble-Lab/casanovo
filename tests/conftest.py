@@ -331,6 +331,10 @@ def _get_config_file(file_path, file_name, additional_cfg=None):
         "precision": "32-true",
         "replace_isoleucine_with_leucine": True,
         "massivekb_tokenizer": True,
+        "bpe_vocab_size": None,
+        "bpe_min_frequency": 2,
+        "bpe_max_token_length": None,
+        "bpe_dropout": 0.0,
         "residues": {
             "G": 57.021464,
             "A": 71.037114,

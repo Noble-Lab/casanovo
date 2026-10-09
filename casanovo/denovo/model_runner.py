@@ -1,13 +1,14 @@
 """Training and testing functionality for the de novo peptide sequencing
 model."""
 
+import copy
 import glob
 import logging
 import os
 import tempfile
 import warnings
 from pathlib import Path
-from typing import Iterable, List, Optional, Sequence, Union
+from typing import Iterable, List, Optional, Sequence, Tuple, Union
 
 import lightning.pytorch as pl
 import lightning.pytorch.loggers
@@ -200,7 +201,6 @@ class ModelRunner:
         """
         self.initialize_trainer(train=True)
         self.initialize_tokenizer()
-        self.initialize_model(train=True)
 
         train_paths = self._get_input_paths(train_peak_path, True, "train")
         valid_paths = self._get_input_paths(valid_peak_path, True, "valid")
@@ -213,6 +213,23 @@ class ModelRunner:
             train_paths, valid_paths, tracking_paths=tracking_paths
         )
         self.loaders.setup()
+
+        # Learn the byte-pair encoding merges for a new model. A model
+        # checkpoint provides its own merges instead.
+        if self.config.bpe_vocab_size is not None:
+            if self.model_filename is None:
+                self.train_tokenizer(self.loaders.get_train_peptides())
+            else:
+                logger.warning(
+                    "Ignoring 'bpe_vocab_size' when training from a model "
+                    "checkpoint; using the byte-pair encoding merges of "
+                    "the checkpoint instead."
+                )
+
+        self.initialize_model(train=True)
+        self.loaders.set_tokenizer(
+            self.tokenizer, train_bpe_dropout=self.config.bpe_dropout
+        )
 
         # Store per-file validation metadata on the model so validation_step
         # can log per-file losses. trainer.datamodule is None when dataloaders
@@ -260,11 +277,12 @@ class ModelRunner:
                 if pred_i < len(self.writer.psms) and self.writer.psms[
                     pred_i
                 ].spectrum_id == (peak_file, scan_id):
-                    curr_pred = self.tokenizer.tokenize(
-                        self.writer.psms[pred_i].sequence, to_strings=True
+                    curr_pred = self.tokenizer.detokenize(
+                        self.tokenizer.tokenize(
+                            self.writer.psms[pred_i].sequence
+                        ),
+                        join=False,
                     )[0]
-                    if self.tokenizer.reverse:
-                        curr_pred = curr_pred[::-1]
 
                     pred_seqs.append(curr_pred)
                     pred_i += 1
@@ -447,8 +465,16 @@ class ModelRunner:
 
         self.trainer = pl.Trainer(**trainer_cfg)
 
-    def initialize_tokenizer(self) -> None:
-        """Initialize the peptide tokenizer."""
+    def initialize_tokenizer(
+        self, merges: Optional[Sequence[Tuple[str, str]]] = None
+    ) -> None:
+        """Initialize the peptide tokenizer.
+
+        Parameters
+        ----------
+        merges : Sequence[Tuple[str, str]], optional
+            The byte-pair encoding merges to apply, in order.
+        """
         if self.config.massivekb_tokenizer:
             tokenizer_clss = MskbPeptideTokenizer
         else:
@@ -460,7 +486,53 @@ class ModelRunner:
             reverse=True,
             start_token=None,
             stop_token="$",
+            merges=merges,
         )
+
+    def train_tokenizer(self, peptides: Iterable[str]) -> None:
+        """Learn byte-pair encoding merges for the peptide tokenizer.
+
+        N-terminal modifications are never merged with residues, so that
+        they remain separate tokens for beam search.
+
+        Parameters
+        ----------
+        peptides : Iterable[str]
+            The peptide sequences from which to learn the merges.
+        """
+        base_tokenizer = self.tokenizer
+        n_term = {
+            aa
+            for aa in base_tokenizer.index
+            if aa.startswith("[") and aa.endswith("]-")
+        }
+        bpe_tokenizer = copy.copy(base_tokenizer)
+        bpe_tokenizer.split = lambda seq: [
+            aa for aa in base_tokenizer.split(seq) if aa not in n_term
+        ]
+        merges = bpe_tokenizer.train_bpe(
+            peptides,
+            vocab_size=self.config.bpe_vocab_size,
+            min_frequency=self.config.bpe_min_frequency,
+            max_token_length=self.config.bpe_max_token_length,
+        ).merges
+        self.initialize_tokenizer(merges=merges)
+        logger.info(
+            "Learned %d byte-pair encoding merges for a vocabulary of %d "
+            "tokens.",
+            len(merges),
+            len(self.tokenizer),
+        )
+
+        if self.output_dir is not None and self.trainer.is_global_zero:
+            prefix = (
+                f"{self.output_rootname}."
+                if self.output_rootname is not None
+                else ""
+            )
+            merges_file = Path(self.output_dir) / f"{prefix}merges.json"
+            self.tokenizer.save_merges(merges_file)
+            logger.info("Saved byte-pair encoding merges to %s", merges_file)
 
     def initialize_model(self, train: bool, db_search: bool = False) -> None:
         """Initialize the Casanovo model.
@@ -554,8 +626,10 @@ class ModelRunner:
             # Use tokenizer initialized from config file instead of loaded
             # from checkpoint file.
             ckpt_tokenizer = self.model.hparams.get("tokenizer")
-            self.model.tokenizer = tokenizer
+            tokenizer = self._use_checkpoint_merges(ckpt_tokenizer)
+            model_params["tokenizer"] = tokenizer
             self._remap_decoder_vocab(ckpt_tokenizer, tokenizer)
+            self.model.set_tokenizer(tokenizer)
 
             architecture_params = set(model_params.keys()) - set(
                 loaded_model_params.keys()
@@ -585,8 +659,9 @@ class ModelRunner:
                     **model_params,
                 )
                 ckpt_tokenizer = self.model.hparams.get("tokenizer")
-                self.model.tokenizer = tokenizer
+                tokenizer = self._use_checkpoint_merges(ckpt_tokenizer)
                 self._remap_decoder_vocab(ckpt_tokenizer, tokenizer)
+                self.model.set_tokenizer(tokenizer)
 
             except RuntimeError:
                 raise RuntimeError(
@@ -659,6 +734,30 @@ class ModelRunner:
             n_workers=self.config.n_workers,
             lance_dir=lance_dir,
         )
+
+    def _use_checkpoint_merges(
+        self, ckpt_tokenizer: Optional[PeptideTokenizer]
+    ) -> PeptideTokenizer:
+        """Apply the byte-pair encoding merges of a checkpoint tokenizer.
+
+        The merges are learned during training and are not part of the
+        config file, so they are taken from the model checkpoint.
+
+        Parameters
+        ----------
+        ckpt_tokenizer : PeptideTokenizer or None
+            The tokenizer stored in the checkpoint.
+
+        Returns
+        -------
+        PeptideTokenizer
+            The tokenizer built from the config file, with the merges of
+            the checkpoint tokenizer.
+        """
+        merges = list(getattr(ckpt_tokenizer, "merges", None) or [])
+        if merges != list(self.tokenizer.merges):
+            self.initialize_tokenizer(merges=merges)
+        return self.tokenizer
 
     @staticmethod
     def _verify_tokenizer(

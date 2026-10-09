@@ -9,11 +9,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ### Added
 
 - The number of spectra that receive no prediction because beam search did not return a valid peptide is now counted and logged at the end of a sequencing run.
+- Byte-pair encoding (BPE) of peptide sequences. Setting `bpe_vocab_size` learns merges of frequent adjacent residues from the training peptides, so that the model predicts multi-residue tokens. The merges are saved to `merges.json` and stored in the model checkpoint for inference. N-terminal modifications are never merged. `bpe_min_frequency` and `bpe_max_token_length` control which merges are learned, and `bpe_dropout` enables BPE-dropout for the training peptides.
 
 ### Changed
 
 - `val_check_interval` now accepts a float in `[0, 1]` to validate at a fraction of each training epoch, in addition to an integer number of training steps.
 - Beam search is sped up by caching finished beams and selecting the top-scoring beam fully on the GPU.
+- Casanovo now uses the main branch of depthcharge, which adds byte-pair encoding to its tokenizers.
+- `min_peptide_len` and `max_peptide_len` count residues rather than tokens, and amino acid scores are reported per residue for multi-residue tokens.
+- Spectra without a `SEQ` annotation now raise an error when annotations are required, instead of being skipped by depthcharge.
 
 ### Fixed
 

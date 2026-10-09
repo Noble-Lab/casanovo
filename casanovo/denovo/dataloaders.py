@@ -1,5 +1,6 @@
 """Data loaders for the de novo sequencing task."""
 
+import copy
 import functools
 import logging
 import math
@@ -250,6 +251,70 @@ class DeNovoDataModule(pl.LightningDataModule):
                     self._get_n_spectra(self.test_dataset),
                 )
 
+    def get_train_peptides(self) -> list[str]:
+        """
+        Get the peptide sequence annotations of the training spectra.
+
+        Returns
+        -------
+        list of str
+            The peptide sequence of each training spectrum.
+        """
+        dataset = self._unwrap(self.train_dataset)
+        return dataset.dataset.to_table(columns=["seq"])["seq"].to_pylist()
+
+    def set_tokenizer(
+        self, tokenizer: PeptideTokenizer, train_bpe_dropout: float = 0.0
+    ) -> None:
+        """
+        Set the tokenizer of the data module and its datasets.
+
+        Parameters
+        ----------
+        tokenizer : PeptideTokenizer
+            The tokenizer to use.
+        train_bpe_dropout : float
+            The probability of skipping each byte-pair encoding merge when
+            tokenizing the training peptides. A copy of the tokenizer is
+            used for the training dataset, so that validation and test
+            peptides are always tokenized deterministically.
+        """
+        self.tokenizer = tokenizer
+        train_tokenizer = tokenizer
+        if train_bpe_dropout > 0:
+            train_tokenizer = copy.deepcopy(tokenizer)
+            train_tokenizer.bpe_dropout = train_bpe_dropout
+
+        datasets = [
+            (self.train_dataset, train_tokenizer),
+            *[(ds, tokenizer) for ds in self.valid_datasets],
+            *[(ds, tokenizer) for ds in self.tracking_datasets],
+            (self.test_dataset, tokenizer),
+        ]
+        for dataset, dataset_tokenizer in datasets:
+            dataset = self._unwrap(dataset)
+            if isinstance(dataset, AnnotatedSpectrumDataset):
+                dataset.tokenizer = dataset_tokenizer
+
+    @staticmethod
+    def _unwrap(dataset: torch.utils.data.Dataset) -> torch.utils.data.Dataset:
+        """
+        Remove the shuffling wrapper from a dataset, if present.
+
+        Parameters
+        ----------
+        dataset : torch.utils.data.Dataset
+            The dataset, which may be wrapped in a ShufflerIterDataPipe.
+
+        Returns
+        -------
+        torch.utils.data.Dataset
+            The underlying dataset.
+        """
+        if isinstance(dataset, ShufflerIterDataPipe):
+            dataset = dataset.datapipe
+        return dataset
+
     @staticmethod
     def _get_n_spectra(dataset: torch.utils.data.Dataset) -> int:
         """
@@ -266,9 +331,7 @@ class DeNovoDataModule(pl.LightningDataModule):
         int
             The number of spectra in the dataset.
         """
-        if isinstance(dataset, ShufflerIterDataPipe):
-            dataset = dataset.datapipe
-        return dataset.n_spectra
+        return DeNovoDataModule._unwrap(dataset).n_spectra
 
     def _make_dataset(
         self, paths, annotated, mode, shuffle

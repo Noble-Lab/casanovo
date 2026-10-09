@@ -1971,6 +1971,9 @@ def test_n_term_scores_db(tiny_config, monkeypatch):
             "precursor_charge": ["+1", "+1"],
             "precursor_mz": torch.tensor([42.0, 42.0]),
             "original_seq_str": ["[Acetyl]-P", "PP"],
+            "seq": model.tokenizer.tokenize(
+                ["[Acetyl]-P", "PP"], add_stop=True
+            ),
         }
     ]
 
@@ -3420,3 +3423,63 @@ def test_optimizer_kwargs_exclude_non_adam():
     assert model.opt_kwargs == {"lr": 1e-3, "weight_decay": 1e-5}
     optimizers, _ = model.configure_optimizers()
     assert isinstance(optimizers[0], torch.optim.Adam)
+
+
+def _bpe_tokenizer(config, reverse=False):
+    """A tokenizer that merges 'PEP' into a single token."""
+    return depthcharge.tokenizers.peptides.PeptideTokenizer(
+        residues=config.residues,
+        reverse=reverse,
+        merges=[("P", "E"), ("PE", "P")],
+    )
+
+
+def test_bpe_finish_beams_counts_residues(tiny_config):
+    """Peptide length limits count residues, not merged tokens."""
+    config = Config(tiny_config)
+    model = Spec2Pep(
+        min_peptide_len=4,
+        max_peptide_len=6,
+        tokenizer=_bpe_tokenizer(config),
+    )
+    step = 2
+    peptides = [
+        ("PEPKR", False),  # PEP-K-R: 5 residues, still decoding.
+        ("PEPK", True),  # PEP-K-$: 4 residues, finished.
+        ("PEPPEPK", False),  # PEP-PEP-K: 7 residues, too long.
+        ("PK", True),  # P-K-$: 2 residues, too short.
+    ]
+    tokens = torch.zeros(len(peptides), model.max_peptide_len + 1).long()
+    for i, (pep, add_stop) in enumerate(peptides):
+        toks = model.tokenizer.tokenize(pep, add_stop=add_stop)[0]
+        assert len(toks) == step + 1
+        tokens[i, : len(toks)] = toks
+
+    finished, discarded = model._finish_beams(tokens, step)
+    assert finished.tolist() == [False, True, False, True]
+    assert discarded.tolist() == [False, False, True, True]
+
+
+@pytest.mark.parametrize(
+    "reverse,expected",
+    [(False, [0.9, 0.9, 0.9, 0.5]), (True, [0.5, 0.5, 0.5, 0.9])],
+)
+def test_bpe_get_top_peptide_aa_scores(reverse, expected, tiny_config):
+    """Merged tokens are expanded to one score per residue."""
+    config = Config(tiny_config)
+    model = Spec2Pep(tokenizer=_bpe_tokenizer(config, reverse=reverse))
+    length = 10
+    cache_tokens = torch.zeros((1, 1, length, length), dtype=torch.int32)
+    cache_scores = torch.zeros((1, 1, length, length))
+
+    toks = model.tokenizer.tokenize("PEPK", add_stop=True)[0]
+    assert len(toks) == 3  # Two tokens and the stop token.
+    step = len(toks) - 1
+    cache_tokens[0, 0, step, : len(toks)] = toks
+    cache_scores[0, 0, step, : len(toks)] = torch.tensor([0.9, 0.5, 1.0])
+
+    (((_, aa_scores, peptide),),) = model._get_top_peptide(
+        cache_tokens, cache_scores
+    )
+    assert peptide == "PEPK"
+    np.testing.assert_allclose(aa_scores, expected)
