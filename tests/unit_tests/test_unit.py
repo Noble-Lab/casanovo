@@ -2071,7 +2071,8 @@ def test_eval_metrics():
 def test_spectrum_id_mgf(mgf_small, tmp_path):
     """Test that spectra from MGF files are specified by their index."""
     mgf_small2 = tmp_path / "mgf_small2.mgf"
-    shutil.copy(mgf_small, mgf_small2)
+    # Depthcharge skips peak files with identical contents.
+    mgf_small2.write_text(mgf_small.read_text() + "\n")
     data_module = DeNovoDataModule(
         lance_dir=str(tmp_path),
         train_paths=[mgf_small, mgf_small2],
@@ -2108,7 +2109,8 @@ def test_spectrum_id_mgf(mgf_small, tmp_path):
 def test_log_training_set_size(mgf_small, tmp_path, caplog):
     """Test that the number of training and validation spectra is logged."""
     mgf_small2 = tmp_path / "mgf_small2.mgf"
-    shutil.copy(mgf_small, mgf_small2)
+    # Depthcharge skips peak files with identical contents.
+    mgf_small2.write_text(mgf_small.read_text() + "\n")
     data_module = DeNovoDataModule(
         lance_dir=str(tmp_path),
         train_paths=[mgf_small, mgf_small2],
@@ -2132,7 +2134,8 @@ def test_log_training_set_size(mgf_small, tmp_path, caplog):
 def test_log_training_set_size_shuffled(mgf_small, tmp_path, caplog):
     """Test spectra count logging when shuffle=True (ShufflerIterDataPipe)."""
     mgf_small2 = tmp_path / "mgf_small2.mgf"
-    shutil.copy(mgf_small, mgf_small2)
+    # Depthcharge skips peak files with identical contents.
+    mgf_small2.write_text(mgf_small.read_text() + "\n")
     data_module = DeNovoDataModule(
         lance_dir=str(tmp_path),
         train_paths=[mgf_small, mgf_small2],
@@ -2156,7 +2159,8 @@ def test_log_training_set_size_shuffled(mgf_small, tmp_path, caplog):
 def test_spectrum_id_mzml(mzml_small, tmp_path):
     """Test that spectra from mzML files are specified by their scan id."""
     mzml_small2 = tmp_path / "mzml_small2.mzml"
-    shutil.copy(mzml_small, mzml_small2)
+    # Depthcharge skips peak files with identical contents.
+    mzml_small2.write_text(mzml_small.read_text() + "\n")
     data_module = DeNovoDataModule(
         lance_dir=str(tmp_path),
         test_paths=[mzml_small, mzml_small2],
@@ -3317,7 +3321,8 @@ def test_mixed_mgf_mzml_scan_number_column(mzml_small, tmp_path):
 def test_data_module_per_file_validation(mgf_small, tmp_path):
     """DeNovoDataModule creates one dataset per validation/tracking file."""
     mgf_small2 = tmp_path / "mgf_small2.mgf"
-    shutil.copy(mgf_small, mgf_small2)
+    # Depthcharge skips peak files with identical contents.
+    mgf_small2.write_text(mgf_small.read_text() + "\n")
     data_module = DeNovoDataModule(
         lance_dir=str(tmp_path),
         valid_paths=[mgf_small, mgf_small2],

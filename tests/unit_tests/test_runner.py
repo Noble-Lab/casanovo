@@ -758,7 +758,8 @@ def test_train_with_tracking_peak_path(tmp_path, mgf_small, tiny_config):
     config.n_layers = 1
 
     mgf_track = tmp_path / "track.mgf"
-    shutil.copy(mgf_small, mgf_track)
+    # Depthcharge skips peak files with identical contents.
+    mgf_track.write_text(mgf_small.read_text() + "\n")
 
     with ModelRunner(
         config, output_dir=tmp_path, output_rootname="track"

@@ -169,9 +169,7 @@ class DeNovoDataModule(pl.LightningDataModule):
         self.n_workers = n_workers if n_workers is not None else os.cpu_count()
 
         # Custom fields to read from the input files.
-        self.custom_field_anno = CustomField(
-            "seq", lambda x: x["params"]["seq"], pa.string()
-        )
+        self.custom_field_anno = CustomField("seq", _get_seq, pa.string())
         self.train_dataset = None
         # Per-file validation datasets: main (monitored) + tracking (log-only).
         self.valid_datasets: list = []
@@ -331,6 +329,7 @@ class DeNovoDataModule(pl.LightningDataModule):
                 spectra=paths,
                 path=lance_path,
                 parse_kwargs=parse_params,
+                overwrite=True,
                 **params,
             )
 
@@ -402,6 +401,35 @@ class DeNovoDataModule(pl.LightningDataModule):
     def db_dataloader(self) -> torch.utils.data.DataLoader:
         """Get a special dataloader for DB search."""
         return self._make_loader(self.test_dataset)
+
+
+def _get_seq(spectrum: dict) -> str:
+    """
+    Get the peptide sequence annotation of a spectrum.
+
+    Depthcharge silently skips spectra whose custom fields raise a
+    ``KeyError``, so a missing annotation is raised as a ``TypeError``
+    instead to fail loudly on unannotated spectra.
+
+    Parameters
+    ----------
+    spectrum : dict
+        The spectrum as parsed by Pyteomics.
+
+    Returns
+    -------
+    str
+        The peptide sequence annotation.
+
+    Raises
+    ------
+    TypeError
+        If the spectrum does not have a peptide sequence annotation.
+    """
+    try:
+        return spectrum["params"]["seq"]
+    except KeyError as e:
+        raise TypeError("Spectrum is missing a SEQ annotation") from e
 
 
 def _discard_low_quality(
