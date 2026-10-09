@@ -173,6 +173,22 @@ replace_isoleucine_with_leucine: true
 # MassIVE-KB style tokenizer, otherwise ProForma syntax.
 massivekb_tokenizer: false
 
+# BYTE-PAIR ENCODING (BPE)
+# Learn merges of frequent adjacent residues from the training peptides, so
+# that the model predicts multi-residue tokens. The merges are stored in the
+# model checkpoint and are used automatically for inference.
+# Total vocabulary size, including the single residues and the stop token.
+# Set to null to disable BPE. Ignored when continuing training from a model
+# checkpoint, which uses the checkpoint's merges.
+bpe_vocab_size: null
+# Minimum number of occurrences of a residue pair to merge it.
+bpe_min_frequency: 2
+# Maximum number of residues in a merged token. Set to null for no limit.
+bpe_max_token_length: null
+# Probability of skipping each merge when tokenizing training peptides
+# (BPE-dropout). Validation and inference always apply all merges.
+bpe_dropout: 0.0
+
 # AMINO ACID AND MODIFICATION VOCABULARY
 residues:
   "G": 57.021464

@@ -131,6 +131,10 @@ class Config:
         precision=str,
         replace_isoleucine_with_leucine=bool,
         massivekb_tokenizer=bool,
+        bpe_vocab_size=int,
+        bpe_min_frequency=int,
+        bpe_max_token_length=int,
+        bpe_dropout=float,
         residues=dict,
         new_token_init=dict,
     )

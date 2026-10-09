@@ -659,6 +659,7 @@ def test_initialize_tokenizer():
         reverse=True,
         start_token=None,
         stop_token="$",
+        merges=None,
     )
     assert runner.tokenizer is mock_tokenizer
 
@@ -758,7 +759,8 @@ def test_train_with_tracking_peak_path(tmp_path, mgf_small, tiny_config):
     config.n_layers = 1
 
     mgf_track = tmp_path / "track.mgf"
-    shutil.copy(mgf_small, mgf_track)
+    # Depthcharge skips peak files with identical contents.
+    mgf_track.write_text(mgf_small.read_text() + "\n")
 
     with ModelRunner(
         config, output_dir=tmp_path, output_rootname="track"
@@ -980,3 +982,122 @@ def test_initialize_trainer_progress_bar(tmp_path, tiny_config):
     ) as runner:
         runner.initialize_trainer(train=True, enable_progress_bar=False)
         assert runner.trainer.progress_bar_callback is None
+
+
+def test_train_tokenizer_keeps_n_term_mods(tiny_config):
+    """N-terminal modifications are never merged by byte-pair encoding."""
+    config = Config(tiny_config)
+    config.massivekb_tokenizer = False
+    runner = ModelRunner(config=config)
+    runner.initialize_tokenizer()
+    n_base = len(runner.tokenizer)
+    config.bpe_vocab_size = n_base + 20
+
+    runner.train_tokenizer(["[Acetyl]-PEPTLDEK"] * 5 + ["PEPTLDEK"] * 3)
+    assert len(runner.tokenizer) > n_base
+    for token in runner.tokenizer.index:
+        assert token.endswith("]-") or "]-" not in token
+
+    tokens = runner.tokenizer.tokenize("[Acetyl]-PEPTLDEK", to_strings=True)
+    assert "[Acetyl]-" in tokens[0]
+
+
+def test_train_and_predict_with_bpe(tmp_path, mgf_small, tiny_config, caplog):
+    """Train with BPE, then predict with the checkpoint's merges."""
+    config = Config(tiny_config)
+    config.max_epochs = 20
+    config.n_layers = 1
+    runner = ModelRunner(config=config)
+    runner.initialize_tokenizer()
+    n_base = len(runner.tokenizer)
+    config.bpe_vocab_size = n_base + 2
+    config.bpe_min_frequency = 1
+    config.bpe_dropout = 0.5
+
+    ckpt = tmp_path / "bpe.ckpt"
+    with ModelRunner(
+        config=config, output_dir=tmp_path, output_rootname="bpe"
+    ) as runner:
+        runner.train([mgf_small], [mgf_small])
+        runner.trainer.save_checkpoint(ckpt)
+
+        merges = runner.tokenizer.merges
+        assert len(merges) == 2
+        assert len(runner.tokenizer) == n_base + 2
+        assert runner.model.vocab_size == n_base + 3
+        assert runner.model.tokenizer is runner.tokenizer
+        assert (tmp_path / "bpe.merges.json").is_file()
+
+        # Only the training peptides use BPE-dropout.
+        train_tokenizer = runner.loaders._unwrap(
+            runner.loaders.train_dataset
+        ).tokenizer
+        assert train_tokenizer.merges == merges
+        assert train_tokenizer.bpe_dropout == 0.5
+        valid_tokenizer = runner.loaders.valid_datasets[0].tokenizer
+        assert valid_tokenizer is runner.tokenizer
+        assert valid_tokenizer.bpe_dropout == 0.0
+
+    # The config doesn't specify BPE, so the checkpoint merges are used.
+    mztab = tmp_path / "bpe.mztab"
+    with ModelRunner(Config(tiny_config), model_filename=str(ckpt)) as runner:
+        runner.predict([mgf_small], mztab, evaluate=True)
+        assert runner.tokenizer.merges == merges
+        assert runner.model.tokenizer is runner.tokenizer
+        assert runner.loaders.test_dataset.tokenizer is runner.tokenizer
+        assert runner.writer.psms
+        for psm in runner.writer.psms:
+            n_residues = len(runner.tokenizer.split(psm.sequence))
+            if any(psm.sequence.startswith(m) for m in runner.model.n_term):
+                n_residues -= 1
+            assert len(psm.aa_scores) == n_residues
+
+    # Fine-tuning keeps the checkpoint merges instead of learning new ones.
+    config.max_epochs = 1
+    config.bpe_vocab_size = n_base + 5
+    with ModelRunner(
+        config,
+        model_filename=str(ckpt),
+        output_dir=tmp_path,
+        output_rootname="finetune",
+    ) as runner:
+        with caplog.at_level("WARNING", logger="casanovo"):
+            runner.train([mgf_small], [mgf_small])
+        assert runner.tokenizer.merges == merges
+        assert runner.model.tokenizer is runner.tokenizer
+        assert not (tmp_path / "finetune.merges.json").exists()
+    assert any("Ignoring 'bpe_vocab_size'" in m for m in caplog.messages)
+
+
+def test_db_search_with_bpe(
+    tmp_path, mgf_small, mgf_medium, tiny_fasta_file, tiny_config_db
+):
+    """DB search reports one amino acid score per residue with BPE."""
+    config = Config(tiny_config_db)
+    config.max_epochs = 1
+    config.n_layers = 1
+    config.bpe_vocab_size = 40
+    config.bpe_min_frequency = 1
+
+    ckpt = tmp_path / "bpe.ckpt"
+    with ModelRunner(config=config, output_dir=tmp_path) as runner:
+        runner.train([mgf_small], [mgf_small])
+        runner.trainer.save_checkpoint(ckpt)
+        merges = runner.tokenizer.merges
+        assert merges
+
+    with ModelRunner(
+        Config(tiny_config_db), model_filename=str(ckpt)
+    ) as runner:
+        runner.db_search(
+            [str(mgf_medium)],
+            str(tiny_fasta_file),
+            str(tmp_path / "db.mztab"),
+        )
+        assert runner.tokenizer.merges == merges
+        assert runner.writer.psms
+        for psm in runner.writer.psms:
+            n_residues = len(runner.tokenizer.split(psm.sequence))
+            if any(psm.sequence.startswith(m) for m in runner.model.n_term):
+                n_residues -= 1
+            assert len(psm.aa_scores) == n_residues

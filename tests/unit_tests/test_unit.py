@@ -1971,6 +1971,9 @@ def test_n_term_scores_db(tiny_config, monkeypatch):
             "precursor_charge": ["+1", "+1"],
             "precursor_mz": torch.tensor([42.0, 42.0]),
             "original_seq_str": ["[Acetyl]-P", "PP"],
+            "seq": model.tokenizer.tokenize(
+                ["[Acetyl]-P", "PP"], add_stop=True
+            ),
         }
     ]
 
@@ -2071,7 +2074,8 @@ def test_eval_metrics():
 def test_spectrum_id_mgf(mgf_small, tmp_path):
     """Test that spectra from MGF files are specified by their index."""
     mgf_small2 = tmp_path / "mgf_small2.mgf"
-    shutil.copy(mgf_small, mgf_small2)
+    # Depthcharge skips peak files with identical contents.
+    mgf_small2.write_text(mgf_small.read_text() + "\n")
     data_module = DeNovoDataModule(
         lance_dir=str(tmp_path),
         train_paths=[mgf_small, mgf_small2],
@@ -2108,7 +2112,8 @@ def test_spectrum_id_mgf(mgf_small, tmp_path):
 def test_log_training_set_size(mgf_small, tmp_path, caplog):
     """Test that the number of training and validation spectra is logged."""
     mgf_small2 = tmp_path / "mgf_small2.mgf"
-    shutil.copy(mgf_small, mgf_small2)
+    # Depthcharge skips peak files with identical contents.
+    mgf_small2.write_text(mgf_small.read_text() + "\n")
     data_module = DeNovoDataModule(
         lance_dir=str(tmp_path),
         train_paths=[mgf_small, mgf_small2],
@@ -2132,7 +2137,8 @@ def test_log_training_set_size(mgf_small, tmp_path, caplog):
 def test_log_training_set_size_shuffled(mgf_small, tmp_path, caplog):
     """Test spectra count logging when shuffle=True (ShufflerIterDataPipe)."""
     mgf_small2 = tmp_path / "mgf_small2.mgf"
-    shutil.copy(mgf_small, mgf_small2)
+    # Depthcharge skips peak files with identical contents.
+    mgf_small2.write_text(mgf_small.read_text() + "\n")
     data_module = DeNovoDataModule(
         lance_dir=str(tmp_path),
         train_paths=[mgf_small, mgf_small2],
@@ -2156,7 +2162,8 @@ def test_log_training_set_size_shuffled(mgf_small, tmp_path, caplog):
 def test_spectrum_id_mzml(mzml_small, tmp_path):
     """Test that spectra from mzML files are specified by their scan id."""
     mzml_small2 = tmp_path / "mzml_small2.mzml"
-    shutil.copy(mzml_small, mzml_small2)
+    # Depthcharge skips peak files with identical contents.
+    mzml_small2.write_text(mzml_small.read_text() + "\n")
     data_module = DeNovoDataModule(
         lance_dir=str(tmp_path),
         test_paths=[mzml_small, mzml_small2],
@@ -3317,7 +3324,8 @@ def test_mixed_mgf_mzml_scan_number_column(mzml_small, tmp_path):
 def test_data_module_per_file_validation(mgf_small, tmp_path):
     """DeNovoDataModule creates one dataset per validation/tracking file."""
     mgf_small2 = tmp_path / "mgf_small2.mgf"
-    shutil.copy(mgf_small, mgf_small2)
+    # Depthcharge skips peak files with identical contents.
+    mgf_small2.write_text(mgf_small.read_text() + "\n")
     data_module = DeNovoDataModule(
         lance_dir=str(tmp_path),
         valid_paths=[mgf_small, mgf_small2],
@@ -3415,3 +3423,80 @@ def test_optimizer_kwargs_exclude_non_adam():
     assert model.opt_kwargs == {"lr": 1e-3, "weight_decay": 1e-5}
     optimizers, _ = model.configure_optimizers()
     assert isinstance(optimizers[0], torch.optim.Adam)
+
+
+def _bpe_tokenizer(config, reverse=False):
+    """A tokenizer that merges 'PEP' into a single token."""
+    return depthcharge.tokenizers.peptides.PeptideTokenizer(
+        residues=config.residues,
+        reverse=reverse,
+        merges=[("P", "E"), ("PE", "P")],
+    )
+
+
+def test_bpe_finish_beams_counts_residues(tiny_config):
+    """Peptide length limits count residues, not merged tokens."""
+    config = Config(tiny_config)
+    model = Spec2Pep(
+        min_peptide_len=4,
+        max_peptide_len=6,
+        tokenizer=_bpe_tokenizer(config),
+    )
+    step = 2
+    peptides = [
+        ("PEPKR", False),  # PEP-K-R: 5 residues, still decoding.
+        ("PEPK", True),  # PEP-K-$: 4 residues, finished.
+        ("PEPPEPK", False),  # PEP-PEP-K: 7 residues, too long.
+        ("PK", True),  # P-K-$: 2 residues, too short.
+    ]
+    tokens = torch.zeros(len(peptides), model.max_peptide_len + 1).long()
+    for i, (pep, add_stop) in enumerate(peptides):
+        toks = model.tokenizer.tokenize(pep, add_stop=add_stop)[0]
+        assert len(toks) == step + 1
+        tokens[i, : len(toks)] = toks
+
+    finished, discarded = model._finish_beams(tokens, step)
+    assert finished.tolist() == [False, True, False, True]
+    assert discarded.tolist() == [False, False, True, True]
+
+
+@pytest.mark.parametrize(
+    "reverse,expected",
+    [(False, [0.9, 0.9, 0.9, 0.5]), (True, [0.5, 0.5, 0.5, 0.9])],
+)
+def test_bpe_get_top_peptide_aa_scores(reverse, expected, tiny_config):
+    """Merged tokens are expanded to one score per residue."""
+    config = Config(tiny_config)
+    model = Spec2Pep(tokenizer=_bpe_tokenizer(config, reverse=reverse))
+    length = 10
+    cache_tokens = torch.zeros((1, 1, length, length), dtype=torch.int32)
+    cache_scores = torch.zeros((1, 1, length, length))
+
+    toks = model.tokenizer.tokenize("PEPK", add_stop=True)[0]
+    assert len(toks) == 3  # Two tokens and the stop token.
+    step = len(toks) - 1
+    cache_tokens[0, 0, step, : len(toks)] = toks
+    cache_scores[0, 0, step, : len(toks)] = torch.tensor([0.9, 0.5, 1.0])
+
+    (((_, aa_scores, peptide),),) = model._get_top_peptide(
+        cache_tokens, cache_scores
+    )
+    assert peptide == "PEPK"
+    np.testing.assert_allclose(aa_scores, expected)
+
+
+def test_set_tokenizer_without_bpe_support(tiny_config):
+    """Tokenizers from older depthcharge versions have no expansions."""
+    config = Config(tiny_config)
+    tokenizer = depthcharge.tokenizers.peptides.PeptideTokenizer(
+        residues=config.residues
+    )
+    model = Spec2Pep(tokenizer=tokenizer)
+
+    legacy_tokenizer = copy.deepcopy(tokenizer)
+    del legacy_tokenizer.expansions
+    model.set_tokenizer(legacy_tokenizer)
+
+    assert model.token_n_residues.tolist() == [
+        int(0 < i != tokenizer.stop_int) for i in range(len(tokenizer) + 1)
+    ]

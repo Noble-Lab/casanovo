@@ -161,7 +161,6 @@ class Spec2Pep(pl.LightningModule):
         self.min_peptide_len = min_peptide_len
         self.n_beams = n_beams
         self.top_match = top_match
-        self.stop_token = self.tokenizer.stop_int
 
         # Logging.
         self.calculate_precision = calculate_precision
@@ -175,6 +174,22 @@ class Spec2Pep(pl.LightningModule):
 
         # Output writer during predicting.
         self.out_writer = out_writer
+
+        self.set_tokenizer(self.tokenizer)
+
+    def set_tokenizer(self, tokenizer: PeptideTokenizer) -> None:
+        """
+        Set the tokenizer and the tensor buffers derived from it.
+
+        Parameters
+        ----------
+        tokenizer : PeptideTokenizer
+            The tokenizer to use. Its vocabulary must match the decoder
+            embedding and output layers.
+        """
+        self.tokenizer = tokenizer
+        self.stop_token = self.tokenizer.stop_int
+        device = next(self.parameters()).device
 
         # Get n-term mod tokens
         self.n_term = [
@@ -192,6 +207,7 @@ class Spec2Pep(pl.LightningModule):
                     if mass < 0
                 ],
                 dtype=torch.int,
+                device=device,
             ),
             persistent=False,
         )
@@ -202,9 +218,56 @@ class Spec2Pep(pl.LightningModule):
             torch.tensor(
                 [self.tokenizer.index[aa] for aa in self.n_term],
                 dtype=torch.int,
+                device=device,
             ),
             persistent=False,
         )
+
+        # Register tensor buffer for the number of residues in each token.
+        # Tokens merged by byte-pair encoding contain multiple residues. The
+        # padding and stop tokens contain none.
+        expansions = getattr(self.tokenizer, "expansions", None)
+        if expansions is None:
+            # Tokenizers from older depthcharge versions lack BPE support.
+            n_residues = np.ones(len(self.tokenizer) + 1, dtype=np.int64)
+            n_residues[0] = 0
+        else:
+            n_residues = np.array([len(e) for e in expansions], dtype=np.int64)
+        n_residues[self.stop_token] = 0
+        self._token_n_residues_np = n_residues
+        self.register_buffer(
+            "token_n_residues",
+            torch.from_numpy(n_residues).to(device),
+            persistent=False,
+        )
+
+    def _expand_aa_scores(
+        self, aa_scores: np.ndarray, tokens: torch.Tensor
+    ) -> np.ndarray:
+        """
+        Convert token-level scores to residue-level scores.
+
+        Each residue of a token merged by byte-pair encoding receives
+        the score of its token. The scores are returned in N- to
+        C-terminal order.
+
+        Parameters
+        ----------
+        aa_scores : np.ndarray of shape (n_tokens,)
+            The score of each token, in the order of the tokens.
+        tokens : torch.Tensor of shape (n_tokens,)
+            The tokens, excluding the stop token.
+
+        Returns
+        -------
+        np.ndarray of shape (n_residues,)
+            The score of each residue.
+        """
+        n_residues = self._token_n_residues_np[tokens.cpu().numpy()]
+        aa_scores = np.repeat(aa_scores, n_residues)
+        if self.tokenizer.reverse:
+            aa_scores = aa_scores[::-1]
+        return aa_scores
 
     @property
     def device(self) -> torch.device:
@@ -483,13 +546,17 @@ class Spec2Pep(pl.LightningModule):
                 # Only discard beams we have actually checked
                 discarded_beams[has_n_term] |= multiple_mods | internal_mods
 
-        # Calculate peptide lengths, and adjust for stop tokens
-        peptide_lens = torch.full((batch_size,), step + 1, device=device)
-        peptide_lens[ends_stop_token] -= 1
+        # Calculate peptide lengths in residues. Tokens merged by byte-pair
+        # encoding contain multiple residues, and the stop token none.
+        peptide_lens = self.token_n_residues[tokens[:, : step + 1]].sum(dim=1)
 
         # Discard beams that don't meet minimum peptide length
         too_short = peptide_lens < self.min_peptide_len
         discarded_beams[too_short & finished_beams] = True
+
+        # Discard beams that exceed the maximum peptide length, which is only
+        # possible when tokens contain multiple residues.
+        discarded_beams[peptide_lens > self.max_peptide_len] = True
 
         return finished_beams, discarded_beams
 
@@ -768,9 +835,7 @@ class Spec2Pep(pl.LightningModule):
                     aa_scores = flat_raw[i, idx, : step + 1].cpu().numpy()
 
                 peptide_score = float(topk_peptide_scores_cpu[i, k])
-
-                if self.tokenizer.reverse:
-                    aa_scores = aa_scores[::-1]
+                aa_scores = self._expand_aa_scores(aa_scores, pred_tokens)
 
                 pred_peptides.append(
                     (
@@ -1297,6 +1362,7 @@ class DbSpec2Pep(Spec2Pep):
                     precursor_charge,
                     precursor_mz,
                     peptide,
+                    peptide_tokens,
                     peptide_score,
                     curr_aa_scores,
                 ) in zip(
@@ -1305,13 +1371,16 @@ class DbSpec2Pep(Spec2Pep):
                     psm_batch["precursor_charge"],
                     psm_batch["precursor_mz"],
                     psm_batch["original_seq_str"],
+                    psm_batch["seq"].cpu(),
                     peptide_scores,
                     aa_scores_all,
                 ):
                     # Omit stop token from reported AA scores.
                     curr_aa_scores = curr_aa_scores[:-1]
-                    if self.tokenizer.reverse:
-                        curr_aa_scores = curr_aa_scores[::-1]
+                    curr_aa_scores = self._expand_aa_scores(
+                        curr_aa_scores,
+                        peptide_tokens[: len(curr_aa_scores)],
+                    )
 
                     spectrum_id = (filename, scan)
                     predictions[spectrum_id].append(
