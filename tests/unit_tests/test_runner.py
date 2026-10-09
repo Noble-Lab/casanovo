@@ -1002,7 +1002,7 @@ def test_train_tokenizer_keeps_n_term_mods(tiny_config):
     assert "[Acetyl]-" in tokens[0]
 
 
-def test_train_and_predict_with_bpe(tmp_path, mgf_small, tiny_config):
+def test_train_and_predict_with_bpe(tmp_path, mgf_small, tiny_config, caplog):
     """Train with BPE, then predict with the checkpoint's merges."""
     config = Config(tiny_config)
     config.max_epochs = 20
@@ -1051,6 +1051,22 @@ def test_train_and_predict_with_bpe(tmp_path, mgf_small, tiny_config):
             if any(psm.sequence.startswith(m) for m in runner.model.n_term):
                 n_residues -= 1
             assert len(psm.aa_scores) == n_residues
+
+    # Fine-tuning keeps the checkpoint merges instead of learning new ones.
+    config.max_epochs = 1
+    config.bpe_vocab_size = n_base + 5
+    with ModelRunner(
+        config,
+        model_filename=str(ckpt),
+        output_dir=tmp_path,
+        output_rootname="finetune",
+    ) as runner:
+        with caplog.at_level("WARNING", logger="casanovo"):
+            runner.train([mgf_small], [mgf_small])
+        assert runner.tokenizer.merges == merges
+        assert runner.model.tokenizer is runner.tokenizer
+        assert not (tmp_path / "finetune.merges.json").exists()
+    assert any("Ignoring 'bpe_vocab_size'" in m for m in caplog.messages)
 
 
 def test_db_search_with_bpe(

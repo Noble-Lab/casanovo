@@ -3483,3 +3483,20 @@ def test_bpe_get_top_peptide_aa_scores(reverse, expected, tiny_config):
     )
     assert peptide == "PEPK"
     np.testing.assert_allclose(aa_scores, expected)
+
+
+def test_set_tokenizer_without_bpe_support(tiny_config):
+    """Tokenizers from older depthcharge versions have no expansions."""
+    config = Config(tiny_config)
+    tokenizer = depthcharge.tokenizers.peptides.PeptideTokenizer(
+        residues=config.residues
+    )
+    model = Spec2Pep(tokenizer=tokenizer)
+
+    legacy_tokenizer = copy.deepcopy(tokenizer)
+    del legacy_tokenizer.expansions
+    model.set_tokenizer(legacy_tokenizer)
+
+    assert model.token_n_residues.tolist() == [
+        int(0 < i != tokenizer.stop_int) for i in range(len(tokenizer) + 1)
+    ]
