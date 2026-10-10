@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Added
 
+- Added the `replace_n_and_q_deamidated_with_d_and_e` config option, which replaces deamidated N and Q residues with D and E residues, because they are indistinguishable by de novo sequencing.
 - The number of spectra that receive no prediction because beam search did not return a valid peptide is now counted and logged at the end of a sequencing run.
 
 ### Changed

@@ -643,6 +643,7 @@ def test_initialize_tokenizer():
     mock_config.massivekb_tokenizer = True
     mock_config.residues = {"foo": 100}
     mock_config.replace_isoleucine_with_leucine = True
+    mock_config.replace_n_and_q_deamidated_with_d_and_e = True
 
     runner = ModelRunner(config=mock_config)
 
@@ -656,11 +657,34 @@ def test_initialize_tokenizer():
     mock_tokenizer_cls.assert_called_once_with(
         residues=mock_config.residues,
         replace_isoleucine_with_leucine=True,
+        replace_n_and_q_deamidated_with_d_and_e=True,
         reverse=True,
         start_token=None,
         stop_token="$",
     )
     assert runner.tokenizer is mock_tokenizer
+
+
+@pytest.mark.parametrize("replace", [True, False])
+def test_initialize_tokenizer_deamidation(replace):
+    """Deamidated N and Q are replaced with D and E only if configured."""
+    config = Config()
+    config.replace_n_and_q_deamidated_with_d_and_e = replace
+
+    runner = ModelRunner(config=config)
+    runner.initialize_tokenizer()
+    tokenizer = runner.tokenizer
+
+    deamidated = tokenizer.tokenize("PEN[Deamidated]Q[Deamidated]K")
+    unmodified = tokenizer.tokenize("PEDEK")
+    if replace:
+        assert "N[Deamidated]" not in tokenizer.residues
+        assert "Q[Deamidated]" not in tokenizer.residues
+        assert torch.equal(deamidated, unmodified)
+    else:
+        assert "N[Deamidated]" in tokenizer.residues
+        assert "Q[Deamidated]" in tokenizer.residues
+        assert not torch.equal(deamidated, unmodified)
 
 
 def test_validate_vocab_compatibility():
