@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Fixed
 
+- Fixed the tokenizer alphabet to use only configured residues, respecting the isoleucine-to-leucine replacement setting instead of silently restoring excluded amino acids.
 - Fixed the mass of the carbamylation + ammonia-loss N-terminal token to `25.979265`. The token name is deliberately left as `[+25.980265]-` because it appears in released checkpoint vocabularies.
 
 ### Removed

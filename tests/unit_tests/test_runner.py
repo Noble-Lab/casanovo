@@ -606,6 +606,7 @@ def test_verify_tokenizer(
         msg = warnings_logged[0].getMessage()
         assert expected_substring in msg
         assert "model checkpoint tokenizer vs config file tokenizer;" in msg
+        assert "using the config tokenizer." in msg
     else:
         # Ensure no warnings were logged
         assert not any(rec.levelname == "WARNING" for rec in caplog.records)
@@ -620,7 +621,7 @@ def test_initialize_tokenizer():
     runner = ModelRunner(config=mock_config)
 
     with unittest.mock.patch(
-        "casanovo.denovo.model_runner.MskbPeptideTokenizer"
+        "casanovo.denovo.model_runner.ConfigMskbPeptideTokenizer"
     ) as mock_tokenizer_cls:
         mock_tokenizer = unittest.mock.MagicMock()
         mock_tokenizer_cls.return_value = mock_tokenizer
@@ -634,6 +635,39 @@ def test_initialize_tokenizer():
         stop_token="$",
     )
     assert runner.tokenizer is mock_tokenizer
+
+
+@pytest.mark.parametrize("massivekb", [False, True])
+@pytest.mark.parametrize("replace_isoleucine", [False, True])
+@pytest.mark.parametrize("remove_w", [False, True])
+def test_tokenizer_uses_configured_alphabet(
+    massivekb, replace_isoleucine, remove_w
+):
+    """Excluded standard residues must stay absent from all token lookups."""
+    config = Config()
+    config.massivekb_tokenizer = massivekb
+    config.replace_isoleucine_with_leucine = replace_isoleucine
+    if remove_w:
+        del config.residues["W"]
+    configured_residues = config.residues.copy()
+    expected = configured_residues.copy()
+    if replace_isoleucine:
+        expected.pop("I", None)
+
+    runner = ModelRunner(config)
+    runner.initialize_tokenizer()
+    tokenizer = runner.tokenizer
+
+    assert tokenizer.residues == expected
+    assert set(tokenizer.index) == set(expected) | {"$"}
+    assert tokenizer.reverse_index[0] is None
+    for token, index in tokenizer.index.items():
+        assert tokenizer.reverse_index[index] == token
+        assert tokenizer.masses[index].item() == pytest.approx(
+            expected.get(token, 0.0)
+        )
+    assert config.residues == configured_residues
+    assert "C" in depthcharge.tokenizers.peptides.PeptideTokenizer().residues
 
 
 def test_validate_vocab_compatibility():
