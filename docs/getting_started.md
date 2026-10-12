@@ -113,6 +113,7 @@ casanovo sequence spectra.mgf
 ![`casanovo sequence --help`](images/sequence-help.svg)
 
 Casanovo can predict peptide sequences for MS/MS spectra in mzML, mzXML, and MGF files, as well as timsTOF `.d` folders.
+Input paths may be individual files or glob patterns, for example `casanovo sequence data/*.mgf`.
 This will write peptide predictions for the given MS/MS spectra to the specified output file in mzTab format.
 
 By default, Casanovo reports the single top-scoring candidate peptide per spectrum.
