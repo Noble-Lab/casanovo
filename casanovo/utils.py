@@ -19,7 +19,7 @@ import torch
 from . import __version__
 from .data.psm import PepSpecMatch
 
-SCORE_FRACTIONS = (1.0, 0.75, 0.5, 0.25, 0.1, 0.01)
+SCORE_BINS = (0.0, 0.01, 0.1, 0.3, 0.5, 0.7, 0.8, 0.85, 0.9)
 
 logger = logging.getLogger("casanovo")
 
@@ -94,9 +94,7 @@ def _get_report_dict(
     results_table: pd.DataFrame
         Peptide-spectrum match table, with one row per PSM.
     score_bins: Optional[Iterable[float]], default=None
-        Explicit confidence thresholds. By default, use observed score
-        cutoffs for the top 100%, 75%, 50%, 25%, 10%, and 1% of PSMs,
-        plus the highest score. Target counts round up; ties are included.
+        Explicit confidence thresholds. Defaults to SCORE_BINS.
 
     Returns
     -------
@@ -110,28 +108,15 @@ def _get_report_dict(
     # Mass modifications do not contribute to sequence length.
     pep_lens = results_table["sequence"].apply(len)
     min_pep_len, med_pep_len, max_pep_len = np.quantile(pep_lens, [0, 0.5, 1])
-    # Use observed rank cutoffs so thresholds can be used for filtering.
+    # Count PSMs at each fixed confidence threshold, including ties.
     if score_bins is None:
-        scores = results_table["score"].sort_values(ascending=False)
-        score_targets = [
-            (
-                f"Top {fraction * 100:g}% cutoff",
-                scores.iloc[int(np.ceil(len(scores) * fraction)) - 1],
-            )
-            for fraction in SCORE_FRACTIONS
-        ]
-        score_targets.append(("Top 1 PSM cutoff", scores.iloc[0]))
-    else:
-        score_targets = [(None, score) for score in sorted(score_bins)]
-
+        score_bins = SCORE_BINS
     binned_scores = {
-        score: (results_table["score"] >= score).sum()
-        for _, score in score_targets
+        score: (results_table["score"] >= score).sum() for score in score_bins
     }
     return {
         "num_psms": len(results_table),
         "score_bins": binned_scores,
-        "score_targets": score_targets,
         "max_sequence_length": max_pep_len,
         "min_sequence_length": min_pep_len,
         "median_sequence_length": med_pep_len,
@@ -211,8 +196,7 @@ def log_annotate_report(
     end_time : Optional[float], default=None
         The end time of the sequencing run in seconds since the epoch.
     score_bins: Optional[Iterable[float]], default=None
-        Explicit confidence thresholds. By default, use dataset-based
-        rank cutoffs, including tied PSMs at each cutoff.
+        Explicit confidence thresholds. Defaults to SCORE_BINS.
     n_missing_predictions : int, default=0
         The number of spectra that did not receive a prediction because
         beam search did not return a valid peptide.
@@ -251,11 +235,11 @@ def log_annotate_report(
         logger.info("Score Distribution:")
         for score, pop in sorted(run_report["score_bins"].items()):
             logger.info(
-                "%s %s (%.2f%%) at a score cutoff of approximately %.6g",
+                "%s %s (%.2f%%) scored ≥ %s",
                 pop,
                 "PSM" if pop == 1 else "PSMs",
                 pop / num_psms * 100,
-                score,
+                float(score),
             )
 
         logger.info(

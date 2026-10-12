@@ -397,9 +397,9 @@ def test_log_annotate_report(
             aa_scores=[0.5] * 4,
         )
         for spectrum_id, score in [
-            ("0", 0.992123456),
-            ("0", 0.995),
-            ("1", 0.999),
+            ("0", 0.099123456),
+            ("0", 0.5),
+            ("1", 0.9),
         ]
     ]
 
@@ -410,20 +410,15 @@ def test_log_annotate_report(
 
     messages = [record.getMessage() for record in caplog.records]
     assert "Sequenced 2 spectra (3 PSMs)" in messages
-    assert (
-        "3 PSMs (100.00%) at a score cutoff of approximately 0.992123"
-        in messages
-    )
-    assert (
-        "2 PSMs (66.67%) at a score cutoff of approximately 0.995" in messages
-    )
-    assert (
-        "1 PSM (33.33%) at a score cutoff of approximately 0.999" in messages
-    )
+    assert "3 PSMs (100.00%) scored ≥ 0.0" in messages
+    assert "2 PSMs (66.67%) scored ≥ 0.5" in messages
+    assert "1 PSM (33.33%) scored ≥ 0.9" in messages
     distribution_messages = [
-        message for message in messages if "at a score cutoff" in message
+        message for message in messages if "scored ≥" in message
     ]
-    assert len(distribution_messages) == 3
+    assert len(distribution_messages) == 9
+    assert not any("Top " in message for message in messages)
+    assert not any("approximately" in message for message in messages)
     throughput_messages = [
         message for message in messages if message.startswith("Throughput:")
     ]
@@ -433,41 +428,79 @@ def test_log_annotate_report(
         assert throughput_messages == [expected_throughput]
 
 
-def test_get_report_dict_rank_cutoffs():
-    """Default cutoffs retain the requested fractions of ranked PSMs."""
+def test_get_report_dict_default_bins():
+    """Default fixed bins include their boundaries and exclude lower scores."""
+    scores = [
+        -0.1,
+        0.0,
+        0.009,
+        0.01,
+        0.099,
+        0.1,
+        0.299,
+        0.3,
+        0.499,
+        0.5,
+        0.699,
+        0.7,
+        0.799,
+        0.8,
+        0.849,
+        0.85,
+        0.899,
+        0.9,
+        1.0,
+    ]
     results = pd.DataFrame(
-        {"sequence": ["AAAA"] * 200, "score": np.arange(200) / 200}
+        {"sequence": ["AAAA"] * len(scores), "score": scores}
     )
     report = utils._get_report_dict(results)
-    assert report["score_targets"] == [
-        ("Top 100% cutoff", 0.0),
-        ("Top 75% cutoff", 0.25),
-        ("Top 50% cutoff", 0.5),
-        ("Top 25% cutoff", 0.75),
-        ("Top 10% cutoff", 0.9),
-        ("Top 1% cutoff", 0.99),
-        ("Top 1 PSM cutoff", 0.995),
-    ]
+    assert report["num_psms"] == 19
     assert report["score_bins"] == {
-        0.0: 200,
-        0.25: 150,
-        0.5: 100,
-        0.75: 50,
-        0.9: 20,
-        0.99: 2,
-        0.995: 1,
+        0.0: 18,
+        0.01: 16,
+        0.1: 14,
+        0.3: 12,
+        0.5: 10,
+        0.7: 8,
+        0.8: 6,
+        0.85: 4,
+        0.9: 2,
     }
 
 
 @pytest.mark.parametrize("scores", [[0.42], [0.42, 0.42, 0.42]])
-def test_get_report_dict_rank_cutoffs_ties(scores):
-    """Keep every target for small datasets and count all tied scores."""
+def test_get_report_dict_fixed_bins_ties(scores):
+    """Include every tied PSM and retain bins with no matches."""
     report = utils._get_report_dict(
-        pd.DataFrame({"sequence": ["AAAA"] * len(scores), "score": scores})
+        pd.DataFrame({"sequence": ["AAAA"] * len(scores), "score": scores}),
+        score_bins=(0.4, 0.42, 0.5),
     )
-    assert len(report["score_targets"]) == 7
-    assert all(score == 0.42 for _, score in report["score_targets"])
-    assert report["score_bins"] == {0.42: len(scores)}
+    assert report["score_bins"] == {
+        0.4: len(scores),
+        0.42: len(scores),
+        0.5: 0,
+    }
+
+
+def test_log_annotate_report_custom_threshold_precision(caplog):
+    """Printed custom thresholds reproduce the exact counted PSM set."""
+    threshold = 0.992123456
+    predictions = [
+        psm.PepSpecMatch(
+            sequence="AAAA",
+            spectrum_id=("test.mgf", str(index)),
+            peptide_score=score,
+            charge=3,
+            calc_mz=100.0,
+            exp_mz=100.0,
+            aa_scores=[0.5] * 4,
+        )
+        for index, score in enumerate([0.9921233, threshold])
+    ]
+    with caplog.at_level(logging.INFO, logger="casanovo"):
+        utils.log_annotate_report(predictions, score_bins=(threshold,))
+    assert "1 PSM (50.00%) scored ≥ 0.992123456" in caplog.messages
 
 
 def test_split_version():

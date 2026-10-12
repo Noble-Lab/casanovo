@@ -8,7 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Added
 
-- The end-of-run sequencing report now includes dataset-based score cutoffs for the top 100%, 75%, 50%, 25%, 10%, and 1% of PSMs and the highest-scoring PSM, including ties. It also reports throughput in spectra per second, counting distinct spectra and reporting the PSM count separately when multiple matches are returned per spectrum.
+- The end-of-run sequencing report now includes score thresholds spanning low to high confidence, selected using full MassIVE-KB and multi-enzyme test runs. It also reports throughput in spectra per second, counting distinct spectra and labeling score-distribution counts as PSMs.
 - The number of spectra that receive no prediction because beam search did not return a valid peptide is now counted and logged at the end of a sequencing run.
 
 ### Changed
