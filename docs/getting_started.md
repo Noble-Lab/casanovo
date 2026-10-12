@@ -179,6 +179,8 @@ casanovo train --validation_peak_path validation_spectra.mgf training_spectra.mg
 
 Training and validation MS/MS data need to be provided as annotated MGF files, where the peptide sequence is denoted in the `SEQ` field.
 
+The `--validation_peak_path` option is optional. If it is not provided, the training files are also used for validation.
+
 If a training is continued for a previously trained model, specify the starting model weights using `--model`.
 
 By default, only the model weights are loaded from this file.
