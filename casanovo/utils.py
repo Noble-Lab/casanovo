@@ -92,9 +92,9 @@ def _get_report_dict(
     Parameters
     ----------
     results_table: pd.DataFrame
-        Peptide-spectrum match table, with one row per PSM.
-    score_bins: Iterable[float], optional
-        Explicit confidence thresholds. Defaults to SCORE_BINS.
+        Parsed spectrum match table.
+    score_bins: Iterable[float], Optional
+        Confidence scores for creating confidence score distribution.
 
     Returns
     -------
@@ -108,7 +108,7 @@ def _get_report_dict(
     # Mass modifications do not contribute to sequence length.
     pep_lens = results_table["sequence"].apply(len)
     min_pep_len, med_pep_len, max_pep_len = np.quantile(pep_lens, [0, 0.5, 1])
-    # Count PSMs at each fixed confidence threshold, including ties.
+    # Get binned confidence scores.
     binned_scores = {
         score: (results_table["score"] >= score).sum() for score in score_bins
     }
@@ -194,8 +194,8 @@ def log_annotate_report(
         The start time of the sequencing run in seconds since the epoch.
     end_time : Optional[float], default=None
         The end time of the sequencing run in seconds since the epoch.
-    score_bins: Iterable[float], optional
-        Explicit confidence thresholds. Defaults to SCORE_BINS.
+    score_bins: Iterable[float], Optional
+        Confidence scores for creating confidence score distribution.
     n_missing_predictions : int, default=0
         The number of spectra that did not receive a prediction because
         beam search did not return a valid peptide.

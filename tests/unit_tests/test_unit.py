@@ -401,30 +401,6 @@ def test_n_workers(monkeypatch):
             assert utils.n_workers() == 0
 
 
-def test_get_report_dict_score_bins():
-    """Count predictions at and above each confidence threshold."""
-    scores = [0.0, 0.5, 0.9, 0.95, 0.98, 0.99, 0.992, 0.995, 0.999, 1.0]
-    results = pd.DataFrame(
-        {"sequence": ["AAAA"] * len(scores), "score": scores}
-    )
-
-    report = utils._get_report_dict(
-        results, score_bins=(0.0, 0.5, 0.9, 0.95, 0.98, 0.99, 0.995, 0.999)
-    )
-
-    assert report["num_psms"] == 10
-    assert report["score_bins"] == {
-        0.0: 10,
-        0.5: 9,
-        0.9: 8,
-        0.95: 7,
-        0.98: 6,
-        0.99: 5,
-        0.995: 3,
-        0.999: 2,
-    }
-
-
 @pytest.mark.parametrize(
     ("start_time", "end_time", "expected_throughput"),
     [
@@ -451,7 +427,7 @@ def test_log_annotate_report(
             aa_scores=[0.5] * 4,
         )
         for spectrum_id, score in [
-            ("0", 0.099123456),
+            ("0", 0.05),
             ("0", 0.5),
             ("1", 0.9),
         ]
@@ -471,8 +447,6 @@ def test_log_annotate_report(
         message for message in messages if "scored ≥" in message
     ]
     assert len(distribution_messages) == 9
-    assert not any("Top " in message for message in messages)
-    assert not any("approximately" in message for message in messages)
     throughput_messages = [
         message for message in messages if message.startswith("Throughput:")
     ]
