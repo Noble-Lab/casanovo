@@ -10,6 +10,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 - The end-of-run sequencing report now includes score thresholds spanning low to high confidence, selected using full MassIVE-KB and multi-enzyme test runs. It also reports throughput in spectra per second, counting distinct spectra and labeling score-distribution counts as PSMs.
 - The number of spectra that receive no prediction because beam search did not return a valid peptide is now counted and logged at the end of a sequencing run.
+- When sequencing with `--evaluate`, the ground truth sequence and the precision and coverage at each prediction are added as columns to the mzTab output, and the average precision (area under the precision-coverage curve) is reported in the end-of-run report.
 
 ### Changed
 
@@ -21,6 +22,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - The database search progress bar now updates in place instead of printing a new line per refresh, by disabling Lightning's competing progress bar during database search.
 - Fixed the mass of the carbamylation + ammonia-loss N-terminal token to `25.979265`. The token name is deliberately left as `[+25.980265]-` because it appears in released checkpoint vocabularies.
 - Fixed training from a checkpoint failing with `TypeError` when configuration values that are not optimizer arguments (e.g. `precursor_mass_tol`) leaked into the Adam optimizer.
+- Fixed multi-GPU training using the same spectra on every device. Since v5.0.0, each device read the full training set in the same order, so all devices trained on identical batches. Each device now trains on its own share of the spectra, so an epoch takes `n` times fewer steps on `n` devices and `train_batch_size` is the true global batch size. To keep the devices in step, fewer than `train_batch_size` spectra are skipped per epoch.
 
 ### Removed
 
