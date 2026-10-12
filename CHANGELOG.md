@@ -14,8 +14,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 - `val_check_interval` now accepts a float in `[0, 1]` to validate at a fraction of each training epoch, in addition to an integer number of training steps.
 - Beam search is sped up by caching finished beams and selecting the top-scoring beam fully on the GPU.
-- Modified config loading to load based on model selectors (e.g., `orbitrap` and `timstof` 
-are currently supported) in sequencing mode
+- Modified config loading to load based on model selectors (e.g., `orbitrap` and `timstof` are currently supported) in sequencing mode.
 
 ### Fixed
 
