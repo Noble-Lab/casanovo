@@ -677,9 +677,9 @@ def setup_model(
         official release will be used (downloaded and cached). If `model`
         is an identifier the weights from the latest appropriate release
         will be used.
-    config : str | None
-        Config file path. If None, the appropriate config based on the 
-        model selector will be chosen. If no suitable config is present, 
+    config : str | None 
+        Config file path. If None, the appropriate config based on the
+        model selector will be chosen. If no suitable config is present,
         the default will be used.
     output_dir: : Path | str
         The path to the output directory.
