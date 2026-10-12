@@ -84,7 +84,7 @@ def split_version(version: str) -> Tuple[str, str, str]:
 
 
 def _get_report_dict(
-    results_table: pd.DataFrame, score_bins: Optional[Iterable[float]] = None
+    results_table: pd.DataFrame, score_bins: Iterable[float] = SCORE_BINS
 ) -> Optional[Dict]:
     """
     Generate sequencing run report
@@ -93,7 +93,7 @@ def _get_report_dict(
     ----------
     results_table: pd.DataFrame
         Peptide-spectrum match table, with one row per PSM.
-    score_bins: Optional[Iterable[float]], default=None
+    score_bins: Iterable[float], optional
         Explicit confidence thresholds. Defaults to SCORE_BINS.
 
     Returns
@@ -109,8 +109,6 @@ def _get_report_dict(
     pep_lens = results_table["sequence"].apply(len)
     min_pep_len, med_pep_len, max_pep_len = np.quantile(pep_lens, [0, 0.5, 1])
     # Count PSMs at each fixed confidence threshold, including ties.
-    if score_bins is None:
-        score_bins = SCORE_BINS
     binned_scores = {
         score: (results_table["score"] >= score).sum() for score in score_bins
     }
@@ -180,7 +178,7 @@ def log_annotate_report(
     predictions: List[PepSpecMatch],
     start_time: Optional[float] = None,
     end_time: Optional[float] = None,
-    score_bins: Optional[Iterable[float]] = None,
+    score_bins: Iterable[float] = SCORE_BINS,
     *,
     n_missing_predictions: int = 0,
     average_precision: Optional[float] = None,
@@ -196,7 +194,7 @@ def log_annotate_report(
         The start time of the sequencing run in seconds since the epoch.
     end_time : Optional[float], default=None
         The end time of the sequencing run in seconds since the epoch.
-    score_bins: Optional[Iterable[float]], default=None
+    score_bins: Iterable[float], optional
         Explicit confidence thresholds. Defaults to SCORE_BINS.
     n_missing_predictions : int, default=0
         The number of spectra that did not receive a prediction because
