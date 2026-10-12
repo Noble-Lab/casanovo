@@ -359,11 +359,11 @@ def test_version():
 )
 def test_is_valid_model(model_file, expectation, log_message, caplog):
     if expectation is None:
-        casanovo._is_valid_model(model_file, load_all_states=True)
+        casanovo._is_valid_model(model_file, continue_training=True)
         assert log_message in caplog.text
     else:
         with expectation:
-            casanovo._is_valid_model(model_file, load_all_states=True)
+            casanovo._is_valid_model(model_file, continue_training=True)
 
 
 @pytest.mark.skip(reason="Skipping due to Linux deadlock issue")
