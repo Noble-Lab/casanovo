@@ -759,7 +759,7 @@ def setup_model(
 def _resolve_setup_config(
     config: Optional[str],
     resolved_model: Optional[Path],
-) -> "Config":
+) -> Config:
     """
     Resolve the Config object to use for this run.
 
