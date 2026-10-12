@@ -123,7 +123,9 @@ top_match: 5
 ```
 
 Each candidate will appear as a separate row in the mzTab output, distinguished by the `PSM_ID` field.
-When predicting spectra using models other than the default Orbitrap, only the `--model` flag needs to be changed (see Model Weights under File Formats) and the correct config file will load automatically. For custom weights with an unrecognized checkpoint name with the `--model` flag, Casanovo uses the default configuration (Orbitrap). Users running Casanovo with custom weights should provide an appropriate config file via the `--config` flag.
+When predicting spectra using models other than the default Orbitrap, only the `--model` flag needs to be changed (see [Model Weights](file_formats.md#model-weights)) and the correct config file will load automatically. 
+For custom weights with an unrecognized checkpoint name with the `--model` flag, Casanovo uses the default configuration (Orbitrap). 
+Users running Casanovo with custom weights should provide an appropriate config file via the `--config` flag.
 
 ### Evaluate *De Novo* Sequencing Performance
 
