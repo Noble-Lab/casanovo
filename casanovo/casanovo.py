@@ -678,7 +678,9 @@ def setup_model(
         is an identifier the weights from the latest appropriate release
         will be used.
     config : str | None
-        Config file path. If None the default config will be used.
+        Config file path. If None, the appropriate config based on the
+        model selector will be chosen. If no suitable config is present,
+        the default will be used.
     output_dir: : Path | str
         The path to the output directory.
     output_root_name : str,
@@ -693,9 +695,6 @@ def setup_model(
         Initialized Casanovo config, local path to model weights if any
         (may be `None` if training using random starting weights).
     """
-    config = Config(config)
-    seed_everything(seed=config["random_seed"], workers=True)
-
     cache_dir = Path(appdirs.user_cache_dir("casanovo", False, opinion=False))
     resolved_model: Optional[Path] = None
 
@@ -749,6 +748,9 @@ def setup_model(
                 "the model weights"
             ) from None
 
+    config = _resolve_setup_config(config, resolved_model)
+    seed_everything(seed=config["random_seed"], workers=True)
+
     logger.info("Casanovo version %s", str(__version__))
     logger.debug("model = %s", resolved_model)
     logger.debug("config = %s", config.file)
@@ -758,6 +760,66 @@ def setup_model(
         logger.debug("%s = %s", str(key), str(value))
 
     return config, resolved_model
+
+
+def _resolve_setup_config(
+    config: Optional[str],
+    resolved_model: Optional[Path],
+) -> Config:
+    """
+    Resolve the Config object to use for this run.
+
+    Priority:
+      1. Explicit `config` path, if it points to a real file.
+      2. Auto-resolved from `resolved_model`'s canonical model id, if
+         the weights filename can be identified.
+      3. Default config, with a warning explaining why no more
+         specific config could be determined.
+
+    Parameters
+    ----------
+    config : str | None
+        User-supplied config file path, or None if not specified.
+    resolved_model : Path | None
+        Path to the resolved model weights, or None if training from
+        scratch with random starting weights.
+
+    Returns
+    -------
+    Config
+        The resolved Config object.
+    """
+    if config is None:
+        if resolved_model is not None:
+            parsed = _parse_ckpt(resolved_model.name)
+            if parsed is not None:
+                canonical_id = parsed[0]
+            else:
+                canonical_id = None
+                logger.warning(
+                    "Could not determine model type from weights file '%s'. "
+                    "Using default config. If this is incorrect, specify a "
+                    "config file explicitly with '--config'.",
+                    resolved_model.name,
+                )
+        else:
+            canonical_id = None
+            logger.warning(
+                "No model weights specified (training from scratch). "
+                "Using default config. If this is incorrect, specify a "
+                "config file explicitly with '--config'."
+            )
+        config = Config(canonical_id)
+    elif Path(config).is_file():
+        config = Config(config)
+    else:
+        logger.warning(
+            "Config '%s' is not a valid file path; using default config.",
+            config,
+        )
+        config = Config(None)
+
+    return config
 
 
 def _get_model_weights(
