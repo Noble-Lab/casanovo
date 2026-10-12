@@ -112,7 +112,7 @@ casanovo sequence spectra.mgf
 
 ![`casanovo sequence --help`](images/sequence-help.svg)
 
-Casanovo can predict peptide sequences for MS/MS spectra in mzML, mzXML, and MGF files.
+Casanovo can predict peptide sequences for MS/MS spectra in mzML, mzXML, and MGF files, as well as timsTOF `.d` folders.
 This will write peptide predictions for the given MS/MS spectra to the specified output file in mzTab format.
 
 By default, Casanovo reports the single top-scoring candidate peptide per spectrum.
@@ -150,7 +150,7 @@ casanovo db-search spectra.mgf proteome.fasta
 
 ![`casanovo db-search --help`](images/db-search-help.svg)
 
-In this case, besides MS/MS spectra in mzML, mzXML, or MGF file(s), Casanovo needs as minimal input the protein database in the FASTA format.
+In this case, besides MS/MS spectra in mzML, mzXML, or MGF file(s) (or timsTOF `.d` folders), Casanovo needs as minimal input the protein database in the FASTA format.
 Additional settings that determine how peptides are derived from the protein sequences can be specified in the YAML configuration file (default: tryptic digestion).
 This will write PSM scores for the given MS/MS spectra and FASTA file to the specified output file in mzTab format.
 
