@@ -260,13 +260,10 @@ class Config:
         shutil.copyfile(cls._default_config, output)
 
     def _resolve_config(self, config_selector: str) -> Path:
-        base_config = self._canonical_configs.get(config_selector)
-        if base_config is None:
+        if config_selector not in self._canonical_configs:
             logger.warning(
                 "No bundled config found for model '%s'; using default "
                 "config.",
                 config_selector,
             )
-            return self._default_config
-
-        return base_config
+        return self._canonical_configs.get(config_selector, self._default_config)
