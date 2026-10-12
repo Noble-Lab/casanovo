@@ -8,6 +8,7 @@ import os
 import re
 import shutil
 import sys
+import tempfile
 import time
 import urllib.parse
 import warnings
@@ -30,6 +31,14 @@ warnings.filterwarnings(
     "ignore",
     ".*Converting mask without torch.bool dtype to bool*",
 )
+
+# The regex pattern below describes the the model weight
+# naming pattern.
+_CKPT_RE = re.compile(
+    r"^casanovo_([a-z0-9][a-z0-9-]*)_v([0-9]+)-([0-9]+)-([0-9]+)\.ckpt$"
+)
+# The default model is orbitrap.
+_DEFAULT_MODEL_ID = "orbitrap"
 
 import appdirs
 import github
@@ -210,6 +219,7 @@ def sequence(
             start_time=start_time,
             end_time=time.time(),
             n_missing_predictions=runner.model.n_missing_predictions,
+            average_precision=runner.average_precision,
         )
 
 
@@ -293,6 +303,7 @@ def db_search(
             start_time=start_time,
             end_time=time.time(),
             n_missing_predictions=runner.model.n_missing_predictions,
+            average_precision=runner.average_precision,
         )
 
 
@@ -529,15 +540,6 @@ def setup_logging(
     logging.getLogger("urllib3").setLevel(logging.WARNING)
 
 
-# The regex pattern below describes the the model weight
-# naming pattern.
-_CKPT_RE = re.compile(
-    r"^casanovo_([a-z0-9][a-z0-9-]*)_v([0-9]+)-([0-9]+)-([0-9]+)\.ckpt$"
-)
-# The default model is orbitrap.
-_DEFAULT_MODEL_ID = "orbitrap"
-
-
 def _normalize(s: str) -> str:
     """
     Normalizes model selector.
@@ -668,11 +670,13 @@ def setup_model(
     Parameters
     ----------
     model : str | None
-        May be a file system path, a URL pointing to a .ckpt file, or
-        None. If `model` is a URL the weights will be downloaded and
-        cached from `model`. If `model` is `None` the weights from the
-        latest matching official release will be used (downloaded and
-        cached).
+        May be a file system path, a URL pointing to a .ckpt file, None,
+        or model identifier (e.g. timstof). If `model` is a URL the weights
+        will be downloaded and cached from `model`. If `model` is `None`
+        when `is_train` is `False` the weights from the latest matching
+        official release will be used (downloaded and cached). If `model`
+        is an identifier the weights from the latest appropriate release
+        will be used.
     config : str | None
         Config file path. If None the default config will be used.
     output_dir: : Path | str
@@ -1028,13 +1032,27 @@ def _download_weights(file_url: str, download_path: Path) -> None:
         response.raw.read, decode_content=True
     )
 
-    with (
-        tqdm.tqdm.wrapattr(
-            response.raw, "read", total=file_size, desc=desc
-        ) as r_raw,
-        open(download_path, "wb") as file,
-    ):
-        shutil.copyfileobj(r_raw, file)
+    temp_file = tempfile.NamedTemporaryFile(
+        dir=download_file_dir,
+        prefix=f"{download_path.name}.",
+        suffix=".tmp",
+        delete=False,
+    )
+    temp_path = Path(temp_file.name)
+    completed = False
+    try:
+        with (
+            tqdm.tqdm.wrapattr(
+                response.raw, "read", total=file_size, desc=desc
+            ) as r_raw,
+            temp_file,
+        ):
+            shutil.copyfileobj(r_raw, temp_file)
+        os.replace(temp_path, download_path)
+        completed = True
+    finally:
+        if not completed:
+            temp_path.unlink(missing_ok=True)
 
 
 def _is_valid_url(file_url: str) -> bool:

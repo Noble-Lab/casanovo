@@ -3,6 +3,7 @@ model."""
 
 import glob
 import logging
+import math
 import os
 import tempfile
 import warnings
@@ -11,6 +12,7 @@ from typing import Iterable, List, Optional, Sequence, Union
 
 import lightning.pytorch as pl
 import lightning.pytorch.loggers
+import numpy as np
 import torch
 from depthcharge.tokenizers import PeptideTokenizer
 from depthcharge.tokenizers.peptides import MskbPeptideTokenizer
@@ -22,7 +24,11 @@ from .. import utils
 from ..config import Config
 from ..data import db_utils, ms_io
 from ..denovo.dataloaders import DeNovoDataModule
-from ..denovo.evaluate import aa_match_batch, aa_match_metrics
+from ..denovo.evaluate import (
+    aa_match_batch,
+    aa_match_metrics,
+    precision_coverage,
+)
 from ..denovo.model import DbSpec2Pep, Spec2Pep
 
 logger = logging.getLogger("casanovo")
@@ -71,6 +77,7 @@ class ModelRunner:
         self.model = None
         self.loaders = None
         self.writer = None
+        self.average_precision = None
 
         if output_dir is None:
             self.callbacks = []
@@ -237,10 +244,14 @@ class ModelRunner:
 
     def log_metrics(self, test_dataloader: DataLoader) -> None:
         """
-        Log peptide precision and amino acid precision.
+        Log peptide and amino acid precision, and average precision.
 
-        Calculate and log peptide precision and amino acid precision
-        based off of model predictions and spectrum annotations.
+        Calculate and log the peptide precision, amino acid precision,
+        and amino acid recall based off of model predictions and spectrum
+        annotations. In evaluation mode the ground truth sequence and the
+        precision and coverage at each prediction are attached to the PSMs
+        for export as additional mzTab columns, and the average precision
+        is stored for the end-of-run report.
 
         Parameters
         ----------
@@ -249,6 +260,7 @@ class ModelRunner:
             model predictions.
         """
         pred_seqs, true_seqs, pred_i = [], [], 0
+        psms, scores = [], []
 
         for batch in test_dataloader:
             for peak_file, scan_id, true_seq in zip(
@@ -267,13 +279,50 @@ class ModelRunner:
                         curr_pred = curr_pred[::-1]
 
                     pred_seqs.append(curr_pred)
+                    psms.append(self.writer.psms[pred_i])
+                    scores.append(self.writer.psms[pred_i].peptide_score)
                     pred_i += 1
                 else:
                     pred_seqs.append(None)
+                    psms.append(None)
+                    scores.append(None)
 
-        aa_precision, aa_recall, pep_precision = aa_match_metrics(
-            *aa_match_batch(true_seqs, pred_seqs, self.tokenizer.residues)
+        aa_matches_batch, n_aa_true, n_aa_pred = aa_match_batch(
+            true_seqs, pred_seqs, self.tokenizer.residues
         )
+        aa_precision, aa_recall, pep_precision = aa_match_metrics(
+            aa_matches_batch, n_aa_true, n_aa_pred
+        )
+        pep_matches = [match[1] for match in aa_matches_batch]
+
+        # Rank scored predictions to build the precision-coverage curve and
+        # attach the ground truth, precision, and coverage to each PSM so
+        # they can be exported as additional mzTab columns.
+        scored = [
+            i
+            for i, score in enumerate(scores)
+            if score is not None and not math.isnan(score)
+        ]
+        self.average_precision = 0.0
+        if scored:
+            order, coverage, precision = precision_coverage(
+                [scores[i] for i in scored],
+                [pep_matches[i] for i in scored],
+                len(true_seqs),
+            )
+            # Average precision is the area under the precision-coverage
+            # curve: the precision at each rank weighted by its coverage
+            # increment (1 / n_spectra).
+            self.average_precision = float(
+                np.sum(precision * np.diff(np.r_[0.0, coverage]))
+            )
+            for rank, scored_idx in enumerate(order):
+                i = scored[scored_idx]
+                psms[i].ground_truth_sequence = (
+                    "".join(true_seqs[i]) if true_seqs[i] else ""
+                )
+                psms[i].precision = float(precision[rank])
+                psms[i].coverage = float(coverage[rank])
 
         if self.config["top_match"] > 1:
             logger.warning(
