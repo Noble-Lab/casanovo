@@ -148,7 +148,7 @@ class Config:
     def __init__(self, config_file: Optional[str] = None):
         """Initialize a Config object."""
         self.file = str(config_file) if config_file is not None else "default"
-        with self._default_config.open() as f_in:
+        with self._default_config.open(encoding="utf-8") as f_in:
             self._params = yaml.safe_load(f_in)
 
         if config_file is None:
@@ -157,7 +157,7 @@ class Config:
             if not Path(config_file).is_file():
                 config_file = self._resolve_config(config_file)
 
-            with Path(config_file).open() as f_in:
+            with Path(config_file).open(encoding="utf-8") as f_in:
                 self._user_config = yaml.safe_load(f_in)
                 if self._user_config is None:
                     self._user_config = {}
