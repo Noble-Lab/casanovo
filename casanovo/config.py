@@ -266,4 +266,6 @@ class Config:
                 "config.",
                 config_selector,
             )
-        return self._canonical_configs.get(config_selector, self._default_config)
+        return self._canonical_configs.get(
+            config_selector, self._default_config
+        )
