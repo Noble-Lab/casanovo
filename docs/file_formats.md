@@ -221,6 +221,8 @@ In mixed-input runs (e.g. both MGF and mzML files), the column is present for th
 If no input file contains scan number headers the column is omitted entirely.
 Note that only purely numeric scan values are exported; MGF files that use composite or non-numeric scan identifiers in these fields will have a "null" value in this column.
 
+In the development version (after 5.2.1), running `casanovo sequence --evaluate` on annotated spectra additionally adds three columns to the PSM section: `opt_global_ground_truth_sequence`, `opt_global_precision`, and `opt_global_coverage`. These columns are omitted when not evaluating.
+
 ```{note}
 The PSM identifier in the `PSM_ID` column is not necessarily identical to the spectrum index in the `spectra_ref` column, even for MGF files.
 - `PSM_ID` is one-based, whereas spectrum indices in `spectra_ref` are zero-based.
