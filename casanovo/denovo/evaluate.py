@@ -291,6 +291,45 @@ def aa_match_metrics(
     return float(aa_precision), float(aa_recall), float(pep_precision)
 
 
+def precision_coverage(
+    scores: Iterable[float],
+    pep_matches: Iterable[bool],
+    n_spectra: int,
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """
+    Compute the peptide precision-coverage curve.
+
+    Predictions are ranked by decreasing score. At each rank, coverage is
+    the fraction of all spectra that have been predicted and precision is
+    the fraction of those predictions that match the ground truth.
+
+    Parameters
+    ----------
+    scores : Iterable[float]
+        The prediction score for each predicted spectrum.
+    pep_matches : Iterable[bool]
+        Whether each prediction matches the ground truth peptide.
+    n_spectra : int
+        The total number of spectra, used as the coverage denominator.
+
+    Returns
+    -------
+    order : np.ndarray
+        Indices that sort the predictions by decreasing score.
+    coverage : np.ndarray
+        The cumulative coverage at each rank.
+    precision : np.ndarray
+        The cumulative precision at each rank.
+    """
+    scores = np.asarray(scores, dtype=float)
+    pep_matches = np.asarray(pep_matches, dtype=bool)
+    order = np.argsort(-scores, kind="stable")
+    ranks = np.arange(1, len(order) + 1)
+    precision = np.cumsum(pep_matches[order]) / ranks
+    coverage = ranks / n_spectra
+    return order, coverage, precision
+
+
 def aa_precision_recall(
     aa_scores_correct: List[float],
     aa_scores_all: List[float],

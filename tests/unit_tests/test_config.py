@@ -1,5 +1,7 @@
 """Test configuration loading"""
 
+from pathlib import Path
+
 import pytest
 import yaml
 
@@ -13,6 +15,24 @@ def test_default():
     assert config["random_seed"] == 454
     assert config.accelerator == "auto"
     assert config.file == "default"
+
+
+def test_config_yaml_reads_use_utf8(monkeypatch, tiny_config):
+    real_open = Path.open
+
+    def _utf8_guarded_open(self, *args, **kwargs):
+        mode = args[0] if args else kwargs.get("mode", "r")
+        if (
+            "r" in mode
+            and "b" not in mode
+            and self.suffix in {".yaml", ".yml"}
+        ):
+            assert kwargs.get("encoding") == "utf-8"
+        return real_open(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "open", _utf8_guarded_open)
+
+    Config(tiny_config)
 
 
 def test_override(tmp_path, tiny_config):
