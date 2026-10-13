@@ -19,7 +19,7 @@ import torch
 from . import __version__
 from .data.psm import PepSpecMatch
 
-SCORE_BINS = (0.0, 0.01, 0.1, 0.3, 0.5, 0.7, 0.8, 0.85, 0.9)
+SCORE_BINS = (0.0, 0.5, 0.6, 0.7, 0.8, 0.85, 0.9)
 
 logger = logging.getLogger("casanovo")
 
@@ -241,7 +241,11 @@ def log_annotate_report(
                 pop,
                 "PSM" if pop == 1 else "PSMs",
                 pop / num_psms * 100,
-                float(score),
+                (
+                    f"{float(score):.2f}"
+                    if score in SCORE_BINS
+                    else str(float(score))
+                ),
             )
 
         logger.info(

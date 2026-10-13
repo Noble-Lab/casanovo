@@ -440,13 +440,13 @@ def test_log_annotate_report(
 
     messages = [record.getMessage() for record in caplog.records]
     assert "Sequenced 2 spectra (3 PSMs)" in messages
-    assert "3 PSMs (100.00%) scored ≥ 0.0" in messages
-    assert "2 PSMs (66.67%) scored ≥ 0.5" in messages
-    assert "1 PSM (33.33%) scored ≥ 0.9" in messages
+    assert "3 PSMs (100.00%) scored ≥ 0.00" in messages
+    assert "2 PSMs (66.67%) scored ≥ 0.50" in messages
+    assert "1 PSM (33.33%) scored ≥ 0.90" in messages
     distribution_messages = [
         message for message in messages if "scored ≥" in message
     ]
-    assert len(distribution_messages) == 9
+    assert len(distribution_messages) == 7
     throughput_messages = [
         message for message in messages if message.startswith("Throughput:")
     ]
@@ -461,14 +461,10 @@ def test_get_report_dict_default_bins():
     scores = [
         -0.1,
         0.0,
-        0.009,
-        0.01,
-        0.099,
-        0.1,
-        0.299,
-        0.3,
         0.499,
         0.5,
+        0.599,
+        0.6,
         0.699,
         0.7,
         0.799,
@@ -483,13 +479,11 @@ def test_get_report_dict_default_bins():
         {"sequence": ["AAAA"] * len(scores), "score": scores}
     )
     report = utils._get_report_dict(results)
-    assert report["num_psms"] == 19
+    assert report["num_psms"] == 15
     assert report["score_bins"] == {
-        0.0: 18,
-        0.01: 16,
-        0.1: 14,
-        0.3: 12,
-        0.5: 10,
+        0.0: 14,
+        0.5: 12,
+        0.6: 10,
         0.7: 8,
         0.8: 6,
         0.85: 4,
