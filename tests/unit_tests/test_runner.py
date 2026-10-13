@@ -5,6 +5,7 @@ import unittest.mock
 from pathlib import Path
 
 import depthcharge.tokenizers.peptides
+import lightning.pytorch as pl
 import numpy as np
 import pytest
 import torch
@@ -937,3 +938,186 @@ def test_initialize_model_with_new_token_init_passes_validate(
         mock_validate.assert_called_once()
 
     assert runner.model.vocab_size == orig_n + 1
+
+
+def test_train_multiple_validation_peak_paths(
+    tmp_path, mgf_small, mgf_medium, tiny_config, monkeypatch
+):
+    """Multiple validation files train and aggregate valid_CELoss (issue #720).
+
+    Lightning does not allow logging the same metric name from different
+    validation dataloaders with ``add_dataloader_idx=False``, which made
+    training crash with a MisconfigurationException when more than one
+    ``--validation_peak_path`` was given. The per-file losses must instead
+    be aggregated into the single ``valid_CELoss`` used for best-checkpoint
+    selection.
+    """
+    config = Config(tiny_config)
+    config.max_epochs = 1
+    config.n_layers = 1
+
+    stem_small = Path(mgf_small).stem
+    stem_medium = Path(mgf_medium).stem
+
+    with ModelRunner(
+        config, output_dir=tmp_path, output_rootname="multival"
+    ) as runner:
+        # Capture the per-file losses and token counts as they were logged
+        # during the epoch, before the model aggregates them.
+        captured = []
+
+        class CapturePerFileMetrics(pl.Callback):
+            def on_validation_epoch_end(self, trainer, pl_module):
+                snapshot = {}
+                for stem in (stem_small, stem_medium):
+                    loss = trainer.callback_metrics.get(f"valid_CELoss/{stem}")
+                    tokens = trainer.callback_metrics.get(
+                        f"valid_n_tokens/{stem}"
+                    )
+                    if loss is not None and tokens is not None:
+                        snapshot[stem] = (loss.item(), tokens.item())
+                captured.append(snapshot)
+
+        original_initialize_trainer = runner.initialize_trainer
+
+        def initialize_trainer_with_capture(*args, **kwargs):
+            original_initialize_trainer(*args, **kwargs)
+            runner.trainer.callbacks.append(CapturePerFileMetrics())
+
+        monkeypatch.setattr(
+            runner, "initialize_trainer", initialize_trainer_with_capture
+        )
+
+        runner.train([mgf_small], [mgf_small, mgf_medium])
+
+        assert runner.model.n_main_loaders == 2
+        # The best checkpoint is still selected on the aggregate valid_CELoss.
+        assert (tmp_path / "multival.best.ckpt").exists()
+
+        # The history recorded the aggregate and the per-file losses.
+        valid_rows = [m for m in runner.model._history if "valid" in m]
+        assert valid_rows
+        for metrics_row in valid_rows:
+            assert f"valid/{stem_small}" in metrics_row
+            assert f"valid/{stem_medium}" in metrics_row
+
+        # The aggregate is the token-weighted mean of the per-file losses.
+        assert len(captured) == len(valid_rows)
+        for metrics_row, snapshot in zip(valid_rows, captured):
+            total_loss = sum(
+                loss * tokens for loss, tokens in snapshot.values()
+            )
+            total_tokens = sum(tokens for _, tokens in snapshot.values())
+            assert metrics_row["valid"] == pytest.approx(
+                total_loss / total_tokens
+            )
+
+
+def test_train_multiple_validation_peak_paths_precision(
+    tmp_path, mgf_small, mgf_medium, tiny_config, monkeypatch
+):
+    """Multiple validation files with precision logging (issue #720).
+
+    The pep_precision and aa_precision metrics were logged with the same
+    collision-prone pattern as valid_CELoss, so training with
+    ``calculate_precision=True`` and multiple validation files crashed as
+    well. They must be aggregated per file like the validation loss.
+    """
+    config = Config(tiny_config)
+    config.max_epochs = 1
+    config.n_layers = 1
+    config.calculate_precision = True
+
+    stem_small = Path(mgf_small).stem
+    stem_medium = Path(mgf_medium).stem
+
+    with ModelRunner(
+        config, output_dir=tmp_path, output_rootname="multivalprec"
+    ) as runner:
+        captured = []
+
+        class CapturePerFileMetrics(pl.Callback):
+            def on_validation_epoch_end(self, trainer, pl_module):
+                snapshot = {}
+                for stem in (stem_small, stem_medium):
+                    pep = trainer.callback_metrics.get(f"pep_precision/{stem}")
+                    aa = trainer.callback_metrics.get(f"aa_precision/{stem}")
+                    spectra = trainer.callback_metrics.get(
+                        f"valid_n_spectra/{stem}"
+                    )
+                    if (
+                        pep is not None
+                        and aa is not None
+                        and spectra is not None
+                    ):
+                        snapshot[stem] = (
+                            pep.item(),
+                            aa.item(),
+                            spectra.item(),
+                        )
+                captured.append(snapshot)
+
+        original_initialize_trainer = runner.initialize_trainer
+
+        def initialize_trainer_with_capture(*args, **kwargs):
+            original_initialize_trainer(*args, **kwargs)
+            runner.trainer.callbacks.append(CapturePerFileMetrics())
+
+        monkeypatch.setattr(
+            runner, "initialize_trainer", initialize_trainer_with_capture
+        )
+
+        runner.train([mgf_small], [mgf_small, mgf_medium])
+
+        valid_rows = [m for m in runner.model._history if "valid" in m]
+        assert valid_rows
+        for metrics_row in valid_rows:
+            assert "valid_pep_precision" in metrics_row
+            assert "valid_aa_precision" in metrics_row
+
+        # The aggregates are the spectrum-weighted means per file.
+        assert len(captured) == len(valid_rows)
+        for metrics_row, snapshot in zip(valid_rows, captured):
+            total_spectra = sum(spectra for _, _, spectra in snapshot.values())
+            pep_sum = sum(
+                pep * spectra for pep, _, spectra in snapshot.values()
+            )
+            aa_sum = sum(aa * spectra for _, aa, spectra in snapshot.values())
+            assert metrics_row["valid_pep_precision"] == pytest.approx(
+                pep_sum / total_spectra
+            )
+            assert metrics_row["valid_aa_precision"] == pytest.approx(
+                aa_sum / total_spectra
+            )
+
+
+def test_train_single_validation_with_tracking_aggregate(
+    tmp_path, mgf_small, tiny_config
+):
+    """A single main validation file is aggregated directly.
+
+    With one main validation file (optionally alongside tracking files) the
+    aggregate ``valid_CELoss`` must equal that file's per-file loss exactly,
+    and tracking files must not influence it.
+    """
+    config = Config(tiny_config)
+    config.max_epochs = 1
+    config.n_layers = 1
+
+    mgf_track = tmp_path / "track.mgf"
+    shutil.copy(mgf_small, mgf_track)
+
+    with ModelRunner(
+        config, output_dir=tmp_path, output_rootname="singletrack"
+    ) as runner:
+        runner.train([mgf_small], [mgf_small], tracking_peak_path=[mgf_track])
+
+        assert runner.model.n_main_loaders == 1
+        valid_rows = [m for m in runner.model._history if "valid" in m]
+        assert valid_rows
+        stem_small = Path(mgf_small).stem
+        for metrics_row in valid_rows:
+            # The tracking file must not influence the aggregate.
+            assert metrics_row["valid"] == pytest.approx(
+                metrics_row[f"valid/{stem_small}"]
+            )

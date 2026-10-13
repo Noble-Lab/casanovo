@@ -891,9 +891,28 @@ class Spec2Pep(pl.LightningModule):
             self.log(f"valid_CELoss/{stem}", loss.detach(), **log_kwargs)
 
         if is_main:
-            # Contributes to the aggregate ``valid_CELoss`` monitored by
-            # ModelCheckpoint for best-checkpoint selection.
-            self.log("valid_CELoss", loss.detach(), **log_kwargs)
+            if n_main == 1:
+                # Contributes to the aggregate ``valid_CELoss`` monitored by
+                # ModelCheckpoint for best-checkpoint selection.
+                self.log("valid_CELoss", loss.detach(), **log_kwargs)
+            elif self.val_stems and dataloader_idx < len(self.val_stems):
+                # With multiple main validation files, Lightning does not
+                # allow logging the same metric name from different
+                # dataloaders when ``add_dataloader_idx=False``. Track the
+                # number of target tokens per file instead and aggregate the
+                # per-file losses in ``on_validation_epoch_end``.
+                stem = self.val_stems[dataloader_idx]
+                self.log(
+                    f"valid_n_tokens/{stem}",
+                    float(batch_size),
+                    reduce_fx="sum",
+                    add_dataloader_idx=False,
+                    on_step=False,
+                    on_epoch=True,
+                    sync_dist=True,
+                    logger=False,
+                    prog_bar=False,
+                )
 
         if not self.calculate_precision or not is_main:
             return loss
@@ -918,13 +937,30 @@ class Spec2Pep(pl.LightningModule):
             on_step=False,
             on_epoch=True,
             sync_dist=True,
+            batch_size=batch_size,
         )
-        self.log(
-            "pep_precision", pep_precision, **log_args, batch_size=batch_size
-        )
-        self.log(
-            "aa_precision", aa_precision, **log_args, batch_size=batch_size
-        )
+        if n_main == 1:
+            self.log("pep_precision", pep_precision, **log_args)
+            self.log("aa_precision", aa_precision, **log_args)
+        elif self.val_stems and dataloader_idx < len(self.val_stems):
+            # As above, logging the same metric name from multiple main
+            # validation dataloaders is not allowed, so keep the precision
+            # metrics per file and aggregate them in
+            # ``on_validation_epoch_end``.
+            stem = self.val_stems[dataloader_idx]
+            self.log(f"pep_precision/{stem}", pep_precision, **log_args)
+            self.log(f"aa_precision/{stem}", aa_precision, **log_args)
+            self.log(
+                f"valid_n_spectra/{stem}",
+                float(batch_size),
+                reduce_fx="sum",
+                add_dataloader_idx=False,
+                on_step=False,
+                on_epoch=True,
+                sync_dist=True,
+                logger=False,
+                prog_bar=False,
+            )
         return loss
 
     def predict_step(
@@ -996,8 +1032,27 @@ class Spec2Pep(pl.LightningModule):
         """
         callback_metrics = self.trainer.callback_metrics
         metrics = {"step": self.trainer.global_step}
+        n_main = self.n_main_loaders if self.n_main_loaders > 0 else 1
 
-        if "valid_CELoss" in callback_metrics:
+        if n_main > 1:
+            # Aggregate the per-file losses of the main validation files
+            # into the ``valid_CELoss`` used for best-checkpoint selection,
+            # weighted by the number of target tokens per file. The
+            # per-file values are already synchronized across devices, so
+            # no additional ``sync_dist`` is needed here.
+            valid_celoss = self._weighted_main_metric(
+                "valid_CELoss/", "valid_n_tokens/"
+            )
+            if valid_celoss is not None:
+                self.log(
+                    "valid_CELoss",
+                    valid_celoss,
+                    add_dataloader_idx=False,
+                    on_step=False,
+                    on_epoch=True,
+                )
+                metrics["valid"] = valid_celoss
+        elif "valid_CELoss" in callback_metrics:
             metrics["valid"] = callback_metrics["valid_CELoss"].detach().item()
 
         for stem in self.val_stems:
@@ -1008,16 +1063,81 @@ class Spec2Pep(pl.LightningModule):
                 )
 
         if self.calculate_precision:
-            if "aa_precision" in callback_metrics:
-                metrics["valid_aa_precision"] = (
-                    callback_metrics["aa_precision"].detach().item()
+            if n_main > 1:
+                pep_precision = self._weighted_main_metric(
+                    "pep_precision/", "valid_n_spectra/"
                 )
-            if "pep_precision" in callback_metrics:
-                metrics["valid_pep_precision"] = (
-                    callback_metrics["pep_precision"].detach().item()
+                aa_precision = self._weighted_main_metric(
+                    "aa_precision/", "valid_n_spectra/"
                 )
+                if pep_precision is not None:
+                    self.log(
+                        "pep_precision",
+                        pep_precision,
+                        add_dataloader_idx=False,
+                        on_step=False,
+                        on_epoch=True,
+                    )
+                    metrics["valid_pep_precision"] = pep_precision
+                if aa_precision is not None:
+                    self.log(
+                        "aa_precision",
+                        aa_precision,
+                        add_dataloader_idx=False,
+                        on_step=False,
+                        on_epoch=True,
+                    )
+                    metrics["valid_aa_precision"] = aa_precision
+            else:
+                if "aa_precision" in callback_metrics:
+                    metrics["valid_aa_precision"] = (
+                        callback_metrics["aa_precision"].detach().item()
+                    )
+                if "pep_precision" in callback_metrics:
+                    metrics["valid_pep_precision"] = (
+                        callback_metrics["pep_precision"].detach().item()
+                    )
         self._history.append(metrics)
         self._log_history()
+
+    def _weighted_main_metric(
+        self, metric: str, weight: str
+    ) -> Optional[float]:
+        """
+        Aggregate a per-file validation metric across the main validation
+        files, weighted by a per-file count.
+
+        Parameters
+        ----------
+        metric : str
+            The prefix of the per-file metric to aggregate, with the file
+            stem appended, e.g. ``"valid_CELoss/"`` for
+            ``valid_CELoss/<stem>``.
+        weight : str
+            The prefix of the per-file weight metric, with the file stem
+            appended, e.g. ``"valid_n_tokens/"`` for
+            ``valid_n_tokens/<stem>``.
+
+        Returns
+        -------
+        Optional[float]
+            The weighted mean of the metric across the main validation
+            files, or ``None`` if no main validation file contributed any
+            batches.
+        """
+        callback_metrics = self.trainer.callback_metrics
+        total, weight_sum = 0.0, 0.0
+        n_main = self.n_main_loaders if self.n_main_loaders > 0 else 1
+        for stem in self.val_stems[:n_main]:
+            file_value = callback_metrics.get(metric + stem)
+            file_weight = callback_metrics.get(weight + stem)
+            if file_value is not None and file_weight is not None:
+                file_weight = file_weight.item()
+                total += file_value.item() * file_weight
+                weight_sum += file_weight
+        if weight_sum == 0:
+            return None
+        return total / weight_sum
 
     def on_predict_batch_end(
         self, outputs: List[psm.PepSpecMatch], *args
