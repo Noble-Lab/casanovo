@@ -351,21 +351,6 @@ def test_evaluate_success(tmp_path, mgf_small, tiny_config):
             id="unannotated_mgf_and_mzml",
         ),
         pytest.param(
-            ["mgf_small", "mzml_small"],
-            False,
-            id="annotated_mgf_and_mzml",
-        ),
-        pytest.param(
-            ["mgf_small", "mgf_small_unannotated"],
-            True,
-            id="annotated_and_unannotated_mgf",
-        ),
-        pytest.param(
-            ["mgf_small", "mgf_small_unannotated", "mzml_small"],
-            True,
-            id="annotated_unannotated_and_mzml",
-        ),
-        pytest.param(
             ["improperly_annotated_file"],
             True,
             id="improperly_annotated_mgf_missing_seq",
@@ -424,6 +409,56 @@ def test_evaluate_failure_cases(
             runner.predict(files, result_file, evaluate=True)
 
     # Metadata-only MzTab should still be written
+    assert result_file.is_file()
+
+
+@pytest.mark.parametrize(
+    "input_files",
+    [
+        pytest.param(["mgf_small", "mzml_small"], id="annotated_mgf_and_mzml"),
+        pytest.param(
+            ["mgf_small", "mgf_small_unannotated"],
+            id="annotated_and_unannotated_mgf",
+        ),
+        pytest.param(
+            ["mgf_small", "mgf_small_unannotated", "mzml_small"],
+            id="annotated_unannotated_and_mzml",
+        ),
+    ],
+)
+def test_evaluate_skips_unannotated_spectra(
+    tmp_path,
+    mgf_small,
+    mzml_small,
+    mgf_small_unannotated,
+    tiny_config,
+    input_files,
+):
+    """Unannotated spectra are skipped when evaluating mixed peak files."""
+    config = Config(tiny_config)
+    config.max_epochs = 1
+
+    model_file = tmp_path / "epoch=0-step=1.ckpt"
+    result_file = tmp_path / "result.mztab"
+
+    with ModelRunner(config, output_dir=tmp_path) as runner:
+        runner.train([mgf_small], [mgf_small])
+
+    assert model_file.is_file()
+
+    file_map = {
+        "mgf_small": mgf_small,
+        "mzml_small": mzml_small,
+        "mgf_small_unannotated": mgf_small_unannotated,
+    }
+    files = [file_map[name] for name in input_files]
+
+    with pytest.warns(UserWarning, match="Skipped"):
+        with ModelRunner(
+            config, model_filename=str(model_file), overwrite_ckpt_check=False
+        ) as runner:
+            runner.predict(files, result_file, evaluate=True)
+
     assert result_file.is_file()
 
 
