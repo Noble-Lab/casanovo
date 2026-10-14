@@ -52,6 +52,8 @@ from .config import Config
 from .denovo import ModelRunner
 
 logger = logging.getLogger("casanovo")
+# Handlers added by setup_logging, removed again on the next call.
+_log_handlers: List[logging.Handler] = []
 click.rich_click.USE_MARKDOWN = True
 click.rich_click.STYLE_HELPTEXT = ""
 click.rich_click.SHOW_ARGUMENTS = True
@@ -504,9 +506,20 @@ def setup_logging(
     }
 
     # Configure logging.
+    # Reset warning capture first, because captureWarnings(True) does nothing
+    # if it was already called, even if the warnings hook has since been
+    # replaced (e.g. by pytest between tests).
+    logging.captureWarnings(False)
     logging.captureWarnings(True)
     root_logger = logging.getLogger()
     root_logger.setLevel(logging.DEBUG)
+
+    # Remove the handlers from a previous call, so messages aren't duplicated
+    # when logging is set up multiple times in the same process.
+    for handler in _log_handlers:
+        root_logger.removeHandler(handler)
+        handler.close()
+    _log_handlers.clear()
 
     # Formatters for file vs console:
     console_formatter = logging.Formatter("{levelname}: {message}", style="{")
@@ -523,6 +536,7 @@ def setup_logging(
     file_handler = logging.FileHandler(log_file_path, encoding="utf8")
     file_handler.setFormatter(log_formatter)
     root_logger.addHandler(file_handler)
+    _log_handlers.extend([console_handler, file_handler])
 
     # Disable dependency non-critical log messages.
     logging.getLogger("depthcharge").setLevel(
