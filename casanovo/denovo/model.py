@@ -871,15 +871,21 @@ class Spec2Pep(pl.LightningModule):
         """
         pred, truth = self._forward_step(batch)
         pred = pred[:, :-1, :].reshape(-1, self.vocab_size)
-        loss = self.val_celoss(pred, truth.flatten())
+        truth = truth.flatten()
+        loss = self.val_celoss(pred, truth)
 
-        batch_size = pred.shape[0]
+        # Weight the epoch metric by the number of target tokens that
+        # actually contribute to the loss. Padded positions are ignored by
+        # the loss (``ignore_index=0``), so counting them via
+        # ``pred.shape[0]`` would bias batches and validation files with
+        # longer padding.
+        n_tokens = int((truth != 0).sum().item())
         log_kwargs = dict(
             add_dataloader_idx=False,
             on_step=False,
             on_epoch=True,
             sync_dist=True,
-            batch_size=batch_size,
+            batch_size=n_tokens,
         )
 
         # Determine per-file stem and main/tracking classification.
@@ -904,7 +910,7 @@ class Spec2Pep(pl.LightningModule):
                 stem = self.val_stems[dataloader_idx]
                 self.log(
                     f"valid_n_tokens/{stem}",
-                    float(batch_size),
+                    float(n_tokens),
                     reduce_fx="sum",
                     add_dataloader_idx=False,
                     on_step=False,

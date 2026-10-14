@@ -12,6 +12,7 @@ import torch
 
 from casanovo.config import Config
 from casanovo.data.psm import PepSpecMatch
+from casanovo.denovo.model import Spec2Pep
 from casanovo.denovo.model_runner import ModelRunner
 
 
@@ -959,6 +960,24 @@ def test_train_multiple_validation_peak_paths(
     stem_small = Path(mgf_small).stem
     stem_medium = Path(mgf_medium).stem
 
+    # Capture the raw validation batches: the loss returned by each
+    # validation step and the number of non-padding target tokens in the
+    # batch's padded sequence tensor. This is independent of how the model
+    # logs the metrics and lets the test verify the token counts and the
+    # aggregate from first principles.
+    raw_batches = []
+    orig_validation_step = Spec2Pep.validation_step
+
+    def capture_validation_step(self, batch, batch_idx, dataloader_idx=0):
+        loss = orig_validation_step(self, batch, batch_idx, dataloader_idx)
+        if not self.training:
+            seqs = batch.get("seq")
+            n_tokens = int((seqs != 0).sum().item())
+            raw_batches.append((dataloader_idx, float(loss), n_tokens))
+        return loss
+
+    monkeypatch.setattr(Spec2Pep, "validation_step", capture_validation_step)
+
     with ModelRunner(
         config, output_dir=tmp_path, output_rootname="multival"
     ) as runner:
@@ -1001,7 +1020,31 @@ def test_train_multiple_validation_peak_paths(
             assert f"valid/{stem_small}" in metrics_row
             assert f"valid/{stem_medium}" in metrics_row
 
-        # The aggregate is the token-weighted mean of the per-file losses.
+        # The logged token counts must be the number of target tokens
+        # that contribute to the loss (the non-padding positions), not
+        # the padded sequence length.
+        assert raw_batches
+        # The validation dataloaders (and their stems) follow the sorted
+        # file paths, not the order in which the paths were passed, so raw
+        # batch indices must be mapped through the actual stem order.
+        stems = tuple(runner.loaders.val_stems)
+        assert set(stems) == {stem_small, stem_medium}
+        true_tokens = dict.fromkeys(stems, 0)
+        weighted_loss_sum = 0.0
+        for dataloader_idx, loss, n_tokens in raw_batches:
+            true_tokens[stems[dataloader_idx]] += n_tokens
+            weighted_loss_sum += loss * n_tokens
+        total_true_tokens = sum(true_tokens.values())
+        assert total_true_tokens > 0
+        for snapshot in captured:
+            for stem, (_, logged_tokens) in snapshot.items():
+                assert logged_tokens == pytest.approx(true_tokens[stem])
+
+        # The aggregate is the token-weighted mean of the per-batch
+        # losses, recomputed from the raw batches. Because each file's
+        # epoch loss is itself token-weighted, this collapses to the
+        # global token-weighted mean across all validation batches.
+        expected_aggregate = weighted_loss_sum / total_true_tokens
         assert len(captured) == len(valid_rows)
         for metrics_row, snapshot in zip(valid_rows, captured):
             total_loss = sum(
@@ -1011,6 +1054,7 @@ def test_train_multiple_validation_peak_paths(
             assert metrics_row["valid"] == pytest.approx(
                 total_loss / total_tokens
             )
+            assert metrics_row["valid"] == pytest.approx(expected_aggregate)
 
 
 def test_train_multiple_validation_peak_paths_precision(
