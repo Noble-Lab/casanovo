@@ -1149,32 +1149,41 @@ def test_train_multiple_validation_peak_paths_precision(
 
 
 def test_train_single_validation_with_tracking_aggregate(
-    tmp_path, mgf_small, tiny_config
+    tmp_path, mgf_small, mgf_medium, tiny_config
 ):
     """A single main validation file is aggregated directly.
 
     With one main validation file (optionally alongside tracking files) the
     aggregate ``valid_CELoss`` must equal that file's per-file loss exactly,
     and tracking files must not influence it.
+
+    The tracking data is deliberately different from the main validation
+    data: a copy of the main file would let an aggregate that wrongly
+    included the tracking loader still match the main file's per-file loss,
+    so the aggregate assertion could not detect the inclusion.
     """
     config = Config(tiny_config)
     config.max_epochs = 1
     config.n_layers = 1
 
-    mgf_track = tmp_path / "track.mgf"
-    shutil.copy(mgf_small, mgf_track)
-
     with ModelRunner(
         config, output_dir=tmp_path, output_rootname="singletrack"
     ) as runner:
-        runner.train([mgf_small], [mgf_small], tracking_peak_path=[mgf_track])
+        runner.train([mgf_small], [mgf_small], tracking_peak_path=[mgf_medium])
 
         assert runner.model.n_main_loaders == 1
         valid_rows = [m for m in runner.model._history if "valid" in m]
         assert valid_rows
         stem_small = Path(mgf_small).stem
+        stem_track = Path(mgf_medium).stem
         for metrics_row in valid_rows:
             # The tracking file must not influence the aggregate.
             assert metrics_row["valid"] == pytest.approx(
                 metrics_row[f"valid/{stem_small}"]
+            )
+            # The tracking file ran on different data, so its per-file loss
+            # is a different value: the equality above can only hold because
+            # the aggregate excludes the tracking loader.
+            assert metrics_row[f"valid/{stem_track}"] != pytest.approx(
+                metrics_row["valid"]
             )
