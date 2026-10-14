@@ -378,7 +378,7 @@ class ModelRunner:
 
         try:
             self.loaders.setup(stage="test", annotated=evaluate)
-        except (KeyError, OSError, TypeError) as e:
+        except (KeyError, OSError, StopIteration, TypeError) as e:
             if evaluate:
                 error_message = (
                     "Error creating annotated spectrum dataloaders. This may "
@@ -506,6 +506,7 @@ class ModelRunner:
         self.tokenizer = tokenizer_clss(
             residues=self.config.residues,
             replace_isoleucine_with_leucine=self.config.replace_isoleucine_with_leucine,
+            replace_n_and_q_deamidated_with_d_and_e=self.config.replace_n_and_q_deamidated_with_d_and_e,
             reverse=True,
             start_token=None,
             stop_token="$",

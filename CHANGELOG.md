@@ -8,11 +8,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Added
 
+- Added the `replace_n_and_q_deamidated_with_d_and_e` config option, which replaces deamidated N and Q residues with D and E residues, because they are indistinguishable by de novo sequencing.
 - The number of spectra that receive no prediction because beam search did not return a valid peptide is now counted and logged at the end of a sequencing run.
 - When sequencing with `--evaluate`, the ground truth sequence and the precision and coverage at each prediction are added as columns to the mzTab output, and the average precision (area under the precision-coverage curve) is reported in the end-of-run report.
 
 ### Changed
 
+- Upgraded minimum DepthCharge version to 0.5.0.
+- When evaluating, unannotated spectra in a mix of annotated and unannotated peak files are now skipped with a warning instead of raising an error. An error is still raised if no annotated spectra remain.
 - `val_check_interval` now accepts a float in `[0, 1]` to validate at a fraction of each training epoch, in addition to an integer number of training steps.
 - Beam search is sped up by caching finished beams and selecting the top-scoring beam fully on the GPU.
 
