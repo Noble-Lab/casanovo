@@ -378,7 +378,7 @@ class ModelRunner:
 
         try:
             self.loaders.setup(stage="test", annotated=evaluate)
-        except (KeyError, OSError, TypeError) as e:
+        except (KeyError, OSError, StopIteration, TypeError) as e:
             if evaluate:
                 error_message = (
                     "Error creating annotated spectrum dataloaders. This may "
