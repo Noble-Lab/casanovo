@@ -968,7 +968,9 @@ def test_train_multiple_validation_peak_paths(
     raw_batches = []
     orig_validation_step = Spec2Pep.validation_step
 
-    def capture_validation_step(self, batch, batch_idx, dataloader_idx=0):
+    def capture_validation_step(
+        self, batch, batch_idx, dataloader_idx=0
+    ) -> torch.Tensor:
         loss = orig_validation_step(self, batch, batch_idx, dataloader_idx)
         if not self.training:
             seqs = batch.get("seq")
@@ -1045,6 +1047,17 @@ def test_train_multiple_validation_peak_paths(
         # epoch loss is itself token-weighted, this collapses to the
         # global token-weighted mean across all validation batches.
         expected_aggregate = weighted_loss_sum / total_true_tokens
+        # The best checkpoint must have been selected on the aggregate
+        # loss, not on a per-file value: the ModelCheckpoint monitoring
+        # ``valid_CELoss`` records exactly the aggregate as its best score.
+        aggregate_checkpoint = next(
+            callback
+            for callback in runner.trainer.callbacks
+            if getattr(callback, "monitor", None) == "valid_CELoss"
+        )
+        assert aggregate_checkpoint.best_model_score.item() == pytest.approx(
+            expected_aggregate
+        )
         assert len(captured) == len(valid_rows)
         for metrics_row, snapshot in zip(valid_rows, captured):
             total_loss = sum(
