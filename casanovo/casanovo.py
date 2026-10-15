@@ -363,8 +363,8 @@ def train(
 ) -> None:
     """Train a Casanovo model on your own data.
 
-    TRAIN_PEAK_PATH must be one or more annoated MGF files, such as
-    those provided by MassIVE-KB, from which to train a new Casnovo
+    TRAIN_PEAK_PATH must be one or more annotated MGF files, such as
+    those provided by MassIVE-KB, from which to train a new Casanovo
     model.
     """
 

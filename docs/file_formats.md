@@ -9,7 +9,7 @@ When you are ready to use Casanovo, you can input your MS/MS spectra in one of t
 - **[mzML](https://doi.org/10.1074/mcp.R110.000133)**: XML-based mass spectrometry community standard file format developed by the Proteomics Standards Initiative (PSI).
 - **[mzXML](https://doi.org/10.1038/nbt1031)**: XML-based predecessor of mzML. Although supported by Casanovo, mzML should typically be preferred instead.
 - **[MGF](https://www.matrixscience.com/help/data_file_help.html)**: A simple text-based peak file, though not as rich in detail as mzML.
-- **D**: A proprietary binary file format used by Bruker instruments.
+- **D**: A timsTOF `.d` folder, the proprietary format used by Bruker timsTOF instruments. Not supported for training or `--evaluate`, which require annotated MGF files.
 
 All four of the above file formats can be used as input to Casanovo for *de novo* peptide sequencing and database searching.
 As the official PSI standard format containing the complete information from a mass spectrometry run, mzML should typically be preferred.
@@ -31,7 +31,7 @@ In case the FASTA file contains amino acids that are not in Casanovo's vocabular
 
 ### Model weights
 
-In addition to MS/MS spectra, Casanovo also optionally accepts a model weights (.ckpt extension) input file when running in training, sequencing, or evaluating mode.
+In addition to MS/MS spectra, Casanovo also optionally accepts a model weights (.ckpt extension) input file when running in training, sequencing (including `--evaluate`), or database search mode.
 These weights define the functionality of the Casanovo neural network.
 
 If no input weights file is provided, Casanovo will automatically use the most recent compatible weights from the [official Casanovo GitHub repository](https://github.com/Noble-Lab/casanovo), which will be downloaded and cached locally if they are not already.
@@ -133,7 +133,7 @@ MTD	software[1]-setting[20]	tb_summarywriter = False
 MTD	software[1]-setting[21]	log_metrics = False
 MTD	software[1]-setting[22]	log_every_n_steps = 50
 MTD	software[1]-setting[23]	val_check_interval = 50000
-MTD	software[1]-setting[24]	n_peaks = 150
+MTD	software[1]-setting[24]	max_peaks = 150
 MTD	software[1]-setting[25]	min_mz = 50.0
 MTD	software[1]-setting[26]	max_mz = 2500.0
 MTD	software[1]-setting[27]	min_intensity = 0.01
@@ -197,10 +197,9 @@ PSM	THMELGGK	1	sp|A5A616|MGTS_ECOLI	null	null	null	[MS, MS:1003281, Casanovo, 4.
 In this case, each PSM contains additional information in the `accession` column referring to the identifier of the protein the matched peptide is derived from.
 
 ```{note}
-Scores in Casanovo range from -1 to 1, where 1 indicates high confidence in the prediction.
-A score below 0 occurs for a predicted peptide sequence that mismatches the observed precursor mass, in which case the score is penalized by subtracting 1.
-This will also be evident from a difference in the observed precursor _m_/_z_, in the `exp_mass_to_charge` column, and the precursor _m_/_z_ calculated from the predicted peptide sequence, in the `calc_mass_to_charge` column.
-Hence, it is important to properly configure settings that impact the precursor mass filter, such as the precursor mass tolerance (option `precursor_mass_tol`) and the isotopes to consider (option `isotope_error_range`).
+Higher scores indicate higher confidence in the prediction.
+As of version 5.2.0, the precursor mass filter is no longer applied in *de novo* sequencing mode, and scores are no longer penalized based on the precursor mass.
+The options `precursor_mass_tol` and `isotope_error_range` now only apply to database searching mode.
 ```
 
 The `spectra_ref` column is essential for connecting predictions back to the corresponding MS/MS spectra in the input file(s).
@@ -221,6 +220,8 @@ The column is global to the entire mzTab file: it is added whenever at least one
 In mixed-input runs (e.g. both MGF and mzML files), the column is present for the whole file, but rows originating from mzML, mzXML, or MGF spectra without scan number headers will have a "null" value in this column.
 If no input file contains scan number headers the column is omitted entirely.
 Note that only purely numeric scan values are exported; MGF files that use composite or non-numeric scan identifiers in these fields will have a "null" value in this column.
+
+In the development version (after 5.2.1), running `casanovo sequence --evaluate` on annotated spectra additionally adds three columns to the PSM section: `opt_global_ground_truth_sequence`, `opt_global_precision`, and `opt_global_coverage`. These columns are omitted when not evaluating.
 
 ```{note}
 The PSM identifier in the `PSM_ID` column is not necessarily identical to the spectrum index in the `spectra_ref` column, even for MGF files.
@@ -247,12 +248,17 @@ After editing, specify your custom configuration file when running Casanovo with
 The configuration file is divided into sections, each containing options that are relevant to different phases of Casanovo's operation.
 The first section contains options used to configure Casanovo during *de novo* peptide sequencing, followed by options in the second section that can only be modified when training a new model.
 For example, the `top_match` option in the first section makes it possible to flexibly report multiple PSMs per spectrum during _de novo_ peptide sequencing.
-In contrast, setting a different value for the `n_peaks` option in the second section is only possible when training a new model, and cannot be modified when predicting with a previously trained model that uses a different configuration.
+In contrast, setting a different value for the `max_peaks` option in the second section is only possible when training a new model, and cannot be modified when predicting with a previously trained model that uses a different configuration.
 
 ```{tip}
 Each change in the configuration can lead to different outcomes in the peptide sequencing process, so it may be beneficial to experiment with various settings to find the optimal configuration for your data.
 Always consider your experimental design and the nature of your data when adjusting these settings.
 ```
+
+### Peptide notation (tokenizer)
+
+By default, Casanovo uses the ProForma peptide tokenizer. Setting `massivekb_tokenizer: true` in the configuration file switches to a MassIVE-KB style tokenizer instead.
+Keep the default (`false`) unless your model was trained with the MassIVE-KB tokenizer.
 
 ## Logging
 
@@ -299,11 +305,11 @@ When fine-tuning a pre-trained model with new PTMs, the `new_token_init` option 
 See the [FAQ](faq.md#how-do-i-fine-tune-casanovo-on-data-with-new-ptms) for the complete fine-tuning workflow.
 
 mzML or mzXML files are not supported as input during training, as these formats do not provide a mechanism to annotate their spectra with peptide sequences.
-Similarly, in Casanovo evaluation mode only annotated MGF files are supported.
+Similarly, when running `casanovo sequence --evaluate` only annotated MGF files are supported.
 
 <!-- TODO: when index files can be reused, document this here -->
 
-During training, Casanovo will save a **checkpoint file** every time the validation performance is evaluated, at the `val_check_interval` frequency specified in the configuration.
+During training, Casanovo will save a **checkpoint file** every time the validation performance is evaluated, at the `val_check_interval` frequency specified in the configuration. This can be an integer number of training steps (at least 1) or a float between 0 and 1 giving a fraction of each epoch.
 Model checkpoints will be saved to the folder specified by the `--output_dir` command line option with filename format `epoch=EPOCH-step=STEP.ckpt`, with `EPOCH` the epoch and `STEP` the training step at which the checkpoint was taken, helping you track progress and select the best model based on validation performance.
 
 <!-- TODO: when checkpointing is made more flexible, update this information -->
