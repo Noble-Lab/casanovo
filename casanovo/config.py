@@ -77,7 +77,17 @@ class Config:
     ```
     """
 
-    _default_config = Path(__file__).parent / "config.yaml"
+    _config_dir = Path(__file__).parent
+    _default_config = _config_dir / "config.yaml"
+
+    _canonical_configs = {
+        "orbitrap": _default_config,
+        **{
+            path.stem.removeprefix("config_"): path
+            for path in _config_dir.glob("config_*.yaml")
+        },
+    }
+
     _config_types = dict(
         precursor_mass_tol=float,
         isotope_error_range=lambda min_max: (int(min_max[0]), int(min_max[1])),
@@ -144,6 +154,9 @@ class Config:
         if config_file is None:
             self._user_config = {}
         else:
+            if not Path(config_file).is_file():
+                config_file = self._resolve_config(config_file)
+
             with Path(config_file).open(encoding="utf-8") as f_in:
                 self._user_config = yaml.safe_load(f_in)
                 if self._user_config is None:
@@ -245,3 +258,14 @@ class Config:
             The output file.
         """
         shutil.copyfile(cls._default_config, output)
+
+    def _resolve_config(self, config_selector: str) -> Path:
+        if config_selector not in self._canonical_configs:
+            logger.warning(
+                "No bundled config found for model '%s'; using default "
+                "config.",
+                config_selector,
+            )
+        return self._canonical_configs.get(
+            config_selector, self._default_config
+        )
