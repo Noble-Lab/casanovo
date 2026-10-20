@@ -17,10 +17,15 @@ from depthcharge.tokenizers import PeptideTokenizer
 from .. import config
 from ..data import ms_io, psm
 from ..data.db_utils import PROTON
-from ..denovo.transformers import PeptideDecoder, SpectrumEncoder
+from ..denovo.transformers import (
+    PeptideDecoder,
+    SpectrumEncoder,
+    AugmentedPeakEncoder,
+    AugmentedSpectrumEncoder,
+)
 from . import evaluate
 
-logger = logging.getLogger("casanovo")
+logger = logging.getLogger(__name__)
 
 
 class Spec2Pep(pl.LightningModule):
@@ -112,7 +117,6 @@ class Spec2Pep(pl.LightningModule):
     ):
         super().__init__()
         self.save_hyperparameters()
-
         self.tokenizer = tokenizer or PeptideTokenizer()
         self.vocab_size = len(self.tokenizer) + 1
         # Build the model.
@@ -123,6 +127,7 @@ class Spec2Pep(pl.LightningModule):
             n_layers=n_layers,
             dropout=dropout,
         )
+
         self.decoder = PeptideDecoder(
             n_tokens=self.tokenizer,
             d_model=dim_model,
@@ -241,14 +246,19 @@ class Spec2Pep(pl.LightningModule):
             score, the amino acid scores, and the predicted peptide
             sequence.
         """
-        mzs, ints, precursors, _ = self._process_batch(batch)
-        return self.beam_search_decode(mzs, ints, precursors)
+        mzs, ints, precursors, _, extra = self._process_batch(batch)
+        return self.beam_search_decode(mzs, ints, precursors, extra)
+
+    def _call_encoder(self, mzs, intensities, extra):
+        """Small helper method to wrap the encoder call"""
+        return self.encoder(mzs, intensities)
 
     def beam_search_decode(
         self,
         mzs: torch.Tensor,
         intensities: torch.Tensor,
         precursors: torch.Tensor,
+        extra: dict = None,
     ) -> List[List[Tuple[float, np.ndarray, str]]]:
         """
         Beam search decoding of the spectrum predictions.
@@ -279,7 +289,7 @@ class Spec2Pep(pl.LightningModule):
             score, the amino acid scores, and the predicted peptide
             sequence.
         """
-        memories, mem_masks = self.encoder(mzs, intensities)
+        memories, mem_masks = self._call_encoder(mzs, intensities, extra)
 
         # Get device from self for consistent placement
         device = self.device
@@ -826,7 +836,19 @@ class Spec2Pep(pl.LightningModule):
         intensities = batch["intensity_array"]
         seqs = batch.get("seq")
 
-        return mzs, intensities, precursors, seqs
+        extra = {}
+
+        for key, value in batch.items():
+            if key not in {
+                "mz_array",
+                "intensity_array",
+                "precursor_mz",
+                "precursor_charge",
+                "seq",
+            }:
+                extra[key] = value
+
+        return mzs, intensities, precursors, seqs, extra
 
     def _forward_step(
         self,
@@ -851,8 +873,8 @@ class Spec2Pep(pl.LightningModule):
         tokens : torch.Tensor of shape (n_spectra, length)
             The predicted tokens for each spectrum.
         """
-        mzs, ints, precursors, tokens = self._process_batch(batch)
-        memories, mem_masks = self.encoder(mzs, ints)
+        mzs, ints, precursors, tokens, extra = self._process_batch(batch)
+        memories, mem_masks = self._call_encoder(mzs, ints, extra)
         scores = self.decoder(
             tokens=tokens,
             memory=memories,
@@ -1187,6 +1209,571 @@ class Spec2Pep(pl.LightningModule):
         return [optimizer], {"scheduler": lr_scheduler, "interval": "step"}
 
 
+class AugmentedSpec2Pep(Spec2Pep):
+    """
+    A Transformer model for DIA de novo peptide sequencing.
+
+    Use this model in conjunction with a pytorch-lightning Trainer.
+
+    Parameters
+    ----------
+    dim_model : int
+        The latent dimensionality used by the transformer model.
+    n_head : int
+        The number of attention heads in each layer. ``dim_model`` must
+        be divisible by ``n_head``.
+    dim_feedforward : int
+        The dimensionality of the fully connected layers in the
+        transformer model.
+    n_layers : int
+        The number of transformer layers.
+    dropout : float
+        The dropout probability for all layers.
+    dim_intensity : Optional[int]
+        The number of features to use for encoding peak intensity. The
+        remaining (``dim_model - dim_intensity``) are reserved for
+        encoding the m/z value. If ``None``, the intensity will be
+        projected up to ``dim_model`` using a linear layer, then summed
+        with the m/z encoding for each peak.
+    max_peptide_len : int
+        The maximum peptide length to decode.
+    residues : str | Dict[str, float]
+        The amino acid dictionary and their masses. By default
+        ("canonical") this is only the 20 canonical amino acids, with
+        cysteine carbamidomethylated. If "massivekb", this dictionary
+        will include the modifications found in MassIVE-KB.
+        Additionally, a dictionary can be used to specify a custom
+        collection of amino acids and masses.
+    max_charge : int
+        The maximum precursor charge to consider.
+    min_peptide_len : int
+        The minimum length of predicted peptides.
+    n_beams : int
+        Number of beams used during beam search decoding.
+    top_match : int
+        Number of PSMs to return for each spectrum.
+    n_log : int
+        The number of epochs to wait between logging messages.
+    train_label_smoothing : float
+        Smoothing factor when calculating the training loss.
+    warmup_iters : int
+        The number of iterations for the linear warm-up of the learning
+        rate.
+    cosine_schedule_period_iters : int
+        The number of iterations for the cosine half period of the
+        learning rate.
+    out_writer : ms_io.MztabWriter | None
+        The output writer for the prediction results.
+    calculate_precision : bool
+        Calculate the validation set precision during training.
+        This is expensive.
+    tokenizer: PeptideTokenizer | None
+        Tokenizer object to process peptide sequences.
+    frag_class_weights: int | float
+        How much the fragment class weighs more than the non-fragment class
+        in the auxiliary classification task
+    frag_weight: int | float
+        How much to weight the auxiliary task in computing the loss
+    **kwargs : Dict
+        Additional keyword arguments passed to the Adam optimizer.
+    """
+
+    def __init__(
+        self,
+        dim_model: int = 512,
+        n_head: int = 8,
+        dim_feedforward: int = 1024,
+        n_layers: int = 9,
+        dropout: float = 0.0,
+        max_peptide_len: int = 100,
+        residues: str | Dict[str, float] = "canonical",
+        max_charge: int = 5,
+        min_peptide_len: int = 6,
+        n_beams: int = 1,
+        top_match: int = 1,
+        n_log: int = 10,
+        train_label_smoothing: float = 0.01,
+        warmup_iters: int = 100_000,
+        cosine_schedule_period_iters: int = 600_000,
+        out_writer: Optional[ms_io.MztabWriter] = None,
+        calculate_precision: bool = False,
+        tokenizer: PeptideTokenizer | None = None,
+        frag_class_weights: float = 20,
+        frag_weight: float = 1e-3,
+        **kwargs: Dict,
+    ):
+        super().__init__(
+            dim_model=dim_model,
+            n_head=n_head,
+            dim_feedforward=dim_feedforward,
+            n_layers=n_layers,
+            dropout=dropout,
+            max_peptide_len=max_peptide_len,
+            residues=residues,
+            max_charge=max_charge,
+            min_peptide_len=min_peptide_len,
+            n_beams=n_beams,
+            top_match=top_match,
+            n_log=n_log,
+            train_label_smoothing=train_label_smoothing,
+            warmup_iters=warmup_iters,
+            cosine_schedule_period_iters=cosine_schedule_period_iters,
+            out_writer=out_writer,
+            calculate_precision=calculate_precision,
+            tokenizer=tokenizer,
+            **kwargs,
+        )
+
+        self.encoder = AugmentedSpectrumEncoder(
+            d_model=dim_model,
+            n_head=n_head,
+            dim_feedforward=dim_feedforward,
+            n_layers=n_layers,
+            dropout=dropout,
+            peak_encoder=AugmentedPeakEncoder(dim_model),
+        )
+
+        self.frag_layer = torch.nn.Linear(dim_model, 2)
+
+        self.register_buffer(
+            "frag_class_weights_tensor",
+            torch.tensor([1.0, frag_class_weights]),
+        )
+
+        self.fragCELoss = torch.nn.CrossEntropyLoss(
+            weight=self.frag_class_weights_tensor,
+            label_smoothing=train_label_smoothing,
+        )
+
+        self.frag_weight = frag_weight
+
+    def _call_encoder(self, mzs, ints, extra):
+        """Small helper method to call the encoder"""
+        return self.encoder(
+            mzs, ints, extra["scan_window_array"], extra["ms_array"]
+        )
+
+    def _forward_step(
+        self,
+        batch: Dict[str, torch.Tensor],
+    ):
+        """
+        The forward learning step.
+
+        Parameters
+        ----------
+        batch : Dict[str, torch.Tensor]
+            A batch from the SpectrumDataset, which contains keys:
+            ``mz_array``, ``intensity_array``, ``precursor_mz``,
+            ``precursor_charge``, ``scan_window_array``, and ``ms_array``
+            each pointing to tensors with the
+            corresponding data. The ``seq`` key is optional and
+            contains the peptide sequences for training.
+
+        Returns
+        -------
+        scores : torch.Tensor of shape (n_spectra, length, n_amino_acids)
+            The individual amino acid scores for each prediction.
+        tokens : torch.Tensor of shape (n_spectra, length)
+            The predicted tokens for each spectrum.
+        """
+        mzs, ints, precursors, tokens, extra = self._process_batch(batch)
+
+        memories, mem_masks = self._call_encoder(mzs, ints, extra)
+
+        pred_frag = self.frag_layer(memories)
+
+        scores = self.decoder(
+            tokens=tokens,
+            memory=memories,
+            memory_key_padding_mask=mem_masks,
+            precursors=precursors,
+        )
+
+        return scores, tokens, pred_frag, extra["frag_labels"]
+
+    def training_step(
+        self,
+        batch: Dict[str, torch.Tensor],
+        *args,
+    ) -> torch.Tensor:
+        """
+        A single training step.
+
+        Parameters
+        ----------
+        batch : Dict[str, torch.Tensor]
+            A batch from the SpectrumDataset, which contains keys:
+            ``mz_array``, ``intensity_array``, ``precursor_mz``,
+            ``precursor_charge``, ``scan_window_array``, and ``ms_array``
+            each pointing to tensors with the
+            corresponding data. The ``seq`` key is optional and
+            contains the peptide sequences for training.
+
+        Returns
+        -------
+        torch.Tensor
+            The loss of the training step.
+        """
+        scores, tokens, pred_frag, frag_labels = self._forward_step(batch)
+
+        # Peptide loss
+        pred = scores[:, :-1, :].reshape(-1, self.vocab_size)
+        peptide_loss = self.celoss(pred, tokens.flatten())
+
+        # Fragment loss
+        pred_frag = pred_frag[:, 1:, :].reshape(-1, 2)
+        frag_labels = frag_labels.reshape(-1).long()
+
+        frag_loss = self.frag_weight * self.fragCELoss(
+            pred_frag,
+            frag_labels,
+        )
+
+        loss = peptide_loss + frag_loss
+
+        self.log(
+            "train_CELoss",
+            peptide_loss.detach(),
+            on_step=False,
+            on_epoch=True,
+            sync_dist=True,
+        )
+
+        self.log(
+            "train_FragLoss",
+            frag_loss.detach(),
+            on_step=False,
+            on_epoch=True,
+            sync_dist=True,
+        )
+
+        self.log(
+            "train_FragAcc",
+            (torch.argmax(pred_frag, dim=1) == frag_labels)
+            .float()
+            .mean()
+            .detach(),
+            on_step=False,
+            on_epoch=True,
+            sync_dist=True,
+        )
+
+        self.log(
+            "train_loss",
+            loss.detach(),
+            on_step=False,
+            on_epoch=True,
+            sync_dist=True,
+        )
+
+        return loss
+
+    def validation_step(
+        self,
+        batch: Dict[str, torch.Tensor],
+        batch_idx: int,
+        dataloader_idx: int = 0,
+    ) -> torch.Tensor:
+        """
+        A single validation step.
+
+        Parameters
+        ----------
+        batch : Dict[str, torch.Tensor]
+            A batch from the SpectrumDataset, which contains keys:
+            ``mz_array``, ``intensity_array``, ``precursor_mz``,
+            ``precursor_charge``, ``scan_window_array``, and ``ms_array``
+            each pointing to tensors with the
+            corresponding data. The ``seq`` key is optional and
+            contains the peptide sequences for training.
+        batch_idx : int
+            Index of the current batch within its dataloader.
+        dataloader_idx : int
+            Index of the dataloader this batch comes from. Dataloaders
+            0..n_main_loaders-1 are "main" validation files that contribute
+            to the aggregate ``valid_CELoss`` used for checkpoint selection.
+            Higher indices are "tracking" files logged per-file only.
+
+        Returns
+        -------
+        torch.Tensor
+            The loss of the validation step.
+        """
+        pred, truth, pred_frag, frag_labels = self._forward_step(batch)
+
+        pred = pred[:, :-1, :].reshape(-1, self.vocab_size)
+        celoss = self.val_celoss(pred, truth.flatten())
+
+        pred_frag = pred_frag[:, 1:, :].reshape(-1, 2)
+        frag_labels = frag_labels.reshape(-1).long()
+
+        frag_loss = self.frag_weight * self.fragCELoss(
+            pred_frag,
+            frag_labels,
+        )
+
+        loss = celoss + frag_loss
+
+        batch_size = pred.shape[0]
+        log_kwargs = dict(
+            add_dataloader_idx=False,
+            on_step=False,
+            on_epoch=True,
+            sync_dist=True,
+            batch_size=batch_size,
+        )
+
+        # Determine per-file stem and main/tracking classification.
+        n_main = self.n_main_loaders if self.n_main_loaders > 0 else 1
+        is_main = dataloader_idx < n_main
+
+        if self.val_stems and dataloader_idx < len(self.val_stems):
+            stem = self.val_stems[dataloader_idx]
+
+            self.log(
+                f"valid_CELoss/{stem}",
+                celoss.detach(),
+                **log_kwargs,
+            )
+
+            self.log(
+                f"valid_FragLoss/{stem}",
+                frag_loss.detach(),
+                **log_kwargs,
+            )
+
+        if is_main:
+            self.log(
+                "valid_CELoss",
+                celoss.detach(),
+                **log_kwargs,
+            )
+
+            self.log(
+                "valid_FragLoss",
+                frag_loss.detach(),
+                **log_kwargs,
+            )
+
+            self.log(
+                "valid_loss",
+                loss.detach(),
+                **log_kwargs,
+            )
+
+            self.log(
+                "valid_FragAcc",
+                (torch.argmax(pred_frag, dim=1) == frag_labels)
+                .float()
+                .mean()
+                .detach(),
+                **log_kwargs,
+            )
+
+        if not self.calculate_precision or not is_main:
+            return loss
+
+        # Calculate and log amino acid and peptide match evaluation
+        # metrics from the predicted peptides (main files only).
+        peptides_true = self.tokenizer.detokenize(batch["seq"])
+        peptides_pred = [
+            pred
+            for spectrum_preds in self.forward(batch)
+            for _, _, pred in spectrum_preds
+        ]
+        aa_precision, _, pep_precision = evaluate.aa_match_metrics(
+            *evaluate.aa_match_batch(
+                peptides_true,
+                peptides_pred,
+                self.tokenizer.residues,
+            )
+        )
+
+        batch_size = len(peptides_true)
+        log_args = dict(
+            add_dataloader_idx=False,
+            on_step=False,
+            on_epoch=True,
+            sync_dist=True,
+        )
+
+        self.log(
+            "pep_precision",
+            pep_precision,
+            **log_args,
+            batch_size=batch_size,
+        )
+
+        self.log(
+            "aa_precision",
+            aa_precision,
+            **log_args,
+            batch_size=batch_size,
+        )
+
+        return loss
+
+    def on_train_epoch_end(self) -> None:
+        """
+        Log the training losses and fragment accuracy at the end of each epoch.
+        """
+        callback_metrics = self.trainer.callback_metrics
+
+        metrics = {
+            "step": self.trainer.global_step,
+            "train_peptide": np.nan,
+            "train_frag": np.nan,
+            "train": np.nan,
+            "train_frag_acc": np.nan,
+        }
+
+        if "train_CELoss" in callback_metrics:
+            metrics["train_peptide"] = (
+                callback_metrics["train_CELoss"].detach().item()
+            )
+
+        if "train_FragLoss" in callback_metrics:
+            metrics["train_frag"] = (
+                callback_metrics["train_FragLoss"].detach().item()
+            )
+
+        if "train_loss" in callback_metrics:
+            metrics["train"] = callback_metrics["train_loss"].detach().item()
+
+        if "train_FragAcc" in callback_metrics:
+            metrics["train_frag_acc"] = (
+                callback_metrics["train_FragAcc"].detach().item()
+            )
+
+        self._history.append(metrics)
+        self._log_history()
+
+    def on_validation_epoch_end(self) -> None:
+        """
+        Log the validation metrics at the end of each epoch.
+        """
+        callback_metrics = self.trainer.callback_metrics
+
+        metrics = {
+            "step": self.trainer.global_step,
+            "valid": np.nan,
+            "valid_peptide": np.nan,
+            "valid_frag": np.nan,
+            "valid_frag_acc": np.nan,
+        }
+
+        if "valid_CELoss" in callback_metrics:
+            metrics["valid_peptide"] = (
+                callback_metrics["valid_CELoss"].detach().item()
+            )
+
+        if "valid_FragLoss" in callback_metrics:
+            metrics["valid_frag"] = (
+                callback_metrics["valid_FragLoss"].detach().item()
+            )
+
+        if "valid_loss" in callback_metrics:
+            metrics["valid"] = callback_metrics["valid_loss"].detach().item()
+
+        if "valid_FragAcc" in callback_metrics:
+            metrics["valid_frag_acc"] = (
+                callback_metrics["valid_FragAcc"].detach().item()
+            )
+
+        # Per-validation-file losses.
+        for stem in self.val_stems:
+            ce_key = f"valid_CELoss/{stem}"
+            frag_key = f"valid_FragLoss/{stem}"
+
+            if ce_key in callback_metrics:
+                metrics[f"valid/{stem}"] = (
+                    callback_metrics[ce_key].detach().item()
+                )
+
+            if frag_key in callback_metrics:
+                metrics[f"valid_frag/{stem}"] = (
+                    callback_metrics[frag_key].detach().item()
+                )
+
+        if self.calculate_precision:
+            if "aa_precision" in callback_metrics:
+                metrics["valid_aa_precision"] = (
+                    callback_metrics["aa_precision"].detach().item()
+                )
+
+            if "pep_precision" in callback_metrics:
+                metrics["valid_pep_precision"] = (
+                    callback_metrics["pep_precision"].detach().item()
+                )
+
+        self._history.append(metrics)
+        self._log_history()
+
+    def _log_history(self) -> None:
+        """
+        Write log to console, if requested.
+        """
+        if len(self._history) == 0:
+            return
+
+        if len(self._history) == 1:
+            header = (
+                "Step\t"
+                "Train loss\t"
+                "Train peptide\t"
+                "Train frag\t"
+                "Train frag acc\t"
+                "Valid loss\t"
+                "Valid peptide\t"
+                "Valid frag\t"
+                "Valid frag acc"
+            )
+
+            if self.calculate_precision:
+                header += "\tPeptide precision\tAA precision"
+
+            logger.info(header)
+
+        metrics = self._history[-1]
+
+        if metrics["step"] % self.n_log != 0:
+            return
+
+        msg = (
+            "%i\t"
+            "%.6f\t"
+            "%.6f\t"
+            "%.6f\t"
+            "%.6f\t"
+            "%.6f\t"
+            "%.6f\t"
+            "%.6f\t"
+            "%.6f"
+        )
+
+        vals = [
+            metrics["step"],
+            metrics.get("train", np.nan),
+            metrics.get("train_peptide", np.nan),
+            metrics.get("train_frag", np.nan),
+            metrics.get("train_frag_acc", np.nan),
+            metrics.get("valid", np.nan),
+            metrics.get("valid_peptide", np.nan),
+            metrics.get("valid_frag", np.nan),
+            metrics.get("valid_frag_acc", np.nan),
+        ]
+
+        if self.calculate_precision:
+            msg += "\t%.6f\t%.6f"
+            vals += [
+                metrics.get("valid_pep_precision", np.nan),
+                metrics.get("valid_aa_precision", np.nan),
+            ]
+
+        logger.info(msg, *vals)
+
+
 class DbSpec2Pep(Spec2Pep):
     """
     Subclass of Spec2Pep for the use of Casanovo as an MS/MS database
@@ -1277,7 +1864,7 @@ class DbSpec2Pep(Spec2Pep):
 
         with torch.inference_mode():
             # Pre-compute encoder outputs for the entire batch.
-            mzs, intensities, precursors_all, _ = self._process_batch(batch)
+            mzs, intensities, precursors_all, *_ = self._process_batch(batch)
             memories, mem_masks = self.encoder(mzs, intensities)
             enc_cache = {
                 "memory": memories,
@@ -1398,7 +1985,7 @@ class DbSpec2Pep(Spec2Pep):
 
         # Use pre-computed encoder outputs if available; otherwise compute once here.
         if enc_cache is None:
-            mzs, ints, precursors_all, _ = self._process_batch(batch)
+            mzs, ints, precursors_all, *_ = self._process_batch(batch)
             memories, mem_masks = self.encoder(mzs, ints)
         else:
             memories, mem_masks = enc_cache["memory"], enc_cache["mem_masks"]
