@@ -125,21 +125,20 @@ def train(
     force_overwrite: bool,
     load_all_states: bool,
 ) -> None:
-    """Train a Casanovo model on your own data.
+    """Train a Cascadia model on your own DIA data.
 
-    TRAIN_PEAK_PATH must be one or more annoated MGF files, such as
-    those provided by MassIVE-KB, from which to train a new Casnovo
-    model.
+    TRAIN_PEAK_PATH must be one or more mzML files. Peptide annotations
+    are read from the TSV file given by --annotation_path.
     """
 
     _is_valid_model(model, load_all_states)
 
     output_path, output_root_name = _setup_output(
-        output_dir, output_root, force_overwrite, verbosity, "casanovo"
+        output_dir, output_root, force_overwrite, verbosity, "cascadia"
     )
 
     start_time = time.time()
-    utils.log_system_info(model="Casanovo", version=__version__)
+    utils.log_system_info(model="Cascadia", version=__version__)
 
     config, model = setup_model(
         model,

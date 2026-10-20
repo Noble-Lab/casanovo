@@ -507,7 +507,9 @@ class DeNovoDataModule(pl.LightningDataModule):
                     )
 
                 if annotated:
-                    if mode == "train" or "valid" in mode:
+                    if mode == "train" or mode.startswith(
+                        ("valid", "tracking")
+                    ):
                         annotations = self._dia_annotate(base_record)
 
                         for seq, charge in annotations:
@@ -597,7 +599,7 @@ class DeNovoDataModule(pl.LightningDataModule):
         keep_idx = np.empty(len(spec.mz), dtype=int)
         j = 0
         for i, m in enumerate(spec.mz):
-            while np.isclose(sorted_mz[j], m):
+            while not np.isclose(sorted_mz[j], m):
                 j += 1
             keep_idx[i] = j
             j += 1

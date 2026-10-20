@@ -370,7 +370,7 @@ class ModelRunner:
         predict_dataloader = self.loaders.predict_dataloader()
         self.trainer.predict(self.model, predict_dataloader)
 
-        if evaluate and not self.casanovo:
+        if evaluate and self.casanovo:
             self.log_metrics(predict_dataloader)
 
     def initialize_trainer(

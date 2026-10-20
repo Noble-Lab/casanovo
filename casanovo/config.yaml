@@ -9,7 +9,7 @@
 # inference batch size, etc. will be used from those sections 
 # of the config file when running inference with Cascadia.
 ###
-# The number of adjacent scans to use when construcing augmented spectra
+# The number of adjacent scans to use when constructing augmented spectra
 width: 2
 
 ###
