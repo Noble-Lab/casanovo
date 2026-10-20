@@ -701,6 +701,7 @@ class ModelRunner:
             lance_dir=lance_dir,
             casanovo=self.casanovo,
             scan_width=self.config.width,
+            residues=self.config.residues,
         )
 
     @staticmethod

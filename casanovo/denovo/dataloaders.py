@@ -146,6 +146,7 @@ class DeNovoDataModule(pl.LightningDataModule):
         ms_level: Optional[int] = 2,
         scan_width: Optional[int] = 2,
         casanovo: Optional[int] = True,
+        residues: Optional[dict] = None,
     ):
         super().__init__()
 
@@ -155,6 +156,7 @@ class DeNovoDataModule(pl.LightningDataModule):
 
         self.lance_dir = lance_dir
         self.casanovo = casanovo
+        self.residues = residues
         self.train_paths = train_paths
         self.valid_paths = list(valid_paths or [])
         self.test_paths = test_paths
@@ -202,16 +204,16 @@ class DeNovoDataModule(pl.LightningDataModule):
             "scan_window_array",
             lambda x: x["scan_window_array"],
             pa.list_(pa.float32()),
-            pad=True,
         )
+
         self.custom_field_ms = CustomField(
-            "ms_array", lambda x: x["ms_array"], pa.list_(pa.int8()), pad=True
+            "ms_array", lambda x: x["ms_array"], pa.list_(pa.int8())
         )
+
         self.custom_field_frag = CustomField(
             "frag_labels",
             lambda x: x["frag_labels"],
             pa.list_(pa.int8()),
-            pad=True,
         )
 
         self.train_dataset = None
@@ -339,12 +341,16 @@ class DeNovoDataModule(pl.LightningDataModule):
             A PyTorch Dataset for the given peak files.
         """
         custom_fields = []
+        pad_fields = []
+
         if not self.casanovo:
             custom_fields.append(self.custom_field_scan_window)
             custom_fields.append(self.custom_field_ms)
+            pad_fields += ["scan_window_array", "ms_array"]
 
         if not self.casanovo and annotated:
             custom_fields.append(self.custom_field_frag)
+            pad_fields.append("frag_labels")
 
         if annotated:
             custom_fields.append(self.custom_field_anno)
@@ -363,7 +369,8 @@ class DeNovoDataModule(pl.LightningDataModule):
                 self.train_batch_size
                 if mode == "train"
                 else self.eval_batch_size
-            )
+            ),
+            pad_fields=pad_fields,
         )
         anno_dataset_params = dataset_params | dict(
             tokenizer=self.tokenizer,
@@ -388,7 +395,7 @@ class DeNovoDataModule(pl.LightningDataModule):
                 spectra=paths,
                 path=lance_path,
                 parse_kwargs=parse_params,
-                **params,
+                **params,  # pad_fields now travels with the rest
             )
 
         if shuffle:
@@ -513,6 +520,9 @@ class DeNovoDataModule(pl.LightningDataModule):
                             if record is None:
                                 continue
 
+                            tokenizer = PeptideTokenizer(
+                                residues=self.residues
+                            )
                             coverage, frag_labels = self._annotate_fragments(
                                 record
                             )
@@ -552,60 +562,6 @@ class DeNovoDataModule(pl.LightningDataModule):
                 )
 
         return plr.DataFrame(overall_records)
-
-    def _passes_fragment_coverage(self, record, min_fragment_coverage):
-        """Check whether a spectrum has sufficient b/y fragment-ion coverage.
-
-        Coverage is the fraction of theoretical b/y fragment ions at +1 and +2
-        charge states that have a matching experimental peak.
-
-        Parameters
-        ----------
-        record : dict
-            Spectrum record containing ``mz_array`` and ``seq``.
-        min_coverage : float
-            Minimum required theoretical-ion coverage.
-
-        Returns
-        -------
-        bool
-            Whether the spectrum meets the coverage requirement.
-        """
-        spec = sus.MsmsSpectrum(
-            mz=record["mz_array"],
-            identifier=str(record["scan_id"]),
-            intensity=record["intensity_array"],
-            retention_time=record.get("retention_time"),
-            precursor_mz=record.get("precursor_mz"),
-            precursor_charge=record.get("precursor_charge"),
-        )
-
-        spec.annotate_proforma(
-            record["seq"],
-            0.05,
-            "Da",
-            ion_types="by",
-            max_ion_charge=2,
-        )
-
-        observed_ions = set()
-
-        for annotation in spec.annotation:
-            if annotation is None:
-                continue
-
-            for ion in annotation:
-                observed_ions.add(str(ion))
-
-        # A peptide of length L has L-1 cleavage positions.
-        # For b/y ions at +1 and +2:
-        #   2 ion types × 2 charges × (L - 1)
-        peptide_length = len(record["seq"])
-        theoretical_ions = 4 * (peptide_length - 1)
-
-        coverage = len(observed_ions) / theoretical_ions
-
-        return coverage >= min_fragment_coverage
 
     def _apply_preprocessing(self, base_record):
         """Run self.preprocessing_fn on a DIA record. Returns the updated
@@ -652,68 +608,76 @@ class DeNovoDataModule(pl.LightningDataModule):
         base_record["ms_array"] = sorted_ms_level[keep_idx]
         return base_record
 
-    def _annotate_fragments(self, record):
-        t0 = time.perf_counter()
-
-        spec = sus.MsmsSpectrum(
-            mz=record["mz_array"],
-            intensity=record["intensity_array"],
-            retention_time=record.get("retention_time"),
-            precursor_mz=record.get("precursor_mz"),
-            precursor_charge=record.get("precursor_charge"),
-            identifier=str(record["scan_id"]),
+    def _near(self, queries, sorted_ref, tol):
+        """For each query value, is any value in sorted_ref within tol?"""
+        if len(sorted_ref) == 0:
+            return np.zeros(len(queries), dtype=bool)
+        idx = np.searchsorted(sorted_ref, queries)
+        left = sorted_ref[np.clip(idx - 1, 0, len(sorted_ref) - 1)]
+        right = sorted_ref[np.clip(idx, 0, len(sorted_ref) - 1)]
+        return (np.abs(queries - left) <= tol) | (
+            np.abs(queries - right) <= tol
         )
 
-        t1 = time.perf_counter()
+    def _annotate_fragments(self, record, tol=0.05):
+        """Annotates the fragments, applying a fixed tolerance of 0.05 Da"""
 
-        spec.annotate_proforma(
-            record["seq"],
-            0.05,
-            "Da",
-            ion_types="by",
-            max_ion_charge=2,
-        )
+        peaks = np.asarray(record["mz_array"], dtype=np.float64)
 
-        t2 = time.perf_counter()
+        tokens = self.tokenizer.split(record["seq"])
+        if (
+            self.tokenizer.reverse
+        ):  # split() returns C->N order when reverse=True
+            tokens = tokens[::-1]
 
-        annotations = spec.annotation
+        # Separate terminal mods from residues; get per-residue mass deltas
+        nterm_delta, cterm_delta = 0.0, 0.0
+        bases, deltas = [], []
+        for tok in tokens:
+            if tok.endswith("-"):  # N-terminal mod, e.g. "[Acetyl]-"
+                nterm_delta += self.residues[tok]
+            elif tok.startswith("-"):  # C-terminal mod, e.g. "-[Amidated]"
+                cterm_delta += self.residues[tok]
+            else:
+                base = tok[0]
+                bases.append(base)
+                deltas.append(self.residues[tok] - self.residues[base])
 
-        frag_labels = np.zeros(len(annotations), dtype=np.int8)
-        observed_ions = set()
+        n = len(bases)
+        cum = np.cumsum(deltas)  # cum[i-1] = mod mass in first i residues
+        total = cum[-1] if n else 0.0
 
-        for i, annotation in enumerate(annotations):
-            if annotation is None:
-                continue
+        # Theoretical b/y ions at charge 1 and 2 via fast_mass
+        theo = {1: [], 2: []}
+        for i in range(1, n):
+            b_seq, y_seq = "".join(bases[:i]), "".join(bases[i:])
+            b_delta = nterm_delta + cum[i - 1]  # N-term mod rides on b ions
+            y_delta = (
+                total - cum[i - 1]
+            ) + cterm_delta  # C-term mod rides on y ions
+            for z in (1, 2):
+                theo[z].append(
+                    pyteomics.mass.fast_mass(b_seq, ion_type="b", charge=z)
+                    + b_delta / z
+                )
+                theo[z].append(
+                    pyteomics.mass.fast_mass(y_seq, ion_type="y", charge=z)
+                    + y_delta / z
+                )
 
-            has_charge_one = False
+        # Per-peak label: 1 if the peak matches any charge-1 b/y ion
+        frag_labels = self._near(
+            peaks, np.sort(np.array(theo[1])), tol
+        ).astype(np.int8)
 
-            for ion in annotation:
-                if ion.charge in (1, 2):
-                    observed_ions.add(str(ion))
+        # Coverage: fraction of the 4 * (n - 1) theoretical ions with a peak within tol
+        theoretical_ions = 4 * (n - 1)
+        if theoretical_ions <= 0 or len(peaks) == 0:
+            return 0.0, frag_labels
 
-                if ion.charge == 1:
-                    has_charge_one = True
-
-            if has_charge_one:
-                frag_labels[i] = 1
-
-        t3 = time.perf_counter()
-
-        peptide_length = len(record["seq"])
-        theoretical_ions = 4 * (peptide_length - 1)
-
-        coverage = (
-            len(observed_ions) / theoretical_ions if theoretical_ions else 0.0
-        )
-
-        print(
-            f"build={t1-t0:.4f}s "
-            f"annotate={t2-t1:.4f}s "
-            f"parse={t3-t2:.4f}s",
-            flush=True,
-        )
-
-        return coverage, frag_labels
+        all_theo = np.array(theo[1] + theo[2])
+        observed = self._near(all_theo, np.sort(peaks), tol).sum()
+        return observed / theoretical_ions, frag_labels
 
     def _dia_annotate(self, record):
         """Find peptide annotations matching a DIA spectrum."""
