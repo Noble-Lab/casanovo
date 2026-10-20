@@ -45,7 +45,7 @@ def _build_mgf_scan_index(mgf_path: str) -> Iterator[tuple[str, str]]:
     """
     index, current_scan, in_ions = 0, None, False
     try:
-        with open(mgf_path, errors="replace") as fh:
+        with open(mgf_path, encoding="utf-8", errors="replace") as fh:
             for line in fh:
                 upper = line.strip().upper()
                 if upper == _MGF_BEGIN:

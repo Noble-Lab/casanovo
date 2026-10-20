@@ -149,7 +149,7 @@ class ModelRunner:
             config_filename=self.config.file,
         )
         self.writer.set_database(str(fasta_path))
-        self.initialize_trainer(train=True)
+        self.initialize_trainer(train=True, enable_progress_bar=False)
         self.initialize_tokenizer()
         self.initialize_model(train=False, db_search=True)
         self.model.out_writer = self.writer
@@ -354,7 +354,9 @@ class ModelRunner:
         if evaluate:
             self.log_metrics(predict_dataloader)
 
-    def initialize_trainer(self, train: bool) -> None:
+    def initialize_trainer(
+        self, train: bool, *, enable_progress_bar: bool = True
+    ) -> None:
         """
         Initialize the Pytorch Lightning Trainer.
 
@@ -363,6 +365,9 @@ class ModelRunner:
         train : bool
             Determines whether to set the trainer up for model training
             or evaluation / inference.
+        enable_progress_bar : bool
+            Whether to show Lightning's progress bar. Disabled for database
+            search, which shows its own "Scoring candidates" bar.
         """
         trainer_cfg = dict(
             accelerator=self.config.accelerator,
@@ -370,6 +375,7 @@ class ModelRunner:
             enable_checkpointing=False,
             precision=self.config.precision,
             logger=False,
+            enable_progress_bar=enable_progress_bar,
         )
 
         if train:
@@ -421,16 +427,21 @@ class ModelRunner:
                             ),
                         )
 
+            # A float val_check_interval requires an epoch-based cadence.
+            val_check_interval = self.config.val_check_interval
+            check_val_every_n_epoch = (
+                1 if isinstance(val_check_interval, float) else None
+            )
             additional_cfg = dict(
                 devices=devices,
-                val_check_interval=self.config.val_check_interval,
+                val_check_interval=val_check_interval,
                 max_epochs=self.config.max_epochs,
                 num_sanity_val_steps=self.config.num_sanity_val_steps,
                 accumulate_grad_batches=self.config.accumulate_grad_batches,
                 gradient_clip_val=self.config.gradient_clip_val,
                 gradient_clip_algorithm=self.config.gradient_clip_algorithm,
                 callbacks=self.callbacks,
-                check_val_every_n_epoch=None,
+                check_val_every_n_epoch=check_val_every_n_epoch,
                 enable_checkpointing=True,
                 logger=loggers,
                 strategy=self._get_strategy(),

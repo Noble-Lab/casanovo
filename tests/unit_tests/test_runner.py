@@ -104,7 +104,9 @@ def test_initialize_model(tmp_path, mgf_small):
         runner.initialize_model(train=False)
 
 
-def test_db_search_no_model_raises(tiny_config_db, mgf_small, tiny_fasta_file):
+def test_db_search_no_model_raises(
+    tiny_config_db, mgf_small, tiny_fasta_file, tmp_path
+):
     """DB search must require an explicit model file."""
     config = Config(tiny_config_db)
     with (
@@ -113,7 +115,11 @@ def test_db_search_no_model_raises(tiny_config_db, mgf_small, tiny_fasta_file):
             ValueError, match="A model file must be provided for DB search"
         ),
     ):
-        runner.db_search((str(mgf_small),), str(tiny_fasta_file), "test.mztab")
+        runner.db_search(
+            (str(mgf_small),),
+            str(tiny_fasta_file),
+            str(tmp_path / "test.mztab"),
+        )
 
 
 def test_save_and_load_weights(tmp_path, mgf_small, tiny_config):
@@ -282,6 +288,27 @@ def test_save_final_model(tmp_path, mgf_small, tiny_config):
 
     assert model_file.exists()
     assert validation_file.exists()
+
+
+def test_val_check_interval_float(tmp_path, tiny_config):
+    """A float val_check_interval builds a valid trainer (#627)."""
+    config = Config(tiny_config)
+
+    config.val_check_interval = 0.5
+    with ModelRunner(
+        config, output_dir=tmp_path, overwrite_ckpt_check=False
+    ) as runner:
+        runner.initialize_trainer(train=True)
+        assert runner.trainer.val_check_interval == 0.5
+        assert runner.trainer.check_val_every_n_epoch == 1
+
+    config.val_check_interval = 50
+    with ModelRunner(
+        config, output_dir=tmp_path, overwrite_ckpt_check=False
+    ) as runner:
+        runner.initialize_trainer(train=True)
+        assert runner.trainer.val_check_interval == 50
+        assert runner.trainer.check_val_every_n_epoch is None
 
 
 def test_evaluate_success(tmp_path, mgf_small, tiny_config):
@@ -937,3 +964,19 @@ def test_initialize_model_with_new_token_init_passes_validate(
         mock_validate.assert_called_once()
 
     assert runner.model.vocab_size == orig_n + 1
+
+
+def test_initialize_trainer_progress_bar(tmp_path, tiny_config):
+    """db_search hides Lightning's progress bar (#655)."""
+    config = Config(tiny_config)
+    with ModelRunner(
+        config, output_dir=tmp_path, overwrite_ckpt_check=False
+    ) as runner:
+        runner.initialize_trainer(train=True)
+        assert runner.trainer.progress_bar_callback is not None
+
+    with ModelRunner(
+        config, output_dir=tmp_path, overwrite_ckpt_check=False
+    ) as runner:
+        runner.initialize_trainer(train=True, enable_progress_bar=False)
+        assert runner.trainer.progress_bar_callback is None

@@ -1,7 +1,7 @@
 """A de novo peptide sequencing model."""
 
 import collections
-import heapq
+import inspect
 import itertools
 import logging
 import warnings
@@ -89,7 +89,8 @@ class Spec2Pep(pl.LightningModule):
     tokenizer: PeptideTokenizer | None
         Tokenizer object to process peptide sequences.
     **kwargs : Dict
-        Additional keyword arguments passed to the Adam optimizer.
+        Additional keyword arguments passed to the Adam optimizer. Only
+        valid Adam parameters are retained; any other values are ignored.
     """
 
     def __init__(
@@ -154,7 +155,10 @@ class Spec2Pep(pl.LightningModule):
                 f"Deprecated hyperparameter '{k}' removed from the model.",
                 DeprecationWarning,
             )
-        self.opt_kwargs = kwargs
+        # Keep only valid Adam arguments; other configuration values
+        # (e.g. loaded from a checkpoint) must not reach the optimizer.
+        adam_kwargs = set(inspect.signature(torch.optim.Adam).parameters)
+        self.opt_kwargs = {k: v for k, v in kwargs.items() if k in adam_kwargs}
 
         # Data properties.
         self.max_peptide_len = max_peptide_len
@@ -168,6 +172,8 @@ class Spec2Pep(pl.LightningModule):
         self.calculate_precision = calculate_precision
         self.n_log = n_log
         self._history = []
+        # Count of spectra for which beam search returned no valid peptide.
+        self.n_missing_predictions = 0
         # Per-file validation metadata; set by ModelRunner.train() before fit.
         self.val_stems: list = []
         self.n_main_loaders: int = 0
@@ -306,8 +312,20 @@ class Spec2Pep(pl.LightningModule):
             batch, length, beam, dtype=torch.int64, device=device
         )
 
-        # Create cache for decoded beams.
-        pred_cache = collections.OrderedDict((i, []) for i in range(batch))
+        # Create cache for decoded beams. cache_tokens uses int32 to reduce
+        # memory footprint; it is cast to int64 before detokenization.
+        cache_tokens = torch.full(
+            (batch, beam, length, length),
+            0,
+            dtype=torch.int32,
+            device=device,
+        )
+        cache_scores = torch.full(
+            (batch, beam, length, length),
+            0.0,
+            dtype=scores.dtype,
+            device=device,
+        )
 
         # Get the first prediction.
         pred = self.decoder(
@@ -343,14 +361,14 @@ class Spec2Pep(pl.LightningModule):
                 # Cache peptide predictions from the finished beams (but not
                 # the discarded beams).
                 beams_to_cache = finished_beams & ~discarded_beams
-                if torch.any(beams_to_cache):
-                    self._cache_finished_beams(
-                        tokens,
-                        scores,
-                        step,
-                        beams_to_cache,
-                        pred_cache,
-                    )
+                self._cache_finished_beams(
+                    tokens,
+                    scores,
+                    step,
+                    beams_to_cache,
+                    cache_tokens,
+                    cache_scores,
+                )
 
                 # Stop decoding when all current beams have been finished.
                 # Continue with beams that have not been finished and not
@@ -390,7 +408,7 @@ class Spec2Pep(pl.LightningModule):
 
         # Return the peptide with the highest confidence score, within
         # the precursor m/z tolerance if possible.
-        return list(self._get_top_peptide(pred_cache))
+        return list(self._get_top_peptide(cache_tokens, cache_scores))
 
     def _finish_beams(
         self,
@@ -443,8 +461,10 @@ class Spec2Pep(pl.LightningModule):
         )
         discarded_beams[current_tokens == 0] = True
 
-        # Discard beams with invalid modification combinations
-        if step > 1:
+        # Discard beams with invalid modification combinations. At step 0 the
+        # single token is at the position where an N-terminal modification is
+        # allowed under either token order, so the check starts at step 1.
+        if step > 0:
             final_pos = torch.full((batch_size,), step, device=device)
             final_pos[ends_stop_token] = step - 1
 
@@ -462,8 +482,11 @@ class Spec2Pep(pl.LightningModule):
                 # This will fail to catch internal modifications in some cases
                 # where there are multiple mods, but these are already discarded
                 # by the previous check.
+                # A reversed tokenizer emits the C-terminus first, so a valid
+                # N-terminal modification is the *last* token generated; an
+                # unreversed tokenizer emits it first.
                 n_terminal_pos = (
-                    0 if self.tokenizer.reverse else final_pos[has_n_term]
+                    final_pos[has_n_term] if self.tokenizer.reverse else 0
                 )
                 internal_mods = ~token_is_nterm[has_n_term, n_terminal_pos]
 
@@ -486,19 +509,21 @@ class Spec2Pep(pl.LightningModule):
         scores: torch.Tensor,
         step: int,
         beams_to_cache: torch.Tensor,
-        pred_cache: Dict[
-            int, List[Tuple[float, float, np.ndarray, torch.Tensor]]
-        ],
-    ):
+        cache_tokens: torch.Tensor,
+        cache_scores: torch.Tensor,
+    ) -> None:
         """
-        Cache terminated beams.
+        Cache terminated beams into fixed-size tensors.
+
+        Storing candidates as tensors allows vectorized final selection and
+        avoids per-step Python heap operations.
 
         Parameters
         ----------
         tokens : torch.Tensor of shape (n_spectra * n_beams, max_length)
             Predicted amino acid tokens for all beams and all spectra.
-         scores : torch.Tensor of shape
-         (n_spectra *  n_beams, max_length, n_amino_acids)
+        scores : torch.Tensor of shape
+            (n_spectra * n_beams, max_length, n_amino_acids)
             Scores for the predicted amino acid tokens for all beams and
             all spectra.
         step : int
@@ -506,74 +531,40 @@ class Spec2Pep(pl.LightningModule):
         beams_to_cache : torch.Tensor of shape (n_spectra * n_beams)
             Boolean tensor indicating whether the current beams are
             ready for caching.
-        pred_cache : Dict[
-            int, List[Tuple[float, float, np.ndarray, torch.Tensor]]
-        ]
-            Priority queue with finished beams for each spectrum,
-            ordered by peptide score. For each finished beam, a tuple
-            with the peptide score, a random tie-breaking
-            float, the amino acid-level scores, and the predicted tokens
-            is stored.
+        cache_tokens : torch.Tensor of shape
+            (n_spectra, n_beams, max_length, max_length)
+            Tensor cache for predicted tokens of finished beams.
+        cache_scores : torch.Tensor of shape
+            (n_spectra, n_beams, max_length, max_length)
+            Tensor cache for raw token probabilities of finished beams.
         """
-        # Find non-zero indices for more efficient iteration
-        cache_indices = (
-            torch.nonzero(beams_to_cache).squeeze(-1).cpu().tolist()
+        batch, beam, _, _ = cache_tokens.shape
+        vocab = scores.shape[-1]
+
+        # [B, S, step + 1] actual tokens up to the current step.
+        tokens_bsl = tokens.view(batch, beam, -1)[:, :, : step + 1]
+
+        # Softmax over the vocabulary and gather the probability of each
+        # selected token in one shot. Use the model's configured softmax so
+        # that the normalization axis stays in sync with future changes.
+        scores_view = scores[:, : step + 1, :].view(
+            batch, beam, step + 1, vocab
         )
+        smx = self.softmax(scores_view.transpose(2, 3)).transpose(2, 3)
+        raw_scores = smx.gather(3, tokens_bsl.unsqueeze(-1)).squeeze(-1)
 
-        device = self.device  # Get device from input tensor
-
-        # Get beam indices and spectrum indices from cache_indices
-        for i in cache_indices:
-            # Find the starting index of the spectrum.
-            spec_idx = i // self.n_beams
-
-            # Get the predicted tokens
-            pred_tokens = tokens[i, : step + 1]
-
-            # Omit the stop token from the peptide sequence (if predicted).
-            has_stop_token = pred_tokens[-1] == self.stop_token
-            pred_peptide = pred_tokens[:-1] if has_stop_token else pred_tokens
-
-            # Calculate softmax scores directly with proper indexing
-            smx = self.softmax(scores[i : i + 1, : step + 1, :])
-
-            # Vectorized AA score extraction
-            range_tensor = torch.arange(len(pred_tokens), device=device)
-            aa_scores = smx[0, range_tensor, pred_tokens].cpu().numpy()
-
-            # Add explicit score 0 for missing stop token
-            if not has_stop_token:
-                aa_scores = np.append(aa_scores, 0)
-
-            # Calculate the peptide score using the appropriate scoring function
-            peptide_score = _peptide_score(aa_scores)
-
-            # Omit the stop token from the amino acid-level scores.
-            aa_scores = aa_scores[:-1]
-
-            pred_peptide_cpu = pred_peptide.cpu()
-            peptide_entry = (
-                peptide_score,
-                np.random.random_sample(),
-                aa_scores,
-                torch.clone(pred_peptide_cpu),
-            )
-            # Check for duplicate predictions and update with highest score.
-            for j, pred_cached in enumerate(pred_cache[spec_idx]):
-                if torch.equal(pred_cached[-1], pred_peptide_cpu):
-                    if peptide_score > pred_cached[0]:
-                        pred_cache[spec_idx][j] = peptide_entry
-                        heapq.heapify(pred_cache[spec_idx])
-                    break
-            else:
-                # Add the prediction to the cache (minimum priority queue,
-                # maximum the number of beams elements).
-                if len(pred_cache[spec_idx]) < self.n_beams:
-                    heapadd = heapq.heappush
-                else:
-                    heapadd = heapq.heappushpop
-
-                heapadd(pred_cache[spec_idx], peptide_entry)
+        # Masked write: only update slots where beams_to_cache is True.
+        write_mask = beams_to_cache.view(batch, beam, 1)
+        cache_tokens[:, :, step, : step + 1] = torch.where(
+            write_mask,
+            tokens_bsl,
+            cache_tokens[:, :, step, : step + 1],
+        )
+        cache_scores[:, :, step, : step + 1] = torch.where(
+            write_mask,
+            raw_scores,
+            cache_scores[:, :, step, : step + 1],
+        )
 
     def _get_topk_beams(
         self,
@@ -655,10 +646,9 @@ class Spec2Pep(pl.LightningModule):
         # Apply mask and get top-k indices
         _, top_idx = torch.topk(mean_scores * active_mask, beam, dim=1)
 
-        # Vectorized index conversion without loops
-        indices = torch.unravel_index(top_idx.flatten(), (vocab, beam))
-        v_idx = indices[0].reshape(top_idx.shape).to(device)
-        s_idx = indices[1].reshape(top_idx.shape).to(device)
+        # Vectorized index conversion without loops, fully on GPU.
+        v_idx = (top_idx // beam).to(torch.long)
+        s_idx = (top_idx % beam).to(torch.long)
 
         # Create batch indices for gathering - flatten s_idx for indexing
         s_idx_flat = einops.rearrange(s_idx, "B S -> (B S)")
@@ -688,52 +678,124 @@ class Spec2Pep(pl.LightningModule):
 
     def _get_top_peptide(
         self,
-        pred_cache: Dict[
-            int, List[Tuple[float, float, np.ndarray, torch.Tensor]]
-        ],
+        cache_tokens: torch.Tensor,
+        cache_scores: torch.Tensor,
     ) -> Iterable[List[Tuple[float, np.ndarray, str]]]:
         """
         Return the peptide with the highest confidence score for each
-        spectrum.
+        spectrum from the cache tensors.
 
         Parameters
         ----------
-        pred_cache : Dict[
-            int, List[Tuple[float, float, np.ndarray, torch.Tensor]]
-        ]
-            Priority queue with finished beams for each spectrum,
-            ordered by peptide score. For each finished beam, a tuple
-            with the peptide score, a random tie-breaking float, the
-            amino acid-level scores, and the predicted tokens is stored.
+        cache_tokens : torch.Tensor of shape
+            (n_spectra, n_beams, max_length, max_length)
+            Tensor cache for predicted tokens of finished beams.
+        cache_scores : torch.Tensor of shape
+            (n_spectra, n_beams, max_length, max_length)
+            Tensor cache for raw token probabilities of finished beams.
 
         Returns
         -------
         pred_peptides : Iterable[List[Tuple[float, np.ndarray, str]]]
             For each spectrum, a list with the top peptide predictions.
             A peptide prediction consists of a tuple with the peptide
-            score, the amino acid scores, and the predicted peptide
+            score, the amino acid-level scores, and the predicted peptide
             sequence.
         """
-        for peptides in pred_cache.values():
-            if len(peptides) > 0:
-                yield [
+        batch, beam, length, _ = cache_tokens.shape
+        device = cache_tokens.device
+        eps = torch.finfo(cache_scores.dtype).eps
+
+        # Flatten the candidate pool over beams and decoding steps.
+        flat_tokens = cache_tokens.view(batch, beam * length, length)
+        flat_raw = cache_scores.view(batch, beam * length, length)
+        # Valid slots are those with non-zero raw probabilities. This is
+        # equivalent to the previous explicit cache_mask because softmax
+        # probabilities are strictly positive and unwritten slots are 0.
+        flat_mask = flat_raw.any(dim=-1)
+
+        # The actual decoding step for each history slot.
+        step_idx = torch.arange(length, device=device).view(1, 1, length)
+        flat_step = step_idx.expand(batch, beam, length).reshape(
+            batch, beam * length
+        )
+
+        # The last real token is at position `step`.
+        last_token = flat_tokens.gather(2, flat_step.unsqueeze(-1)).squeeze(-1)
+        has_stop = last_token == self.stop_token
+
+        # Compute peptide scores as the product of raw token probabilities.
+        # For positions beyond `step`, raw scores are 0 and are masked out.
+        pos_idx = torch.arange(length, device=device).view(1, 1, length)
+        valid_pos = pos_idx <= flat_step.unsqueeze(-1)
+        log_raw = torch.log(flat_raw.clamp(min=eps))
+        log_score = (log_raw * valid_pos).sum(dim=-1)
+        # Penalize candidates without a stop token by appending a 0 score.
+        log_score = log_score + torch.where(
+            has_stop,
+            torch.zeros_like(log_score),
+            torch.log(torch.tensor(eps, device=device, dtype=log_score.dtype)),
+        )
+        # Use -inf for invalid slots so they are never selected.
+        log_score = log_score.masked_fill(~flat_mask, float("-inf"))
+
+        # Select the top candidates for each spectrum in log space to avoid
+        # exp() underflow to 0, which would tie with masked slots.
+        # Fast path for the common case where only the top-1 match is needed.
+        if self.top_match == 1:
+            n_candidates = 1
+            topk_idx = log_score.argmax(dim=1, keepdim=True)
+            topk_log_scores = log_score.gather(1, topk_idx)
+        else:
+            n_candidates = min(self.top_match, beam * length)
+            topk_log_scores, topk_idx = torch.topk(
+                log_score, n_candidates, dim=1
+            )
+
+        # Move selection-related tensors to CPU once to avoid per-iteration
+        # GPU synchronization.
+        topk_idx_cpu = topk_idx.cpu()
+        flat_step_cpu = flat_step.cpu()
+        has_stop_cpu = has_stop.cpu()
+        flat_mask_cpu = flat_mask.cpu()
+        topk_peptide_scores_cpu = torch.exp(topk_log_scores.cpu())
+
+        for i in range(batch):
+            pred_peptides = []
+            for k in range(n_candidates):
+                idx = topk_idx_cpu[i, k].item()
+                if not flat_mask_cpu[i, idx]:
+                    continue
+
+                step = int(flat_step_cpu[i, idx])
+                pred_tokens = flat_tokens[i, idx, : step + 1].long()
+                stop = bool(has_stop_cpu[i, idx])
+
+                if stop:
+                    pred_tokens = pred_tokens[:-1]
+                    aa_scores = flat_raw[i, idx, :step].cpu().numpy()
+                else:
+                    aa_scores = flat_raw[i, idx, : step + 1].cpu().numpy()
+
+                peptide_score = float(topk_peptide_scores_cpu[i, k])
+
+                if self.tokenizer.reverse:
+                    aa_scores = aa_scores[::-1]
+
+                pred_peptides.append(
                     (
-                        pep_score,
-                        (
-                            aa_scores[::-1]
-                            if self.tokenizer.reverse
-                            else aa_scores
-                        ),
+                        peptide_score,
+                        aa_scores,
                         self.tokenizer.detokenize(
                             torch.unsqueeze(pred_tokens, 0)
                         )[0],
                     )
-                    for pep_score, _, aa_scores, pred_tokens in heapq.nlargest(
-                        self.top_match, peptides
-                    )
-                ]
-            else:
-                yield []
+                )
+
+                if len(pred_peptides) >= self.top_match:
+                    break
+
+            yield pred_peptides
 
     def _process_batch(
         self, batch: Dict[str, torch.Tensor]
@@ -978,6 +1040,9 @@ class Spec2Pep(pl.LightningModule):
             batch["precursor_mz"],
             self.forward(batch),
         ):
+            if not spectrum_preds:
+                self.n_missing_predictions += 1
+                continue
             for peptide_score, aa_scores, peptide in spectrum_preds:
                 predictions.append(
                     psm.PepSpecMatch(
@@ -1035,6 +1100,18 @@ class Spec2Pep(pl.LightningModule):
                 )
         self._history.append(metrics)
         self._log_history()
+
+    def on_predict_start(self) -> None:
+        """Reset the count of spectra without a prediction."""
+        self.n_missing_predictions = 0
+
+    def on_predict_epoch_end(self) -> None:
+        """Aggregate the missing-prediction count across devices."""
+        self.n_missing_predictions = int(
+            self.all_gather(
+                torch.tensor(self.n_missing_predictions, device=self.device)
+            ).sum()
+        )
 
     def on_predict_batch_end(
         self, outputs: List[psm.PepSpecMatch], *args
@@ -2080,51 +2157,60 @@ class CosineWarmupScheduler(torch.optim.lr_scheduler._LRScheduler):
 
 
 def _peptide_score(
-    aa_scores: np.ndarray,
-    lengths: Optional[np.ndarray] = None,
-) -> Union[float, np.ndarray]:
+    aa_scores: Union[np.ndarray, torch.Tensor],
+    lengths: Optional[Union[np.ndarray, torch.Tensor]] = None,
+) -> Union[float, np.ndarray, torch.Tensor]:
     """
     Calculate the peptide-level confidence score from the raw
     amino acid scores.
 
     The peptide score is the product of the raw amino acid scores.
-    This function contains paths for both single peptide inputs
-    (de novo mode) and batched peptide inputs (database search mode).
+    This function accepts both NumPy arrays and PyTorch tensors.
+    NumPy inputs are converted to tensors for computation (zero-copy
+    for contiguous CPU arrays) and the result is returned in the
+    original type.
 
     Parameters
     ----------
-    aa_scores : np.ndarray
+    aa_scores : np.ndarray or torch.Tensor
         A 1D array of amino acid scores for a single peptide, or a 2D
         padded array for a batch of peptides.
-    lengths : Optional[np.ndarray]
+    lengths : Optional[np.ndarray or torch.Tensor]
         An array of peptide lengths, required when `aa_scores` is a 2D
         (batched) array.
 
     Returns
     -------
-    peptide_score : float or np.ndarray
+    peptide_score : float, np.ndarray, or torch.Tensor
         The calculated peptide score or an array of scores for the batch.
     """
-    eps = np.finfo(np.float64).eps
+    # Track whether the input was numpy to return the appropriate type.
+    return_numpy = isinstance(aa_scores, np.ndarray)
 
-    # FAST PATH: de novo inference
+    # Convert numpy arrays to tensors without copying data (zero-copy for
+    # contiguous CPU arrays), enabling a single unified computation path.
+    if return_numpy:
+        aa_scores = torch.as_tensor(aa_scores)
+
+    eps = torch.finfo(torch.float64).eps
+    log_scores = torch.log(torch.clamp(aa_scores, eps, 1))
+
     if aa_scores.ndim == 1:
-        log_scores = np.log(np.clip(aa_scores, eps, 1))
-        peptide_log_score = np.sum(log_scores)
-        peptide_score = np.exp(peptide_log_score)
+        # FAST PATH: de novo inference — single peptide.
+        peptide_score = torch.exp(torch.sum(log_scores))
+        return peptide_score.item() if return_numpy else peptide_score
 
-        return peptide_score
-
-    # BATCH PATH: database search
+    # BATCH PATH: database search — padded batch of peptides.
+    if lengths is None:
+        raise ValueError("`lengths` must be provided for batched input.")
+    if not isinstance(lengths, torch.Tensor):
+        lengths = torch.tensor(
+            lengths, dtype=torch.long, device=aa_scores.device
+        )
     else:
-        if lengths is None:
-            raise ValueError("`lengths` must be provided for batched input.")
-
-        log_scores = np.log(np.clip(aa_scores, eps, 1))
-        cumsum = np.cumsum(log_scores, axis=1)
-        batch_size = aa_scores.shape[0]
-        idx = np.arange(batch_size)
-        peptide_log_scores = cumsum[idx, np.maximum(lengths - 1, 0)]
-        peptide_scores = np.exp(peptide_log_scores)
-
-        return peptide_scores
+        lengths = lengths.to(dtype=torch.long, device=aa_scores.device)
+    cumsum = torch.cumsum(log_scores, dim=1)
+    batch_size = aa_scores.shape[0]
+    idx = torch.arange(batch_size, device=aa_scores.device)
+    peptide_scores = torch.exp(cumsum[idx, torch.clamp(lengths - 1, min=0)])
+    return peptide_scores.numpy() if return_numpy else peptide_scores
