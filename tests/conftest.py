@@ -5,6 +5,27 @@ import psims
 import pytest
 import yaml
 from pyteomics.mass import calculate_mass, fast_mass, std_aa_mass
+import pathlib
+
+
+@pytest.fixture
+def mzml_small_ms1():
+    return (
+        pathlib.Path(__file__).parent
+        / ".."
+        / "sample_data"
+        / "sample_preprocessed_spectra.mzML"
+    )
+
+
+@pytest.fixture
+def tsv_small():
+    return (
+        pathlib.Path(__file__).parent
+        / ".."
+        / "sample_data"
+        / "annotations_tsv.tsv"
+    )
 
 
 @pytest.fixture
@@ -363,6 +384,10 @@ def _get_config_file(file_path, file_name, additional_cfg=None):
             "[+25.980265]-": 25.979265,
         },
         "new_token_init": {},
+        "width": 2,
+        "frag_class_weights": 20,
+        "frag_weight": 1e-3,
+        "min_fragment_coverage": 0.25,
     }
 
     if additional_cfg is not None:
