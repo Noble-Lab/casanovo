@@ -702,6 +702,7 @@ class ModelRunner:
             casanovo=self.casanovo,
             scan_width=self.config.width,
             residues=self.config.residues,
+            min_fragment_coverage=self.config.min_fragment_coverage,
         )
 
     @staticmethod

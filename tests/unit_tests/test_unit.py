@@ -3752,10 +3752,10 @@ def test_train_cli_tracking_peak_path(tmp_path, mgf_small, monkeypatch):
     monkeypatch.setattr(_ModelRunner, "train", fake_train)
     monkeypatch.setattr(casanovo, "_is_valid_model", lambda *a, **kw: None)
     monkeypatch.setattr(
-        shared_loading, "_setup_output", lambda *a, **kw: (tmp_path, "out")
+        casanovo, "_setup_output", lambda *a, **kw: (tmp_path, "out")
     )
     monkeypatch.setattr(
-        shared_loading, "setup_model", lambda *a, **kw: (Config(), None)
+        casanovo, "setup_model", lambda *a, **kw: (Config(), None)
     )
     monkeypatch.setattr(utils, "log_system_info", lambda *a, **kw: None)
     monkeypatch.setattr(utils, "log_run_report", lambda **kw: None)

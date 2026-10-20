@@ -146,7 +146,6 @@ class DeNovoDataModule(pl.LightningDataModule):
         ms_level: Optional[int] = 2,
         scan_width: Optional[int] = 2,
         casanovo: Optional[int] = True,
-        residues: Optional[dict] = None,
     ):
         super().__init__()
 
@@ -156,7 +155,6 @@ class DeNovoDataModule(pl.LightningDataModule):
 
         self.lance_dir = lance_dir
         self.casanovo = casanovo
-        self.residues = residues
         self.train_paths = train_paths
         self.valid_paths = list(valid_paths or [])
         self.test_paths = test_paths
@@ -522,9 +520,6 @@ class DeNovoDataModule(pl.LightningDataModule):
                             if record is None:
                                 continue
 
-                            tokenizer = PeptideTokenizer(
-                                residues=self.residues
-                            )
                             coverage, frag_labels = self._annotate_fragments(
                                 record
                             )
@@ -637,13 +632,16 @@ class DeNovoDataModule(pl.LightningDataModule):
         bases, deltas = [], []
         for tok in tokens:
             if tok.endswith("-"):  # N-terminal mod, e.g. "[Acetyl]-"
-                nterm_delta += self.residues[tok]
+                nterm_delta += self.tokenizer.residues[tok]
             elif tok.startswith("-"):  # C-terminal mod, e.g. "-[Amidated]"
-                cterm_delta += self.residues[tok]
+                cterm_delta += self.tokenizer.residues[tok]
             else:
                 base = tok[0]
                 bases.append(base)
-                deltas.append(self.residues[tok] - self.residues[base])
+                deltas.append(
+                    self.tokenizer.residues[tok]
+                    - self.tokenizer.residues[base]
+                )
 
         n = len(bases)
         cum = np.cumsum(deltas)  # cum[i-1] = mod mass in first i residues
