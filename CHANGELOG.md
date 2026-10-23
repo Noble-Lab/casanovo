@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Added
 
+- The end-of-run sequencing report now includes additional score thresholds between 0.5 and 0.9 and excludes 0.95 and 0.99, selected based on full MassIVE-KB and multi-enzyme test runs. It also reports throughput in distinct spectra per second and labels score-distribution counts as PSMs.
 - The number of spectra that receive no prediction because beam search did not return a valid peptide is now counted and logged at the end of a sequencing run.
 - When sequencing with `--evaluate`, the ground truth sequence and the precision and coverage at each prediction are added as columns to the mzTab output, and the average precision (area under the precision-coverage curve) is reported in the end-of-run report.
 

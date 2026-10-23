@@ -402,6 +402,130 @@ def test_n_workers(monkeypatch):
             assert utils.n_workers() == 0
 
 
+@pytest.mark.parametrize(
+    ("start_time", "end_time", "expected_throughput"),
+    [
+        (0, 10, "Throughput: 0.20 spectra/s"),
+        (0, 100, "Throughput: 0.02 spectra/s"),
+        (None, 10, None),
+        (0, None, None),
+        (0, 0, None),
+        (10, 0, None),
+    ],
+)
+def test_log_annotate_report(
+    caplog, start_time, end_time, expected_throughput
+):
+    """Report unique spectra and guard missing or invalid run times."""
+    predictions = [
+        psm.PepSpecMatch(
+            sequence="AAAA",
+            spectrum_id=("test.mgf", spectrum_id),
+            peptide_score=score,
+            charge=3,
+            calc_mz=100.0,
+            exp_mz=100.0,
+            aa_scores=[0.5] * 4,
+        )
+        for spectrum_id, score in [
+            ("0", 0.05),
+            ("0", 0.5),
+            ("1", 0.9),
+        ]
+    ]
+
+    with caplog.at_level(logging.INFO, logger="casanovo"):
+        utils.log_annotate_report(
+            predictions, start_time=start_time, end_time=end_time
+        )
+
+    messages = [record.getMessage() for record in caplog.records]
+    assert "Sequenced 2 spectra (3 PSMs)" in messages
+    assert "3 PSMs (100.00%) scored ≥ 0.00" in messages
+    assert "2 PSMs (66.67%) scored ≥ 0.50" in messages
+    assert "1 PSM (33.33%) scored ≥ 0.90" in messages
+    distribution_messages = [
+        message for message in messages if "scored ≥" in message
+    ]
+    assert len(distribution_messages) == 7
+    throughput_messages = [
+        message for message in messages if message.startswith("Throughput:")
+    ]
+    if expected_throughput is None:
+        assert throughput_messages == []
+    else:
+        assert throughput_messages == [expected_throughput]
+
+
+def test_get_report_dict_default_bins():
+    """Default fixed bins include their boundaries and exclude lower scores."""
+    scores = [
+        -0.1,
+        0.0,
+        0.499,
+        0.5,
+        0.599,
+        0.6,
+        0.699,
+        0.7,
+        0.799,
+        0.8,
+        0.849,
+        0.85,
+        0.899,
+        0.9,
+        1.0,
+    ]
+    results = pd.DataFrame(
+        {"sequence": ["AAAA"] * len(scores), "score": scores}
+    )
+    report = utils._get_report_dict(results)
+    assert report["num_psms"] == 15
+    assert report["score_bins"] == {
+        0.0: 14,
+        0.5: 12,
+        0.6: 10,
+        0.7: 8,
+        0.8: 6,
+        0.85: 4,
+        0.9: 2,
+    }
+
+
+@pytest.mark.parametrize("scores", [[0.42], [0.42, 0.42, 0.42]])
+def test_get_report_dict_fixed_bins_ties(scores):
+    """Include every tied PSM and retain bins with no matches."""
+    report = utils._get_report_dict(
+        pd.DataFrame({"sequence": ["AAAA"] * len(scores), "score": scores}),
+        score_bins=(0.4, 0.42, 0.5),
+    )
+    assert report["score_bins"] == {
+        0.4: len(scores),
+        0.42: len(scores),
+        0.5: 0,
+    }
+
+
+def test_log_annotate_report_custom_threshold_precision(caplog):
+    """Printed custom thresholds reproduce the exact counted PSM set."""
+    threshold = 0.992123456
+    predictions = [
+        psm.PepSpecMatch(
+            sequence="AAAA",
+            spectrum_id=("test.mgf", str(index)),
+            peptide_score=score,
+            charge=3,
+            calc_mz=100.0,
+            exp_mz=100.0,
+            aa_scores=[0.5] * 4,
+        )
+        for index, score in enumerate([0.9921233, threshold])
+    ]
+    with caplog.at_level(logging.INFO, logger="casanovo"):
+        utils.log_annotate_report(predictions, score_bins=(threshold,))
+    assert "1 PSM (50.00%) scored ≥ 0.992123456" in caplog.messages
+
+
 def test_split_version():
     """Test that splitting the version number works as expected."""
     version = utils.split_version("2.0.1")
