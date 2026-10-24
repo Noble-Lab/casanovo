@@ -22,6 +22,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Fixed the mass of the carbamylation + ammonia-loss N-terminal token to `25.979265`. The token name is deliberately left as `[+25.980265]-` because it appears in released checkpoint vocabularies.
 - Fixed training from a checkpoint failing with `TypeError` when configuration values that are not optimizer arguments (e.g. `precursor_mass_tol`) leaked into the Adam optimizer.
 - Fixed multi-GPU training using the same spectra on every device. Since v5.0.0, each device read the full training set in the same order, so all devices trained on identical batches. Each device now trains on its own share of the spectra, so an epoch takes `n` times fewer steps on `n` devices and `train_batch_size` is the true global batch size. To keep the devices in step, fewer than `train_batch_size` spectra are skipped per epoch.
+- Fixed logging state leaking between tests. Calling `setup_logging` more than once in the same process no longer adds duplicate log handlers or stops warnings from being written to the log, and a test fixture now restores the logging state after each test.
 
 ### Removed
 
