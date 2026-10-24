@@ -458,6 +458,36 @@ def test_predict_no_valid_spectra(
                 )
 
 
+@pytest.mark.parametrize(
+    "evaluate, expected_error, match",
+    [
+        (True, TypeError, "Error creating annotated spectrum dataloaders"),
+        (False, KeyError, "seq"),
+    ],
+)
+def test_predict_dataloader_error(
+    tmp_path, mgf_small, tiny_config, evaluate, expected_error, match
+):
+    """Errors while reading the peak files get a descriptive message when
+    evaluating, and are re-raised otherwise."""
+    config = Config(tiny_config)
+    with ModelRunner(config, output_dir=tmp_path) as runner:
+        # The error is raised before the model is used.
+        runner.initialize_model = lambda train: setattr(
+            runner, "model", unittest.mock.MagicMock()
+        )
+        with unittest.mock.patch(
+            "casanovo.denovo.dataloaders.DeNovoDataModule.setup",
+            side_effect=KeyError("seq"),
+        ):
+            with pytest.raises(expected_error, match=match):
+                runner.predict(
+                    [str(mgf_small)],
+                    tmp_path / "result.mztab",
+                    evaluate=evaluate,
+                )
+
+
 def test_metrics_logging(tmp_path, mgf_small, tiny_config):
     config = Config(tiny_config)
     config.log_metrics = True
