@@ -379,6 +379,7 @@ def _get_config_file(file_path, file_name, additional_cfg=None):
         "gradient_clip_algorithm": "norm",
         "precision": "32-true",
         "replace_isoleucine_with_leucine": True,
+        "replace_n_and_q_deamidated_with_d_and_e": False,
         "massivekb_tokenizer": True,
         "residues": {
             "G": 57.021464,

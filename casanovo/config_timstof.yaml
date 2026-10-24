@@ -170,6 +170,8 @@ precision: "32-true"
 
 # Replace I by L in peptide sequences.
 replace_isoleucine_with_leucine: true
+# Replace deamidated N and Q by D and E in peptide sequences.
+replace_n_and_q_deamidated_with_d_and_e: false
 # MassIVE-KB style tokenizer, otherwise ProForma syntax.
 massivekb_tokenizer: false
 
