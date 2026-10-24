@@ -378,7 +378,28 @@ class ModelRunner:
 
         try:
             self.loaders.setup(stage="test", annotated=evaluate)
-        except (KeyError, OSError, StopIteration, TypeError) as e:
+        except StopIteration as e:
+            # Raised by depthcharge when every spectrum was skipped.
+            if evaluate:
+                error_message = (
+                    "No annotated spectra could be read from the input peak "
+                    "files. This happens when a peak file is unannotated, or "
+                    "when every spectrum was skipped for another reason "
+                    "(invalid precursor charge, too few peaks, ...). See the "
+                    "preceding 'Skipped N spectra' warning for the last error "
+                    "that was encountered."
+                )
+                logger.error(error_message)
+                raise TypeError(error_message) from e
+
+            error_message = (
+                "No valid spectra could be read from the input peak files. "
+                "See the preceding 'Skipped N spectra' warning for the last "
+                "error that was encountered."
+            )
+            logger.error(error_message)
+            raise ValueError(error_message) from e
+        except (KeyError, OSError, TypeError) as e:
             if evaluate:
                 error_message = (
                     "Error creating annotated spectrum dataloaders. This may "

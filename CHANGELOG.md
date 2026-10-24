@@ -16,7 +16,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ### Changed
 
 - Upgraded minimum DepthCharge version to 0.5.0.
-- When evaluating, unannotated spectra in a mix of annotated and unannotated peak files are now skipped with a warning instead of raising an error. An error is still raised if no annotated spectra remain.
+- Spectra with invalid information, such as a missing `SEQ` annotation, are now skipped with a warning instead of raising an error. As a result, when evaluating, training, or validating on a mix of annotated and unannotated peak files, only the annotated spectra are used. An error is still raised if no valid spectra remain; when sequencing, its message now points to the "Skipped N spectra" warning for the cause instead of assuming an unannotated peak file.
 - `val_check_interval` now accepts a float in `[0, 1]` to validate at a fraction of each training epoch, in addition to an integer number of training steps.
 - Beam search is sped up by caching finished beams and selecting the top-scoring beam fully on the GPU.
 
