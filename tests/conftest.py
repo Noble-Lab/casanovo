@@ -18,9 +18,23 @@ def restore_logging():
     """
     root_logger = logging.getLogger()
     handlers = root_logger.handlers[:]
+    setup_loggers = [
+        logging.getLogger("depthcharge"),
+        logging.getLogger("fsspec"),
+        logging.getLogger("github"),
+        logging.getLogger("h5py"),
+        logging.getLogger("numba"),
+        logging.getLogger("pytorch_lightning"),
+        logging.getLogger("torch"),
+        logging.getLogger("urllib3"),
+    ]
     levels = {
         logger: logger.level
-        for logger in [root_logger, *root_logger.manager.loggerDict.values()]
+        for logger in [
+            root_logger,
+            *root_logger.manager.loggerDict.values(),
+            *setup_loggers,
+        ]
         if isinstance(logger, logging.Logger)
     }
     yield
