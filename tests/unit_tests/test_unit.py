@@ -2746,37 +2746,9 @@ def test_setup_output(tmp_path, monkeypatch):
 
 def test_setup_logging_warnings(tmp_path):
     """Warnings are logged once, on a single line."""
-    root_logger = logging.getLogger()
-    original_handlers = list(root_logger.handlers)
-    original_root_level = root_logger.level
-    logger_names = [
-        "depthcharge",
-        "fsspec",
-        "github",
-        "h5py",
-        "numba",
-        "pytorch_lightning",
-        "torch",
-        "urllib3",
-    ]
-    original_levels = {}
-    for name in logger_names:
-        original_levels[name] = logging.getLogger(name).level
-
     log_path = tmp_path / "test.log"
-    try:
-        logging.captureWarnings(False)
-        casanovo.setup_logging(log_path, "info")
-        warnings.warn("Hello\n World")
-    finally:
-        for handler in root_logger.handlers[:]:
-            if handler not in original_handlers:
-                root_logger.removeHandler(handler)
-                handler.close()
-        logging.captureWarnings(False)
-        root_logger.setLevel(original_root_level)
-        for name, level in original_levels.items():
-            logging.getLogger(name).setLevel(level)
+    casanovo.setup_logging(log_path, "info")
+    warnings.warn("Hello\n World")
     lines = log_path.read_text().splitlines()
     matching = []
     for line in lines:
@@ -2784,6 +2756,31 @@ def test_setup_logging_warnings(tmp_path):
             matching.append(line)
     assert len(matching) == 1
     assert "Hello World" in matching[0]
+
+
+def test_setup_logging_repeated_calls(tmp_path):
+    """Repeated calls replace the previous handlers instead of adding more."""
+    root_logger = logging.getLogger()
+    n_handlers = len(root_logger.handlers)
+    for i in range(3):
+        casanovo.setup_logging(tmp_path / f"run{i}.log", "info")
+    assert len(root_logger.handlers) == n_handlers + 2
+
+    logging.getLogger("casanovo").info("hello")
+    assert "hello" not in (tmp_path / "run0.log").read_text()
+    assert (tmp_path / "run2.log").read_text().count("hello") == 1
+
+
+def test_setup_logging_reinstalls_warning_capture(tmp_path):
+    """Warnings are logged even if the warnings hook was replaced since an
+    earlier call, as pytest does between tests."""
+    casanovo.setup_logging(tmp_path / "first.log", "info")
+    log_path = tmp_path / "second.log"
+    with warnings.catch_warnings(record=True):
+        warnings.simplefilter("always")
+        casanovo.setup_logging(log_path, "info")
+        warnings.warn("hello")
+    assert "hello" in log_path.read_text()
 
 
 def test_spectrum_preprocessing(tmp_path, mgf_small):
