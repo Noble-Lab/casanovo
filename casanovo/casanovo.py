@@ -340,7 +340,7 @@ def db_search(
     type=click.Path(exists=True, dir_okay=True),
 )
 @click.option(
-    "--load_all_states",
+    "--continue_training",
     help="""
     Flag to indicate whether all states are loaded when re-starting 
     training, or only the weights. Defaults to False.
@@ -359,7 +359,7 @@ def train(
     output_root: Optional[str],
     verbosity: str,
     force_overwrite: bool,
-    load_all_states: bool,
+    continue_training: bool,
 ) -> None:
     """Train a Casanovo model on your own data.
 
@@ -368,7 +368,7 @@ def train(
     model.
     """
 
-    _is_valid_model(model, load_all_states)
+    _is_valid_model(model, continue_training)
 
     output_path, output_root_name = _setup_output(
         output_dir, output_root, force_overwrite, verbosity
@@ -407,7 +407,7 @@ def train(
         runner.train(
             train_peak_path,
             validation_peak_path,
-            model if load_all_states else None,
+            model if continue_training else None,
             tracking_peak_path,
         )
 
@@ -444,39 +444,39 @@ def configure(
     logger.info(f"Wrote {config_path}")
 
 
-def _is_valid_model(model: Optional[str], load_all_states: bool) -> None:
+def _is_valid_model(model: Optional[str], continue_training: bool) -> None:
     """
-    Validate the model argument when --load_all_states is specified.
+    Validate the model argument when --continue_training is specified.
 
     Parameters
     ----------
     model : Optional[str]
         The model path or URL.
-    load_all_states : bool
+    continue_training : bool
         Whether to load all model states for resuming training.
 
     Raises
     ------
     ValueError
-        If load_all_states is True and model is a URL or non-existent file.
+        If continue_training is True and model is a URL or non-existent file.
     UserWarning
-        If load_all_states is True but model is not provided
+        If continue_training is True but model is not provided
     """
-    if load_all_states:
+    if continue_training:
         if model is None:
             logger.warning(
-                "When --load_all_states is specified, --model must also be provided. "
+                "When --continue_training is specified, --model must also be provided. "
                 "Training will start from scratch without a provided model.",
                 stacklevel=2,
             )
         elif _is_valid_url(model):
             raise ValueError(
                 "Full model state cannot be loaded from a URL. "
-                "Please provide a local file path when --load_all_states is True.",
+                "Please provide a local file path when --continue_training is True.",
             )
         elif not Path(model).is_file():
             raise ValueError(
-                "When --load_all_states is True, the model path must point to an existing file.",
+                "When --continue_training is True, the model path must point to an existing file.",
             )
 
 

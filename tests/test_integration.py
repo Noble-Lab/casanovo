@@ -75,7 +75,7 @@ def test_train_and_run(
             "train_resuming",
             "--model",
             str(model_file),
-            "--load_all_states",
+            "--continue_training",
         ]
 
         result = run(train_args)
