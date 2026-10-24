@@ -24,7 +24,7 @@ You can find the `config.yaml` configuration file that is used by default [here]
 
 ### How do I solve a "PermissionError: GitHub API rate limit exceeded" error when trying to run Casanovo?
 
-When running Casanovo in `denovo` or `eval` mode, Casanovo needs compatible pretrained model weights to make predictions.
+When running Casanovo in `sequence` or `db-search` mode, Casanovo needs compatible pretrained model weights to make predictions.
 If no model weights file is specified using the `--model` command-line parameter, Casanovo will automatically try to download the latest compatible model file from GitHub and save it to its cache for subsequent use.
 However, the GitHub API is limited to maximum 60 requests per hour per IP address.
 Consequently, if Casanovo has been executed multiple times already, it might temporarily not be able to communicate with GitHub.
@@ -54,7 +54,7 @@ Include full information about your system setup, the installed CUDA toolkit and
 ### Why do I get a "CUDA out of memory" error when trying to run Casanovo?
 
 This means that there was not enough (free) memory available on your GPU to run Casanovo, which is especially likely to happen when you are using a smaller, consumer-grade GPU.
-Depending on whether the error occurred during `train` or `denovo` mode, we recommend decreasing the `train_batch_size` or `predict_batch_size` options, respectively, in the [config file](https://github.com/Noble-Lab/casanovo/blob/main/casanovo/config.yaml) to reduce the number of spectra that are processed simultaneously.
+Depending on whether the error occurred during `train` or `sequence` (or `db-search`) mode, we recommend decreasing the `train_batch_size` or `predict_batch_size` options, respectively, in the [config file](https://github.com/Noble-Lab/casanovo/blob/main/casanovo/config.yaml) to reduce the number of spectra that are processed simultaneously.
 Additionally, we recommend shutting down any other processes that may be running on the GPU, so that Casanovo can exclusively use the GPU.
 
 ### How can I run Casanovo on a specific GPU device?
@@ -250,7 +250,7 @@ For general-purpose usage of Casanovo, use its [default weights](https://casanov
 
 You can evaluate a trained Casanovo model compared to ground-truth peptide labels using a precision–coverage curve.
 
-1. Run Casanovo in sequencing or evaluation mode on your MS/MS data, [as described here](https://casanovo.readthedocs.io/en/latest/getting_started.html#running-casanovo).
+1. Run Casanovo with `casanovo sequence` (optionally with `--evaluate`) on your MS/MS data, [as described here](https://casanovo.readthedocs.io/en/latest/getting_started.html#running-casanovo).
 2. Collect the ground-truth peptide labels as well as the peptide labels predicted by Casanovo. Note that Casanovo might not report a peptide for every spectrum if the spectra are invalid (e.g. not enough peaks), so make sure that both pieces of information are correctly linked to each other (using the `spectra_ref` column in the mzTab output file produced by Casanovo).
 3. Use the following script to plot a precision–coverage curve:
 ```python
