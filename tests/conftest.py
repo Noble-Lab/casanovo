@@ -45,6 +45,14 @@ def restore_logging():
     for logger, level in levels.items():
         if logger.level != level:
             logger.setLevel(level)
+    # Loggers created during the test go back to their default level.
+    for logger in root_logger.manager.loggerDict.values():
+        if (
+            isinstance(logger, logging.Logger)
+            and logger not in levels
+            and logger.level != logging.NOTSET
+        ):
+            logger.setLevel(logging.NOTSET)
     logging.captureWarnings(False)
 
 
