@@ -19,7 +19,7 @@ import torch
 from . import __version__
 from .data.psm import PepSpecMatch
 
-SCORE_BINS = (0.0, 0.5, 0.9, 0.95, 0.99)
+SCORE_BINS = (0.0, 0.5, 0.6, 0.7, 0.8, 0.85, 0.9)
 
 logger = logging.getLogger("casanovo")
 
@@ -113,7 +113,7 @@ def _get_report_dict(
         score: (results_table["score"] >= score).sum() for score in score_bins
     }
     return {
-        "num_spectra": len(results_table),
+        "num_psms": len(results_table),
         "score_bins": binned_scores,
         "max_sequence_length": max_pep_len,
         "min_sequence_length": min_pep_len,
@@ -219,15 +219,33 @@ def log_annotate_report(
             "No predictions were logged, this may be due to an error"
         )
     else:
-        num_spectra = run_report["num_spectra"]
-        logger.info("Sequenced %s spectra", num_spectra)
+        distinct_spectra = len(set(psm.spectrum_id for psm in predictions))
+        num_psms = run_report["num_psms"]
+        if distinct_spectra != num_psms:
+            logger.info(
+                "Sequenced %s spectra (%s PSMs)", distinct_spectra, num_psms
+            )
+        else:
+            logger.info("Sequenced %s spectra", distinct_spectra)
+        time_elapsed = 0
+        if start_time is not None and end_time is not None:
+            time_elapsed = end_time - start_time
+        if time_elapsed > 0:
+            logger.info(
+                "Throughput: %.2f spectra/s", distinct_spectra / time_elapsed
+            )
         logger.info("Score Distribution:")
         for score, pop in sorted(run_report["score_bins"].items()):
             logger.info(
-                "%s spectra (%.2f%%) scored ≥ %.2f",
+                "%s %s (%.2f%%) scored ≥ %s",
                 pop,
-                pop / num_spectra * 100,
-                score,
+                "PSM" if pop == 1 else "PSMs",
+                pop / num_psms * 100,
+                (
+                    f"{float(score):.2f}"
+                    if score in SCORE_BINS
+                    else str(float(score))
+                ),
             )
 
         logger.info(
