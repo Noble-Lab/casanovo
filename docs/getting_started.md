@@ -139,7 +139,7 @@ To evaluate the peptide predictions, ground truth peptide labels must to be prov
 Compatible MGF files are available from [MassIVE-KB](https://massive.ucsd.edu/ProteoSAFe/static/massive-kb-libraries.jsp).
 Note that the `--evaluate` flag requires that `top_match` is set to 1 in the configuration file.
 
-In the development version (after 5.2.1), the end-of-run report also includes the average precision (the area under the precision-coverage curve), and the mzTab output includes extra evaluation columns (see [File Formats](file_formats.md)).
+In the development version (after 5.2.1), the end-of-run report also includes the average precision (the area under the precision-coverage curve), and the mzTab output includes extra evaluation columns if at least one PSM has an evaluation result (see [File Formats](file_formats.md)).
 
 ### Database searching
 

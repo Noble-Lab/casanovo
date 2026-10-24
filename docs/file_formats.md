@@ -109,6 +109,8 @@ Different PTMs in Casanovo can only be enabled or disabled by training a new mod
 
 The final piece of information in the metadata section is the active configuration settings, allowing for replication or review of the analysis parameters:
 
+*Note: this example was generated with an older version of Casanovo. The exact list of settings and their values differ between versions, so use the `MTD` lines of your own output to see which settings were used for your run.*
+
 ```
 MTD	software[1]-setting[1]	model = casanovo_massivekb_v4_0_0.ckpt
 MTD	software[1]-setting[2]	config_filename = default
@@ -221,7 +223,7 @@ In mixed-input runs (e.g. both MGF and mzML files), the column is present for th
 If no input file contains scan number headers the column is omitted entirely.
 Note that only purely numeric scan values are exported; MGF files that use composite or non-numeric scan identifiers in these fields will have a "null" value in this column.
 
-In the development version (after 5.2.1), running `casanovo sequence --evaluate` on annotated spectra additionally adds three columns to the PSM section: `opt_global_ground_truth_sequence`, `opt_global_precision`, and `opt_global_coverage`. These columns are omitted when not evaluating.
+In the development version (after 5.2.1), running `casanovo sequence --evaluate` on annotated spectra additionally adds three columns to the PSM section: `opt_global_ground_truth_sequence`, `opt_global_precision`, and `opt_global_coverage`. These columns are written only if at least one PSM has an evaluation result, so they are omitted when not evaluating and when no PSM could be scored.
 
 ```{note}
 The PSM identifier in the `PSM_ID` column is not necessarily identical to the spectrum index in the `spectra_ref` column, even for MGF files.
