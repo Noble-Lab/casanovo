@@ -654,40 +654,25 @@ def test_peptide_score():
     """
     aa_scores_raw = np.asarray([0.0, 0.5, 1.0])
 
-    peptide_score = _peptide_score(aa_scores_raw, True)
+    # No penalty for a precursor mismatch: the score is the product alone.
+    peptide_score = _peptide_score(aa_scores_raw)
     assert peptide_score == pytest.approx(0.0)
 
-    peptide_score = _peptide_score(aa_scores_raw, False)
-    assert peptide_score == pytest.approx(-1.0)
-
     aa_scores_raw = np.asarray([1.0, 0.25])
-    peptide_score = _peptide_score(aa_scores_raw, True)
+    peptide_score = _peptide_score(aa_scores_raw)
     assert peptide_score == pytest.approx(0.25)
 
     aa_scores_batch = np.array([[0.5, 0.8, 0.0], [0.9, 0.7, 0.6]])
     lengths_batch = np.array([2, 3])
 
-    peptide_scores = _peptide_score(aa_scores_batch, True, lengths_batch)
+    peptide_scores = _peptide_score(aa_scores_batch, lengths_batch)
     expected_scores = np.array([0.5 * 0.8, 0.9 * 0.7 * 0.6])
     assert np.allclose(peptide_scores, expected_scores)
-
-    peptide_scores_no_fit = _peptide_score(
-        aa_scores_batch, False, lengths_batch
-    )
-    assert np.allclose(peptide_scores_no_fit, expected_scores - 1)
-
-    fits_array = np.array([True, False])
-    peptide_scores_mixed_fit = _peptide_score(
-        aa_scores_batch, fits_array, lengths_batch
-    )
-    expected_mixed_scores = expected_scores.copy()
-    expected_mixed_scores[~fits_array] -= 1
-    assert np.allclose(peptide_scores_mixed_fit, expected_mixed_scores)
 
     with pytest.raises(
         ValueError, match="`lengths` must be provided for batched input."
     ):
-        _peptide_score(aa_scores_batch, True, None)
+        _peptide_score(aa_scores_batch, None)
 
 
 def test_peptide_generator_errors(tiny_fasta_file):
@@ -1370,7 +1355,7 @@ def test_db_stop_token(tiny_config):
             predction.aa_scores
         )
         assert pytest.approx(predction.peptide_score) != _peptide_score(
-            predction.aa_scores, True
+            predction.aa_scores
         )
 
 
@@ -2277,8 +2262,13 @@ def test_pmc_decode_near_miss_does_not_shadow_a_match():
     assert model._fits_precursor_mass(tokens, precursor_mass)
 
 
-def test_predict_step_penalizes_mass_mismatch(monkeypatch):
-    """PMC may give up, and what it leaves behind must sort last."""
+def test_predict_step_keeps_mass_mismatch_unpenalized(monkeypatch):
+    """PMC may give up; the greedy peptide it leaves behind keeps its score.
+
+    Upstream subtracts 1 from such a peptide. Here it is not penalized: on
+    chimeric spectra it is often the co-isolated peptide, whose mass misses
+    the recorded precursor.
+    """
     model = _pmc_model()
     model.min_peptide_len = 0
     idx = model.tokenizer.index
@@ -2309,8 +2299,8 @@ def test_predict_step_penalizes_mass_mismatch(monkeypatch):
     )
 
     assert matched.sequence == missed.sequence
-    assert missed.peptide_score < 0 <= matched.peptide_score
-    assert matched.peptide_score == pytest.approx(missed.peptide_score + 1)
+    # Same peptide, same logits: the same score whether or not it fits.
+    assert 0 <= missed.peptide_score == pytest.approx(matched.peptide_score)
     # Aggregated as upstream does, so the reported score stays the
     # product of the reported residue scores.
     assert matched.peptide_score == pytest.approx(

@@ -1181,8 +1181,9 @@ class Spec2Pep(pl.LightningModule):
 
         # Precise mass control: when the greedy peptide does not match
         # the precursor mass, search for the best CTC path that does.
+        # If PMC finds none, the greedy peptide is kept, unpenalized
+        # (_peptide_score).
         _, _, precursors, _ = self._process_batch(batch)
-        fits = []
         for i, tokens in enumerate(sequences):
             precursor_mass = precursors[i, 0].item()
             fit = bool(tokens) and self._fits_precursor_mass(
@@ -1193,11 +1194,9 @@ class Spec2Pep(pl.LightningModule):
                 if pmc is not None:
                     # PMC only returns mass-matching paths.
                     sequences[i], scores[i], stop_scores[i] = pmc
-                    fit = True
-            fits.append(fit)
 
         predictions = []
-        for filename, scan, charge, prec_mz, tokens, confs, stop, fit in zip(
+        for filename, scan, charge, prec_mz, tokens, confs, stop in zip(
             batch["peak_file"],
             batch["scan_id"],
             batch["precursor_charge"],
@@ -1205,7 +1204,6 @@ class Spec2Pep(pl.LightningModule):
             sequences,
             scores,
             stop_scores,
-            fits,
         ):
             # Beam search withheld these; CTC decoding replaced it
             # without replacing the rule.
@@ -1221,9 +1219,9 @@ class Spec2Pep(pl.LightningModule):
             if self.tokenizer.reverse:
                 aa_scores = aa_scores[::-1]
 
-            # Upstream's aggregation, which subtracts 1 when the peptide
-            # misses the precursor, as it does when PMC found no
-            # mass-matching path and the greedy peptide survived. The
+            # Upstream's aggregation, the product of the residue scores,
+            # without its 1 subtracted from a peptide that misses the
+            # precursor (see _peptide_score). The
             # product also survives the N-terminal score merge in
             # `on_predict_batch_end`, which a mean does not. The stop is
             # scored with the peptide, as upstream counts it, but is not
@@ -1231,7 +1229,7 @@ class Spec2Pep(pl.LightningModule):
             scored = aa_scores
             if stop is not None:
                 scored = np.append(aa_scores, stop)
-            peptide_score = float(_peptide_score(scored, fit))
+            peptide_score = float(_peptide_score(scored))
 
             predictions.append(
                 psm.PepSpecMatch(
@@ -1735,7 +1733,6 @@ def _calc_match_score(
     lengths_np = fused_np[:, -1].astype(np.int32, copy=False)
 
     # Call the single, unified scoring function for batch calculation.
-    # In database search mode, fits_precursor_mz is implicitly True.
     peptide_scores = _peptide_score(per_aa_np, lengths=lengths_np).tolist()
 
     # Extract AA scores for each peptide based on its length.
@@ -1813,7 +1810,6 @@ def _calc_mass_error(
 
 def _peptide_score(
     aa_scores: np.ndarray,
-    fits_precursor_mz: Union[bool, np.ndarray] = True,
     lengths: Optional[np.ndarray] = None,
 ) -> Union[float, np.ndarray]:
     """
@@ -1824,14 +1820,17 @@ def _peptide_score(
     This function contains paths for both single peptide inputs
     (de novo mode) and batched peptide inputs (database search mode).
 
+    Unlike upstream Casanovo, a peptide whose mass misses the precursor
+    does not have 1 subtracted from its score: on chimeric spectra such
+    a prediction is often the co-isolated peptide, a real peptide whose
+    mass misses the recorded precursor, and the penalty would rank it
+    below every mass-matching prediction.
+
     Parameters
     ----------
     aa_scores : np.ndarray
         A 1D array of amino acid scores for a single peptide, or a 2D
         padded array for a batch of peptides.
-    fits_precursor_mz : bool or np.ndarray
-        Flag or array of flags indicating whether predictions fit the
-        precursor m/z filter.
     lengths : Optional[np.ndarray]
         An array of peptide lengths, required when `aa_scores` is a 2D
         (batched) array.
@@ -1847,11 +1846,7 @@ def _peptide_score(
     if aa_scores.ndim == 1:
         log_scores = np.log(np.clip(aa_scores, eps, 1))
         peptide_log_score = np.sum(log_scores)
-        peptide_score = np.exp(peptide_log_score)
-
-        if not fits_precursor_mz:
-            peptide_score -= 1
-        return peptide_score
+        return np.exp(peptide_log_score)
 
     # BATCH PATH: database search
     else:
@@ -1863,12 +1858,4 @@ def _peptide_score(
         batch_size = aa_scores.shape[0]
         idx = np.arange(batch_size)
         peptide_log_scores = cumsum[idx, np.maximum(lengths - 1, 0)]
-        peptide_scores = np.exp(peptide_log_scores)
-
-        if isinstance(fits_precursor_mz, (bool, np.bool_)):
-            if not fits_precursor_mz:
-                peptide_scores -= 1
-        else:
-            peptide_scores[~fits_precursor_mz] -= 1
-
-        return peptide_scores
+        return np.exp(peptide_log_scores)
