@@ -27,6 +27,13 @@ from torch.utils.data.datapipes.iter.combinatorics import ShufflerIterDataPipe
 
 logger = logging.getLogger(__name__)
 
+_RT_TO_SECONDS = {
+    "second": 1.0,
+    "minute": 60.0,
+    "millisecond": 1e-3,
+    "hour": 3600.0,
+}
+
 
 def _unique_stems(paths: list) -> list:
     """Return unique file stems for a list of paths.
@@ -164,6 +171,14 @@ class DeNovoDataModule(pl.LightningDataModule):
             functools.partial(_discard_low_quality, min_peaks=min_peaks),
             _scale_to_unit_norm,
         ]
+        self.cascadia_preprocessing_fn = [
+            preprocessing.set_mz_range(min_mz=min_mz, max_mz=max_mz),
+            preprocessing.filter_intensity(min_intensity, max_peaks),
+            functools.partial(_discard_low_quality, min_peaks=min_peaks),
+            _scale_to_unit_norm,
+        ]
+        self.ms1_sqrt_passes = 2
+        self.ms2_sqrt_passes = 1
         self.valid_charge = np.arange(1, max_charge + 1)
         self.max_peaks = max_peaks
         self.max_charge = max_charge
@@ -371,6 +386,17 @@ class DeNovoDataModule(pl.LightningDataModule):
         sorted_scan_window = scan_window[sort_idx]
         sorted_ms_level = ms_level_arr[sort_idx]
 
+        sorted_intensity = np.clip(
+            intensity[sort_idx].astype(np.float64), 0, None
+        )
+        is_ms1 = sorted_ms_level == 1
+        for level_mask, sqrt_passes in (
+            (is_ms1, self.ms1_sqrt_passes),
+            (~is_ms1, self.ms2_sqrt_passes),
+        ):
+            for _ in range(sqrt_passes):
+                sorted_intensity[level_mask] **= 0.5
+
         spec = sus.MsmsSpectrum(
             mz=sorted_mz,
             intensity=sorted_intensity,
@@ -381,7 +407,7 @@ class DeNovoDataModule(pl.LightningDataModule):
         )
 
         try:
-            for processor in self.preprocessing_fn:
+            for processor in self.cascadia_preprocessing_fn:
                 spec = processor(spec)
         except ValueError:
             return None
@@ -582,6 +608,17 @@ class DeNovoDataModule(pl.LightningDataModule):
 
         entry.setdefault(rts_key, []).append(rt_offset)
 
+    def _convert_rt(self, scan_time):
+        """Converts the format of the existing RT to be seconds"""
+        time_unit = scan_time.unit_info
+        scaling_factor = _RT_TO_SECONDS[time_unit]
+        if scaling_factor is None:
+            raise ValueError(
+                "Scan start time has no supported units; unable to preprocess spectra."
+            )
+
+        return float(scan_time) * scaling_factor
+
     def _extract_spectra(
         self, mzml_file, f_to_mzrt_to_pep, time_width
     ) -> dict[tuple, dict[str, tuple]]:
@@ -615,13 +652,11 @@ class DeNovoDataModule(pl.LightningDataModule):
 
         with pyteomics.mzml.read(str(mzml_file)) as reader:
             for spec in reader:
-                cur_rt = 60 * spec["scanList"]["scan"][0]["scan start time"]
+                cur_rt = self._convert_rt(
+                    spec["scanList"]["scan"][0]["scan start time"]
+                )  # converts RTs from minutes to seconds
 
                 if spec["ms level"] == 1:
-                    mzs, intensities = self._select_top_peaks(
-                        spec, sqrt_passes=2
-                    )
-
                     for scan_rt in range(
                         int(cur_rt / 10) - 1,
                         int(cur_rt / 10) + 2,
@@ -732,8 +767,8 @@ class DeNovoDataModule(pl.LightningDataModule):
         ) as reader:
             for spec in reader:
                 if spec["ms level"] == 1:
-                    cur_rt = (
-                        60 * spec["scanList"]["scan"][0]["scan start time"]
+                    cur_rt = self._convert_rt(
+                        spec["scanList"]["scan"][0]["scan start time"]
                     )
                     if last_rt is not None:
                         cycle_time = cur_rt - last_rt
@@ -749,8 +784,8 @@ class DeNovoDataModule(pl.LightningDataModule):
                     lower_offset = window["isolation window lower offset"]
                     upper_offset = window["isolation window upper offset"]
                     window_size = upper_offset + lower_offset
-                    cur_rt = (
-                        60 * spec["scanList"]["scan"][0]["scan start time"]
+                    cur_rt = self._convert_rt(
+                        spec["scanList"]["scan"][0]["scan start time"]
                     )
                     if num_spectra % 50000 == 0:
                         part += 1
