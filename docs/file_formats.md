@@ -31,31 +31,40 @@ In case the FASTA file contains amino acids that are not in Casanovo's vocabular
 
 ### Model weights
 
-In addition to MS/MS spectra, Casanovo also optionally accepts a model weights (.ckpt extension) input file when running in training, sequencing, or evaluating mode.
-These weights define the functionality of the Casanovo neural network.
+In addition to MS/MS spectra, Casanovo and Cascadia also optionally accept a model weights (.ckpt extension) input file when running in training, sequencing, or evaluating mode.
+These weights define the functionality of the neural network.
 
-If no input weights file is provided, Casanovo will automatically use the most recent compatible weights from the [official Casanovo GitHub repository](https://github.com/Noble-Lab/casanovo), which will be downloaded and cached locally if they are not already.
-Model weights are retrieved by matching Casanovo release version, which is of the form (major, minor, patch).
+If no input weights file is provided, Casanovo or Cascadia will automatically use the most recent compatible weights from the [official Casanovo GitHub repository](https://github.com/Noble-Lab/casanovo), which will be downloaded and cached locally if they are not already.
+Model weights are retrieved by matching the software version, which is of the form (major, minor, patch), and matching the model type (Casanovo or Cascadia).
+
 Casanovo supports models optimized for different instrument types. 
 The default model is ``orbitrap``, and other models can be specified with ``--model timstof`` (only other model currently supported). 
 The model selector matching is done case-insensitively and separators are ignored (e.g., ``Orbitrap``, ``orbitrap``, and ``orbi-trap`` all resolve to the ``orbitrap`` model). 
 Partial names are accepted as long as they match exactly one model (e.g., ``tims`` would resolve to ``timstof``).
 If no model weights for an identical release are available, alternative releases with matching (i) major and minor, or (ii) major versions will be used.
 
-Alternatively, you can input custom model weights in the form of a local file system path or a URL pointing to a compatible Casanovo model weights file.
+Alternatively, you can input custom model weights in the form of a local file system path or a URL pointing to a compatible model weights file.
 If a URL is provided, the upstream weights file will be downloaded and cached locally for later use.
 See the [command line interface documentation](cli.rst) for more details.
 
+## Input File Formats for Cascadia 
+
+### MS/MS Spectra and Other File Types
+
+When you are ready to use Cascadia, you can input your MS/MS spectra in the mzML format:
+
+- **[mzML](https://doi.org/10.1074/mcp.R110.000133)**: XML-based mass spectrometry community standard file format developed by the Proteomics Standards Initiative (PSI).
+
 ## Output: Understanding the mzTab format
 
-After Casanovo processes your input file(s), it provides the results in an **[mzTab](https://doi.org/10.1074/mcp.O113.036681)** file.
+Casanovo and Cascadia provide results in an **[mzTab](https://doi.org/10.1074/mcp.O113.036681)** file.
 This file is divided into two main sections:
 
-1. **Metadata section**: This part describes general information about the file and the Casanovo task.
-2. **Peptide–spectrum match (PSM) section**: Details of the peptide sequences that Casanovo predicted for the MS/MS spectra.
+1. **Metadata section**: This part describes general information about the file and the task that was performed.
+2. **Peptide–spectrum match (PSM) section**: Details of the peptide sequences that Casanovo or Cascadia predicted for the MS/MS spectra.
 
 mzTab files can contain additional sections to include protein identifications and quantification information as well.
-However, as these levels of information are not relevant for Casanovo, these are not included in its output mzTab files.
+However, as these levels of information are not relevant for peptide sequencing, these are not included in its output mzTab files.
 
 ```{tip}
 mzTab is a human and machine readable format.
@@ -85,7 +94,7 @@ On the final line you can see a typical key–value entry using information defi
 In this case, the line indicates that the file is produced by the Casanovo software, which is recorded in the `MS` controlled vocabulary with accession number `MS:1003281`.
 The final element is the version number of Casanovo that produced this file.
 
-The next few lines typically list the post-translational modifications (PTMs) that Casanovo knew:
+The next few lines typically list the post-translational modifications (PTMs) that the model knew:
 
 ```
 MTD	fixed_mod[1]	[UNIMOD, UNIMOD:4, Carbamidomethyl, ]
@@ -166,7 +175,7 @@ Irrespective of the mode of operation used, all settings will be reported in the
 **PSM section**
 
 The PSM section in mzTab files starts with a header line, indicated by the `PSH` key, which defines the subsequent tabular PSM information.
-Next, the following lines each start with the `PSM` key and contain information for an individual PSM predicted by Casanovo.
+Next, the following lines each start with the `PSM` key and contain information for an individual PSM.
 
 ```
 PSH	sequence	PSM_ID	accession	unique	database	database_version	search_engine	search_engine_score[1]	modifications	retention_time	charge	exp_mass_to_charge	calc_mass_to_charge	spectra_ref	pre	post	start	end	opt_global_aa_scores    opt_global_cv_MS:1003169_proforma_peptidoform_sequence
@@ -211,7 +220,7 @@ This column consists of two parts: the run index and the spectrum reference, sep
     - When using MGF files as input, the spectrum reference will be an index, encoded as `index=INDEX`, with `INDEX` the zero-based index of the spectrum in its input file. This is because MGF is not a standardized format that is not guaranteed to contain specific spectrum identifiers.
 
 ```{warning}
-Be mindful of the input peak file format when linking Casanovo PSMs to their input spectra.
+Be mindful of the input peak file format when linking Casanovo or Cascadia PSMs to their input spectra.
 Even when the same raw file is converted to both mzML and MGF, scan numbers in the mzML file will generally not match spectrum indices in the MGF file, as the former contains both MS and MS/MS spectra while the latter only contains MS/MS spectra.
 ```
 When processing MGF files that contain instrument-assigned scan numbers in a `SCANS`, `SCAN`, or `SCAN ID` header field, Casanovo will additionally export an optional `opt_global_cv_MS:1003057_scan_number` column in the PSM section.
@@ -228,10 +237,10 @@ The PSM identifier in the `PSM_ID` column is not necessarily identical to the sp
 - If multiple predictions are included per spectrum (configuration option `top_match`), each PSM will have a different identifier, but spectrum references will overlap.
 ```
 
-## Casanovo Configuration
+## Model Configuration
 
-Casanovo operates based on settings defined in a [YAML configuration file](https://github.com/Noble-Lab/casanovo/blob/main/casanovo/config.yaml).
-This file contains several options that affect how Casanovo processes your data and predicts peptide sequences.
+Casanovo and Cascadia operate based on settings defined in a [YAML configuration file](https://github.com/Noble-Lab/casanovo/blob/main/casanovo/config.yaml).
+This file contains several options that affect how the software processes your data and predicts peptide sequences.
 If you run Casanovo without specifying a configuration file, it uses a set of default settings.
 However, you might want to adjust these settings for several reasons, such as to capture specific characteristics of your data or to experiment with different training configurations.
 
@@ -242,12 +251,14 @@ casanovo configure
 ```
 
 You can then edit this file to adjust various settings.
-After editing, specify your custom configuration file when running Casanovo with the `--config` option.
+After editing, specify your custom configuration file when running with the `--config` option.
 
-The configuration file is divided into sections, each containing options that are relevant to different phases of Casanovo's operation.
-The first section contains options used to configure Casanovo during *de novo* peptide sequencing, followed by options in the second section that can only be modified when training a new model.
+The configuration file is divided into sections, each containing options that are relevant to different phases of Casanovo or Cascadia's operation.
+The first section contains options used during *de novo* peptide sequencing, followed by options in the second section that can only be modified when training a new model.
 For example, the `top_match` option in the first section makes it possible to flexibly report multiple PSMs per spectrum during _de novo_ peptide sequencing.
 In contrast, setting a different value for the `n_peaks` option in the second section is only possible when training a new model, and cannot be modified when predicting with a previously trained model that uses a different configuration.
+
+An additional section include parameters that are unique to Cascadia.
 
 ```{tip}
 Each change in the configuration can lead to different outcomes in the peptide sequencing process, so it may be beneficial to experiment with various settings to find the optimal configuration for your data.
@@ -256,9 +267,9 @@ Always consider your experimental design and the nature of your data when adjust
 
 ## Logging
 
-Casanovo generates detailed log files during operation, providing insights into its performance and aiding in troubleshooting.
+Casanovo and Cascadia generate detailed log files during operation, providing insights into model performance and aiding in troubleshooting.
 These log files are named similarly to the output mzTab files but with a `.log` extension.
-Log files detail every step Casanovo takes, including:
+Log files detail every step Casanovo or Cascadia takes, including:
 
 - Starting and ending timestamps of the sequencing or training process.
 - Configuration options used.
@@ -307,3 +318,11 @@ During training, Casanovo will save a **checkpoint file** every time the validat
 Model checkpoints will be saved to the folder specified by the `--output_dir` command line option with filename format `epoch=EPOCH-step=STEP.ckpt`, with `EPOCH` the epoch and `STEP` the training step at which the checkpoint was taken, helping you track progress and select the best model based on validation performance.
 
 <!-- TODO: when checkpointing is made more flexible, update this information -->
+
+## For Advanced Users: Training Cascadia 
+
+To train a new Cascadia model, the sequence and charge annotations must be provided in a **tsv file with retention time, precursor m/z, and file name**. 
+The sequence and charge annotations will be matched to the augmented spectra based on all three of these fields. 
+
+During training, Cascadia will save **checkpoint files** at every `val_check_interval` steps (or fraction of steps if `val_check_interval` is a float), specified in the configuration.
+Model checkpoints will be saved to the folder specified by the `--output_dir` command line option with filename format `epoch=EPOCH-step=STEP.ckpt`, with `EPOCH` the epoch and `STEP` the training step at which the checkpoint was taken, helping you track progress and select the best model based on validation performance. By default, only the checkpoint for the trained model will be used (i.e., if Cascadia was trained, a checkpoint only compatible for Cascadia will be saved). To switch to the other model, retrain the model using the other CLI name.
