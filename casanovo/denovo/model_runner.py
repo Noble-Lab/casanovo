@@ -23,9 +23,9 @@ from ..config import Config
 from ..data import db_utils, ms_io
 from ..denovo.dataloaders import DeNovoDataModule
 from ..denovo.evaluate import aa_match_batch, aa_match_metrics
-from ..denovo.model import DbSpec2Pep, Spec2Pep
+from ..denovo.model import DbSpec2Pep, Spec2Pep, AugmentedSpec2Pep
 
-logger = logging.getLogger("casanovo")
+logger = logging.getLogger(__name__)
 
 
 class ModelRunner:
@@ -48,6 +48,8 @@ class ModelRunner:
     overwrite_ckpt_check: bool, optional
         Whether to check output_dir (if not `None`) for conflicting
         checkpoint files.
+    casanovo: bool, optional
+        Whether or not to load data for the Casanovo or Cascadia models
     """
 
     def __init__(
@@ -57,6 +59,7 @@ class ModelRunner:
         output_dir: Optional[Path | None] = None,
         output_rootname: Optional[str | None] = None,
         overwrite_ckpt_check: Optional[bool] = True,
+        casanovo: Optional[bool] = True,
     ) -> None:
         """Initialize a ModelRunner."""
         self.config = config
@@ -64,6 +67,7 @@ class ModelRunner:
         self.output_dir = output_dir
         self.output_rootname = output_rootname
         self.overwrite_ckpt_check = overwrite_ckpt_check
+        self.casanovo = casanovo
 
         # Initialized later.
         self.tmp_dir = None
@@ -523,9 +527,18 @@ class ModelRunner:
                 logger.error("A model file must be provided for DB search")
                 raise ValueError("A model file must be provided for DB search")
             # Train a model from scratch if no model file is provided.
-            if train:
+            if train and self.casanovo:
                 self.model = Spec2Pep(**model_params)
                 return
+
+            if train and not self.casanovo:
+                model_params["frag_class_weights"] = (
+                    self.config.frag_class_weights
+                )
+                model_params["frag_weight"] = self.config.frag_weight
+                self.model = AugmentedSpec2Pep(**model_params)
+                return
+
             # Else we're not training, so a model file must be provided.
             else:
                 logger.error("A model file must be provided")
@@ -543,7 +556,13 @@ class ModelRunner:
         # First try loading model details from the weights file,
         # otherwise use the provided configuration.
         device = torch.empty(1).device  # Use the default device.
-        model_clss = DbSpec2Pep if db_search else Spec2Pep
+        if db_search:
+            model_clss = DbSpec2Pep
+        elif self.casanovo:
+            model_clss = Spec2Pep
+        else:
+            model_clss = AugmentedSpec2Pep
+
         try:
             self.model = model_clss.load_from_checkpoint(
                 self.model_filename,
@@ -560,6 +579,7 @@ class ModelRunner:
             architecture_params = set(model_params.keys()) - set(
                 loaded_model_params.keys()
             )
+
             for param in architecture_params:
                 if model_params[param] != self.model.hparams[param]:
                     if param == "tokenizer":
@@ -658,6 +678,8 @@ class ModelRunner:
             shuffle_buffer_size=self.config.shuffle_buffer_size,
             n_workers=self.config.n_workers,
             lance_dir=lance_dir,
+            casanovo=self.casanovo,
+            scan_width=self.config.width,
         )
 
     @staticmethod

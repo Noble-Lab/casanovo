@@ -10,8 +10,7 @@ import yaml
 
 from . import utils
 
-logger = logging.getLogger("casanovo")
-
+logger = logging.getLogger(__name__)
 
 # FIXME: This contains deprecated config options to be removed in the next
 #  major version update.
@@ -133,6 +132,9 @@ class Config:
         massivekb_tokenizer=bool,
         residues=dict,
         new_token_init=dict,
+        width=int,
+        frag_class_weights=float,
+        frag_weight=float,
     )
 
     def __init__(self, config_file: Optional[str] = None):

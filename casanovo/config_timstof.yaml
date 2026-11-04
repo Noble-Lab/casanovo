@@ -1,7 +1,50 @@
 ###
-# Casanovo configuration.
+# Casanovo/Cascadia configuration.
+# Casanovo/Cascadia configuration.
 # Blank entries are interpreted as `None`.
 ###
+
+###
+# The following parameters are unique to running inference with 
+# Cascadia. Other parameters such as training batch size, 
+# inference batch size, etc. will be used from those sections 
+# of the config file when running inference with Cascadia.
+###
+width: 2
+
+###
+# The following parameters are unique to training
+# Cascadia. Other parameters such as training batch size, 
+# inference batch size, etc. will be used from those sections 
+# of the config file when running inference with Cascadia.
+###
+# How much the fragment class weighs more than the non-fragment class 
+# in the auxiliary classification task
+frag_class_weights: 20
+
+# How much to weight the auxiliary task in computing the loss
+frag_weight: 1e-3
+
+###
+# The following parameters are unique to running inference with 
+# Cascadia. Other parameters such as training batch size, 
+# inference batch size, etc. will be used from those sections 
+# of the config file when running inference with Cascadia.
+###
+width: 2
+
+###
+# The following parameters are unique to training
+# Cascadia. Other parameters such as training batch size, 
+# inference batch size, etc. will be used from those sections 
+# of the config file when running inference with Cascadia.
+###
+# How much the fragment class weighs more than the non-fragment class 
+# in the auxiliary classification task
+frag_class_weights: 20
+
+# How much to weight the auxiliary task in computing the loss
+frag_weight: 1e-3
 
 ###
 # The following parameters can be modified when running inference or when
@@ -9,6 +52,22 @@
 # parameters when running Casanovo in database search mode.
 ###
 
+# Max absolute difference allowed with respect to observed precursor m/z.
+# Only peptides within the specified precursor m/z tolerance are considered.
+precursor_mass_tol: 50 
+
+# Isotopes to consider when comparing predicted and observed precursor m/z's.
+isotope_error_range: [0, 1]
+
+# Max absolute difference allowed with respect to observed precursor m/z.
+# de novo: Predictions outside the tolerance range are assigned a negative
+# peptide score.
+# database search: Select candidate peptides within the specified precursor m/z
+# tolerance.
+# Set to "inf" (with quotation marks) to disable the filter entirely.
+precursor_mass_tol: 50  # ppm
+# Isotopes to consider when comparing predicted and observed precursor m/z's.
+isotope_error_range: [0, 1]
 # The minimum length of considered peptides.
 min_peptide_len: 6
 # The maximum length of considered peptides.
@@ -16,7 +75,7 @@ max_peptide_len: 100
 # Number of spectra in one inference batch.
 predict_batch_size: 1024
 # Number of PSMs for each spectrum.
-top_match: 1
+top_match: 2
 # The hardware accelerator to use. Must be one of:
 # "cpu", "gpu", "tpu", "ipu", "hpu", "mps", or "auto".
 accelerator: "auto"
@@ -66,7 +125,8 @@ max_mods: 1
 # the "residues" dictionary.
 # Example: "M:M[Oxidation],nterm:[Carbamyl]-"
 allowed_fixed_mods: "C:C[Carbamidomethyl]"
-allowed_var_mods: "M:M[Oxidation],N:N[Deamidated],Q:Q[Deamidated],nterm:[Acetyl]-,nterm:[Carbamyl]-,nterm:[Ammonia-loss]-,nterm:[+25.980265]-"
+allowed_var_mods: "M:M[Oxidation],nterm:[Acetyl]-,nterm:[Ammonia-loss]-,C:C[Cysteinyl]"
+allowed_var_mods: "M:M[Oxidation],nterm:[Acetyl]-,nterm:[Ammonia-loss]-,C:C[Cysteinyl]"
 
 
 ###
@@ -203,10 +263,13 @@ residues:
   "Q[Deamidated]": 129.042594             # Gln deamidation: 128.058578 +  0.984016
   # N-terminal modifications.
   "[Acetyl]-": 42.010565                  # Acetylation
-  "[Carbamyl]-": 43.005814                # Carbamylation
+  #"[Carbamyl]-": 43.005814                # Carbamylation
+  #"[Carbamyl]-": 43.005814                # Carbamylation
   "[Ammonia-loss]-": -17.026549           # Ammonia loss
-  "[+25.980265]-": 25.979265              # Carbamylation and ammonia loss: 43.005814 - 17.026549
-  "[Carbamyl][Ammonia-loss]-": 25.979265  # Carbamylation and ammonia loss: 43.005814 - 17.026549
+  #"[+25.979265]-": 25.979265              # Carbamylation and ammonia loss
+  #"[Carbamyl][Ammonia-loss]-": 25.979265  # Carbamylation and ammonia loss
+  #"[+25.979265]-": 25.979265              # Carbamylation and ammonia loss
+  #"[Carbamyl][Ammonia-loss]-": 25.979265  # Carbamylation and ammonia loss
 
 # When fine-tuning with a vocabulary that extends the checkpoint's, map each
 # new token to an existing token whose weights should be used for initialization.
