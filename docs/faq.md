@@ -222,6 +222,8 @@ To view per-file tracking losses, enable `tb_summarywriter: true` or `log_metric
 ### How can I change the learning rate schedule used during training?
 
 By default, Casanovo uses a learning rate schedule that combines linear warm up followed by a cosine decay (as implemented in `CosineWarmupScheduler` in `casanovo/denovo/model.py`) during training.
+The length of the warm up is set with the `warmup_iters` option in the configuration file.
+The cosine half period is not configurable: it is derived from the total number of training steps, so after the warm up the learning rate only decreases, ending near zero on the final step.
 To use a different learning rate schedule, you can specify an alternative learning rate scheduler as follows (in the `lr_scheduler` variable in function `Spec2Pep.configure_optimizers` in `casanovo/denovo/model.py`):
 
 ```
@@ -229,6 +231,7 @@ lr_scheduler = torch.optim.lr_scheduler.LinearLR(optimizer, total_iters=self.war
 ```
 
 You can use any of the scheduler classes available in [`torch.optim.lr_scheduler`](https://pytorch.org/docs/stable/optim.html#how-to-adjust-learning-rate) or implement your custom learning rate schedule similar to `CosineWarmupScheduler`.
+If your schedule needs the total number of training steps, use `self.trainer.estimated_stepping_batches` in `configure_optimizers`, which accounts for the number of epochs, gradient accumulation, and multi-device training.
 
 ## Miscellaneous
 

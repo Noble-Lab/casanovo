@@ -18,11 +18,12 @@ logger = logging.getLogger("casanovo")
 _config_deprecated = dict(
     n_peaks="max_peaks",
     every_n_train_steps="val_check_interval",
-    max_iters="cosine_schedule_period_iters",
+    max_iters=None,
     max_length="max_peptide_len",
     save_top_k=None,
     model_save_folder_path=None,
     reverse_peptides=None,
+    cosine_schedule_period_iters=None,
 )
 
 
@@ -115,7 +116,6 @@ class Config:
         dropout=float,
         dim_intensity=int,
         warmup_iters=int,
-        cosine_schedule_period_iters=int,
         learning_rate=float,
         weight_decay=float,
         train_label_smoothing=float,

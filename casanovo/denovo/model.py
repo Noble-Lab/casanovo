@@ -73,9 +73,6 @@ class Spec2Pep(pl.LightningModule):
     warmup_iters : int
         The number of iterations for the linear warm-up of the learning
         rate.
-    cosine_schedule_period_iters : int
-        The number of iterations for the cosine half period of the
-        learning rate.
     out_writer : ms_io.MztabWriter | None
         The output writer for the prediction results.
     calculate_precision : bool
@@ -104,7 +101,6 @@ class Spec2Pep(pl.LightningModule):
         n_log: int = 10,
         train_label_smoothing: float = 0.01,
         warmup_iters: int = 100_000,
-        cosine_schedule_period_iters: int = 600_000,
         out_writer: Optional[ms_io.MztabWriter] = None,
         calculate_precision: bool = False,
         tokenizer: PeptideTokenizer | None = None,
@@ -138,9 +134,14 @@ class Spec2Pep(pl.LightningModule):
             ignore_index=ignore_index, label_smoothing=train_label_smoothing
         )
         self.val_celoss = torch.nn.CrossEntropyLoss(ignore_index=ignore_index)
-        # Optimizer settings.
+        # Optimizer settings. The cosine schedule period is derived
+        # from the total number of training steps in
+        # `configure_optimizers`.
         self.warmup_iters = warmup_iters
-        self.cosine_schedule_period_iters = cosine_schedule_period_iters
+        self.cosine_schedule_period_iters = None
+        # Fallback total step count, attached by `ModelRunner.train`,
+        # for when Lightning cannot estimate it (streaming dataloader).
+        self.total_train_steps = None
         # `kwargs` will contain additional arguments as well as
         # unrecognized arguments, including deprecated ones. Remove the
         # deprecated ones.
@@ -1128,6 +1129,16 @@ class Spec2Pep(pl.LightningModule):
 
     def on_train_start(self):
         """Log optimizer settings."""
+        # Resuming from a checkpoint restores the scheduler state,
+        # including the cosine period of the previous run; re-impose the
+        # period derived for the current run so an extended `max_epochs`
+        # stretches the schedule instead of training past its end. When
+        # the configuration is unchanged, the two are identical.
+        scheduler = self.lr_schedulers()
+        if isinstance(scheduler, CosineWarmupScheduler):
+            scheduler.cosine_schedule_period_iters = (
+                self.cosine_schedule_period_iters
+            )
         self.log("hp/optimizer_warmup_iters", self.warmup_iters)
         self.log(
             "hp/optimizer_cosine_schedule_period_iters",
@@ -1172,6 +1183,9 @@ class Spec2Pep(pl.LightningModule):
         Initialize the optimizer.
 
         We use the Adam optimizer with a cosine learning rate scheduler.
+        The cosine half period spans the total number of training steps,
+        so after the warm-up the learning rate only ever decreases,
+        ending near zero on the final step.
 
         Returns
         -------
@@ -1179,6 +1193,20 @@ class Spec2Pep(pl.LightningModule):
             The initialized Adam optimizer and its learning rate
             scheduler.
         """
+        # A streaming training dataloader has no length, in which case
+        # Lightning returns `Trainer.max_steps` (-1 by default) instead
+        # of a usable estimate; fall back to the step count that
+        # `ModelRunner.train` computed from the dataset size.
+        period = self.trainer.estimated_stepping_batches
+        if not 0 < period < float("inf"):
+            period = self.total_train_steps
+        if period is None or not 0 < period < float("inf"):
+            raise ValueError(
+                "Unable to determine the total number of training steps "
+                "for the learning rate schedule; set `max_steps` on the "
+                "trainer or `total_train_steps` on the model."
+            )
+        self.cosine_schedule_period_iters = int(period)
         optimizer = torch.optim.Adam(self.parameters(), **self.opt_kwargs)
         # Apply learning rate scheduler per step.
         lr_scheduler = CosineWarmupScheduler(
