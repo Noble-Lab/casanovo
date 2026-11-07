@@ -110,6 +110,7 @@ class Spec2Pep(pl.LightningModule):
         tokenizer: PeptideTokenizer | None = None,
         **kwargs: Dict,
     ):
+        """Initialize the de novo peptide sequencing model."""
         super().__init__()
         self.save_hyperparameters()
 
