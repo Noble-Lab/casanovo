@@ -161,7 +161,6 @@ class Spec2Pep(pl.LightningModule):
         self.min_peptide_len = min_peptide_len
         self.n_beams = n_beams
         self.top_match = top_match
-        self.stop_token = self.tokenizer.stop_int
 
         # Logging.
         self.calculate_precision = calculate_precision
@@ -176,6 +175,11 @@ class Spec2Pep(pl.LightningModule):
         # Output writer during predicting.
         self.out_writer = out_writer
 
+        self._update_tokenizer_metadata()
+
+    def _update_tokenizer_metadata(self) -> None:
+        """Update token indices to match the current tokenizer."""
+        self.stop_token = self.tokenizer.stop_int
         # Get n-term mod tokens
         self.n_term = [
             aa
@@ -192,6 +196,7 @@ class Spec2Pep(pl.LightningModule):
                     if mass < 0
                 ],
                 dtype=torch.int,
+                device=self.device,
             ),
             persistent=False,
         )
@@ -202,6 +207,7 @@ class Spec2Pep(pl.LightningModule):
             torch.tensor(
                 [self.tokenizer.index[aa] for aa in self.n_term],
                 dtype=torch.int,
+                device=self.device,
             ),
             persistent=False,
         )
