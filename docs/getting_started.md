@@ -28,7 +28,8 @@ This will create an Anaconda environment called `casanovo_env` that has Python 3
 
 ```{Note} 
 Currently, due to outstanding issues with support of Pytorch on Mac, you should install with Python version 3.10, like this `conda create --name casanovo_env python=3.10`.
-On Apple Silicon Macs, Casanovo versions 5.1.0 through 5.2.1 run on the CPU even when `accelerator` is `auto`. This override has been removed in the development version, which can use the GPU through Apple's Metal Performance Shaders (MPS); see the [FAQ](faq.md) for the environment variable this requires.
+On Apple Silicon Macs, Casanovo can use the GPU through Apple's Metal Performance Shaders (MPS).
+See the [FAQ](faq.md) for the environment variable this requires.
 ```
 
 Activate this environment by running:
@@ -139,7 +140,8 @@ To evaluate the peptide predictions, ground truth peptide labels must to be prov
 Compatible MGF files are available from [MassIVE-KB](https://massive.ucsd.edu/ProteoSAFe/static/massive-kb-libraries.jsp).
 Note that the `--evaluate` flag requires that `top_match` is set to 1 in the configuration file.
 
-In the development version (after 5.2.1), the end-of-run report also includes the average precision (the area under the precision-coverage curve), and the mzTab output includes extra evaluation columns if at least one PSM has an evaluation result (see [File Formats](file_formats.md)).
+The end-of-run report also includes the average precision (the area under the precision-coverage curve).
+The mzTab output includes extra evaluation columns if at least one PSM has an evaluation result (see [File Formats](file_formats.md)).
 
 ### Database searching
 
@@ -151,7 +153,7 @@ casanovo db-search spectra.mgf proteome.fasta
 
 ![`casanovo db-search --help`](images/db-search-help.svg)
 
-In this case, besides MS/MS spectra in mzML, mzXML, or MGF file(s) (or timsTOF `.d` folders), Casanovo needs as minimal input the protein database in the FASTA format.
+In this case, besides MS/MS spectra in a supported raw spectrum format, Casanovo needs as minimal input the protein database in the FASTA format.
 Additional settings that determine how peptides are derived from the protein sequences can be specified in the YAML configuration file (default: tryptic digestion).
 This will write PSM scores for the given MS/MS spectra and FASTA file to the specified output file in mzTab format.
 
