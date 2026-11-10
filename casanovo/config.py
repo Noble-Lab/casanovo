@@ -145,16 +145,19 @@ class Config:
         new_token_init=dict,
     )
 
-    def __init__(self, config_file: Optional[str] = None):
+    def __init__(
+        self, config_file: Optional[str] = None, model_selector: bool = False
+    ):
         """Initialize a Config object."""
         self.file = str(config_file) if config_file is not None else "default"
         with self._default_config.open() as f_in:
             self._params = yaml.safe_load(f_in)
+        self.model_selector = model_selector
 
         if config_file is None:
             self._user_config = {}
         else:
-            if not Path(config_file).is_file():
+            if model_selector or not Path(config_file).is_file():
                 config_file = self._resolve_config(config_file)
 
             with Path(config_file).open() as f_in:

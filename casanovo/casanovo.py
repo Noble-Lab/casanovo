@@ -803,7 +803,7 @@ def _resolve_setup_config(
                 "Using default config. If this is incorrect, specify a "
                 "config file explicitly with '--config'."
             )
-        config = Config(canonical_id)
+        config = Config(canonical_id, model_selector=True)
     elif Path(config).is_file():
         config = Config(config)
     else:
