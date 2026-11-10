@@ -185,11 +185,11 @@ The `--validation_peak_path` option is optional. If it is not provided, the trai
 If a training is continued for a previously trained model, specify the starting model weights using `--model`.
 
 By default, only the model weights are loaded from this file.
-To also restore the rest of the saved training state when resuming a run, add the `--load_all_states` flag.
+To also restore the rest of the saved training state when resuming a run, add the `--continue_training` flag.
 This flag requires `--model`, and the model must be a local checkpoint file (not a URL):
 
 ```sh
-casanovo train --model previous.ckpt --load_all_states --validation_peak_path validation_spectra.mgf training_spectra.mgf
+casanovo train --model previous.ckpt --continue_training --validation_peak_path validation_spectra.mgf training_spectra.mgf
 ```
 
 To fine-tune an existing model with new post-translational modifications, additional configuration is required; see the [FAQ](faq.md#how-do-i-fine-tune-casanovo-on-data-with-new-ptms) for a detailed guide.
