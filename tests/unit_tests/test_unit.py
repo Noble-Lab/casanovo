@@ -3262,6 +3262,45 @@ def test_validation_step_logs_per_file():
     assert "valid_CELoss" not in logged
 
 
+def test_validation_step_multiple_main_loaders():
+    """validation_step with multiple main loaders aggregates on epoch end."""
+    tokenizer = depthcharge.tokenizers.peptides.MskbPeptideTokenizer()
+    model = Spec2Pep(
+        n_beams=1,
+        residues="massivekb",
+        min_peptide_len=4,
+        tokenizer=tokenizer,
+    )
+    model.val_stems = ["a", "b"]
+    model.n_main_loaders = 2
+    model.trainer = unittest.mock.MagicMock()
+    model.trainer.callback_metrics = {}
+    model.trainer.global_step = 0
+
+    batch = {
+        "mz_array": torch.zeros(1, 5),
+        "intensity_array": torch.zeros(1, 5),
+        "precursor_mz": torch.tensor(235.63410),
+        "precursor_charge": torch.tensor(2),
+        "seq": tokenizer.tokenize(["PEPK"]),
+    }
+
+    model.on_validation_epoch_start()
+    with unittest.mock.patch.object(model, "log") as mock_log:
+        model.validation_step(batch, 0, dataloader_idx=0)
+        model.validation_step(batch, 0, dataloader_idx=1)
+        logged = {c.args[0]: c.kwargs for c in mock_log.call_args_list}
+        assert "valid_CELoss/a" in logged
+        assert "valid_CELoss/b" in logged
+        # Aggregate valid_CELoss is deferred to on_validation_epoch_end
+        assert "valid_CELoss" not in logged
+
+        # on_validation_epoch_end logs the aggregated valid_CELoss
+        model.on_validation_epoch_end()
+        logged_after = {c.args[0]: c.kwargs for c in mock_log.call_args_list}
+        assert "valid_CELoss" in logged_after
+
+
 def test_train_cli_tracking_peak_path(tmp_path, mgf_small, monkeypatch):
     """-t/--tracking_peak_path CLI option is forwarded to ModelRunner.train()."""
     from casanovo.denovo.model_runner import ModelRunner as _ModelRunner

@@ -746,6 +746,39 @@ def test_train_with_tracking_peak_path(tmp_path, mgf_small, tiny_config):
         assert any(track_key in metrics for metrics in runner.model._history)
 
 
+def test_train_multiple_validation_peak_paths(
+    tmp_path, mgf_small, tiny_config
+):
+    """train() with multiple validation_peak_path files logs per-file and aggregate metrics without crashing."""
+    config = Config(tiny_config)
+    config.max_epochs = 1
+    config.n_layers = 1
+    config.val_check_interval = 1
+
+    mgf_val2 = tmp_path / "val2.mgf"
+    shutil.copy(mgf_small, mgf_val2)
+
+    with ModelRunner(
+        config, output_dir=tmp_path, output_rootname="multi_val"
+    ) as runner:
+        runner.train([mgf_small], [mgf_small, mgf_val2])
+        assert runner.model.n_main_loaders == 2
+        assert runner.model.val_stems[:2] == [
+            Path(mgf_small).stem,
+            Path(mgf_val2).stem,
+        ]
+        assert "valid_CELoss" in runner.trainer.callback_metrics
+        assert (
+            f"valid_CELoss/{Path(mgf_small).stem}"
+            in runner.trainer.callback_metrics
+        )
+        assert (
+            f"valid_CELoss/{Path(mgf_val2).stem}"
+            in runner.trainer.callback_metrics
+        )
+        assert any("valid" in metrics for metrics in runner.model._history)
+
+
 def test_remap_decoder_vocab_no_change(tmp_path, mgf_small, tiny_config):
     """Identical vocabs: weights unchanged and layers not rebuilt."""
     config = Config(tiny_config)
