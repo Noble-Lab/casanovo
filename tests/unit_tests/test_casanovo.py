@@ -1,6 +1,7 @@
 import datetime
 import functools
 import hashlib
+import inspect
 import io
 import logging
 import os
@@ -44,6 +45,7 @@ def test_version():
     ],
 )
 def test_is_valid_model(model_file, expectation, log_message, caplog):
+    """Require a local checkpoint when resuming training."""
     if expectation is None:
         casanovo._is_valid_model(model_file, continue_training=True)
         assert log_message in caplog.text
@@ -116,6 +118,7 @@ class MockResponseGet:
 
     class FailingRaw(io.BytesIO):
         def read(self, *args, **kwargs):
+            """Return the first chunk, then time out on subsequent reads."""
             if self.tell() == 0:
                 return super().read(4)
             raise requests.Timeout
@@ -127,10 +130,12 @@ class MockResponseGet:
         self.fail_after_first_chunk = fail_after_first_chunk
 
     def raise_for_status(self):
+        """Raise an HTTP error when the mock response is unsuccessful."""
         if not self.is_ok:
             raise requests.HTTPError
 
     def __call__(self, url, stream=True, allow_redirects=True, timeout=None):
+        """Build a streaming response and record the requested timeout."""
         self.request_counter += 1
         self.timeouts.append(timeout)
         response = unittest.mock.MagicMock()
@@ -151,6 +156,7 @@ class MockResponseHead:
         self.timeouts = []
 
     def __call__(self, url, timeout=None):
+        """Return mock HEAD metadata or raise a connection error."""
         self.timeouts.append(timeout)
         if self.fail:
             raise requests.ConnectionError
@@ -307,6 +313,7 @@ def test_rate_limit_exception(monkeypatch, model_arg):
     ],
 )
 def test_get_model_weights(monkeypatch, selector, expected_filename):
+    """Resolve and cache weights for compatible Casanovo versions."""
     test_releases = ["3.0.0", "3.0.999", "3.999.999"]
     mock_get = MockResponseGet()
     mock_github = functools.partial(MockGithub, test_releases)
@@ -691,12 +698,17 @@ def test_setup_logging_reinstalls_warning_capture(tmp_path):
     ],
 )
 def test_shared_file_io_params_validation(tmp_path, args, should_fail):
+    """Check exit codes and output streams for shared CLI options."""
+
     @click.command(cls=_SharedFileIOParams)
     def dummy(*args, **kwargs):
         click.echo("ok")
 
     argv = args(tmp_path)
-    res = click.testing.CliRunner().invoke(dummy, argv)
+    runner_options = {}
+    if "mix_stderr" in inspect.signature(click.testing.CliRunner).parameters:
+        runner_options["mix_stderr"] = False
+    res = click.testing.CliRunner(**runner_options).invoke(dummy, argv)
 
     if should_fail:
         assert res.exit_code != 0

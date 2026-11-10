@@ -152,12 +152,13 @@ def test_peptide_score_batch_requires_lengths():
 
     with pytest.raises(
         ValueError,
-        match="`lengths` must be provided for batched input\.",
+        match=r"`lengths` must be provided for batched input\.",
     ):
         _peptide_score(aa_scores_batch, None)
 
 
 def test_calc_match_score():
+    """Check match scores for padded batches in both sequence directions."""
     score_A = [0.42, 1.0, 0.0, 0.0, 0.0]
     score_B = [0.42, 0.0, 1.0, 0.0, 0.0]
     score_C = [0.42, 0.0, 0.0, 1.0, 0.0]
@@ -247,6 +248,7 @@ def test_calc_match_score():
 
 
 def test_psm_batches(tiny_config):
+    """Check that candidate batches preserve the matching spectrum data."""
     peptides_one = [
         "SGSGSG",
         "GSGSGT",
@@ -341,6 +343,7 @@ def test_psm_batches(tiny_config):
 
 
 def test_db_stop_token(tiny_config):
+    """Check that the stop token contributes only to the match score."""
     peptides_one = [
         "SGSGSG",
         "GSGSGT",
@@ -393,14 +396,14 @@ def test_db_stop_token(tiny_config):
         "intensity_array": torch.zeros((2, 10)),
     }
 
-    for predction in db_model.predict_step(mock_batch):
-        # make sure the stop token score is not inlcuded in reported AA scores
-        # but is included in match score calculation
-        assert len(tokenizer.tokenize(predction.sequence)[0]) == len(
-            predction.aa_scores
+    predictions = db_model.predict_step(mock_batch)
+    assert predictions
+    for prediction in predictions:
+        assert len(tokenizer.tokenize(prediction.sequence)[0]) == len(
+            prediction.aa_scores
         )
-        assert pytest.approx(predction.peptide_score) != _peptide_score(
-            predction.aa_scores, True
+        assert pytest.approx(prediction.peptide_score) != _peptide_score(
+            prediction.aa_scores
         )
 
 
@@ -633,6 +636,7 @@ def test_on_predict_epoch_end_aggregates(tiny_config):
 
 
 def test_finish_beams(tiny_config):
+    """Finish a beam at its stop token and discard it if it is too short."""
     config = Config(tiny_config)
     model = Spec2Pep(
         n_beams=4,
@@ -686,6 +690,7 @@ def test_finish_beams(tiny_config):
 
 @pytest.mark.parametrize("reverse", [True, False])
 def test_invalid_n_term_mod(tiny_config, reverse):
+    """Reject misplaced and repeated N-terminal mods in either direction."""
     config = Config(tiny_config)
     model = Spec2Pep(
         n_beams=4,
@@ -891,6 +896,7 @@ def test_cache_finished_beams(tiny_config):
 
 
 def test_get_top_peptide_ranking(tiny_config):
+    """Select the highest-scoring peptide from unsorted cached beams."""
     config = Config(tiny_config)
     model = Spec2Pep(
         tokenizer=depthcharge.tokenizers.peptides.PeptideTokenizer(
@@ -925,6 +931,7 @@ def test_get_top_peptide_ranking(tiny_config):
 
 @pytest.mark.parametrize("topk", [1, 2, 3])
 def test_get_top_peptide_multiple(topk, tiny_config):
+    """Return the requested number of cached peptides in score order."""
     config = Config(tiny_config)
     model = Spec2Pep(
         top_match=topk,
@@ -1049,6 +1056,7 @@ def test_beam_search_decode_early_termination(tiny_config):
 
 
 def test_duplicate_peptide_scores(tiny_config):
+    """Preserve equal peptide scores when caching finished beams."""
     config = Config(tiny_config)
     model = Spec2Pep(
         n_beams=1,

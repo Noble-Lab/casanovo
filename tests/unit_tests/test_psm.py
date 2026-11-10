@@ -81,7 +81,7 @@ def test_parse_sequence():
         "exp_mz",
         "aa_scores",
     ]
-    default_args = {arg: None for arg in psm_args}
+    default_args = dict.fromkeys(psm_args)
 
     # No mod
     match = psm.PepSpecMatch(sequence="ACDMK", **default_args)

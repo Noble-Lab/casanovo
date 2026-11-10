@@ -10,6 +10,7 @@ from casanovo.data import psm
 
 
 def test_log_annotate_report_average_precision(monkeypatch):
+    """Report average precision even when the prediction list is empty."""
     mock_logger = unittest.mock.MagicMock()
     monkeypatch.setattr("casanovo.utils.logger", mock_logger)
     monkeypatch.setattr(utils, "log_run_report", lambda **_: None)
@@ -210,6 +211,7 @@ def test_check_dir(tmp_path):
 
 
 def test_log_annotate_report_missing_predictions(monkeypatch):
+    """Report missing predictions and preserve positional score bin calls."""
     mock_logger = unittest.mock.MagicMock()
     monkeypatch.setattr("casanovo.utils.logger", mock_logger)
     monkeypatch.setattr(utils, "log_run_report", lambda **_: None)

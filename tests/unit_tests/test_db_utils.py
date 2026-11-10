@@ -194,6 +194,7 @@ def test_peptide_generator_unknown_amino_acids(tmp_path):
 
 
 def test_digest_fasta_cleave(tiny_fasta_file):
+    """Check tryptic digestion with zero, one, and three missed cleavages."""
     # No missed cleavages
     expected_normal = [
         "ATSIPAR",
