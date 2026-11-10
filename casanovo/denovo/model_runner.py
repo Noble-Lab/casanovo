@@ -3,6 +3,7 @@ model."""
 
 import glob
 import logging
+import math
 import os
 import tempfile
 import warnings
@@ -11,6 +12,7 @@ from typing import Iterable, List, Optional, Sequence, Union
 
 import lightning.pytorch as pl
 import lightning.pytorch.loggers
+import numpy as np
 import torch
 from depthcharge.tokenizers import PeptideTokenizer
 from depthcharge.tokenizers.peptides import MskbPeptideTokenizer
@@ -22,10 +24,14 @@ from .. import utils
 from ..config import Config
 from ..data import db_utils, ms_io
 from ..denovo.dataloaders import DeNovoDataModule
-from ..denovo.evaluate import aa_match_batch, aa_match_metrics
-from ..denovo.model import DbSpec2Pep, Spec2Pep
+from ..denovo.evaluate import (
+    aa_match_batch,
+    aa_match_metrics,
+    precision_coverage,
+)
+from ..denovo.model import DbSpec2Pep, Spec2Pep, AugmentedSpec2Pep
 
-logger = logging.getLogger("casanovo")
+logger = logging.getLogger(__name__)
 
 
 class ModelRunner:
@@ -48,6 +54,8 @@ class ModelRunner:
     overwrite_ckpt_check: bool, optional
         Whether to check output_dir (if not `None`) for conflicting
         checkpoint files.
+    casanovo: bool, optional
+        Whether or not to load data for the Casanovo or Cascadia models
     """
 
     def __init__(
@@ -57,6 +65,7 @@ class ModelRunner:
         output_dir: Optional[Path | None] = None,
         output_rootname: Optional[str | None] = None,
         overwrite_ckpt_check: Optional[bool] = True,
+        casanovo: Optional[bool] = True,
     ) -> None:
         """Initialize a ModelRunner."""
         self.config = config
@@ -64,6 +73,7 @@ class ModelRunner:
         self.output_dir = output_dir
         self.output_rootname = output_rootname
         self.overwrite_ckpt_check = overwrite_ckpt_check
+        self.casanovo = casanovo
 
         # Initialized later.
         self.tmp_dir = None
@@ -71,6 +81,7 @@ class ModelRunner:
         self.model = None
         self.loaders = None
         self.writer = None
+        self.average_precision = None
 
         if output_dir is None:
             self.callbacks = []
@@ -237,10 +248,14 @@ class ModelRunner:
 
     def log_metrics(self, test_dataloader: DataLoader) -> None:
         """
-        Log peptide precision and amino acid precision.
+        Log peptide and amino acid precision, and average precision.
 
-        Calculate and log peptide precision and amino acid precision
-        based off of model predictions and spectrum annotations.
+        Calculate and log the peptide precision, amino acid precision,
+        and amino acid recall based off of model predictions and spectrum
+        annotations. In evaluation mode the ground truth sequence and the
+        precision and coverage at each prediction are attached to the PSMs
+        for export as additional mzTab columns, and the average precision
+        is stored for the end-of-run report.
 
         Parameters
         ----------
@@ -249,6 +264,7 @@ class ModelRunner:
             model predictions.
         """
         pred_seqs, true_seqs, pred_i = [], [], 0
+        psms, scores = [], []
 
         for batch in test_dataloader:
             for peak_file, scan_id, true_seq in zip(
@@ -267,13 +283,50 @@ class ModelRunner:
                         curr_pred = curr_pred[::-1]
 
                     pred_seqs.append(curr_pred)
+                    psms.append(self.writer.psms[pred_i])
+                    scores.append(self.writer.psms[pred_i].peptide_score)
                     pred_i += 1
                 else:
                     pred_seqs.append(None)
+                    psms.append(None)
+                    scores.append(None)
 
-        aa_precision, aa_recall, pep_precision = aa_match_metrics(
-            *aa_match_batch(true_seqs, pred_seqs, self.tokenizer.residues)
+        aa_matches_batch, n_aa_true, n_aa_pred = aa_match_batch(
+            true_seqs, pred_seqs, self.tokenizer.residues
         )
+        aa_precision, aa_recall, pep_precision = aa_match_metrics(
+            aa_matches_batch, n_aa_true, n_aa_pred
+        )
+        pep_matches = [match[1] for match in aa_matches_batch]
+
+        # Rank scored predictions to build the precision-coverage curve and
+        # attach the ground truth, precision, and coverage to each PSM so
+        # they can be exported as additional mzTab columns.
+        scored = [
+            i
+            for i, score in enumerate(scores)
+            if score is not None and not math.isnan(score)
+        ]
+        self.average_precision = 0.0
+        if scored:
+            order, coverage, precision = precision_coverage(
+                [scores[i] for i in scored],
+                [pep_matches[i] for i in scored],
+                len(true_seqs),
+            )
+            # Average precision is the area under the precision-coverage
+            # curve: the precision at each rank weighted by its coverage
+            # increment (1 / n_spectra).
+            self.average_precision = float(
+                np.sum(precision * np.diff(np.r_[0.0, coverage]))
+            )
+            for rank, scored_idx in enumerate(order):
+                i = scored[scored_idx]
+                psms[i].ground_truth_sequence = (
+                    "".join(true_seqs[i]) if true_seqs[i] else ""
+                )
+                psms[i].precision = float(precision[rank])
+                psms[i].coverage = float(coverage[rank])
 
         if self.config["top_match"] > 1:
             logger.warning(
@@ -329,6 +382,27 @@ class ModelRunner:
 
         try:
             self.loaders.setup(stage="test", annotated=evaluate)
+        except StopIteration as e:
+            # Raised by depthcharge when every spectrum was skipped.
+            if evaluate:
+                error_message = (
+                    "No annotated spectra could be read from the input peak "
+                    "files. This happens when a peak file is unannotated, or "
+                    "when every spectrum was skipped for another reason "
+                    "(invalid precursor charge, too few peaks, ...). See the "
+                    "preceding 'Skipped N spectra' warning for the last error "
+                    "that was encountered."
+                )
+                logger.error(error_message)
+                raise TypeError(error_message) from e
+
+            error_message = (
+                "No valid spectra could be read from the input peak files. "
+                "See the preceding 'Skipped N spectra' warning for the last "
+                "error that was encountered."
+            )
+            logger.error(error_message)
+            raise ValueError(error_message) from e
         except (KeyError, OSError, TypeError) as e:
             if evaluate:
                 error_message = (
@@ -457,6 +531,7 @@ class ModelRunner:
         self.tokenizer = tokenizer_clss(
             residues=self.config.residues,
             replace_isoleucine_with_leucine=self.config.replace_isoleucine_with_leucine,
+            replace_n_and_q_deamidated_with_d_and_e=self.config.replace_n_and_q_deamidated_with_d_and_e,
             reverse=True,
             start_token=None,
             stop_token="$",
@@ -523,9 +598,18 @@ class ModelRunner:
                 logger.error("A model file must be provided for DB search")
                 raise ValueError("A model file must be provided for DB search")
             # Train a model from scratch if no model file is provided.
-            if train:
+            if train and self.casanovo:
                 self.model = Spec2Pep(**model_params)
                 return
+
+            if train and not self.casanovo:
+                model_params["frag_class_weights"] = (
+                    self.config.frag_class_weights
+                )
+                model_params["frag_weight"] = self.config.frag_weight
+                self.model = AugmentedSpec2Pep(**model_params)
+                return
+
             # Else we're not training, so a model file must be provided.
             else:
                 logger.error("A model file must be provided")
@@ -543,7 +627,13 @@ class ModelRunner:
         # First try loading model details from the weights file,
         # otherwise use the provided configuration.
         device = torch.empty(1).device  # Use the default device.
-        model_clss = DbSpec2Pep if db_search else Spec2Pep
+        if db_search:
+            model_clss = DbSpec2Pep
+        elif self.casanovo:
+            model_clss = Spec2Pep
+        else:
+            model_clss = AugmentedSpec2Pep
+
         try:
             self.model = model_clss.load_from_checkpoint(
                 self.model_filename,
@@ -560,6 +650,7 @@ class ModelRunner:
             architecture_params = set(model_params.keys()) - set(
                 loaded_model_params.keys()
             )
+
             for param in architecture_params:
                 if model_params[param] != self.model.hparams[param]:
                     if param == "tokenizer":
@@ -658,6 +749,8 @@ class ModelRunner:
             shuffle_buffer_size=self.config.shuffle_buffer_size,
             n_workers=self.config.n_workers,
             lance_dir=lance_dir,
+            casanovo=self.casanovo,
+            scan_width=self.config.width,
         )
 
     @staticmethod

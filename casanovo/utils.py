@@ -16,10 +16,9 @@ import pandas as pd
 import psutil
 import torch
 
-from . import __version__
 from .data.psm import PepSpecMatch
 
-SCORE_BINS = (0.0, 0.5, 0.9, 0.95, 0.99)
+SCORE_BINS = (0.0, 0.5, 0.6, 0.7, 0.8, 0.85, 0.9)
 
 logger = logging.getLogger("casanovo")
 
@@ -61,28 +60,6 @@ def n_workers() -> int:
     )
 
 
-def split_version(version: str) -> Tuple[str, str, str]:
-    """
-    Split the version into its semantic versioning components.
-
-    Parameters
-    ----------
-    version : str
-        The version number.
-
-    Returns
-    -------
-    major : str
-        The major release.
-    minor : str
-        The minor release.
-    patch : str
-        The patch release.
-    """
-    version_regex = re.compile(r"(\d+)\.(\d+)\.*(\d*)(?:.dev\d+.+)?")
-    return tuple(g for g in version_regex.match(version).groups())
-
-
 def _get_report_dict(
     results_table: pd.DataFrame, score_bins: Iterable[float] = SCORE_BINS
 ) -> Optional[Dict]:
@@ -113,7 +90,7 @@ def _get_report_dict(
         score: (results_table["score"] >= score).sum() for score in score_bins
     }
     return {
-        "num_spectra": len(results_table),
+        "num_psms": len(results_table),
         "score_bins": binned_scores,
         "max_sequence_length": max_pep_len,
         "min_sequence_length": min_pep_len,
@@ -121,7 +98,7 @@ def _get_report_dict(
     }
 
 
-def log_system_info() -> None:
+def log_system_info(model: str, version: str) -> None:
     """
     Log system information.
 
@@ -134,7 +111,7 @@ def log_system_info() -> None:
     logger.info("OS: %s", platform.system())
     logger.info("OS Version: %s", platform.version())
     logger.info("Python Version: %s", platform.python_version())
-    logger.info("Casanovo Version: %s", __version__)
+    logger.info(f"{model} Version: %s", version)
     logger.info("Depthcharge Version: %s", depthcharge.__version__)
     logger.info("PyTorch Version: %s", torch.__version__)
     if torch.cuda.is_available():
@@ -181,6 +158,7 @@ def log_annotate_report(
     score_bins: Iterable[float] = SCORE_BINS,
     *,
     n_missing_predictions: int = 0,
+    average_precision: Optional[float] = None,
 ) -> None:
     """
     Log run annotation report.
@@ -198,6 +176,9 @@ def log_annotate_report(
     n_missing_predictions : int, default=0
         The number of spectra that did not receive a prediction because
         beam search did not return a valid peptide.
+    average_precision : Optional[float], default=None
+        The average precision (area under the precision-coverage curve),
+        reported when sequencing with evaluation.
     """
     log_run_report(start_time=start_time, end_time=end_time)
     run_report = _get_report_dict(
@@ -215,15 +196,33 @@ def log_annotate_report(
             "No predictions were logged, this may be due to an error"
         )
     else:
-        num_spectra = run_report["num_spectra"]
-        logger.info("Sequenced %s spectra", num_spectra)
+        distinct_spectra = len(set(psm.spectrum_id for psm in predictions))
+        num_psms = run_report["num_psms"]
+        if distinct_spectra != num_psms:
+            logger.info(
+                "Sequenced %s spectra (%s PSMs)", distinct_spectra, num_psms
+            )
+        else:
+            logger.info("Sequenced %s spectra", distinct_spectra)
+        time_elapsed = 0
+        if start_time is not None and end_time is not None:
+            time_elapsed = end_time - start_time
+        if time_elapsed > 0:
+            logger.info(
+                "Throughput: %.2f spectra/s", distinct_spectra / time_elapsed
+            )
         logger.info("Score Distribution:")
         for score, pop in sorted(run_report["score_bins"].items()):
             logger.info(
-                "%s spectra (%.2f%%) scored ≥ %.2f",
+                "%s %s (%.2f%%) scored ≥ %s",
                 pop,
-                pop / num_spectra * 100,
-                score,
+                "PSM" if pop == 1 else "PSMs",
+                pop / num_psms * 100,
+                (
+                    f"{float(score):.2f}"
+                    if score in SCORE_BINS
+                    else str(float(score))
+                ),
             )
 
         logger.info(
@@ -242,6 +241,9 @@ def log_annotate_report(
             "did not return a valid peptide",
             n_missing_predictions,
         )
+
+    if average_precision is not None:
+        logger.info("Average Precision: %.4f", average_precision)
 
 
 def check_dir_file_exists(
@@ -271,3 +273,37 @@ def check_dir_file_exists(
                 f"File matching wildcard pattern {pattern} already exist in "
                 f"{dir} and can not be overwritten."
             )
+
+
+def is_apple_silicon() -> bool:
+    """
+    Check whether the current device is Apple Silicon.
+
+    Returns
+    -------
+    bool
+        Whether the current device is Apple Silicon.
+    """
+    return platform.system() == "Darwin" and platform.machine() == "arm64"
+
+
+def split_version(version: str) -> Tuple[str, str, str]:
+    """
+    Split the version into its semantic versioning components.
+
+    Parameters
+    ----------
+    version : str
+        The version number.
+
+    Returns
+    -------
+    major : str
+        The major release.
+    minor : str
+        The minor release.
+    patch : str
+        The patch release.
+    """
+    version_regex = re.compile(r"(\d+)\.(\d+)\.*(\d*)(?:.dev\d+.+)?")
+    return tuple(g for g in version_regex.match(version).groups())
