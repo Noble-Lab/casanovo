@@ -543,14 +543,15 @@ class DeNovoDataModule(pl.LightningDataModule):
         for path in paths:
             skipped = 0
 
-            f_to_mzrt_to_pep, max_mz, _window_size, cycle_time = (
-                self._get_centers(path)
+            f_to_mzrt_to_pep, cycle_time, max_window_width = self._get_centers(
+                path
             )
 
             prec_to_spec = self._extract_spectra(
                 path,
                 f_to_mzrt_to_pep,
                 (self.scan_width + 1) * cycle_time,
+                max_window_width + 1,
             )
 
             for key, value in prec_to_spec.items():
@@ -714,7 +715,7 @@ class DeNovoDataModule(pl.LightningDataModule):
         return float(scan_time["scan start time"]) * scaling_factor
 
     def _extract_spectra(
-        self, mzml_file, f_to_mzrt_to_pep, time_width
+        self, mzml_file, f_to_mzrt_to_pep, time_width, ms1_margin
     ) -> dict[tuple, dict[str, tuple]]:
         """Creates a dictionary of precursors with at least one matched scan
 
@@ -763,13 +764,14 @@ class DeNovoDataModule(pl.LightningDataModule):
                                 if np.abs(rt - cur_rt) >= time_width:
                                     continue
 
+                                mask = np.abs(mzs - mz) <= ms1_margin
                                 self._accumulate_scan(
                                     prec_to_spec,
                                     (mz, rt, scan_id),
                                     "ms1_scans",
                                     "ms1_rts",
-                                    mzs,
-                                    intensities,
+                                    mzs[mask],
+                                    intensities[mask],
                                     cur_rt - rt,
                                 )
 
@@ -851,12 +853,13 @@ class DeNovoDataModule(pl.LightningDataModule):
             If the file contains no MS1 scans or no MS2 scans.
         """
         f_to_mzrt_to_pep = {}
-        max_mz = 0
         num_spectra = 0
         part = 0
         last_rt = None
         cycle_time = None
+        max_window_width = 0
         window_size = None
+
         with pyteomics.mzml.read(
             str(mzml_file), decode_binary=False
         ) as reader:
@@ -884,7 +887,11 @@ class DeNovoDataModule(pl.LightningDataModule):
 
                     num_spectra += 1
                     key = (int(window_center / 10), int(cur_rt / 10))
-                    max_mz = max(max_mz, int(window_center / 10))
+                    max_window_width = max(
+                        max_window_width,
+                        lower_offset,
+                        upper_offset,
+                    )
                     if key in f_to_mzrt_to_pep[part]:
                         f_to_mzrt_to_pep[part][key].append(
                             (window_center, cur_rt, scan_id)
@@ -904,7 +911,7 @@ class DeNovoDataModule(pl.LightningDataModule):
                 f"{mzml_file} does not contain MS2 scans required for DIA extraction"
             )
 
-        return f_to_mzrt_to_pep, max_mz, window_size, cycle_time
+        return f_to_mzrt_to_pep, cycle_time, max_window_width
 
     def _make_loader(
         self, dataset: torch.utils.data.Dataset, shuffle: bool = False

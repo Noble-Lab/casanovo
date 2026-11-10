@@ -195,9 +195,8 @@ def test_missing_ms1_warning(caplog):
 
     dataset._get_centers = lambda _: (
         {},  # f_to_mzrt_to_pep
-        0,  # max_mz
-        10,  # window_size
         1,  # cycle_time
+        10,  # max_window_width
     )
 
     dataset._extract_spectra = lambda *args: {
