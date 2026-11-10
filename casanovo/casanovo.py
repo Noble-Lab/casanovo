@@ -2,13 +2,17 @@
 
 import logging
 import re
+import shutil
+import sys
+import os
+import tempfile
 import time
 import warnings
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import Optional, Tuple, List
 
 warnings.formatwarning = lambda message, category, *args, **kwargs: (
-    f"{category.__name__}: {message}"
+    f"{category.__name__}: {' '.join(str(message).split())}"
 )
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 warnings.filterwarnings(
@@ -24,6 +28,17 @@ warnings.filterwarnings(
     ".*Converting mask without torch.bool dtype to bool*",
 )
 
+# The regex pattern below describes the the model weight
+# naming pattern.
+_CKPT_RE = re.compile(
+    r"^casanovo_([a-z0-9][a-z0-9-]*)_v([0-9]+)-([0-9]+)-([0-9]+)\.ckpt$"
+)
+# The default model is orbitrap.
+_DEFAULT_MODEL_ID = "orbitrap"
+
+import appdirs
+import github
+import requests
 import rich_click as click
 from .shared_loading import (
     _SharedFileIOParams,
@@ -37,8 +52,9 @@ from . import __version__, utils
 from .config import Config
 from .denovo import ModelRunner
 
-logger = logging.getLogger(__name__)
-
+logger = logging.getLogger("casanovo")
+# Handlers added by setup_logging, removed again on the next call.
+_log_handlers: List[logging.Handler] = []
 click.rich_click.USE_MARKDOWN = True
 click.rich_click.STYLE_HELPTEXT = ""
 click.rich_click.SHOW_ARGUMENTS = True
@@ -154,6 +170,7 @@ def sequence(
             start_time=start_time,
             end_time=time.time(),
             n_missing_predictions=runner.model.n_missing_predictions,
+            average_precision=runner.average_precision,
         )
 
 
@@ -243,6 +260,7 @@ def db_search(
             start_time=start_time,
             end_time=time.time(),
             n_missing_predictions=runner.model.n_missing_predictions,
+            average_precision=runner.average_precision,
         )
 
 
@@ -302,8 +320,8 @@ def train(
 ) -> None:
     """Train a Casanovo model on your own data.
 
-    TRAIN_PEAK_PATH must be one or more annoated MGF files, such as
-    those provided by MassIVE-KB, from which to train a new Casnovo
+    TRAIN_PEAK_PATH must be one or more annotated MGF files, such as
+    those provided by MassIVE-KB, from which to train a new Casanovo
     model.
     """
 
@@ -387,6 +405,192 @@ def configure(
     config_path = str(output_path / config_fname)
     Config.copy_default(config_path)
     logger.info(f"Wrote {config_path}")
+
+
+def setup_logging(
+    log_file_path: Path,
+    verbosity: str,
+) -> None:
+    """
+    Set up the logger.
+
+    Logging occurs to the command-line and to the given log file.
+
+    Parameters
+    ----------
+    log_file_path: Path
+        The log file path.
+    verbosity : str
+        The logging level to use in the console.
+    """
+    logging_levels = {
+        "debug": logging.DEBUG,
+        "info": logging.INFO,
+        "warning": logging.WARNING,
+        "error": logging.ERROR,
+    }
+
+    # Configure logging.
+    # Reset warning capture first, because captureWarnings(True) does nothing
+    # if it was already called, even if the warnings hook has since been
+    # replaced (e.g. by pytest between tests).
+    logging.captureWarnings(False)
+    logging.captureWarnings(True)
+    root_logger = logging.getLogger()
+    root_logger.setLevel(logging.DEBUG)
+
+    # Remove the handlers from a previous call, so messages aren't duplicated
+    # when logging is set up multiple times in the same process.
+    for handler in _log_handlers:
+        root_logger.removeHandler(handler)
+        handler.close()
+    _log_handlers.clear()
+
+    # Formatters for file vs console:
+    console_formatter = logging.Formatter("{levelname}: {message}", style="{")
+    log_formatter = logging.Formatter(
+        "{asctime} {levelname} [{name}/{processName}] {module}.{funcName} : "
+        "{message}",
+        style="{",
+    )
+
+    console_handler = logging.StreamHandler(sys.stderr)
+    console_handler.setLevel(logging_levels[verbosity.lower()])
+    console_handler.setFormatter(console_formatter)
+    root_logger.addHandler(console_handler)
+    file_handler = logging.FileHandler(log_file_path, encoding="utf8")
+    file_handler.setFormatter(log_formatter)
+    root_logger.addHandler(file_handler)
+    _log_handlers.extend([console_handler, file_handler])
+
+    # Disable dependency non-critical log messages.
+    logging.getLogger("depthcharge").setLevel(
+        logging_levels[verbosity.lower()]
+    )
+    logging.getLogger("fsspec").setLevel(logging.WARNING)
+    logging.getLogger("github").setLevel(logging.WARNING)
+    logging.getLogger("h5py").setLevel(logging.WARNING)
+    logging.getLogger("numba").setLevel(logging.WARNING)
+    logging.getLogger("pytorch_lightning").setLevel(logging.WARNING)
+    logging.getLogger("torch").setLevel(logging.WARNING)
+    logging.getLogger("urllib3").setLevel(logging.WARNING)
+
+
+def _normalize(s: str) -> str:
+    """
+    Normalizes model selector.
+
+    Removes hyphens, underscores, and whitespace characters.
+
+    Parameters
+    ----------
+    s: String
+       The string to be normalized.
+
+    Returns
+    -------
+    String
+       The normalized model selector.
+    """
+    return re.sub(r"[-_\s]", "", s).lower()
+
+
+def _parse_ckpt(filename: str) -> Optional[Tuple[str, Tuple[int, int, int]]]:
+    """
+    Parses the checkpoint filename.
+
+    Extracts the major, minor model versions and model selector.
+
+    Parameters
+    ----------
+    filename: String
+        The name of the model file provided.
+
+    Returns
+    -------
+    Optional[Tuple[str, Tuple[int, int, int]]]
+        Method could return None if filename does not match _CKPT_RE
+        Returns a Tuple with the String set to the model selector,
+        and the integer tuple values set to the Casanovo compatibility
+        version.
+    """
+    parsed_string = _CKPT_RE.match(os.path.basename(filename).lower())
+    if not parsed_string:
+        return None
+    return parsed_string.group(1), (
+        int(parsed_string.group(2)),
+        int(parsed_string.group(3)),
+        int(parsed_string.group(4)),
+    )
+
+
+def _resolve_selector(selector: str, candidates: List[str]) -> str:
+    """
+    Resolves the model selector to a present model.
+
+    Resolve a model selector to a canonical model ID via:
+      1. Exact normalized match
+      2. Unique normalized prefix match
+      3. Unique normalized substring match
+
+    Parameters
+    ----------
+    selector: String
+       The parsed selector from _parse_ckpt.
+    candidates: List[str]
+        The current models present in the cache.
+
+    Returns
+    -------
+    String
+        Best matching model to selector
+    """
+    norm = _normalize(selector)
+    norm_map = {c: _normalize(c) for c in candidates}
+
+    for matches in (
+        [c for c, nc in norm_map.items() if nc == norm],
+        [c for c, nc in norm_map.items() if nc.startswith(norm)],
+        [c for c, nc in norm_map.items() if norm in nc],
+    ):
+        if len(matches) == 1:
+            return matches[0]
+        if len(matches) > 1:
+            options = ", ".join(sorted(matches))
+            raise ValueError(
+                f"Ambiguous model selector '{selector}'. Matching models:\n"
+                + f"{options} \n Please specify one of these options."
+            )
+
+    available = "\n".join(f"  {c}" for c in sorted(candidates))
+    raise ValueError(
+        f"Unknown model selector '{selector}'.\nAvailable models:\n{available}"
+    )
+
+
+def _best_ckpt(
+    checkpoints: List[Tuple[Path, Tuple[int, int, int]]],
+    version: Tuple[int, int, int],
+) -> Optional[Path]:
+    """
+    Pick best checkpoint by: exact patch > latest same minor > latest same major.
+
+    Parameters
+    ----------
+    checkpoints: List[Tuple[Path, Tuple[int, int, int]]]
+        Possible checkpoints.
+    version: Tuple[int, int, int]
+        Intended version.
+    """
+    maj, min_, pat = version
+    for subset in (
+        [x for x in checkpoints if x[1] == (maj, min_, pat)],
+        [x for x in checkpoints if x[1][:2] == (maj, min_)],
+        [x for x in checkpoints if x[1][0] == maj],
+    ):
+        if subset:
+            return max(subset, key=lambda x: x[1])[0]
+    return None
 
 
 if __name__ == "__main__":

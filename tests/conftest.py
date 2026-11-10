@@ -1,5 +1,7 @@
 """Fixtures used for testing."""
 
+import logging
+
 import numpy as np
 import psims
 import pytest
@@ -16,6 +18,53 @@ def mzml_small_ms1():
         / "sample_data"
         / "sample_preprocessed_spectra.mzML"
     )
+
+
+@pytest.fixture(autouse=True)
+def restore_logging():
+    """Restore the global logging state after each test.
+
+    `setup_logging` changes logger levels, adds handlers, and turns on warning
+    capture, which would otherwise leak into later tests.
+    """
+    root_logger = logging.getLogger()
+    handlers = root_logger.handlers[:]
+    setup_loggers = [
+        logging.getLogger("depthcharge"),
+        logging.getLogger("fsspec"),
+        logging.getLogger("github"),
+        logging.getLogger("h5py"),
+        logging.getLogger("numba"),
+        logging.getLogger("pytorch_lightning"),
+        logging.getLogger("torch"),
+        logging.getLogger("urllib3"),
+    ]
+    levels = {
+        logger: logger.level
+        for logger in [
+            root_logger,
+            *root_logger.manager.loggerDict.values(),
+            *setup_loggers,
+        ]
+        if isinstance(logger, logging.Logger)
+    }
+    yield
+    for handler in root_logger.handlers[:]:
+        if handler not in handlers:
+            root_logger.removeHandler(handler)
+            handler.close()
+    for logger, level in levels.items():
+        if logger.level != level:
+            logger.setLevel(level)
+    # Loggers created during the test go back to their default level.
+    for logger in root_logger.manager.loggerDict.values():
+        if (
+            isinstance(logger, logging.Logger)
+            and logger not in levels
+            and logger.level != logging.NOTSET
+        ):
+            logger.setLevel(logging.NOTSET)
+    logging.captureWarnings(False)
 
 
 @pytest.fixture
@@ -341,6 +390,7 @@ def _get_config_file(file_path, file_name, additional_cfg=None):
         "gradient_clip_algorithm": "norm",
         "precision": "32-true",
         "replace_isoleucine_with_leucine": True,
+        "replace_n_and_q_deamidated_with_d_and_e": False,
         "massivekb_tokenizer": True,
         "residues": {
             "G": 57.021464,

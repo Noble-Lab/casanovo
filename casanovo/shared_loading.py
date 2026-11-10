@@ -709,10 +709,24 @@ def _download_weights(file_url: str, download_path: Path) -> None:
         response.raw.read, decode_content=True
     )
 
-    with (
-        tqdm.tqdm.wrapattr(
-            response.raw, "read", total=file_size, desc=desc
-        ) as r_raw,
-        open(download_path, "wb") as file,
-    ):
-        shutil.copyfileobj(r_raw, file)
+    temp_file = tempfile.NamedTemporaryFile(
+        dir=download_file_dir,
+        prefix=f"{download_path.name}.",
+        suffix=".tmp",
+        delete=False,
+    )
+    temp_path = Path(temp_file.name)
+    completed = False
+    try:
+        with (
+            tqdm.tqdm.wrapattr(
+                response.raw, "read", total=file_size, desc=desc
+            ) as r_raw,
+            temp_file,
+        ):
+            shutil.copyfileobj(r_raw, temp_file)
+        os.replace(temp_path, download_path)
+        completed = True
+    finally:
+        if not completed:
+            temp_path.unlink(missing_ok=True)

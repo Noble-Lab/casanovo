@@ -13,6 +13,7 @@ import tempfile
 import types
 import unittest
 import unittest.mock
+from typing import NoReturn
 
 import click
 import click.testing
@@ -21,19 +22,32 @@ import depthcharge.data
 import depthcharge.tokenizers.peptides
 import einops
 import github
+import lance
 import numpy as np
 import pandas as pd
+import pyarrow as pa
 import pytest
 import requests
 import torch
 import pyteomics.mztab
 import pyteomics.mzml
 import pyteomics.proforma
+import warnings
 
 from casanovo import casanovo, denovo, utils, shared_loading
 from casanovo.casanovo import _SharedFileIOParams
 from casanovo.config import Config
 from casanovo.data import db_utils, ms_io, psm
+from casanovo.denovo.dataloaders import (
+    DeNovoDataModule,
+    DistributedBatchSampler,
+)
+from casanovo.denovo.evaluate import (
+    aa_match,
+    aa_match_batch,
+    aa_match_metrics,
+    precision_coverage,
+)
 from casanovo.denovo.dataloaders import DeNovoDataModule, _unique_stems
 from casanovo.denovo.evaluate import (
     aa_match,
@@ -217,7 +231,15 @@ def test_get_centers_no_ms1(mzml_small_ms1, monkeypatch):
 
     ms2_spec = {
         "ms level": 2,
-        "scanList": {"scan": [{"scan start time": 1.0}]},
+        "scanList": {
+            "scan": [
+                {
+                    "scan start time": pyteomics.auxiliary.unitfloat(
+                        1.0, "minute"
+                    )
+                }
+            ]
+        },
         "precursorList": {
             "precursor": [
                 {
@@ -261,12 +283,28 @@ def test_get_centers_no_ms2(mzml_small_ms1, monkeypatch):
 
     ms1_spec_1 = {
         "ms level": 1,
-        "scanList": {"scan": [{"scan start time": 1.0}]},
+        "scanList": {
+            "scan": [
+                {
+                    "scan start time": pyteomics.auxiliary.unitfloat(
+                        1.0, "minute"
+                    )
+                }
+            ]
+        },
     }
 
     ms1_spec_2 = {
         "ms level": 1,
-        "scanList": {"scan": [{"scan start time": 2.0}]},
+        "scanList": {
+            "scan": [
+                {
+                    "scan start time": pyteomics.auxiliary.unitfloat(
+                        2.0, "minute"
+                    )
+                }
+            ]
+        },
     }
 
     class MockReader:
@@ -551,6 +589,49 @@ def test_mztab_save(tiny_config, tmp_path):
     assert file.is_file()
 
 
+def test_mztab_save_eval_columns(tiny_config, tmp_path):
+    """Evaluation results are exported as additional mzTab columns."""
+    file = tmp_path / "test.mztab"
+    writer = ms_io.MztabWriter(file)
+    writer.set_metadata(Config(tiny_config))
+    writer.set_ms_run(["test.mgf"])
+    writer.psms = [
+        psm.PepSpecMatch(
+            sequence="AAAA",
+            spectrum_id=("test.mgf", "0"),
+            peptide_score=1.0,
+            charge=3,
+            calc_mz=100.0,
+            exp_mz=100.0,
+            aa_scores=[0.5, 0.5, 0.5, 0.5],
+            ground_truth_sequence="AAAK",
+            precision=1.0,
+            coverage=0.5,
+        )
+    ]
+    writer.save()
+
+    lines = file.read_text(encoding="utf-8").splitlines()
+    header = next(ln for ln in lines if ln.startswith("PSH")).split("\t")
+    fields = next(ln for ln in lines if ln.startswith("PSM")).split("\t")
+    assert fields[header.index("opt_global_ground_truth_sequence")] == "AAAK"
+    assert fields[header.index("opt_global_precision")] == "1.0"
+    assert fields[header.index("opt_global_coverage")] == "0.5"
+
+
+def test_log_annotate_report_average_precision(monkeypatch):
+    mock_logger = unittest.mock.MagicMock()
+    monkeypatch.setattr("casanovo.utils.logger", mock_logger)
+    monkeypatch.setattr(utils, "log_run_report", lambda **_: None)
+    utils.log_annotate_report([], average_precision=0.75)
+    calls = [
+        c
+        for c in mock_logger.info.call_args_list
+        if "Average Precision" in c[0][0]
+    ]
+    assert calls and calls[0][0][1] == 0.75
+
+
 def test_version():
     """Check that the version is not None."""
     assert casanovo.__version__ is not None
@@ -614,6 +695,130 @@ def test_n_workers(monkeypatch):
                 utils.n_workers()
         else:
             assert utils.n_workers() == 0
+
+
+@pytest.mark.parametrize(
+    ("start_time", "end_time", "expected_throughput"),
+    [
+        (0, 10, "Throughput: 0.20 spectra/s"),
+        (0, 100, "Throughput: 0.02 spectra/s"),
+        (None, 10, None),
+        (0, None, None),
+        (0, 0, None),
+        (10, 0, None),
+    ],
+)
+def test_log_annotate_report(
+    caplog, start_time, end_time, expected_throughput
+):
+    """Report unique spectra and guard missing or invalid run times."""
+    predictions = [
+        psm.PepSpecMatch(
+            sequence="AAAA",
+            spectrum_id=("test.mgf", spectrum_id),
+            peptide_score=score,
+            charge=3,
+            calc_mz=100.0,
+            exp_mz=100.0,
+            aa_scores=[0.5] * 4,
+        )
+        for spectrum_id, score in [
+            ("0", 0.05),
+            ("0", 0.5),
+            ("1", 0.9),
+        ]
+    ]
+
+    with caplog.at_level(logging.INFO, logger="casanovo"):
+        utils.log_annotate_report(
+            predictions, start_time=start_time, end_time=end_time
+        )
+
+    messages = [record.getMessage() for record in caplog.records]
+    assert "Sequenced 2 spectra (3 PSMs)" in messages
+    assert "3 PSMs (100.00%) scored ≥ 0.00" in messages
+    assert "2 PSMs (66.67%) scored ≥ 0.50" in messages
+    assert "1 PSM (33.33%) scored ≥ 0.90" in messages
+    distribution_messages = [
+        message for message in messages if "scored ≥" in message
+    ]
+    assert len(distribution_messages) == 7
+    throughput_messages = [
+        message for message in messages if message.startswith("Throughput:")
+    ]
+    if expected_throughput is None:
+        assert throughput_messages == []
+    else:
+        assert throughput_messages == [expected_throughput]
+
+
+def test_get_report_dict_default_bins():
+    """Default fixed bins include their boundaries and exclude lower scores."""
+    scores = [
+        -0.1,
+        0.0,
+        0.499,
+        0.5,
+        0.599,
+        0.6,
+        0.699,
+        0.7,
+        0.799,
+        0.8,
+        0.849,
+        0.85,
+        0.899,
+        0.9,
+        1.0,
+    ]
+    results = pd.DataFrame(
+        {"sequence": ["AAAA"] * len(scores), "score": scores}
+    )
+    report = utils._get_report_dict(results)
+    assert report["num_psms"] == 15
+    assert report["score_bins"] == {
+        0.0: 14,
+        0.5: 12,
+        0.6: 10,
+        0.7: 8,
+        0.8: 6,
+        0.85: 4,
+        0.9: 2,
+    }
+
+
+@pytest.mark.parametrize("scores", [[0.42], [0.42, 0.42, 0.42]])
+def test_get_report_dict_fixed_bins_ties(scores):
+    """Include every tied PSM and retain bins with no matches."""
+    report = utils._get_report_dict(
+        pd.DataFrame({"sequence": ["AAAA"] * len(scores), "score": scores}),
+        score_bins=(0.4, 0.42, 0.5),
+    )
+    assert report["score_bins"] == {
+        0.4: len(scores),
+        0.42: len(scores),
+        0.5: 0,
+    }
+
+
+def test_log_annotate_report_custom_threshold_precision(caplog):
+    """Printed custom thresholds reproduce the exact counted PSM set."""
+    threshold = 0.992123456
+    predictions = [
+        psm.PepSpecMatch(
+            sequence="AAAA",
+            spectrum_id=("test.mgf", str(index)),
+            peptide_score=score,
+            charge=3,
+            calc_mz=100.0,
+            exp_mz=100.0,
+            aa_scores=[0.5] * 4,
+        )
+        for index, score in enumerate([0.9921233, threshold])
+    ]
+    with caplog.at_level(logging.INFO, logger="casanovo"):
+        utils.log_annotate_report(predictions, score_bins=(threshold,))
+    assert "1 PSM (50.00%) scored ≥ 0.992123456" in caplog.messages
 
 
 def test_split_version():
@@ -691,10 +896,17 @@ class MockResponseGet:
         def read(self, *args, **kwargs):
             return super().read(*args)
 
-    def __init__(self):
+    class FailingRaw(io.BytesIO):
+        def read(self, *args, **kwargs):
+            if self.tell() == 0:
+                return super().read(4)
+            raise requests.Timeout
+
+    def __init__(self, fail_after_first_chunk=False):
         self.request_counter = 0
         self.is_ok = True
         self.timeouts = []
+        self.fail_after_first_chunk = fail_after_first_chunk
 
     def raise_for_status(self):
         if not self.is_ok:
@@ -706,7 +918,10 @@ class MockResponseGet:
         response = unittest.mock.MagicMock()
         response.raise_for_status = self.raise_for_status
         response.headers = {"Content-Length": str(len(self.file_content))}
-        response.raw = MockResponseGet.MockRaw(self.file_content)
+        if self.fail_after_first_chunk:
+            response.raw = MockResponseGet.FailingRaw(self.file_content)
+        else:
+            response.raw = MockResponseGet.MockRaw(self.file_content)
         return response
 
 
@@ -1210,6 +1425,61 @@ def test_get_weights_from_url(monkeypatch):
         with pytest.raises(ValueError):
             bad_url = "foobar"
             shared_loading._get_weights_from_url(bad_url, cache_dir)
+
+
+def test_get_weights_from_url_discards_partial_download(monkeypatch):
+    file_url = "http://example.com/model_weights.ckpt"
+
+    with (
+        monkeypatch.context() as mnk,
+        tempfile.TemporaryDirectory() as tmp_dir,
+    ):
+        failing_get = MockResponseGet(fail_after_first_chunk=True)
+        mnk.setattr(requests, "get", failing_get)
+
+        cache_dir = pathlib.Path(tmp_dir)
+        url_hash = hashlib.shake_256(file_url.encode("utf-8")).hexdigest(5)
+        cache_file_dir = cache_dir / url_hash
+        cache_file_path = cache_file_dir / "model_weights.ckpt"
+
+        with pytest.raises(requests.Timeout):
+            shared_loading._get_weights_from_url(file_url, cache_dir)
+
+        assert not cache_file_path.exists()
+        assert not list(cache_file_dir.glob("model_weights.ckpt.*.tmp"))
+
+        successful_get = MockResponseGet()
+        mock_head = MockResponseHead()
+        mnk.setattr(requests, "get", successful_get)
+        mnk.setattr(requests, "head", mock_head)
+
+        result_path = shared_loading._get_weights_from_url(file_url, cache_dir)
+
+        assert result_path.resolve() == cache_file_path.resolve()
+        assert cache_file_path.read_bytes() == MockResponseGet.file_content
+        assert successful_get.request_counter == 1
+
+
+def test_download_weights_discards_temp_file_on_keyboard_interrupt(
+    monkeypatch, tmp_path
+):
+    download_path = tmp_path / "model_weights.ckpt"
+    mock_get = MockResponseGet()
+    monkeypatch.setattr(requests, "get", mock_get)
+
+    def fail_copyfileobj(_source, destination) -> NoReturn:
+        destination.write(b"partial")
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(shutil, "copyfileobj", fail_copyfileobj)
+
+    with pytest.raises(KeyboardInterrupt):
+        shared_loading._download_weights(
+            "http://example.com/model_weights.ckpt", download_path
+        )
+
+    assert not download_path.exists()
+    assert not list(tmp_path.glob("model_weights.ckpt.*.tmp"))
 
 
 def test_is_valid_url():
@@ -2515,6 +2785,104 @@ def test_log_training_set_size_shuffled(mgf_small, tmp_path, caplog):
     )
 
 
+def _mock_dist(rank, world_size):
+    """Pretend to be one rank of an initialized DDP process group."""
+    return unittest.mock.patch.multiple(
+        "casanovo.denovo.dataloaders.dist",
+        is_available=lambda: True,
+        is_initialized=lambda: True,
+        get_rank=lambda: rank,
+        get_world_size=lambda: world_size,
+    )
+
+
+@pytest.fixture
+def lance_rows(tmp_path):
+    """A Lance dataset with 50 rows whose single column is the row index."""
+    path = tmp_path / "rows.lance"
+    lance.write_dataset(pa.table({"x": list(range(50))}), path)
+    return lance.dataset(path)
+
+
+def _sampled_batches(dataset, batch_size, rank=None, world_size=None):
+    """Read row indices from a DistributedBatchSampler per Lance batch."""
+    sampler = DistributedBatchSampler()
+    if rank is None:
+        batches = sampler(dataset, batch_size=batch_size)
+        return [b.column("x").to_pylist() for b in batches]
+    with _mock_dist(rank, world_size):
+        batches = sampler(dataset, batch_size=batch_size)
+        return [b.column("x").to_pylist() for b in batches]
+
+
+def test_distributed_batch_sampler_shards(lance_rows):
+    """Each rank reads disjoint full batches and the same number of them."""
+    world_size, batch_size = 3, 4
+    per_rank = [
+        _sampled_batches(lance_rows, batch_size, rank, world_size)
+        for rank in range(world_size)
+    ]
+    # 50 // (3 * 4) = 4 global batches; the last 2 rows are dropped.
+    assert [len(batches) for batches in per_rank] == [4, 4, 4]
+    assert all(
+        len(batch) == batch_size for batches in per_rank for batch in batches
+    )
+    rows = [{x for batch in batches for x in batch} for batches in per_rank]
+    assert sum(len(r) for r in rows) == len(set().union(*rows)) == 48
+    assert per_rank[1][0] == [4, 5, 6, 7]
+
+
+def test_distributed_batch_sampler_single_process(lance_rows):
+    """Without a process group every row is read, as before."""
+    batches = _sampled_batches(lance_rows, 16)
+    assert [x for batch in batches for x in batch] == list(range(50))
+    # Single world size: no rows are dropped either.
+    batches = _sampled_batches(lance_rows, 16, rank=0, world_size=1)
+    assert [x for batch in batches for x in batch] == list(range(50))
+
+
+def test_distributed_batch_sampler_too_few_rows(lance_rows):
+    """Fewer rows than one global batch cannot be sharded evenly."""
+    with pytest.raises(ValueError, match="too few"):
+        _sampled_batches(lance_rows, 16, rank=0, world_size=4)
+
+
+@pytest.mark.parametrize("shuffle", [False, True])
+def test_train_dataset_ddp_sharding(mgf_medium, tmp_path, shuffle):
+    """Under DDP each rank trains on its own spectra, in equal numbers."""
+    data_module = DeNovoDataModule(
+        lance_dir=str(tmp_path),
+        train_paths=[mgf_medium],
+        train_batch_size=2,
+        min_peaks=0,
+        shuffle=shuffle,
+    )
+    data_module.setup(stage="fit")
+    assert data_module._get_n_spectra(data_module.train_dataset) == 7
+
+    # Iterate the dataset directly: the DataLoader would try to broadcast
+    # its shuffle seed over the mocked process group.
+    spectra = {}
+    for rank in (0, 1):
+        with _mock_dist(rank, 2):
+            spectra[rank] = [
+                scan_id
+                for batch in data_module.train_dataset
+                for scan_id in batch["scan_id"]
+            ]
+    # 7 // (2 ranks * 2) = 1 batch of 2 spectra per rank.
+    assert len(spectra[0]) == len(spectra[1]) == 2
+    assert not set(spectra[0]) & set(spectra[1])
+
+    # Without a process group all spectra are used.
+    single = [
+        scan_id
+        for batch in data_module.train_dataset
+        for scan_id in batch["scan_id"]
+    ]
+    assert sorted(single) == sorted(f"index={i}" for i in range(7))
+
+
 def test_spectrum_id_mzml(mzml_small, tmp_path):
     """Test that spectra from mzML files are specified by their scan id."""
     mzml_small2 = tmp_path / "mzml_small2.mzml"
@@ -2580,6 +2948,26 @@ def test_run_map(mgf_small):
     out_writer.set_ms_run([os.path.basename(mgf_small.name)])
     assert mgf_small.name in out_writer._run_map
     assert os.path.abspath(mgf_small.name) not in out_writer._run_map
+
+
+def test_precision_coverage():
+    scores = [0.6, 0.9, 0.7, 0.8]
+    pep_matches = [False, True, True, False]
+    order, coverage, precision = precision_coverage(
+        scores, pep_matches, n_spectra=5
+    )
+    # Ranked by decreasing score (0.9, 0.8, 0.7, 0.6) -> indices 1, 3, 2, 0.
+    assert list(order) == [1, 3, 2, 0]
+    # Matches in that order (True, False, True, False) -> cumsum 1, 1, 2, 2.
+    np.testing.assert_allclose(precision, [1.0, 0.5, 2 / 3, 0.5])
+    np.testing.assert_allclose(coverage, [0.2, 0.4, 0.6, 0.8])
+
+    # Tied scores keep their original order (stable sort).
+    order, coverage, precision = precision_coverage(
+        [0.5, 0.5, 0.9], [True, False, True], n_spectra=3
+    )
+    assert list(order) == [2, 0, 1]
+    np.testing.assert_allclose(precision, [1.0, 1.0, 2 / 3])
 
 
 def test_set_database(tmp_path):
@@ -2742,6 +3130,45 @@ def test_setup_output(tmp_path, monkeypatch):
 
         assert output_path.resolve() == target_path.resolve()
         assert output_root == "bar"
+
+
+def test_setup_logging_warnings(tmp_path):
+    """Warnings are logged once, on a single line."""
+    log_path = tmp_path / "test.log"
+    casanovo.setup_logging(log_path, "info")
+    warnings.warn("Hello\n World")
+    lines = log_path.read_text().splitlines()
+    matching = []
+    for line in lines:
+        if "Hello" in line:
+            matching.append(line)
+    assert len(matching) == 1
+    assert "Hello World" in matching[0]
+
+
+def test_setup_logging_repeated_calls(tmp_path):
+    """Repeated calls replace the previous handlers instead of adding more."""
+    root_logger = logging.getLogger()
+    n_handlers = len(root_logger.handlers)
+    for i in range(3):
+        casanovo.setup_logging(tmp_path / f"run{i}.log", "info")
+    assert len(root_logger.handlers) == n_handlers + 2
+
+    logging.getLogger("casanovo").info("hello")
+    assert "hello" not in (tmp_path / "run0.log").read_text()
+    assert (tmp_path / "run2.log").read_text().count("hello") == 1
+
+
+def test_setup_logging_reinstalls_warning_capture(tmp_path):
+    """Warnings are logged even if the warnings hook was replaced since an
+    earlier call, as pytest does between tests."""
+    casanovo.setup_logging(tmp_path / "first.log", "info")
+    log_path = tmp_path / "second.log"
+    with warnings.catch_warnings(record=True):
+        warnings.simplefilter("always")
+        casanovo.setup_logging(log_path, "info")
+        warnings.warn("hello")
+    assert "hello" in log_path.read_text()
 
 
 def test_spectrum_preprocessing(tmp_path, mgf_small):
