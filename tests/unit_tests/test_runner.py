@@ -333,17 +333,11 @@ def test_evaluate_success(tmp_path, mgf_small, tiny_config):
 
 
 @pytest.mark.parametrize(
-    "input_files, expect_match",
+    "input_files, expect_error",
     [
+        pytest.param(["mzml_small"], True, id="mzml_only"),
         pytest.param(
-            ["mzml_small"],
-            False,
-            id="mzml_only",
-        ),
-        pytest.param(
-            ["mgf_small_unannotated"],
-            True,
-            id="unannotated_mgf_only",
+            ["mgf_small_unannotated"], True, id="unannotated_mgf_only"
         ),
         pytest.param(
             ["mgf_small_unannotated", "mzml_small"],
@@ -351,24 +345,22 @@ def test_evaluate_success(tmp_path, mgf_small, tiny_config):
             id="unannotated_mgf_and_mzml",
         ),
         pytest.param(
-            ["mgf_small", "mzml_small"],
-            False,
-            id="annotated_mgf_and_mzml",
+            ["improperly_annotated_file"],
+            True,
+            id="improperly_annotated_mgf_missing_seq",
+        ),
+        pytest.param(
+            ["mgf_small", "mzml_small"], False, id="annotated_mgf_and_mzml"
         ),
         pytest.param(
             ["mgf_small", "mgf_small_unannotated"],
-            True,
+            False,
             id="annotated_and_unannotated_mgf",
         ),
         pytest.param(
             ["mgf_small", "mgf_small_unannotated", "mzml_small"],
-            True,
+            False,
             id="annotated_unannotated_and_mzml",
-        ),
-        pytest.param(
-            ["improperly_annotated_file"],
-            True,
-            id="improperly_annotated_mgf_missing_seq",
         ),
     ],
 )
@@ -379,13 +371,15 @@ def test_evaluate_failure_cases(
     mgf_small_unannotated,
     tiny_config,
     input_files,
-    expect_match,
+    expect_error,
 ):
-    """Test all evaluation failure modes."""
+    """Test evaluation with unannotated peak files.
+
+    Evaluation fails if no annotated spectra remain, and otherwise skips the
+    unannotated spectra with a warning.
+    """
     exception_string = (
-        "Error creating annotated spectrum dataloaders. This may "
-        "be the result of having an unannotated peak file present "
-        "in the validation peak file path list."
+        "No annotated spectra could be read from the input peak files."
     )
 
     config = Config(tiny_config)
@@ -414,10 +408,11 @@ def test_evaluate_failure_cases(
 
     files = [file_map[name] for name in input_files]
 
-    with pytest.raises(
-        TypeError,
-        match=exception_string if expect_match else None,
-    ):
+    if expect_error:
+        context = pytest.raises(TypeError, match=exception_string)
+    else:
+        context = pytest.warns(UserWarning, match="Skipped")
+    with context:
         with ModelRunner(
             config, model_filename=str(model_file), overwrite_ckpt_check=False
         ) as runner:
@@ -425,6 +420,72 @@ def test_evaluate_failure_cases(
 
     # Metadata-only MzTab should still be written
     assert result_file.is_file()
+    if not expect_error:
+        # Average precision is only computed if evaluation ran.
+        assert runner.average_precision is not None
+
+
+def test_predict_no_valid_spectra(
+    tmp_path, mgf_small_unannotated, tiny_config
+):
+    """Sequencing fails with a descriptive error if every spectrum is
+    skipped."""
+    no_pepmass_file = tmp_path / "no_pepmass.mgf"
+    no_pepmass_file.write_text(
+        "".join(
+            line
+            for line in Path(mgf_small_unannotated)
+            .read_text()
+            .splitlines(keepends=True)
+            if not line.startswith("PEPMASS=")
+        )
+    )
+
+    config = Config(tiny_config)
+    with ModelRunner(config, output_dir=tmp_path) as runner:
+        # The error is raised before the model is used.
+        runner.initialize_model = lambda train: setattr(
+            runner, "model", unittest.mock.MagicMock()
+        )
+        with pytest.warns(UserWarning, match="Skipped"):
+            with pytest.raises(
+                ValueError, match="No valid spectra could be read"
+            ):
+                runner.predict(
+                    [str(no_pepmass_file)],
+                    tmp_path / "result.mztab",
+                    evaluate=False,
+                )
+
+
+@pytest.mark.parametrize(
+    "evaluate, expected_error, match",
+    [
+        (True, TypeError, "Error creating annotated spectrum dataloaders"),
+        (False, KeyError, "seq"),
+    ],
+)
+def test_predict_dataloader_error(
+    tmp_path, mgf_small, tiny_config, evaluate, expected_error, match
+):
+    """Errors while reading the peak files get a descriptive message when
+    evaluating, and are re-raised otherwise."""
+    config = Config(tiny_config)
+    with ModelRunner(config, output_dir=tmp_path) as runner:
+        # The error is raised before the model is used.
+        runner.initialize_model = lambda train: setattr(
+            runner, "model", unittest.mock.MagicMock()
+        )
+        with unittest.mock.patch(
+            "casanovo.denovo.dataloaders.DeNovoDataModule.setup",
+            side_effect=KeyError("seq"),
+        ):
+            with pytest.raises(expected_error, match=match):
+                runner.predict(
+                    [str(mgf_small)],
+                    tmp_path / "result.mztab",
+                    evaluate=evaluate,
+                )
 
 
 def test_metrics_logging(tmp_path, mgf_small, tiny_config):
@@ -688,6 +749,7 @@ def test_initialize_tokenizer():
     mock_config.massivekb_tokenizer = True
     mock_config.residues = {"foo": 100}
     mock_config.replace_isoleucine_with_leucine = True
+    mock_config.replace_n_and_q_deamidated_with_d_and_e = True
 
     runner = ModelRunner(config=mock_config)
 
@@ -701,11 +763,34 @@ def test_initialize_tokenizer():
     mock_tokenizer_cls.assert_called_once_with(
         residues=mock_config.residues,
         replace_isoleucine_with_leucine=True,
+        replace_n_and_q_deamidated_with_d_and_e=True,
         reverse=True,
         start_token=None,
         stop_token="$",
     )
     assert runner.tokenizer is mock_tokenizer
+
+
+@pytest.mark.parametrize("replace", [True, False])
+def test_initialize_tokenizer_deamidation(replace):
+    """Deamidated N and Q are replaced with D and E only if configured."""
+    config = Config()
+    config.replace_n_and_q_deamidated_with_d_and_e = replace
+
+    runner = ModelRunner(config=config)
+    runner.initialize_tokenizer()
+    tokenizer = runner.tokenizer
+
+    deamidated = tokenizer.tokenize("PEN[Deamidated]Q[Deamidated]K")
+    unmodified = tokenizer.tokenize("PEDEK")
+    if replace:
+        assert "N[Deamidated]" not in tokenizer.residues
+        assert "Q[Deamidated]" not in tokenizer.residues
+        assert torch.equal(deamidated, unmodified)
+    else:
+        assert "N[Deamidated]" in tokenizer.residues
+        assert "Q[Deamidated]" in tokenizer.residues
+        assert not torch.equal(deamidated, unmodified)
 
 
 def test_validate_vocab_compatibility():

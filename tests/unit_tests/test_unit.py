@@ -31,6 +31,7 @@ import requests
 import torch
 import pyteomics.mztab
 import pyteomics.proforma
+import warnings
 
 from casanovo import casanovo, denovo, utils
 from casanovo.casanovo import _SharedFileIOParams
@@ -379,11 +380,11 @@ def test_version():
 )
 def test_is_valid_model(model_file, expectation, log_message, caplog):
     if expectation is None:
-        casanovo._is_valid_model(model_file, load_all_states=True)
+        casanovo._is_valid_model(model_file, continue_training=True)
         assert log_message in caplog.text
     else:
         with expectation:
-            casanovo._is_valid_model(model_file, load_all_states=True)
+            casanovo._is_valid_model(model_file, continue_training=True)
 
 
 @pytest.mark.skip(reason="Skipping due to Linux deadlock issue")
@@ -419,6 +420,130 @@ def test_n_workers(monkeypatch):
                 utils.n_workers()
         else:
             assert utils.n_workers() == 0
+
+
+@pytest.mark.parametrize(
+    ("start_time", "end_time", "expected_throughput"),
+    [
+        (0, 10, "Throughput: 0.20 spectra/s"),
+        (0, 100, "Throughput: 0.02 spectra/s"),
+        (None, 10, None),
+        (0, None, None),
+        (0, 0, None),
+        (10, 0, None),
+    ],
+)
+def test_log_annotate_report(
+    caplog, start_time, end_time, expected_throughput
+):
+    """Report unique spectra and guard missing or invalid run times."""
+    predictions = [
+        psm.PepSpecMatch(
+            sequence="AAAA",
+            spectrum_id=("test.mgf", spectrum_id),
+            peptide_score=score,
+            charge=3,
+            calc_mz=100.0,
+            exp_mz=100.0,
+            aa_scores=[0.5] * 4,
+        )
+        for spectrum_id, score in [
+            ("0", 0.05),
+            ("0", 0.5),
+            ("1", 0.9),
+        ]
+    ]
+
+    with caplog.at_level(logging.INFO, logger="casanovo"):
+        utils.log_annotate_report(
+            predictions, start_time=start_time, end_time=end_time
+        )
+
+    messages = [record.getMessage() for record in caplog.records]
+    assert "Sequenced 2 spectra (3 PSMs)" in messages
+    assert "3 PSMs (100.00%) scored ≥ 0.00" in messages
+    assert "2 PSMs (66.67%) scored ≥ 0.50" in messages
+    assert "1 PSM (33.33%) scored ≥ 0.90" in messages
+    distribution_messages = [
+        message for message in messages if "scored ≥" in message
+    ]
+    assert len(distribution_messages) == 7
+    throughput_messages = [
+        message for message in messages if message.startswith("Throughput:")
+    ]
+    if expected_throughput is None:
+        assert throughput_messages == []
+    else:
+        assert throughput_messages == [expected_throughput]
+
+
+def test_get_report_dict_default_bins():
+    """Default fixed bins include their boundaries and exclude lower scores."""
+    scores = [
+        -0.1,
+        0.0,
+        0.499,
+        0.5,
+        0.599,
+        0.6,
+        0.699,
+        0.7,
+        0.799,
+        0.8,
+        0.849,
+        0.85,
+        0.899,
+        0.9,
+        1.0,
+    ]
+    results = pd.DataFrame(
+        {"sequence": ["AAAA"] * len(scores), "score": scores}
+    )
+    report = utils._get_report_dict(results)
+    assert report["num_psms"] == 15
+    assert report["score_bins"] == {
+        0.0: 14,
+        0.5: 12,
+        0.6: 10,
+        0.7: 8,
+        0.8: 6,
+        0.85: 4,
+        0.9: 2,
+    }
+
+
+@pytest.mark.parametrize("scores", [[0.42], [0.42, 0.42, 0.42]])
+def test_get_report_dict_fixed_bins_ties(scores):
+    """Include every tied PSM and retain bins with no matches."""
+    report = utils._get_report_dict(
+        pd.DataFrame({"sequence": ["AAAA"] * len(scores), "score": scores}),
+        score_bins=(0.4, 0.42, 0.5),
+    )
+    assert report["score_bins"] == {
+        0.4: len(scores),
+        0.42: len(scores),
+        0.5: 0,
+    }
+
+
+def test_log_annotate_report_custom_threshold_precision(caplog):
+    """Printed custom thresholds reproduce the exact counted PSM set."""
+    threshold = 0.992123456
+    predictions = [
+        psm.PepSpecMatch(
+            sequence="AAAA",
+            spectrum_id=("test.mgf", str(index)),
+            peptide_score=score,
+            charge=3,
+            calc_mz=100.0,
+            exp_mz=100.0,
+            aa_scores=[0.5] * 4,
+        )
+        for index, score in enumerate([0.9921233, threshold])
+    ]
+    with caplog.at_level(logging.INFO, logger="casanovo"):
+        utils.log_annotate_report(predictions, score_bins=(threshold,))
+    assert "1 PSM (50.00%) scored ≥ 0.992123456" in caplog.messages
 
 
 def test_split_version():
@@ -2637,6 +2762,45 @@ def test_setup_output(tmp_path, monkeypatch):
 
         assert output_path.resolve() == target_path.resolve()
         assert output_root == "bar"
+
+
+def test_setup_logging_warnings(tmp_path):
+    """Warnings are logged once, on a single line."""
+    log_path = tmp_path / "test.log"
+    casanovo.setup_logging(log_path, "info")
+    warnings.warn("Hello\n World")
+    lines = log_path.read_text().splitlines()
+    matching = []
+    for line in lines:
+        if "Hello" in line:
+            matching.append(line)
+    assert len(matching) == 1
+    assert "Hello World" in matching[0]
+
+
+def test_setup_logging_repeated_calls(tmp_path):
+    """Repeated calls replace the previous handlers instead of adding more."""
+    root_logger = logging.getLogger()
+    n_handlers = len(root_logger.handlers)
+    for i in range(3):
+        casanovo.setup_logging(tmp_path / f"run{i}.log", "info")
+    assert len(root_logger.handlers) == n_handlers + 2
+
+    logging.getLogger("casanovo").info("hello")
+    assert "hello" not in (tmp_path / "run0.log").read_text()
+    assert (tmp_path / "run2.log").read_text().count("hello") == 1
+
+
+def test_setup_logging_reinstalls_warning_capture(tmp_path):
+    """Warnings are logged even if the warnings hook was replaced since an
+    earlier call, as pytest does between tests."""
+    casanovo.setup_logging(tmp_path / "first.log", "info")
+    log_path = tmp_path / "second.log"
+    with warnings.catch_warnings(record=True):
+        warnings.simplefilter("always")
+        casanovo.setup_logging(log_path, "info")
+        warnings.warn("hello")
+    assert "hello" in log_path.read_text()
 
 
 def test_spectrum_preprocessing(tmp_path, mgf_small):

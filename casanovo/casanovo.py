@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Optional, Tuple, List
 
 warnings.formatwarning = lambda message, category, *args, **kwargs: (
-    f"{category.__name__}: {message}"
+    f"{category.__name__}: {' '.join(str(message).split())}"
 )
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 warnings.filterwarnings(
@@ -52,6 +52,8 @@ from .config import Config
 from .denovo import ModelRunner
 
 logger = logging.getLogger("casanovo")
+# Handlers added by setup_logging, removed again on the next call.
+_log_handlers: List[logging.Handler] = []
 click.rich_click.USE_MARKDOWN = True
 click.rich_click.STYLE_HELPTEXT = ""
 click.rich_click.SHOW_ARGUMENTS = True
@@ -340,7 +342,7 @@ def db_search(
     type=click.Path(exists=True, dir_okay=True),
 )
 @click.option(
-    "--load_all_states",
+    "--continue_training",
     help="""
     Flag to indicate whether all states are loaded when re-starting 
     training, or only the weights. Defaults to False.
@@ -359,16 +361,16 @@ def train(
     output_root: Optional[str],
     verbosity: str,
     force_overwrite: bool,
-    load_all_states: bool,
+    continue_training: bool,
 ) -> None:
     """Train a Casanovo model on your own data.
 
-    TRAIN_PEAK_PATH must be one or more annoated MGF files, such as
-    those provided by MassIVE-KB, from which to train a new Casnovo
+    TRAIN_PEAK_PATH must be one or more annotated MGF files, such as
+    those provided by MassIVE-KB, from which to train a new Casanovo
     model.
     """
 
-    _is_valid_model(model, load_all_states)
+    _is_valid_model(model, continue_training)
 
     output_path, output_root_name = _setup_output(
         output_dir, output_root, force_overwrite, verbosity
@@ -407,7 +409,7 @@ def train(
         runner.train(
             train_peak_path,
             validation_peak_path,
-            model if load_all_states else None,
+            model if continue_training else None,
             tracking_peak_path,
         )
 
@@ -444,39 +446,39 @@ def configure(
     logger.info(f"Wrote {config_path}")
 
 
-def _is_valid_model(model: Optional[str], load_all_states: bool) -> None:
+def _is_valid_model(model: Optional[str], continue_training: bool) -> None:
     """
-    Validate the model argument when --load_all_states is specified.
+    Validate the model argument when --continue_training is specified.
 
     Parameters
     ----------
     model : Optional[str]
         The model path or URL.
-    load_all_states : bool
+    continue_training : bool
         Whether to load all model states for resuming training.
 
     Raises
     ------
     ValueError
-        If load_all_states is True and model is a URL or non-existent file.
+        If continue_training is True and model is a URL or non-existent file.
     UserWarning
-        If load_all_states is True but model is not provided
+        If continue_training is True but model is not provided
     """
-    if load_all_states:
+    if continue_training:
         if model is None:
             logger.warning(
-                "When --load_all_states is specified, --model must also be provided. "
+                "When --continue_training is specified, --model must also be provided. "
                 "Training will start from scratch without a provided model.",
                 stacklevel=2,
             )
         elif _is_valid_url(model):
             raise ValueError(
                 "Full model state cannot be loaded from a URL. "
-                "Please provide a local file path when --load_all_states is True.",
+                "Please provide a local file path when --continue_training is True.",
             )
         elif not Path(model).is_file():
             raise ValueError(
-                "When --load_all_states is True, the model path must point to an existing file.",
+                "When --continue_training is True, the model path must point to an existing file.",
             )
 
 
@@ -504,10 +506,20 @@ def setup_logging(
     }
 
     # Configure logging.
+    # Reset warning capture first, because captureWarnings(True) does nothing
+    # if it was already called, even if the warnings hook has since been
+    # replaced (e.g. by pytest between tests).
+    logging.captureWarnings(False)
     logging.captureWarnings(True)
     root_logger = logging.getLogger()
     root_logger.setLevel(logging.DEBUG)
-    warnings_logger = logging.getLogger("py.warnings")
+
+    # Remove the handlers from a previous call, so messages aren't duplicated
+    # when logging is set up multiple times in the same process.
+    for handler in _log_handlers:
+        root_logger.removeHandler(handler)
+        handler.close()
+    _log_handlers.clear()
 
     # Formatters for file vs console:
     console_formatter = logging.Formatter("{levelname}: {message}", style="{")
@@ -521,11 +533,10 @@ def setup_logging(
     console_handler.setLevel(logging_levels[verbosity.lower()])
     console_handler.setFormatter(console_formatter)
     root_logger.addHandler(console_handler)
-    warnings_logger.addHandler(console_handler)
     file_handler = logging.FileHandler(log_file_path, encoding="utf8")
     file_handler.setFormatter(log_formatter)
     root_logger.addHandler(file_handler)
-    warnings_logger.addHandler(file_handler)
+    _log_handlers.extend([console_handler, file_handler])
 
     # Disable dependency non-critical log messages.
     logging.getLogger("depthcharge").setLevel(
