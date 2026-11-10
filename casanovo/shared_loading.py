@@ -7,6 +7,7 @@ import hashlib
 import urllib.parse
 import requests
 import datetime
+import tempfile
 import tqdm
 import functools
 import shutil
