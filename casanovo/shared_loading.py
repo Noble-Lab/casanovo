@@ -22,6 +22,7 @@ from lightning.pytorch import seed_everything
 logger = logging.getLogger(__name__)
 
 _MODEL_WEIGHT_REQUEST_TIMEOUT = 30
+_DEFAULT_MODEL_ID = "orbitrap"
 
 
 class _SharedFileIOParams(click.RichCommand):
@@ -197,9 +198,6 @@ def setup_logging(
     logging.getLogger("pytorch_lightning").setLevel(logging.WARNING)
     logging.getLogger("torch").setLevel(logging.WARNING)
     logging.getLogger("urllib3").setLevel(logging.WARNING)
-
-
-_DEFAULT_MODEL_ID = "orbitrap"
 
 
 def _normalize(s: str) -> str:

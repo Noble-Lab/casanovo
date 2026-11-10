@@ -705,7 +705,7 @@ class DeNovoDataModule(pl.LightningDataModule):
         """Converts the format of the existing RT to be seconds"""
         rt = scan_time["scan start time"]
         unit = getattr(rt, "unit_info", None)
-        scaling_factor = _RT_TO_SECONDS[unit]
+        scaling_factor = _RT_TO_SECONDS.get(unit)
         if scaling_factor is None:
             raise ValueError(
                 "Scan start time has no supported units; unable to preprocess spectra."
