@@ -378,6 +378,27 @@ class ModelRunner:
 
         try:
             self.loaders.setup(stage="test", annotated=evaluate)
+        except StopIteration as e:
+            # Raised by depthcharge when every spectrum was skipped.
+            if evaluate:
+                error_message = (
+                    "No annotated spectra could be read from the input peak "
+                    "files. This happens when a peak file is unannotated, or "
+                    "when every spectrum was skipped for another reason "
+                    "(invalid precursor charge, too few peaks, ...). See the "
+                    "preceding 'Skipped N spectra' warning for the last error "
+                    "that was encountered."
+                )
+                logger.error(error_message)
+                raise TypeError(error_message) from e
+
+            error_message = (
+                "No valid spectra could be read from the input peak files. "
+                "See the preceding 'Skipped N spectra' warning for the last "
+                "error that was encountered."
+            )
+            logger.error(error_message)
+            raise ValueError(error_message) from e
         except (KeyError, OSError, TypeError) as e:
             if evaluate:
                 error_message = (
@@ -506,6 +527,7 @@ class ModelRunner:
         self.tokenizer = tokenizer_clss(
             residues=self.config.residues,
             replace_isoleucine_with_leucine=self.config.replace_isoleucine_with_leucine,
+            replace_n_and_q_deamidated_with_d_and_e=self.config.replace_n_and_q_deamidated_with_d_and_e,
             reverse=True,
             start_token=None,
             stop_token="$",

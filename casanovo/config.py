@@ -130,6 +130,7 @@ class Config:
         gradient_clip_algorithm=str,
         precision=str,
         replace_isoleucine_with_leucine=bool,
+        replace_n_and_q_deamidated_with_d_and_e=bool,
         massivekb_tokenizer=bool,
         residues=dict,
         new_token_init=dict,
