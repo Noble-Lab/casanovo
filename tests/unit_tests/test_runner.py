@@ -5,6 +5,7 @@ import unittest.mock
 from pathlib import Path
 
 import depthcharge.tokenizers.peptides
+import lightning.pytorch as pl
 import numpy as np
 import pytest
 import torch
@@ -923,6 +924,84 @@ def test_remap_decoder_vocab_no_change(tmp_path, mgf_small, tiny_config):
         assert runner.model.decoder.final is old_final
         assert torch.equal(old_emb.weight.data, old_emb_data)
         assert torch.equal(old_final.weight.data, old_final_data)
+
+
+@pytest.mark.parametrize(
+    "vocab_change", ["drop", "extend", "add_nterm", "unchanged"]
+)
+def test_loaded_tokenizer_modification_indices(
+    tmp_path, tiny_config, vocab_change
+):
+    """Check modification placement after loading a different vocabulary."""
+    config = Config(tiny_config)
+    config.dim_model = 16
+    config.massivekb_tokenizer = False
+    config.residues["C[Cysteinyl]"] = 222.013285
+    runner = ModelRunner(config=config)
+    runner.initialize_tokenizer()
+    runner.initialize_model(train=True)
+    checkpoint = tmp_path / "model.ckpt"
+    torch.save(
+        {
+            "state_dict": runner.model.state_dict(),
+            "hyper_parameters": dict(runner.model.hparams),
+            "pytorch-lightning_version": pl.__version__,
+        },
+        checkpoint,
+    )
+
+    config.residues = dict(config.residues)
+    if vocab_change == "drop":
+        del config.residues["C[Cysteinyl]"]
+    elif vocab_change == "extend":
+        config.residues["K[Acetyl]"] = 170.105528
+        config.new_token_init = {"K[Acetyl]": "K"}
+    elif vocab_change == "add_nterm":
+        config.residues["[Formyl]-"] = 27.994915
+        config.new_token_init = {"[Formyl]-": "[Acetyl]-"}
+
+    runner = ModelRunner(config=config, model_filename=str(checkpoint))
+    runner.initialize_tokenizer()
+    runner.initialize_model(train=False)
+    model = runner.model
+    tokenizer = runner.tokenizer
+    nterm = [
+        token
+        for token in tokenizer.index
+        if token.startswith("[") and token.endswith("]-")
+    ]
+
+    # Stale modification indices can also cause an unmodified W residue
+    # to be discarded as an incorrectly placed N-terminal modification.
+    beams = [list("WEDLTPEPA") + ["$"]]
+    expected_discarded = [False]
+    for modification in nterm:
+        beams.extend(
+            [
+                list("KEDLTPEP") + [modification, "$"],
+                list("KED") + [modification] + list("LTPEP") + ["$"],
+            ]
+        )
+        expected_discarded.extend([False, True])
+    tokens = torch.tensor(
+        [[tokenizer.index[token] for token in beam] for beam in beams],
+        device=model.device,
+    )
+    finished, discarded = model._finish_beams(tokens, tokens.shape[1] - 1)
+    assert finished.all()
+    assert discarded.tolist() == expected_discarded
+    assert model.n_term == nterm
+    assert model.nterm_idx.tolist() == [tokenizer.index[t] for t in nterm]
+    assert model.neg_mass_idx.tolist() == [
+        tokenizer.index[t]
+        for t, mass in tokenizer.residues.items()
+        if mass < 0
+    ]
+    assert model.stop_token == tokenizer.stop_int
+    for name in ("nterm_idx", "neg_mass_idx"):
+        assert getattr(model, name).device == model.device
+        assert getattr(model, name).dtype == torch.int
+        assert name not in model.state_dict()
 
 
 def test_remap_decoder_vocab_extends(tmp_path, mgf_small, tiny_config):
