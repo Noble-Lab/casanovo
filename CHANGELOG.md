@@ -8,20 +8,27 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Added
 
+- The end-of-run sequencing report now includes additional score thresholds between 0.5 and 0.9 and excludes 0.95 and 0.99, selected based on full MassIVE-KB and multi-enzyme test runs. It also reports throughput in distinct spectra per second and labels score-distribution counts as PSMs.
+- Added the `replace_n_and_q_deamidated_with_d_and_e` config option, which replaces deamidated N and Q residues with D and E residues, because they are indistinguishable by de novo sequencing.
 - The number of spectra that receive no prediction because beam search did not return a valid peptide is now counted and logged at the end of a sequencing run.
+- When sequencing with `--evaluate`, the ground truth sequence and the precision and coverage at each prediction are added as columns to the mzTab output, and the average precision (area under the precision-coverage curve) is reported in the end-of-run report.
 
 ### Changed
 
+- Upgraded minimum DepthCharge version to 0.5.0.
+- Spectra with invalid information, such as a missing `SEQ` annotation, are now skipped with a warning instead of raising an error. As a result, when evaluating, training, or validating on a mix of annotated and unannotated peak files, only the annotated spectra are used. An error is still raised if no valid spectra remain; when sequencing, its message now points to the "Skipped N spectra" warning for the cause instead of assuming an unannotated peak file.
 - `val_check_interval` now accepts a float in `[0, 1]` to validate at a fraction of each training epoch, in addition to an integer number of training steps.
 - Beam search is sped up by caching finished beams and selecting the top-scoring beam fully on the GPU.
-- Modified config loading to load based on model selectors (e.g., `orbitrap` and `timstof` 
-are currently supported) in sequencing mode
+- Modified config loading to load based on model selectors (e.g., `orbitrap` and `timstof` are currently supported) in sequencing mode.
+- `--load_all_states` was renamed to `--continue_training`. 
 
 ### Fixed
 
 - The database search progress bar now updates in place instead of printing a new line per refresh, by disabling Lightning's competing progress bar during database search.
 - Fixed the mass of the carbamylation + ammonia-loss N-terminal token to `25.979265`. The token name is deliberately left as `[+25.980265]-` because it appears in released checkpoint vocabularies.
 - Fixed training from a checkpoint failing with `TypeError` when configuration values that are not optimizer arguments (e.g. `precursor_mass_tol`) leaked into the Adam optimizer.
+- Fixed multi-GPU training using the same spectra on every device. Since v5.0.0, each device read the full training set in the same order, so all devices trained on identical batches. Each device now trains on its own share of the spectra, so an epoch takes `n` times fewer steps on `n` devices and `train_batch_size` is the true global batch size. To keep the devices in step, fewer than `train_batch_size` spectra are skipped per epoch.
+- Fixed logging state leaking between tests. Calling `setup_logging` more than once in the same process no longer adds duplicate log handlers or stops warnings from being written to the log, and a test fixture now restores the logging state after each test.
 
 ### Removed
 

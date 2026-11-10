@@ -140,6 +140,7 @@ class Config:
         gradient_clip_algorithm=str,
         precision=str,
         replace_isoleucine_with_leucine=bool,
+        replace_n_and_q_deamidated_with_d_and_e=bool,
         massivekb_tokenizer=bool,
         residues=dict,
         new_token_init=dict,
@@ -150,7 +151,7 @@ class Config:
     ):
         """Initialize a Config object."""
         self.file = str(config_file) if config_file is not None else "default"
-        with self._default_config.open() as f_in:
+        with self._default_config.open(encoding="utf-8") as f_in:
             self._params = yaml.safe_load(f_in)
         self.model_selector = model_selector
 
@@ -160,7 +161,7 @@ class Config:
             if model_selector or not Path(config_file).is_file():
                 config_file = self._resolve_config(config_file)
 
-            with Path(config_file).open() as f_in:
+            with Path(config_file).open(encoding="utf-8") as f_in:
                 self._user_config = yaml.safe_load(f_in)
                 if self._user_config is None:
                     self._user_config = {}
@@ -263,13 +264,12 @@ class Config:
         shutil.copyfile(cls._default_config, output)
 
     def _resolve_config(self, config_selector: str) -> Path:
-        base_config = self._canonical_configs.get(config_selector)
-        if base_config is None:
+        if config_selector not in self._canonical_configs:
             logger.warning(
                 "No bundled config found for model '%s'; using default "
                 "config.",
                 config_selector,
             )
-            return self._default_config
-
-        return base_config
+        return self._canonical_configs.get(
+            config_selector, self._default_config
+        )

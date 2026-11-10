@@ -5,12 +5,14 @@ import logging
 import math
 import os
 import pathlib
-from typing import Optional, Sequence
+from typing import Generator, Optional, Sequence
 
+import lance.sampler
 import lightning.pytorch as pl
 import numpy as np
 import pyarrow as pa
 import spectrum_utils.spectrum as sus
+import torch.distributed as dist
 import torch.utils.data._utils.collate
 from depthcharge.data import (
     AnnotatedSpectrumDataset,
@@ -23,6 +25,92 @@ from torch.utils.data import DataLoader
 from torch.utils.data.datapipes.iter.combinatorics import ShufflerIterDataPipe
 
 logger = logging.getLogger("casanovo")
+
+
+class DistributedBatchSampler(lance.sampler.Sampler):
+    """
+    Lance sampler that shards the data across DDP ranks.
+
+    Lance datasets are iterable, so Lightning cannot inject a
+    ``DistributedSampler`` and every rank would otherwise read the full
+    dataset. Instead, the rank and world size are looked up from
+    ``torch.distributed`` each time the dataset is iterated, because
+    the process group only exists once training has started.
+
+    Rank ``r`` of ``W`` ranks reads batches ``r, r + W, r + 2W, ...``
+    of ``batch_size`` consecutive rows. Every rank gets the same number
+    of full batches, because an extra batch on one rank would leave it
+    waiting forever in a gradient all-reduce. Up to
+    ``W * batch_size - 1`` rows, less than one global batch, are
+    therefore skipped each epoch. Without an initialized process group,
+    or with a single rank, the full dataset is read.
+    """
+
+    def __call__(
+        self,
+        dataset: lance.LanceDataset,
+        *args,
+        batch_size: int = 128,
+        filter: Optional[str] = None,
+        **kwargs,
+    ) -> Generator[pa.RecordBatch, None, None]:
+        """
+        Yield the record batches for the current rank.
+
+        Parameters
+        ----------
+        dataset : lance.LanceDataset
+            The Lance dataset to read from.
+        *args
+            Additional positional arguments for the Lance sampler.
+        batch_size : int
+            The number of rows per batch.
+        filter : Optional[str]
+            A Lance filter expression to select rows.
+        **kwargs
+            Additional keyword arguments for the Lance sampler.
+
+        Yields
+        ------
+        pa.RecordBatch
+            The record batches assigned to the current rank.
+
+        Raises
+        ------
+        ValueError
+            If the dataset has fewer rows than one global batch.
+        """
+        if not (dist.is_available() and dist.is_initialized()):
+            world_size = 1
+        else:
+            world_size = dist.get_world_size()
+        if world_size == 1:
+            yield from lance.sampler.FullScanSampler()(
+                dataset, *args, batch_size=batch_size, filter=filter, **kwargs
+            )
+            return
+
+        rank = dist.get_rank()
+        n_rows = dataset.count_rows(filter)
+        n_rows_rank = n_rows // (world_size * batch_size) * batch_size
+        if n_rows_rank == 0:
+            raise ValueError(
+                f"{n_rows} spectra are too few to give each of {world_size} "
+                f"devices a batch of {batch_size} spectra"
+            )
+        # Lance's ShardedBatchSampler warns whenever `with_row_id` is passed,
+        # even if it is False.
+        if not kwargs.get("with_row_id"):
+            kwargs.pop("with_row_id", None)
+        batches = lance.sampler.ShardedBatchSampler(rank, world_size)(
+            dataset, *args, batch_size=batch_size, filter=filter, **kwargs
+        )
+        for batch in batches:
+            if batch.num_rows >= n_rows_rank:
+                yield batch.slice(0, n_rows_rank)
+                return
+            n_rows_rank -= batch.num_rows
+            yield batch
 
 
 def _unique_stems(paths: list) -> list:
@@ -333,6 +421,11 @@ class DeNovoDataModule(pl.LightningDataModule):
                 parse_kwargs=parse_params,
                 **params,
             )
+
+        if mode == "train":
+            # Shard before shuffling, so that each rank shuffles only its
+            # own part of the training data.
+            dataset.sampler = DistributedBatchSampler()
 
         if shuffle:
             buffer_batches = max(
