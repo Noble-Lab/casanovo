@@ -143,7 +143,9 @@ def test_peptide_generator_errors(tiny_fasta_file):
                 "fail.fasta", "trypsin", "full", 0, 5, 10, residues_dict
             )
         ]
-    with pytest.raises(ValueError):
+    with pytest.raises(
+        ValueError, match=r"^Digestion type fail not recognized\.$"
+    ):
         [
             (a, b)
             for a, b in db_utils._peptide_generator(
@@ -838,7 +840,7 @@ def test_ptm_warning(tiny_fasta_file, caplog):
             tokenizer=depthcharge.tokenizers.PeptideTokenizer.from_massivekb(),
         )
     assert any(
-        "is not specified as a fixed or variable modification"
-        in record.message
+        "Modified residue '[Acetyl]-' is not specified as a fixed or "
+        "variable modification" in record.getMessage()
         for record in caplog.records
     )

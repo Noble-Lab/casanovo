@@ -225,7 +225,6 @@ def test_spectrum_preprocessing(tmp_path, mgf_small):
     """
     Test the spectrum preprocessing function.
     """
-    min_peaks, max_peaks = 0, 100
     min_mz, max_mz = 0, 2000
     min_intensity = 0
     remove_precursor_tol = 0
@@ -295,7 +294,6 @@ def test_spectrum_preprocessing(tmp_path, mgf_small):
     assert dataloader.test_dataset.n_spectra == total_spectra
     for spec in dataloader.test_dataset:
         assert spec["precursor_charge"] <= max_charge
-    max_charge = 4
 
 
 def test_data_module_per_file_validation(mgf_small, tmp_path):
