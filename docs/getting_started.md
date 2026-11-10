@@ -153,7 +153,7 @@ casanovo db-search spectra.mgf proteome.fasta
 
 ![`casanovo db-search --help`](images/db-search-help.svg)
 
-In this case, besides MS/MS spectra in mzML, mzXML, or MGF file(s) or timsTOF `.d` folder(s), Casanovo needs as minimal input the protein database in the FASTA format.
+In this case, besides MS/MS spectra in a supported raw spectrum format, Casanovo needs as minimal input the protein database in the FASTA format.
 Additional settings that determine how peptides are derived from the protein sequences can be specified in the YAML configuration file (default: tryptic digestion).
 This will write PSM scores for the given MS/MS spectra and FASTA file to the specified output file in mzTab format.
 
