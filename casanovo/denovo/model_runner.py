@@ -352,6 +352,26 @@ class ModelRunner:
 
         try:
             self.loaders.setup(stage="test", annotated=evaluate)
+        except StopIteration as e:
+            if evaluate:
+                error_message = (
+                    "No annotated spectra could be read from the input peak "
+                    "files. This happens when a peak file is unannotated, or "
+                    "when every spectrum was skipped for another reason "
+                    "(invalid precursor charge, too few peaks, ...). See the "
+                    "preceding 'Skipped N spectra' warning for the last error "
+                    "that was encountered."
+                )
+                logger.error(error_message)
+                raise TypeError(error_message) from e
+
+            error_message = (
+                "No valid spectra could be read from the input peak files. "
+                "See the preceding 'Skipped N spectra' warning for the last "
+                "error that was encountered."
+            )
+            logger.error(error_message)
+            raise ValueError(error_message) from e
         except (KeyError, OSError, TypeError) as e:
             if evaluate:
                 error_message = (
@@ -701,7 +721,6 @@ class ModelRunner:
             lance_dir=lance_dir,
             casanovo=self.casanovo,
             scan_width=self.config.width,
-            residues=self.config.residues,
             min_fragment_coverage=self.config.min_fragment_coverage,
         )
 

@@ -426,12 +426,34 @@ class DeNovoDataModule(pl.LightningDataModule):
         overall_records = []
         scan_id = 0
 
+        if annotated:
+            if self.annotation_data_frame is None:
+                raise ValueError(
+                    "annotation_path is required when annotated=True"
+                )
+            if not (mode == "train" or mode.startswith(("valid", "tracking"))):
+                raise ValueError(
+                    "Cascadia currently does not support evaluation mode for "
+                    "de novo sequencing."
+                )
+
         for path in paths:
             skipped = 0
+            peak_file = pathlib.Path(path).name
 
-            f_to_mzrt_to_pep, max_mz, _window_size, cycle_time = (
-                self._get_centers(path)
-            )
+            if annotated:
+                centers = self._annotation_centers.get(peak_file, [])
+                if not centers:
+                    logger.warning(
+                        "No annotations for file %s, skipping", path
+                    )
+                    continue
+                f_to_mzrt_to_pep = self._bin_centers(centers)
+                cycle_time = self._get_cycle_time(path)
+            else:
+                f_to_mzrt_to_pep, _max_mz, _window_size, cycle_time = (
+                    self._get_centers(path)
+                )
 
             prec_to_spec = self._extract_spectra(
                 path,
@@ -442,7 +464,7 @@ class DeNovoDataModule(pl.LightningDataModule):
             for key, value in prec_to_spec.items():
                 prec, rt, _ = key
 
-                if "ms1_scans" not in value:
+                if "ms1_scans" not in value or "scans" not in value:
                     skipped += 1
                     continue
 
@@ -452,13 +474,13 @@ class DeNovoDataModule(pl.LightningDataModule):
                 ms1_rts = np.array(value["ms1_rts"])
                 window_width = value["window_width"]
 
-                abs_rts = [np.abs(x) for x in rts]
-                sorted_rt_idxs = np.argsort(abs_rts)[: self.scan_width]
+                sorted_rt_idxs = np.argsort(np.abs(rts))[: self.scan_width]
                 rts = rts[sorted_rt_idxs]
                 scans = scans[sorted_rt_idxs]
 
-                abs_ms1_rts = [np.abs(x) for x in ms1_rts]
-                sorted_ms1_rt_idxs = np.argsort(abs_ms1_rts)[: self.scan_width]
+                sorted_ms1_rt_idxs = np.argsort(np.abs(ms1_rts))[
+                    : self.scan_width
+                ]
                 ms1_rts = ms1_rts[sorted_ms1_rt_idxs]
                 ms1_scans = ms1_scans[sorted_ms1_rt_idxs]
 
@@ -485,7 +507,7 @@ class DeNovoDataModule(pl.LightningDataModule):
                         ms_array.append(1)
 
                 base_record = {
-                    "peak_file": pathlib.Path(path).name,
+                    "peak_file": peak_file,
                     "ms_level": self.ms_level,
                     "precursor_mz": prec,
                     "retention_time": rt,
@@ -499,44 +521,26 @@ class DeNovoDataModule(pl.LightningDataModule):
                     "ms_array": np.asarray(ms_array, dtype=np.int8),
                 }
 
-                if annotated and self.annotation_data_frame is None:
-                    raise ValueError(
-                        "annotation_path is required when annotated=True"
-                    )
-
                 if annotated:
-                    if mode == "train" or mode.startswith(
-                        ("valid", "tracking")
-                    ):
-                        annotations = self._dia_annotate(base_record)
+                    for seq, charge in self._dia_annotate(base_record):
+                        record = dict(base_record)
+                        record["seq"] = seq
+                        record["precursor_charge"] = charge
+                        record["scan_id"] = scan_id
 
-                        for seq, charge in annotations:
-                            record = dict(base_record)
-                            record["seq"] = seq
-                            record["precursor_charge"] = charge
-                            record["scan_id"] = scan_id
+                        record = self._apply_preprocessing(record)
+                        if record is None:
+                            continue
 
-                            record = self._apply_preprocessing(record)
-                            if record is None:
-                                continue
-
-                            coverage, frag_labels = self._annotate_fragments(
-                                record
-                            )
-
-                            if coverage < self.min_fragment_coverage:
-                                continue
-
-                            record["frag_labels"] = frag_labels
-
-                            overall_records.append(record)
-
-                            scan_id += 1
-                    else:
-                        raise ValueError(
-                            "Cascadia currently does not support evaluation mode for "
-                            "de novo sequencing."
+                        coverage, frag_labels = self._annotate_fragments(
+                            record
                         )
+                        if coverage < self.min_fragment_coverage:
+                            continue
+
+                        record["frag_labels"] = frag_labels
+                        overall_records.append(record)
+                        scan_id += 1
 
                 else:
                     for charge in self.valid_charge:
@@ -553,7 +557,8 @@ class DeNovoDataModule(pl.LightningDataModule):
 
             if skipped > 0:
                 logger.warning(
-                    "%d spectra were skipped due to missing MS1 scans for file %s",
+                    "%d spectra were skipped due to missing MS1 or MS2 scans "
+                    "for file %s",
                     skipped,
                     path,
                 )
@@ -679,60 +684,59 @@ class DeNovoDataModule(pl.LightningDataModule):
         observed = self._near(all_theo, np.sort(peaks), tol).sum()
         return observed / theoretical_ions, frag_labels
 
-    def _dia_annotate(self, record):
-        """Find peptide annotations matching a DIA spectrum."""
+    def _bin_centers(self, centers):
+        """Same structure _get_centers returns, built from (mz, rt, charge) tuples."""
+        f_to_mzrt_to_pep = {1: {}}
+        for mz, rt, charge in centers:
+            key = (int(mz / 10), int(rt / 10))
+            f_to_mzrt_to_pep[1].setdefault(key, []).append((mz, rt, charge))
+        return f_to_mzrt_to_pep
 
-        rt = record["retention_time"]
-        mz = record["precursor_mz"]
-        peak_file = record["peak_file"]
-
-        rt_bin = int(rt / self.rt_tolerance)
-        mz_bin = int(mz / self.mz_tolerance)
-
-        matches = []
-
-        # Check neighboring bins because a valid match can fall
-        # across a bin boundary.
-        for rt_offset in (-1, 0, 1):
-            for mz_offset in (-1, 0, 1):
-                key = (
-                    peak_file,
-                    rt_bin + rt_offset,
-                    mz_bin + mz_offset,
-                )
-
-                for (
-                    seq,
-                    charge,
-                    candidate_rt,
-                    candidate_mz,
-                ) in self._dia_annotation_index.get(key, []):
-                    if (
-                        abs(candidate_rt - rt) <= self.rt_tolerance
-                        and abs(candidate_mz - mz) <= self.mz_tolerance
-                    ):
-                        matches.append((seq, charge))
-
-        return matches
+    def _get_cycle_time(self, mzml_file):
+        """Time between the first two MS1 scans (stops early)."""
+        last_rt = None
+        with pyteomics.mzml.read(
+            str(mzml_file), decode_binary=False
+        ) as reader:
+            for spec in reader:
+                if spec["ms level"] != 1:
+                    continue
+                cur_rt = 60 * spec["scanList"]["scan"][0]["scan start time"]
+                if last_rt is not None:
+                    return cur_rt - last_rt
+                last_rt = cur_rt
+        raise ValueError(
+            f"{mzml_file} does not contain at least two MS1 scans for DIA extraction"
+        )
 
     def _build_dia_annotation_index(self):
-        """Build a fast lookup index for DIA annotations."""
-        self._dia_annotation_index = {}
-
+        """Map (peak_file, precursor_mz, retention_time) -> [(seq, charge)], and
+        collect one extraction center per unique (m/z, RT) per file."""
+        index = {}
         for row in self.annotation_data_frame.iter_rows(named=True):
-            rt_bin = int(row["retention_time"] / self.rt_tolerance)
-            mz_bin = int(row["precursor_mz"] / self.mz_tolerance)
-
-            key = (row["peak_file"], rt_bin, mz_bin)
-
-            self._dia_annotation_index.setdefault(key, []).append(
-                (
-                    row["seq"],
-                    row["charge"],
-                    row["retention_time"],
-                    row["precursor_mz"],
-                )
+            key = (
+                row["peak_file"],
+                row["precursor_mz"],
+                row["retention_time"],
             )
+            index.setdefault(key, []).append((row["seq"], row["charge"]))
+        self._dia_annotation_index = index
+
+        centers = {}
+        for peak_file, mz, rt in index:
+            centers.setdefault(peak_file, []).append(
+                (mz, rt, 1)
+            )  # charge placeholder
+        self._annotation_centers = centers
+
+    def _dia_annotate(self, record):
+        """Peptides labeled at this exact (file, m/z, RT) center."""
+        key = (
+            record["peak_file"],
+            record["precursor_mz"],
+            record["retention_time"],
+        )
+        return self._dia_annotation_index.get(key, [])
 
     def _select_top_peaks(self, spec, sqrt_passes=1):
         """Select the top-n most intense peaks, sort by m/z, scale intensities.

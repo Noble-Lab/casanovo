@@ -333,17 +333,11 @@ def test_evaluate_success(tmp_path, mgf_small, tiny_config):
 
 
 @pytest.mark.parametrize(
-    "input_files, expect_match",
+    "input_files, expect_error",
     [
+        pytest.param(["mzml_small"], True, id="mzml_only"),
         pytest.param(
-            ["mzml_small"],
-            False,
-            id="mzml_only",
-        ),
-        pytest.param(
-            ["mgf_small_unannotated"],
-            True,
-            id="unannotated_mgf_only",
+            ["mgf_small_unannotated"], True, id="unannotated_mgf_only"
         ),
         pytest.param(
             ["mgf_small_unannotated", "mzml_small"],
@@ -351,24 +345,22 @@ def test_evaluate_success(tmp_path, mgf_small, tiny_config):
             id="unannotated_mgf_and_mzml",
         ),
         pytest.param(
-            ["mgf_small", "mzml_small"],
-            False,
-            id="annotated_mgf_and_mzml",
+            ["improperly_annotated_file"],
+            True,
+            id="improperly_annotated_mgf_missing_seq",
+        ),
+        pytest.param(
+            ["mgf_small", "mzml_small"], False, id="annotated_mgf_and_mzml"
         ),
         pytest.param(
             ["mgf_small", "mgf_small_unannotated"],
-            True,
+            False,
             id="annotated_and_unannotated_mgf",
         ),
         pytest.param(
             ["mgf_small", "mgf_small_unannotated", "mzml_small"],
-            True,
+            False,
             id="annotated_unannotated_and_mzml",
-        ),
-        pytest.param(
-            ["improperly_annotated_file"],
-            True,
-            id="improperly_annotated_mgf_missing_seq",
         ),
     ],
 )
@@ -379,13 +371,15 @@ def test_evaluate_failure_cases(
     mgf_small_unannotated,
     tiny_config,
     input_files,
-    expect_match,
+    expect_error,
 ):
-    """Test all evaluation failure modes."""
+    """Test evaluation with unannotated peak files.
+
+    Evaluation fails if no annotated spectra remain, and otherwise skips the
+    unannotated spectra with a warning.
+    """
     exception_string = (
-        "Error creating annotated spectrum dataloaders. This may "
-        "be the result of having an unannotated peak file present "
-        "in the validation peak file path list."
+        "No annotated spectra could be read from the input peak files."
     )
 
     config = Config(tiny_config)
@@ -414,10 +408,11 @@ def test_evaluate_failure_cases(
 
     files = [file_map[name] for name in input_files]
 
-    with pytest.raises(
-        TypeError,
-        match=exception_string if expect_match else None,
-    ):
+    if expect_error:
+        context = pytest.raises(TypeError, match=exception_string)
+    else:
+        context = pytest.warns(UserWarning, match="Skipped")
+    with context:
         with ModelRunner(
             config, model_filename=str(model_file), overwrite_ckpt_check=False
         ) as runner:
@@ -425,6 +420,9 @@ def test_evaluate_failure_cases(
 
     # Metadata-only MzTab should still be written
     assert result_file.is_file()
+    if not expect_error:
+        # Average precision is only computed if evaluation ran.
+        assert runner.average_precision is not None
 
 
 def test_metrics_logging(tmp_path, mgf_small, tiny_config):
