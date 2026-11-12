@@ -204,7 +204,9 @@ def test_missing_ms1_warning(caplog):
     with caplog.at_level(logging.WARNING):
         dataset._dia_to_dataframe(["test.mzML"], annotated=False, mode="test")
 
-    assert "2 spectra were skipped due to missing MS1 scans" in caplog.text
+    assert (
+        "2 spectra were skipped due to missing MS1 or MS2 scans" in caplog.text
+    )
 
 
 def test_get_centers_no_ms1(mzml_small_ms1, monkeypatch):

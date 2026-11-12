@@ -423,6 +423,23 @@ class DeNovoDataModule(pl.LightningDataModule):
         Iterator[pl.DataFrame]
             An iterator of dataframes with the centered spectra.
         """
+        paths = list(
+            dict.fromkeys(os.path.abspath(p) for p in paths)
+        )  # same file listed twice isn't a duplicate
+
+        if annotated:
+            by_name = {}
+            for p in paths:
+                by_name.setdefault(pathlib.Path(p).name, []).append(p)
+            dupes = {n: ps for n, ps in by_name.items() if len(ps) > 1}
+            if dupes:
+                raise ValueError(
+                    "Annotated DIA training requires unique peak file names, because "
+                    "annotations are looked up by file name. These names appear more "
+                    "than once; rename the files so each is unique (and update the "
+                    f"peak_file column in the annotation TSV to match): {dupes}"
+                )
+
         overall_records = []
         scan_id = 0
 
@@ -599,7 +616,7 @@ class DeNovoDataModule(pl.LightningDataModule):
         keep_idx = np.empty(len(spec.mz), dtype=int)
         j = 0
         for i, m in enumerate(spec.mz):
-            while not np.isclose(sorted_mz[j], m):
+            while sorted_mz[j] != m:
                 j += 1
             keep_idx[i] = j
             j += 1
@@ -827,6 +844,7 @@ class DeNovoDataModule(pl.LightningDataModule):
         """
         prec_to_spec = {}
         bins_by_rt = {}
+        rt_bins = max(1, int(np.ceil(time_width / 10)))
 
         for part in f_to_mzrt_to_pep:
             for (scan_window, scan_rt), entries in f_to_mzrt_to_pep[
@@ -846,8 +864,8 @@ class DeNovoDataModule(pl.LightningDataModule):
                     )
 
                     for scan_rt in range(
-                        int(cur_rt / 10) - 1,
-                        int(cur_rt / 10) + 2,
+                        int(cur_rt / 10) - rt_bins,
+                        int(cur_rt / 10) + rt_bins + 1,
                     ):
                         for scan_window, entries in bins_by_rt.get(
                             scan_rt, {}

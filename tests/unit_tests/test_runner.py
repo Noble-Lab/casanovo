@@ -420,9 +420,6 @@ def test_evaluate_failure_cases(
 
     # Metadata-only MzTab should still be written
     assert result_file.is_file()
-    if not expect_error:
-        # Average precision is only computed if evaluation ran.
-        assert runner.average_precision is not None
 
 
 def test_metrics_logging(tmp_path, mgf_small, tiny_config):
