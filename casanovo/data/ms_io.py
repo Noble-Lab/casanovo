@@ -11,11 +11,11 @@ from pathlib import Path
 
 import natsort
 
-from .. import __version__
+from ..version import _get_version
 from ..config import Config
 from .psm import PepSpecMatch
 
-logger = logging.getLogger("casanovo")
+logger = logging.getLogger(__name__)
 
 # MGF spectrum block delimiters and scan-number header prefixes.
 _MGF_BEGIN = "BEGIN IONS"
@@ -87,18 +87,23 @@ class MztabWriter:
         The name of the mzTab file.
     """
 
-    def __init__(self, filename: str):
+    def __init__(self, filename: str, model: str = "Casanovo"):
         self.filename = filename
+        self.package_version = _get_version()
+        self.model = model
         self.metadata = [
             ("mzTab-version", "1.0.0"),
             ("mzTab-mode", "Summary"),
             ("mzTab-type", "Identification"),
             (
                 "description",
-                f"Casanovo identification file "
+                f"{model} identification file "
                 f"{os.path.splitext(os.path.basename(self.filename))[0]}",
             ),
-            ("software[1]", f"[MS, MS:1003281, Casanovo, {__version__}]"),
+            (
+                "software[1]",
+                f"[MS, MS:1003281, {model}, {self.package_version}]",
+            ),
             (
                 "psm_search_engine_score[1]",
                 "[MS, MS:1001143, search engine specific score for PSMs, ]",
@@ -288,7 +293,7 @@ class MztabWriter:
                     "null",  # unique
                     self.database,  # database
                     self.database_version,  # database_version
-                    f"[MS, MS:1003281, Casanovo, {__version__}]",
+                    f"[MS, MS:1003281, {self.model}, {self.package_version}]",
                     psm.peptide_score,  # search_engine_score[1]
                     # FIXME: Modifications should be specified as
                     #  controlled vocabulary terms.

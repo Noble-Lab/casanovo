@@ -1,7 +1,33 @@
 ###
-# Casanovo configuration.
+# Casanovo/Cascadia configuration.
 # Blank entries are interpreted as `None`.
 ###
+
+###
+# The following parameters are unique to running inference with 
+# Cascadia. Other parameters such as training batch size, 
+# inference batch size, etc. will be used from those sections 
+# of the config file when running inference with Cascadia.
+###
+# The number of adjacent scans to use when constructing augmented spectra
+width: 2
+
+###
+# The following parameters are unique to training
+# Cascadia. Other parameters such as training batch size, 
+# inference batch size, etc. will be used from those sections 
+# of the config file when running inference with Cascadia.
+###
+# How much the fragment class weighs more than the non-fragment class 
+# in the auxiliary classification task
+frag_class_weights: 20
+
+# How much to weight the auxiliary task in computing the loss
+frag_weight: 1e-3
+
+# What fraction of fragments must be covered for a training example 
+# to be included.
+min_fragment_coverage: 0.25
 
 ###
 # The following parameters can be modified when running inference or when
@@ -121,7 +147,9 @@ n_layers: 9
 # Dropout rate for model weights.
 dropout: 0.0
 # Number of dimensions to use for encoding peak intensity.
-dim_intensity:
+# If ``None``, the intensity will be projected up to ``dim_model`` using
+# a linear layer, then summed with the m/z encoding for each peak.
+dim_intensity: null
 # The number of iterations for the linear warm-up of the learning rate.
 warmup_iters: 100_000
 # The number of iterations for the cosine half period of the learning rate.
