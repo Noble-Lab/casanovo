@@ -1,5 +1,6 @@
 """Unit tests specifically for the model_runner module."""
 
+import pickle
 import shutil
 import unittest.mock
 from pathlib import Path
@@ -739,6 +740,7 @@ def test_verify_tokenizer(
         msg = warnings_logged[0].getMessage()
         assert expected_substring in msg
         assert "model checkpoint tokenizer vs config file tokenizer;" in msg
+        assert "using the config tokenizer." in msg
     else:
         # Ensure no warnings were logged
         assert not any(rec.levelname == "WARNING" for rec in caplog.records)
@@ -754,10 +756,9 @@ def test_initialize_tokenizer():
     runner = ModelRunner(config=mock_config)
 
     with unittest.mock.patch(
-        "casanovo.denovo.model_runner.MskbPeptideTokenizer"
+        "casanovo.denovo.model_runner.MskbPeptideTokenizer",
+        wraps=depthcharge.tokenizers.peptides.MskbPeptideTokenizer,
     ) as mock_tokenizer_cls:
-        mock_tokenizer = unittest.mock.MagicMock()
-        mock_tokenizer_cls.return_value = mock_tokenizer
         runner.initialize_tokenizer()
 
     mock_tokenizer_cls.assert_called_once_with(
@@ -768,7 +769,11 @@ def test_initialize_tokenizer():
         start_token=None,
         stop_token="$",
     )
-    assert runner.tokenizer is mock_tokenizer
+    assert (
+        type(runner.tokenizer)
+        is depthcharge.tokenizers.peptides.MskbPeptideTokenizer
+    )
+    assert runner.tokenizer.residues == {"foo": 100}
 
 
 @pytest.mark.parametrize("replace", [True, False])
@@ -791,6 +796,76 @@ def test_initialize_tokenizer_deamidation(replace):
         assert "N[Deamidated]" in tokenizer.residues
         assert "Q[Deamidated]" in tokenizer.residues
         assert not torch.equal(deamidated, unmodified)
+
+
+@pytest.mark.parametrize("massivekb", [False, True])
+@pytest.mark.parametrize("replace_isoleucine", [False, True])
+@pytest.mark.parametrize("replace_deamidated", [False, True])
+@pytest.mark.parametrize("remove_w", [False, True])
+def test_tokenizer_uses_configured_alphabet(
+    massivekb, replace_isoleucine, replace_deamidated, remove_w
+):
+    """The tokenizer contains only the configured residues."""
+    config = Config()
+    config.massivekb_tokenizer = massivekb
+    config.replace_isoleucine_with_leucine = replace_isoleucine
+    config.replace_n_and_q_deamidated_with_d_and_e = replace_deamidated
+    if remove_w:
+        del config.residues["W"]
+    configured_residues = config.residues.copy()
+    expected = configured_residues.copy()
+    if replace_isoleucine:
+        expected.pop("I")
+    if replace_deamidated:
+        expected.pop("N[Deamidated]")
+        expected.pop("Q[Deamidated]")
+
+    runner = ModelRunner(config)
+    runner.initialize_tokenizer()
+    tokenizer = runner.tokenizer
+
+    assert tokenizer.residues == expected
+    assert set(tokenizer.index) == set(expected) | {"$"}
+    assert sorted(tokenizer.index.values()) == list(
+        range(1, len(tokenizer.index) + 1)
+    )
+    assert len(tokenizer.reverse_index) == len(tokenizer.index) + 1
+    assert len(tokenizer.masses) == len(tokenizer.reverse_index)
+    assert tokenizer.reverse_index[0] is None
+    assert tokenizer.stop_int == tokenizer.index["$"]
+    for token, index in tokenizer.index.items():
+        assert tokenizer.reverse_index[index] == token
+        assert tokenizer.masses[index].item() == pytest.approx(
+            expected.get(token, 0.0)
+        )
+    assert config.residues == configured_residues
+    assert "C" in depthcharge.tokenizers.peptides.PeptideTokenizer().residues
+
+
+@pytest.mark.parametrize("massivekb", [False, True])
+def test_tokenizer_pickles_as_depthcharge_class(massivekb):
+    """The tokenizer pickles without Casanovo classes."""
+    config = Config()
+    config.massivekb_tokenizer = massivekb
+    runner = ModelRunner(config)
+    runner.initialize_tokenizer()
+    tokenizer = runner.tokenizer
+
+    expected_cls = (
+        depthcharge.tokenizers.peptides.MskbPeptideTokenizer
+        if massivekb
+        else depthcharge.tokenizers.peptides.PeptideTokenizer
+    )
+    assert type(tokenizer) is expected_cls
+
+    pickled = pickle.dumps(tokenizer)
+    assert b"casanovo" not in pickled
+    restored = pickle.loads(pickled)
+    assert type(restored) is expected_cls
+    assert restored.residues == tokenizer.residues
+    assert restored.index == tokenizer.index
+    assert restored.reverse_index == tokenizer.reverse_index
+    assert torch.equal(restored.masses, tokenizer.masses)
 
 
 def test_validate_vocab_compatibility():

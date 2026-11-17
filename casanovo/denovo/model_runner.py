@@ -8,13 +8,13 @@ import os
 import tempfile
 import warnings
 from pathlib import Path
-from typing import Iterable, List, Optional, Sequence, Union
+from typing import Dict, Iterable, List, Optional, Sequence, Union
 
 import lightning.pytorch as pl
 import lightning.pytorch.loggers
 import numpy as np
 import torch
-from depthcharge.tokenizers import PeptideTokenizer
+from depthcharge.tokenizers import PeptideTokenizer, Tokenizer
 from depthcharge.tokenizers.peptides import MskbPeptideTokenizer
 from lightning.pytorch.callbacks import LearningRateMonitor, ModelCheckpoint
 from lightning.pytorch.strategies import DDPStrategy
@@ -524,7 +524,7 @@ class ModelRunner:
         else:
             tokenizer_clss = PeptideTokenizer
 
-        self.tokenizer = tokenizer_clss(
+        tokenizer = tokenizer_clss(
             residues=self.config.residues,
             replace_isoleucine_with_leucine=self.config.replace_isoleucine_with_leucine,
             replace_n_and_q_deamidated_with_d_and_e=self.config.replace_n_and_q_deamidated_with_d_and_e,
@@ -532,6 +532,8 @@ class ModelRunner:
             start_token=None,
             stop_token="$",
         )
+        _restrict_tokenizer_residues(tokenizer, self.config.residues)
+        self.tokenizer = tokenizer
 
     def initialize_model(self, train: bool, db_search: bool = False) -> None:
         """Initialize the Casanovo model.
@@ -745,7 +747,7 @@ class ModelRunner:
 
         logger.warning(
             "Mismatching %s in model checkpoint tokenizer vs config file tokenizer;"
-            " using the checkpoint tokenizer.",
+            " using the config tokenizer.",
             mismatch_reason,
         )
 
@@ -1006,3 +1008,32 @@ def _get_peak_filenames(
         )
 
     return sorted(list(found_files))
+
+
+def _restrict_tokenizer_residues(
+    tokenizer: PeptideTokenizer, residues: Dict[str, float]
+) -> None:
+    """
+    Remove tokenizer residues that are not in the given residues.
+
+    The tokenizer is modified in place and keeps its Depthcharge class.
+
+    Parameters
+    ----------
+    tokenizer : PeptideTokenizer
+        The tokenizer to modify.
+    residues : Dict[str, float]
+        The configured residues and their masses.
+    """
+    tokenizer.residues = {
+        aa: mass for aa, mass in tokenizer.residues.items() if aa in residues
+    }
+    Tokenizer.__init__(
+        tokenizer,
+        tokenizer.residues,
+        tokenizer.start_token,
+        tokenizer.stop_token,
+    )
+    tokenizer.masses = torch.tensor(
+        [tokenizer.residues.get(aa, 0.0) for aa in tokenizer.reverse_index]
+    )
