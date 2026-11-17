@@ -665,6 +665,9 @@ class ModelRunner:
                     "Casanovo."
                 )
 
+        # Update token indices after loading the model, even if the
+        # checkpoint and config tokenizers have the same vocabulary.
+        self.model._update_tokenizer_metadata()
         self._validate_vocab_compatibility()
 
     def initialize_data_module(
