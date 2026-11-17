@@ -1134,6 +1134,29 @@ def test_remap_decoder_vocab_drops_token_warns(
 
     assert any("dropped" in rec.message.lower() for rec in caplog.records)
 
+    tokenizer = runner.tokenizer
+    model = runner.model
+    assert model.tokenizer is tokenizer
+    assert model.stop_token == tokenizer.stop_int
+    expected_n_term = [
+        aa
+        for aa in tokenizer.index
+        if aa.startswith("[") and aa.endswith("]-")
+    ]
+    assert expected_n_term
+    assert model.n_term == expected_n_term
+    assert model.nterm_idx.tolist() == [
+        tokenizer.index[aa] for aa in expected_n_term
+    ]
+    expected_neg_mass_idx = [
+        tokenizer.index[aa]
+        for aa, mass in tokenizer.residues.items()
+        if mass < 0
+    ]
+    assert expected_neg_mass_idx
+    assert model.neg_mass_idx.tolist() == expected_neg_mass_idx
+    assert max(model.nterm_idx.tolist()) < model.vocab_size
+
 
 def test_initialize_model_with_new_token_init_passes_validate(
     tmp_path, mgf_small, tiny_config

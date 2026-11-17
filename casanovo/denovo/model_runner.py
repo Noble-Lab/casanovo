@@ -628,6 +628,7 @@ class ModelRunner:
             # from checkpoint file.
             ckpt_tokenizer = self.model.hparams.get("tokenizer")
             self.model.tokenizer = tokenizer
+            self.model.update_tokenizer_indices()
             self._remap_decoder_vocab(ckpt_tokenizer, tokenizer)
 
             architecture_params = set(model_params.keys()) - set(
@@ -659,6 +660,7 @@ class ModelRunner:
                 )
                 ckpt_tokenizer = self.model.hparams.get("tokenizer")
                 self.model.tokenizer = tokenizer
+                self.model.update_tokenizer_indices()
                 self._remap_decoder_vocab(ckpt_tokenizer, tokenizer)
 
             except RuntimeError:
