@@ -1053,6 +1053,72 @@ def test_peptide_generator_unknown_amino_acids(tmp_path):
     assert enzymatic == [("ME", "foo")]
 
 
+@pytest.mark.parametrize(
+    ("allowed_fixed_mods", "expected_fixed_mods", "expected_fixed_swaps"),
+    [
+        ("", {}, {}),
+        (
+            "C:C[Carbamidomethyl]",
+            {"a": ["C"]},
+            {"aC": "C[Carbamidomethyl]"},
+        ),
+    ],
+)
+def test_construct_mods_dict(
+    allowed_fixed_mods, expected_fixed_mods, expected_fixed_swaps
+):
+    fixed_mods, var_mods, swap_map = db_utils._construct_mods_dict(
+        allowed_fixed_mods, "M:M[Oxidation],nterm:[Acetyl]-"
+    )
+
+    assert fixed_mods == expected_fixed_mods
+    assert var_mods == {"a": ["M"], "b-": True}
+    assert swap_map == {
+        **expected_fixed_swaps,
+        "aM": "M[Oxidation]",
+        "b-": "[Acetyl]-",
+    }
+
+
+@pytest.mark.parametrize(
+    ("seq", "swap_map", "swap_pattern", "expected"),
+    [
+        ("PEPTIDEK", {}, "()", "PEPTIDEK"),
+        ("", {}, "()", ""),
+        (
+            "b-ACaMPEPTIDEK",
+            {"aM": "M[Oxidation]", "b-": "[Acetyl]-"},
+            "(aM|b-)",
+            "[Acetyl]-ACM[Oxidation]PEPTIDEK",
+        ),
+    ],
+)
+def test_convert_from_modx(seq, swap_map, swap_pattern, expected):
+    assert (
+        db_utils._convert_from_modx(seq, swap_map, re.compile(swap_pattern))
+        == expected
+    )
+
+
+def test_digest_fasta_no_mods(tiny_fasta_file):
+    pdb = db_utils.ProteinDatabase(
+        fasta_path=str(tiny_fasta_file),
+        enzyme="trypsin",
+        digestion="full",
+        missed_cleavages=0,
+        min_peptide_len=6,
+        max_peptide_len=6,
+        max_mods=0,
+        precursor_tolerance=20,
+        isotope_error=[0, 0],
+        allowed_fixed_mods="",
+        allowed_var_mods="",
+        tokenizer=depthcharge.tokenizers.PeptideTokenizer(),
+    )
+
+    assert pdb.db_peptides.index.to_list() == ["VTLSCR"]
+
+
 def test_digest_fasta_cleave(tiny_fasta_file):
     # No missed cleavages
     expected_normal = [

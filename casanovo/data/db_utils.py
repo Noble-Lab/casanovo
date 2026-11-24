@@ -52,6 +52,7 @@ class ProteinDatabase:
         and observed precursor m/z's.
     allowed_fixed_mods : str
         A comma-separated string of fixed modifications to consider.
+        An empty string disables fixed modifications.
     allowed_var_mods : str
         A comma-separated string of variable modifications to consider.
     tokenizer: depthcharge.tokenizers.PeptideTokenizer
@@ -305,6 +306,7 @@ def _construct_mods_dict(
     ----------
     allowed_fixed_mods : str
         A comma-separated string of fixed modifications to consider.
+        An empty string disables fixed modifications.
     allowed_var_mods : str
         A comma-separated string of variable modifications to consider.
 
@@ -322,6 +324,8 @@ def _construct_mods_dict(
     for mod_map, allowed_mods in zip(
         [fixed_mods, var_mods], [allowed_fixed_mods, allowed_var_mods]
     ):
+        if not allowed_mods:
+            continue
         for i, mod in enumerate(allowed_mods.split(",")):
             aa, mod_aa = mod.split(":")
             mod_id = string.ascii_lowercase[i]
@@ -445,6 +449,7 @@ def _convert_from_modx(
     swap_map : dict[str, str]
         Dictionary that allows for swapping of modX to
         Casanovo-acceptable modifications.
+        An empty dictionary leaves the sequence unchanged.
     swap_regex : Pattern
         Regular expression to match modX format.
 
@@ -453,6 +458,8 @@ def _convert_from_modx(
     str
         Peptide in Casanovo-acceptable modifications.
     """
+    if not swap_map:
+        return seq
     # FIXME: This might be handled by the DepthCharge residues vocabulary
     #  instead.
     return swap_regex.sub(lambda x: swap_map[x.group()], seq)
