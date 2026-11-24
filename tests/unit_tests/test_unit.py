@@ -1053,6 +1053,33 @@ def test_peptide_generator_unknown_amino_acids(tmp_path):
     assert enzymatic == [("ME", "foo")]
 
 
+@pytest.mark.parametrize(
+    ("allowed_fixed_mods", "expected_fixed_mods", "expected_fixed_swaps"),
+    [
+        ("", {}, {}),
+        (
+            "C:C[Carbamidomethyl]",
+            {"a": ["C"]},
+            {"aC": "C[Carbamidomethyl]"},
+        ),
+    ],
+)
+def test_construct_mods_dict(
+    allowed_fixed_mods, expected_fixed_mods, expected_fixed_swaps
+):
+    fixed_mods, var_mods, swap_map = db_utils._construct_mods_dict(
+        allowed_fixed_mods, "M:M[Oxidation],nterm:[Acetyl]-"
+    )
+
+    assert fixed_mods == expected_fixed_mods
+    assert var_mods == {"a": ["M"], "b-": True}
+    assert swap_map == {
+        **expected_fixed_swaps,
+        "aM": "M[Oxidation]",
+        "b-": "[Acetyl]-",
+    }
+
+
 def test_digest_fasta_cleave(tiny_fasta_file):
     # No missed cleavages
     expected_normal = [

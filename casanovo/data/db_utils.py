@@ -52,6 +52,7 @@ class ProteinDatabase:
         and observed precursor m/z's.
     allowed_fixed_mods : str
         A comma-separated string of fixed modifications to consider.
+        An empty string disables fixed modifications.
     allowed_var_mods : str
         A comma-separated string of variable modifications to consider.
     tokenizer: depthcharge.tokenizers.PeptideTokenizer
@@ -305,6 +306,7 @@ def _construct_mods_dict(
     ----------
     allowed_fixed_mods : str
         A comma-separated string of fixed modifications to consider.
+        An empty string disables fixed modifications.
     allowed_var_mods : str
         A comma-separated string of variable modifications to consider.
 
@@ -322,6 +324,8 @@ def _construct_mods_dict(
     for mod_map, allowed_mods in zip(
         [fixed_mods, var_mods], [allowed_fixed_mods, allowed_var_mods]
     ):
+        if not allowed_mods:
+            continue
         for i, mod in enumerate(allowed_mods.split(",")):
             aa, mod_aa = mod.split(":")
             mod_id = string.ascii_lowercase[i]
