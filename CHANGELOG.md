@@ -14,11 +14,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 - Removed the override that forced `accelerator: "auto"` to `"cpu"` on Apple Silicon devices.
 
-## [5.2.2] - 2026-11-20
+## [5.2.2] - 2026-11-24
 
 ### Changed
 
 - Remove unsupported timsTOF modifications (deamidation, carbamylation) from the timsTOF config.
+
+### Fixed
+
+- Correctly handle absence of fixed modifications during database search mode.
 
 ## [5.2.1] - 2026-08-12
 

@@ -1080,6 +1080,45 @@ def test_construct_mods_dict(
     }
 
 
+@pytest.mark.parametrize(
+    ("seq", "swap_map", "swap_pattern", "expected"),
+    [
+        ("PEPTIDEK", {}, "()", "PEPTIDEK"),
+        ("", {}, "()", ""),
+        (
+            "b-ACaMPEPTIDEK",
+            {"aM": "M[Oxidation]", "b-": "[Acetyl]-"},
+            "(aM|b-)",
+            "[Acetyl]-ACM[Oxidation]PEPTIDEK",
+        ),
+    ],
+)
+def test_convert_from_modx(seq, swap_map, swap_pattern, expected):
+    assert (
+        db_utils._convert_from_modx(seq, swap_map, re.compile(swap_pattern))
+        == expected
+    )
+
+
+def test_digest_fasta_no_mods(tiny_fasta_file):
+    pdb = db_utils.ProteinDatabase(
+        fasta_path=str(tiny_fasta_file),
+        enzyme="trypsin",
+        digestion="full",
+        missed_cleavages=0,
+        min_peptide_len=6,
+        max_peptide_len=6,
+        max_mods=0,
+        precursor_tolerance=20,
+        isotope_error=[0, 0],
+        allowed_fixed_mods="",
+        allowed_var_mods="",
+        tokenizer=depthcharge.tokenizers.PeptideTokenizer(),
+    )
+
+    assert pdb.db_peptides.index.to_list() == ["VTLSCR"]
+
+
 def test_digest_fasta_cleave(tiny_fasta_file):
     # No missed cleavages
     expected_normal = [

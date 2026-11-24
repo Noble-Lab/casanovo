@@ -449,6 +449,7 @@ def _convert_from_modx(
     swap_map : dict[str, str]
         Dictionary that allows for swapping of modX to
         Casanovo-acceptable modifications.
+        An empty dictionary leaves the sequence unchanged.
     swap_regex : Pattern
         Regular expression to match modX format.
 
@@ -457,6 +458,8 @@ def _convert_from_modx(
     str
         Peptide in Casanovo-acceptable modifications.
     """
+    if not swap_map:
+        return seq
     # FIXME: This might be handled by the DepthCharge residues vocabulary
     #  instead.
     return swap_regex.sub(lambda x: swap_map[x.group()], seq)
