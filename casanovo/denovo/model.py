@@ -166,6 +166,9 @@ class Spec2Pep(pl.LightningModule):
         # Per-file validation metadata; set by ModelRunner.train() before fit.
         self.val_stems: list = []
         self.n_main_loaders: int = 0
+        self._main_val_celoss: list = []
+        self._main_pep_precisions: list = []
+        self._main_aa_precisions: list = []
 
         # Output writer during predicting.
         self.out_writer = out_writer
@@ -893,7 +896,10 @@ class Spec2Pep(pl.LightningModule):
         if is_main:
             # Contributes to the aggregate ``valid_CELoss`` monitored by
             # ModelCheckpoint for best-checkpoint selection.
-            self.log("valid_CELoss", loss.detach(), **log_kwargs)
+            if n_main <= 1:
+                self.log("valid_CELoss", loss.detach(), **log_kwargs)
+            else:
+                self._main_val_celoss.append((loss.detach(), batch_size))
 
         if not self.calculate_precision or not is_main:
             return loss
@@ -919,12 +925,19 @@ class Spec2Pep(pl.LightningModule):
             on_epoch=True,
             sync_dist=True,
         )
-        self.log(
-            "pep_precision", pep_precision, **log_args, batch_size=batch_size
-        )
-        self.log(
-            "aa_precision", aa_precision, **log_args, batch_size=batch_size
-        )
+        if n_main <= 1:
+            self.log(
+                "pep_precision",
+                pep_precision,
+                **log_args,
+                batch_size=batch_size,
+            )
+            self.log(
+                "aa_precision", aa_precision, **log_args, batch_size=batch_size
+            )
+        else:
+            self._main_pep_precisions.append((pep_precision, batch_size))
+            self._main_aa_precisions.append((aa_precision, batch_size))
         return loss
 
     def predict_step(
@@ -990,10 +1003,45 @@ class Spec2Pep(pl.LightningModule):
         self._history.append(metrics)
         self._log_history()
 
+    def on_validation_epoch_start(self) -> None:
+        """Clear validation loss and precision accumulators."""
+        self._main_val_celoss.clear()
+        self._main_pep_precisions.clear()
+        self._main_aa_precisions.clear()
+
     def on_validation_epoch_end(self) -> None:
         """
         Log the validation metrics at the end of each epoch.
         """
+        if self.n_main_loaders > 1:
+            if self._main_val_celoss:
+                total_loss = sum(l * w for l, w in self._main_val_celoss)
+                total_weight = sum(w for _, w in self._main_val_celoss)
+                agg_loss = (
+                    total_loss / total_weight
+                    if total_weight > 0
+                    else torch.tensor(0.0, device=self.device)
+                )
+                self.log("valid_CELoss", agg_loss, sync_dist=True)
+                self._main_val_celoss.clear()
+
+            if self.calculate_precision:
+                if self._main_pep_precisions:
+                    total_pep = sum(
+                        p * w for p, w in self._main_pep_precisions
+                    )
+                    total_w = sum(w for _, w in self._main_pep_precisions)
+                    agg_pep = total_pep / total_w if total_w > 0 else 0.0
+                    self.log("pep_precision", agg_pep, sync_dist=True)
+                    self._main_pep_precisions.clear()
+
+                if self._main_aa_precisions:
+                    total_aa = sum(a * w for a, w in self._main_aa_precisions)
+                    total_w = sum(w for _, w in self._main_aa_precisions)
+                    agg_aa = total_aa / total_w if total_w > 0 else 0.0
+                    self.log("aa_precision", agg_aa, sync_dist=True)
+                    self._main_aa_precisions.clear()
+
         callback_metrics = self.trainer.callback_metrics
         metrics = {"step": self.trainer.global_step}
 
