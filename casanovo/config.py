@@ -89,6 +89,8 @@ class Config:
         cosine_schedule_period_iters=int,
         learning_rate=float,
         weight_decay=float,
+        muon_lr=float,
+        muon_momentum=float,
         inter_ctc_layers=list,
         inter_ctc_weight=float,
         train_label_smoothing=float,

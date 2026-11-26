@@ -27,6 +27,7 @@ from .. import config
 from ..data import ms_io, psm
 from ..denovo.transformers import PeptideDecoder, SpectrumEncoder
 from . import evaluate
+from .muon import MuonWithAuxAdamW
 
 logger = logging.getLogger("casanovo")
 
@@ -112,8 +113,14 @@ class Spec2Pep(pl.LightningModule):
     inter_ctc_weight : float
         Share of the training loss carried by those auxiliary
         predictions; the final layer carries the rest.
+    muon_lr : float
+        Learning rate for the Muon parameter group, the hidden weight
+        matrices. Muon updates have unit RMS, so this is on a different
+        scale than the auxiliary group's.
+    muon_momentum : float
+        Momentum for the Muon parameter group.
     **kwargs : Dict
-        Additional keyword arguments passed to the Adam optimizer.
+        Additional keyword arguments for the auxiliary AdamW group.
     """
 
     def __init__(
@@ -137,6 +144,8 @@ class Spec2Pep(pl.LightningModule):
         cosine_schedule_period_iters: int = 600_000,
         inter_ctc_layers: Sequence[int] = (),
         inter_ctc_weight: float = 0.5,
+        muon_lr: float = 0.002,
+        muon_momentum: float = 0.95,
         out_writer: Optional[ms_io.MztabWriter] = None,
         calculate_precision: bool = False,
         tokenizer: PeptideTokenizer | None = None,
@@ -187,6 +196,8 @@ class Spec2Pep(pl.LightningModule):
         # Optimizer settings.
         self.warmup_iters = warmup_iters
         self.cosine_schedule_period_iters = cosine_schedule_period_iters
+        self.muon_lr = muon_lr
+        self.muon_momentum = muon_momentum
         # `kwargs` will contain additional arguments as well as
         # unrecognized arguments, including deprecated ones. Remove the
         # deprecated ones.
@@ -797,15 +808,45 @@ class Spec2Pep(pl.LightningModule):
         """
         Initialize the optimizer.
 
-        We use the Adam optimizer with a cosine learning rate scheduler.
+        Hidden weight matrices are optimized with Muon; embeddings, the
+        output head, and all vector/scalar parameters use an auxiliary
+        AdamW group, per the Muon usage guidance. A single cosine
+        learning rate scheduler rescales both groups' base learning
+        rates by the same warmup/decay factor.
 
         Returns
         -------
         Tuple[List[torch.optim.Optimizer], Dict[str, Any]]
-            The initialized Adam optimizer and its learning rate
-            scheduler.
+            The initialized optimizer and its learning rate scheduler.
         """
-        optimizer = torch.optim.Adam(self.parameters(), **self.opt_kwargs)
+        aux_ids = set()
+        for module in self.modules():
+            if isinstance(module, torch.nn.Embedding):
+                aux_ids.update(id(p) for p in module.parameters())
+        aux_ids.update(id(p) for p in self.decoder.final.parameters())
+        muon_params, aux_params = [], []
+        for p in self.parameters():
+            if not p.requires_grad:
+                continue
+            # Squeeze first: ndim alone calls the encoder's spectrum
+            # token, shaped (1, 1, d_model), a matrix, and Muon would
+            # normalize its update to a size the gradient cannot affect.
+            if p.squeeze().ndim >= 2 and id(p) not in aux_ids:
+                muon_params.append(p)
+            else:
+                aux_params.append(p)
+        optimizer = MuonWithAuxAdamW(
+            [
+                dict(
+                    params=muon_params,
+                    use_muon=True,
+                    lr=self.muon_lr,
+                    momentum=self.muon_momentum,
+                    weight_decay=self.opt_kwargs.get("weight_decay", 0.0),
+                ),
+                dict(params=aux_params, use_muon=False, **self.opt_kwargs),
+            ]
+        )
         # Apply learning rate scheduler per step.
         lr_scheduler = CosineWarmupScheduler(
             optimizer, self.warmup_iters, self.cosine_schedule_period_iters

@@ -304,6 +304,8 @@ def _get_config_file(file_path, file_name, additional_cfg=None):
         "n_layers": 1,
         "dropout": 0.0,
         "dim_intensity": None,
+        "muon_lr": 0.002,
+        "muon_momentum": 0.95,
         "inter_ctc_weight": 0.5,
         "warmup_iters": 1,
         "cosine_schedule_period_iters": 600,
