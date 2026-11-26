@@ -3,13 +3,16 @@ import shutil
 import unittest.mock
 
 import lance
+import numpy as np
 import pyarrow as pa
 import pytest
+import spectrum_utils.spectrum as sus
 import torch
 
 from casanovo.denovo.dataloaders import (
     DeNovoDataModule,
     DistributedBatchSampler,
+    _deduplicate_mz,
 )
 
 
@@ -294,6 +297,30 @@ def test_spectrum_preprocessing(tmp_path, mgf_small):
     assert dataloader.test_dataset.n_spectra == total_spectra
     for spec in dataloader.test_dataset:
         assert spec["precursor_charge"] <= max_charge
+
+
+def test_deduplicate_mz():
+    """Repeated m/z values are merged, summing their intensities (#272)."""
+    spectrum = sus.MsmsSpectrum(
+        "test",
+        500.0,
+        2,
+        np.array([100.0, 100.0, 200.0, 300.0, 300.0]),
+        np.array([1.0, 2.0, 5.0, 3.0, 4.0]),
+    )
+    _deduplicate_mz(spectrum)
+    np.testing.assert_allclose(spectrum.mz, [100.0, 200.0, 300.0])
+    np.testing.assert_allclose(spectrum.intensity, [3.0, 5.0, 7.0])
+
+
+def test_deduplicate_mz_no_duplicates():
+    """Spectra without repeated m/z values are left unchanged (#272)."""
+    mz = np.array([100.0, 200.0, 300.0])
+    intensity = np.array([1.0, 2.0, 3.0])
+    spectrum = sus.MsmsSpectrum("test", 500.0, 2, mz, intensity)
+    _deduplicate_mz(spectrum)
+    np.testing.assert_allclose(spectrum.mz, mz)
+    np.testing.assert_allclose(spectrum.intensity, intensity)
 
 
 def test_data_module_per_file_validation(mgf_small, tmp_path):
