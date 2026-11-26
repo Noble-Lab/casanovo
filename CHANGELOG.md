@@ -23,6 +23,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Fixed
 
+- Constrained `pyarrow` to `<26` so that installing Casanovo from source works again. Casanovo requires `numpy<2.0` (through `pylance`), but `pyarrow` is only lower-bounded by `depthcharge-ms`, so a fresh install resolved to `pyarrow>=26`, which raises `ImportError: pyarrow requires NumPy 2.0 or newer` on import.
 - The database search progress bar now updates in place instead of printing a new line per refresh, by disabling Lightning's competing progress bar during database search.
 - Fixed the mass of the carbamylation + ammonia-loss N-terminal token to `25.979265`. The token name is deliberately left as `[+25.980265]-` because it appears in released checkpoint vocabularies.
 - Fixed training from a checkpoint failing with `TypeError` when configuration values that are not optimizer arguments (e.g. `precursor_mass_tol`) leaked into the Adam optimizer.

@@ -27,6 +27,7 @@ dependencies = [
     "numpy<2.0",
     "pandas",
     "psutil",
+    "pyarrow<26",
     "PyGithub",
     "pylance==0.15.0",
     "PyYAML",
