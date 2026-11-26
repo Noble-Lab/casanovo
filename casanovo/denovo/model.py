@@ -5,7 +5,17 @@ import heapq
 import itertools
 import logging
 import warnings
-from typing import Any, Dict, Generator, Iterable, List, Optional, Tuple, Union
+from typing import (
+    Any,
+    Dict,
+    Generator,
+    Iterable,
+    List,
+    Optional,
+    Sequence,
+    Tuple,
+    Union,
+)
 
 import einops
 import lightning.pytorch as pl
@@ -94,6 +104,14 @@ class Spec2Pep(pl.LightningModule):
         This is expensive.
     tokenizer: PeptideTokenizer | None
         Tokenizer object to process peptide sequences.
+    inter_ctc_layers : Sequence[int]
+        Decoder layers (1-based) that also score their hidden states for
+        an auxiliary CTC loss. Scoring reuses the output layer, so this
+        adds no parameters and changes nothing at inference. Layers
+        outside the stack are dropped with a warning.
+    inter_ctc_weight : float
+        Share of the training loss carried by those auxiliary
+        predictions; the final layer carries the rest.
     **kwargs : Dict
         Additional keyword arguments passed to the Adam optimizer.
     """
@@ -117,6 +135,8 @@ class Spec2Pep(pl.LightningModule):
         train_label_smoothing: float = 0.01,
         warmup_iters: int = 100_000,
         cosine_schedule_period_iters: int = 600_000,
+        inter_ctc_layers: Sequence[int] = (),
+        inter_ctc_weight: float = 0.5,
         out_writer: Optional[ms_io.MztabWriter] = None,
         calculate_precision: bool = False,
         tokenizer: PeptideTokenizer | None = None,
@@ -138,6 +158,12 @@ class Spec2Pep(pl.LightningModule):
             n_layers=n_layers,
             dropout=dropout,
         )
+        # Intermediate CTC: which decoder layers score their own hidden
+        # states for an auxiliary loss, and how much of the loss those
+        # auxiliary predictions carry. Empty list disables it, and the
+        # model is then identical to the plain CTC decoder.
+        self.inter_ctc_layers = tuple(inter_ctc_layers or ())
+        self.inter_ctc_weight = float(inter_ctc_weight)
         self.decoder = PeptideDecoder(
             n_tokens=self.tokenizer,
             d_model=dim_model,
@@ -146,7 +172,13 @@ class Spec2Pep(pl.LightningModule):
             n_layers=n_layers,
             dropout=dropout,
             max_charge=max_charge,
+            inter_ctc_layers=self.inter_ctc_layers,
         )
+        # The decoder keeps only the layers it has, so take its list back as
+        # the effective one. Holding the raw request here would let the gate
+        # in _forward_step ask for intermediates from a decoder that scores
+        # nothing, and the auxiliary loss would be skipped without a word.
+        self.inter_ctc_layers = self.decoder.inter_ctc_layers
         self.softmax = torch.nn.Softmax(2)
         self.ctc_loss = torch.nn.CTCLoss(
             blank=self.blank_token, zero_infinity=True
@@ -285,7 +317,8 @@ class Spec2Pep(pl.LightningModule):
     def _forward_step(
         self,
         batch: Dict[str, torch.Tensor],
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        return_intermediates: bool = False,
+    ) -> Tuple[torch.Tensor, ...]:
         """
         The forward learning step for non-autoregressive decoding.
 
@@ -303,6 +336,10 @@ class Spec2Pep(pl.LightningModule):
             at position 0 and the output layer scores like any other.
         seqs : torch.Tensor of shape (n_spectra, length) or None
             The ground truth tokens for training, or None for inference.
+        intermediates : list of torch.Tensor
+            Only when ``return_intermediates``: the scores from each
+            layer in ``inter_ctc_layers``, for the auxiliary CTC losses.
+            Empty when that list is.
         """
         mzs, ints, precursors, seqs = self._process_batch(batch)
         memories, mem_masks = self.encoder(mzs, ints)
@@ -314,12 +351,24 @@ class Spec2Pep(pl.LightningModule):
             dtype=torch.long,
             device=self.device,
         )
-        scores = self.decoder(
-            tokens=zero_tokens,
-            memory=memories,
-            memory_key_padding_mask=mem_masks,
-            precursors=precursors,
-        )
+        if self.inter_ctc_layers or return_intermediates:
+            scores, intermediates = self.decoder.forward_with_intermediates(
+                tokens=zero_tokens,
+                memory=memories,
+                memory_key_padding_mask=mem_masks,
+                precursors=precursors,
+            )
+        else:
+            scores = self.decoder(
+                tokens=zero_tokens,
+                memory=memories,
+                memory_key_padding_mask=mem_masks,
+                precursors=precursors,
+            )
+            intermediates = []
+
+        if return_intermediates:
+            return scores, seqs, intermediates
         return scores, seqs
 
     def training_step(
@@ -348,7 +397,9 @@ class Spec2Pep(pl.LightningModule):
             The loss of the training step.
         """
 
-        pred, truth = self._forward_step(batch)
+        pred, truth, intermediates = self._forward_step(
+            batch, return_intermediates=True
+        )
 
         log_probs = pred.log_softmax(-1).transpose(0, 1)  # (T, B, V)
         input_lengths = torch.full(
@@ -375,6 +426,12 @@ class Spec2Pep(pl.LightningModule):
                 self.decoder_frames + 1,
             )
         loss = self.ctc_loss(log_probs, truth, input_lengths, target_lengths)
+        # The final layer's CTC loss is what gets logged as `*_CTCLoss`, so it
+        # stays comparable with runs that predate intermediate CTC and keeps
+        # driving best-checkpoint selection. The combined objective below is
+        # what the optimizer sees; logging that instead would mix in the
+        # shallower layers' worse predictions and both compare wrongly against
+        # earlier curves and pick checkpoints on the wrong quantity.
         self.log(
             f"{mode}_CTCLoss",
             loss.detach(),
@@ -383,6 +440,36 @@ class Spec2Pep(pl.LightningModule):
             sync_dist=True,
             batch_size=truth.shape[0],
         )
+        if intermediates:
+            # Intermediate CTC: the same objective on each intermediate
+            # layer's own prediction, so the layers below the last one are
+            # supervised directly rather than only through it.
+            aux = torch.stack(
+                [
+                    self.ctc_loss(
+                        scores.log_softmax(-1).transpose(0, 1),
+                        truth,
+                        input_lengths,
+                        target_lengths,
+                    )
+                    for scores in intermediates
+                ]
+            ).mean()
+            loss = (1 - self.inter_ctc_weight) * loss + (
+                self.inter_ctc_weight * aux
+            )
+            for key, value in (
+                (f"{mode}_CTCLoss_intermediate", aux),
+                (f"{mode}_CTCLoss_total", loss),
+            ):
+                self.log(
+                    key,
+                    value.detach(),
+                    on_step=False,
+                    on_epoch=True,
+                    sync_dist=True,
+                    batch_size=truth.shape[0],
+                )
         return loss
 
     def validation_step(

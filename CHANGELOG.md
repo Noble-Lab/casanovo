@@ -10,6 +10,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 - A TSV file with all candidate peptides can be exported during database searching with the `--export` flag.
 - Non-autoregressive decoding with a CTC loss: the decoder emits `decoder_frames` frames at once and CTC aligns them to the peptide.
+- Intermediate CTC: `inter_ctc_layers` names decoder layers that also score their hidden states for an auxiliary loss, weighted by `inter_ctc_weight`. Scoring reuses the output layer, so it adds no parameters and nothing at inference.
 
 ### Changed
 

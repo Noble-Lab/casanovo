@@ -1834,12 +1834,14 @@ def test_train_val_step_functions():
     assert torch.isclose(val_step_loss, train_step_loss)
 
 
-def test_frames_attend_to_each_other():
+@pytest.mark.parametrize("inter_ctc_layers", [(), (1,)])
+def test_frames_attend_to_each_other(inter_ctc_layers):
     """Adding decoder frames changes the logits of the earlier ones.
 
     If no frame attends to any other, as when every frame was inferred to
     be padding, a position's logits cannot depend on how many frames
-    follow it.
+    follow it. Both decode paths are covered, since each passes its own
+    masks to the layers.
     """
     tokenizer = depthcharge.tokenizers.peptides.MskbPeptideTokenizer(
         reverse=True, start_token=None, stop_token="$"
@@ -1852,6 +1854,7 @@ def test_frames_attend_to_each_other():
         decoder_frames=8,
         residues="massivekb",
         tokenizer=tokenizer,
+        inter_ctc_layers=inter_ctc_layers,
     ).eval()
 
     torch.manual_seed(0)
@@ -1874,6 +1877,43 @@ def test_frames_attend_to_each_other():
         "the added frames left the earlier positions untouched, so the "
         "decoder frames are not attending to one another"
     )
+
+
+def test_intermediate_ctc_adds_no_parameters():
+    """Scoring intermediate layers supervises them without new weights."""
+    tokenizer = depthcharge.tokenizers.peptides.MskbPeptideTokenizer(
+        reverse=True, start_token=None, stop_token="$"
+    )
+    kwargs = dict(
+        dim_model=8,
+        n_head=2,
+        dim_feedforward=8,
+        n_layers=3,
+        decoder_frames=8,
+        residues="massivekb",
+        tokenizer=tokenizer,
+    )
+    torch.manual_seed(0)
+    plain = Spec2Pep(**kwargs).eval()
+    unfed = Spec2Pep(**kwargs, inter_ctc_layers=(1, 2)).eval()
+    # Scoring reuses the output layer the model already has, so the two
+    # are the same size and a checkpoint from either loads into the other.
+    assert plain.state_dict().keys() == unfed.state_dict().keys()
+    unfed.load_state_dict(plain.state_dict())
+
+    batch = {
+        "mz_array": torch.linspace(100.0, 1000.0, 12).repeat(2, 1),
+        "intensity_array": torch.rand(2, 12),
+        "precursor_mz": torch.full((2,), 600.0),
+        "precursor_charge": torch.full((2,), 2.0),
+        "seq": tokenizer.tokenize(["PEPK", "PEPK"]),
+    }
+    with torch.no_grad():
+        _, _, intermediates = unfed._forward_step(
+            batch, return_intermediates=True
+        )
+    assert len(intermediates) == 2
+    assert unfed.training_step(batch) > 0
 
 
 def test_run_map(mgf_small):

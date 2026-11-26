@@ -458,6 +458,8 @@ class ModelRunner:
             cosine_schedule_period_iters=self.config.cosine_schedule_period_iters,
             lr=self.config.learning_rate,
             weight_decay=self.config.weight_decay,
+            inter_ctc_layers=self.config.inter_ctc_layers,
+            inter_ctc_weight=self.config.inter_ctc_weight,
             train_label_smoothing=self.config.train_label_smoothing,
             calculate_precision=self.config.calculate_precision,
             out_writer=self.writer,
@@ -478,6 +480,7 @@ class ModelRunner:
             cosine_schedule_period_iters=self.config.cosine_schedule_period_iters,
             lr=self.config.learning_rate,
             weight_decay=self.config.weight_decay,
+            inter_ctc_weight=self.config.inter_ctc_weight,
             train_label_smoothing=self.config.train_label_smoothing,
             calculate_precision=self.config.calculate_precision,
             out_writer=self.writer,
@@ -523,6 +526,8 @@ class ModelRunner:
                 loaded_model_params.keys()
             )
             for param in architecture_params:
+                if param not in self.model.hparams:
+                    continue
                 if model_params[param] != self.model.hparams[param]:
                     if param == "tokenizer":
                         self._verify_tokenizer(

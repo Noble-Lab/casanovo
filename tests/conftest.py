@@ -267,6 +267,8 @@ def _get_config_file(file_path, file_name, additional_cfg=None):
         "min_peptide_len": 6,
         "max_peptide_len": 100,
         "decoder_frames": 100,
+        # n_layers is 1 here, so no layer qualifies whatever this says.
+        "inter_ctc_layers": [],
         "predict_batch_size": 1024,
         "top_match": 1,
         "accelerator": "cpu",
@@ -302,6 +304,7 @@ def _get_config_file(file_path, file_name, additional_cfg=None):
         "n_layers": 1,
         "dropout": 0.0,
         "dim_intensity": None,
+        "inter_ctc_weight": 0.5,
         "warmup_iters": 1,
         "cosine_schedule_period_iters": 600,
         "learning_rate": 5e-4,

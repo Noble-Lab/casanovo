@@ -1,6 +1,7 @@
 """Transformer encoder and decoder for the de novo sequencing task."""
 
-from collections.abc import Callable
+import warnings
+from collections.abc import Callable, Sequence
 
 import torch
 from depthcharge.encoders import FloatEncoder, PeakEncoder, PositionalEncoder
@@ -55,6 +56,7 @@ class PeptideDecoder(AnalyteTransformerDecoder):
         positional_encoder: PositionalEncoder | bool = True,
         padding_int: int | None = None,
         max_charge: int = 4,
+        inter_ctc_layers: Sequence[int] = (),
     ) -> None:
         """Initialize a PeptideDecoder."""
 
@@ -78,6 +80,75 @@ class PeptideDecoder(AnalyteTransformerDecoder):
         self.final = torch.nn.Linear(
             d_model, self.token_encoder.num_embeddings + 1
         )
+
+        # The layers after which this decoder also scores its own hidden
+        # states, for an auxiliary CTC loss each. Scoring reuses the output
+        # layer, so no layer here grows the model, and a checkpoint trained
+        # without them still loads.
+        requested = tuple(sorted(set(inter_ctc_layers)))
+        self.inter_ctc_layers = tuple(
+            k for k in requested if 1 <= k < n_layers
+        )
+        dropped = [k for k in requested if k not in self.inter_ctc_layers]
+        if dropped:
+            warnings.warn(
+                f"Ignoring inter_ctc_layers {dropped}: a decoder of "
+                f"{n_layers} layers can score layers 1 to {n_layers - 1}. "
+                f"Scoring {list(self.inter_ctc_layers)}.",
+                stacklevel=2,
+            )
+
+    def forward_with_intermediates(
+        self,
+        tokens: torch.Tensor | None,
+        *args: torch.Tensor,
+        memory: torch.Tensor | None,
+        memory_key_padding_mask: torch.Tensor | None = None,
+        memory_mask: torch.Tensor | None = None,
+        **kwargs: dict,
+    ) -> tuple[torch.Tensor, list[torch.Tensor]]:
+        """
+        Decode, scoring the stack's own hidden states along the way.
+
+        Intermediate CTC (Lee and Watanabe, ICASSP 2021): after each layer
+        in ``inter_ctc_layers`` the hidden states are scored with the same
+        output layer the model already has, and that prediction carries an
+        auxiliary CTC loss during training. The score is not fed back into
+        the stack, so the layers below are supervised without changing what
+        the layers above receive, and what a spectrum decodes to is
+        unaffected. Inference still runs this method and scores those
+        layers, for predictions nothing reads.
+
+        This has to open up the layer stack rather than call
+        ``transformer_decoder`` in one shot, so it prepares the frames
+        itself with ``_prepare_frames``.
+
+        Returns
+        -------
+        scores : torch.Tensor of shape (batch, len_seq, n_tokens)
+            The final-layer scores, identical in meaning to ``forward``.
+        intermediates : list of torch.Tensor
+            One score tensor per layer in ``inter_ctc_layers``, for the
+            auxiliary CTC losses. Empty when the list is, in which case
+            the scores match ``forward`` exactly.
+        """
+        encoded, tgt_mask = self._prepare_frames(tokens, *args, **kwargs)
+        intermediates = []
+        for depth, layer in enumerate(self.transformer_decoder.layers, 1):
+            encoded = layer(
+                encoded,
+                memory,
+                tgt_mask=tgt_mask,
+                tgt_key_padding_mask=None,
+                memory_mask=memory_mask,
+                memory_key_padding_mask=memory_key_padding_mask,
+            )
+            if depth in self.inter_ctc_layers:
+                intermediates.append(self.final(encoded))
+
+        if self.transformer_decoder.norm is not None:
+            encoded = self.transformer_decoder.norm(encoded)
+        return self.final(encoded), intermediates
 
     def global_token_hook(
         self,

@@ -136,6 +136,11 @@ cosine_schedule_period_iters: 600_000
 learning_rate: 5e-4
 # Regularization term for weight updates.
 weight_decay: 1e-5
+# Decoder layers (1-based) that also score their hidden states for an
+# auxiliary CTC loss. Empty disables it.
+inter_ctc_layers: [1, 3, 5, 7]
+# Share of the training loss carried by those auxiliary predictions.
+inter_ctc_weight: 0.5
 # Amount of label smoothing when computing the training loss.
 train_label_smoothing: 0.01
 
