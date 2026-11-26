@@ -228,6 +228,9 @@ def test_save_final_model(tmp_path, mgf_small, tiny_config):
     """Test that final model checkpoints are saved."""
     # Test checkpoint saving when val_check_interval is greater than training steps
     config = Config(tiny_config)
+    # The checkpoint names below assume 20 epochs of one batch each;
+    # tiny_config's max_epochs is set for tests that need to converge.
+    config.max_epochs = 20
     config.val_check_interval = 50
     model_file = tmp_path / "epoch=19-step=20.ckpt"
     with ModelRunner(config, output_dir=tmp_path) as runner:

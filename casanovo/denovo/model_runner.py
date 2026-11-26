@@ -25,7 +25,6 @@ from ..denovo.dataloaders import DeNovoDataModule
 from ..denovo.evaluate import aa_match_batch, aa_match_metrics
 from ..denovo.model import DbSpec2Pep, Spec2Pep
 
-
 logger = logging.getLogger("casanovo")
 
 
@@ -103,7 +102,7 @@ class ModelRunner:
             ),
             ModelCheckpoint(
                 dirpath=output_dir,
-                monitor="valid_CELoss",
+                monitor="valid_CTCLoss",
                 filename=best_filename,
                 enable_version_counter=False,
             ),
@@ -445,6 +444,7 @@ class ModelRunner:
             precursor_mass_tol=self.config.precursor_mass_tol,
             isotope_error_range=self.config.isotope_error_range,
             min_peptide_len=self.config.min_peptide_len,
+            decoder_frames=self.config.decoder_frames,
             top_match=self.config.top_match,
             n_beams=self.config.n_beams,
             n_log=self.config.n_log,
@@ -470,7 +470,7 @@ class ModelRunner:
             precursor_mass_tol=self.config.precursor_mass_tol,
             isotope_error_range=self.config.isotope_error_range,
             min_peptide_len=self.config.min_peptide_len,
-            max_peptide_len=self.config.max_peptide_len,
+            decoder_frames=self.config.decoder_frames,
             top_match=self.config.top_match,
             n_beams=self.config.n_beams,
             n_log=self.config.n_log,

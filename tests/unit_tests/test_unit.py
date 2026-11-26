@@ -653,40 +653,25 @@ def test_peptide_score():
     """
     aa_scores_raw = np.asarray([0.0, 0.5, 1.0])
 
-    peptide_score = _peptide_score(aa_scores_raw, True)
+    # No penalty for a precursor mismatch: the score is the product alone.
+    peptide_score = _peptide_score(aa_scores_raw)
     assert peptide_score == pytest.approx(0.0)
 
-    peptide_score = _peptide_score(aa_scores_raw, False)
-    assert peptide_score == pytest.approx(-1.0)
-
     aa_scores_raw = np.asarray([1.0, 0.25])
-    peptide_score = _peptide_score(aa_scores_raw, True)
+    peptide_score = _peptide_score(aa_scores_raw)
     assert peptide_score == pytest.approx(0.25)
 
     aa_scores_batch = np.array([[0.5, 0.8, 0.0], [0.9, 0.7, 0.6]])
     lengths_batch = np.array([2, 3])
 
-    peptide_scores = _peptide_score(aa_scores_batch, True, lengths_batch)
+    peptide_scores = _peptide_score(aa_scores_batch, lengths_batch)
     expected_scores = np.array([0.5 * 0.8, 0.9 * 0.7 * 0.6])
     assert np.allclose(peptide_scores, expected_scores)
-
-    peptide_scores_no_fit = _peptide_score(
-        aa_scores_batch, False, lengths_batch
-    )
-    assert np.allclose(peptide_scores_no_fit, expected_scores - 1)
-
-    fits_array = np.array([True, False])
-    peptide_scores_mixed_fit = _peptide_score(
-        aa_scores_batch, fits_array, lengths_batch
-    )
-    expected_mixed_scores = expected_scores.copy()
-    expected_mixed_scores[~fits_array] -= 1
-    assert np.allclose(peptide_scores_mixed_fit, expected_mixed_scores)
 
     with pytest.raises(
         ValueError, match="`lengths` must be provided for batched input."
     ):
-        _peptide_score(aa_scores_batch, True, None)
+        _peptide_score(aa_scores_batch, None)
 
 
 def test_peptide_generator_errors(tiny_fasta_file):
@@ -1369,7 +1354,7 @@ def test_db_stop_token(tiny_config):
             predction.aa_scores
         )
         assert pytest.approx(predction.peptide_score) != _peptide_score(
-            predction.aa_scores, True
+            predction.aa_scores
         )
 
 
@@ -1761,7 +1746,7 @@ def test_spectrum_id_mgf(mgf_small, tmp_path):
     mgf_small2 = tmp_path / "mgf_small2.mgf"
     shutil.copy(mgf_small, mgf_small2)
     data_module = DeNovoDataModule(
-        lance_dir=tmp_path.name,
+        lance_dir=tmp_path,
         train_paths=[mgf_small, mgf_small2],
         valid_paths=[mgf_small, mgf_small2],
         test_paths=[mgf_small, mgf_small2],
@@ -1775,12 +1760,16 @@ def test_spectrum_id_mgf(mgf_small, tmp_path):
         data_module.valid_dataset,
         data_module.test_dataset,
     ]:
+        # depthcharge's MgfParser labels spectra "index=<n>", not "<n>"
+        # (parsers.py, MgfParser._parse_spectrum). mzTab output is
+        # unaffected either way: ms_io adds the "index=" prefix itself
+        # when the id is bare, and leaves it alone when it is not.
         for i, (filename, scan_id) in enumerate(
             [
-                (mgf_small, "0"),
-                (mgf_small, "1"),
-                (mgf_small2, "0"),
-                (mgf_small2, "1"),
+                (mgf_small, "index=0"),
+                (mgf_small, "index=1"),
+                (mgf_small2, "index=0"),
+                (mgf_small2, "index=1"),
             ]
         ):
             assert dataset[i]["peak_file"][0] == filename.name
@@ -1792,7 +1781,7 @@ def test_spectrum_id_mzml(mzml_small, tmp_path):
     mzml_small2 = tmp_path / "mzml_small2.mzml"
     shutil.copy(mzml_small, mzml_small2)
     data_module = DeNovoDataModule(
-        lance_dir=tmp_path.name,
+        lance_dir=tmp_path,
         test_paths=[mzml_small, mzml_small2],
         min_peaks=0,
         shuffle=False,
@@ -1839,10 +1828,52 @@ def test_train_val_step_functions():
     assert train_step_loss > 0
     assert val_step_loss > 0
 
-    # Check if smoothing is applied in training and not in validation
-    assert model.celoss.label_smoothing == 0.1
-    assert model.val_celoss.label_smoothing == 0
-    assert val_step_loss != train_step_loss
+    # Training and validation share the same CTC loss, with a dedicated
+    # blank class as the last vocabulary index.
+    assert model.ctc_loss.blank == model.blank_token == model.vocab_size - 1
+    assert torch.isclose(val_step_loss, train_step_loss)
+
+
+def test_frames_attend_to_each_other():
+    """Adding decoder frames changes the logits of the earlier ones.
+
+    If no frame attends to any other, as when every frame was inferred to
+    be padding, a position's logits cannot depend on how many frames
+    follow it.
+    """
+    tokenizer = depthcharge.tokenizers.peptides.MskbPeptideTokenizer(
+        reverse=True, start_token=None, stop_token="$"
+    )
+    model = Spec2Pep(
+        dim_model=8,
+        n_head=2,
+        dim_feedforward=8,
+        n_layers=2,
+        decoder_frames=8,
+        residues="massivekb",
+        tokenizer=tokenizer,
+    ).eval()
+
+    torch.manual_seed(0)
+    batch = {
+        "mz_array": torch.linspace(100.0, 1000.0, 12).repeat(2, 1),
+        "intensity_array": torch.rand(2, 12),
+        "precursor_mz": torch.full((2,), 600.0),
+        "precursor_charge": torch.full((2,), 2.0),
+    }
+
+    with torch.no_grad():
+        short, _ = model._forward_step(batch)
+        # `decoder_frames` is the frame count, so raising it adds frames.
+        model.decoder_frames += 8
+        long, _ = model._forward_step(batch)
+
+    shared = short.shape[1]
+    assert long.shape[1] > shared, "the second run must be longer"
+    assert not torch.allclose(long[:, :shared], short), (
+        "the added frames left the earlier positions untouched, so the "
+        "decoder frames are not attending to one another"
+    )
 
 
 def test_run_map(mgf_small):
@@ -2018,7 +2049,7 @@ def test_spectrum_preprocessing(tmp_path, mgf_small):
     # One spectrum removed with too few peaks.
     total_spectra = 1
     dataloader = DeNovoDataModule(
-        tmp_path.name,
+        tmp_path,
         test_paths=str(mgf_small),
         min_peaks=min_peaks,
         max_peaks=max_peaks,
@@ -2040,7 +2071,7 @@ def test_spectrum_preprocessing(tmp_path, mgf_small):
     # All spectra retained.
     total_spectra = 2
     dataloader = DeNovoDataModule(
-        tmp_path.name,
+        tmp_path,
         test_paths=str(mgf_small),
         min_peaks=min_peaks,
         max_peaks=max_peaks,
@@ -2063,7 +2094,7 @@ def test_spectrum_preprocessing(tmp_path, mgf_small):
     # One spectrum removed with too high charge.
     total_spectra = 1
     dataloader = DeNovoDataModule(
-        tmp_path.name,
+        tmp_path,
         test_paths=str(mgf_small),
         min_peaks=min_peaks,
         max_peaks=max_peaks,
@@ -2096,7 +2127,7 @@ def test_beam_search_decode(tiny_config):
     model.tokenizer.reverse = False
 
     batch = 1
-    length = model.max_peptide_len + 1
+    length = model.decoder_frames + 1
     beam = model.n_beams
     step = 3
     device = model.device
@@ -2149,7 +2180,7 @@ def test_beam_search_decode(tiny_config):
     assert torch.equal(
         discarded, torch.tensor([False, False, False, True], device=device)
     )
-    
+
 
 @pytest.mark.skip(reason="No Beam Search in Non-AR Model")
 def test_peptide_too_short_too_heavy(tiny_config):
@@ -2223,7 +2254,7 @@ def test_cache_finished_beams(tiny_config):
         pep for (_, _, _, pep) in pred_cache[0] if torch.equal(pep, true_tok)
     ]
     assert len(cached) == 1
-    
+
 
 @pytest.mark.skip(reason="No Beam Search in Non-AR Model")
 def test_get_top_peptide_ranking(tiny_config):
@@ -2273,7 +2304,7 @@ def test_get_top_peptide_multiple(topk, tiny_config):
     assert len(result) == topk
     for i in range(topk):
         assert result[i][2] == cache_items[i][1]
-        
+
 
 @pytest.mark.skip(reason="No Beam Search in Non-AR Model")
 @pytest.mark.parametrize("reverse", [True, False])
@@ -2323,7 +2354,7 @@ def test_get_topk_beams(tiny_config):
     model._beam_size = beam
     model._cumulative_masses = torch.zeros(batch * beam, device=device)
 
-    length = model.max_peptide_len + 1
+    length = model.decoder_frames + 1
     vocab = len(model.tokenizer) + 1
 
     scores = torch.zeros((batch * beam, length, vocab), device=device)
@@ -2360,7 +2391,7 @@ def test_finish_beams_negative_mods(tiny_config):
     model._beam_size = beam
     model._cumulative_masses = torch.zeros(batch * beam, device=device)
 
-    length = model.max_peptide_len + 1
+    length = model.decoder_frames + 1
     step = 1
     tokens = torch.zeros((beam, length), dtype=torch.int64, device=device)
     tokens[:, : step + 1] = model.tokenizer.tokenize(["GK", "AK"])
@@ -2385,7 +2416,7 @@ def test_beam_search_decode_early_termination(tiny_config):
         ),
     )
 
-    model.max_peptide_len = 0
+    model.decoder_frames = 0
     mzs = ints = torch.zeros(1, 5, device=model.device)
     precursors = torch.tensor(
         [[469.25364, 2.0, 235.63410]], device=model.device
@@ -2413,7 +2444,7 @@ def test_duplicate_peptide_scores(tiny_config):
     model._beam_size = beam
     model._cumulative_masses = torch.zeros(batch * beam, device=device)
 
-    length = model.max_peptide_len + 1
+    length = model.decoder_frames + 1
     vocab = len(model.tokenizer) + 1
     step = 4
 
@@ -2544,18 +2575,20 @@ def test_precursor_rescue():
 
 
 def test_db_spec2pep_forward_no_cache(tiny_config):
-    """Test the DbSpec2Pep forward method without a cache."""
+    """Scoring a candidate needs the cache, so refuse without it.
+
+    Upstream fell back to `_forward_step`, which was equivalent there
+    because it fed the candidate to the decoder. This decoder takes
+    blank frames instead, so that fallback would have scored every
+    candidate of a spectrum identically, against frames that never saw
+    it.
+    """
     tokenizer = depthcharge.tokenizers.peptides.PeptideTokenizer(
         residues=Config(tiny_config).residues
     )
     db_model = DbSpec2Pep(tokenizer=tokenizer)
 
-    # Mock the _forward_step method to confirm it's called
-    db_model._forward_step = unittest.mock.MagicMock(
-        return_value=(torch.zeros(1, 5, 25), torch.zeros(1, 4))
-    )
-
-    # Create a batch without pre-computed encoder outputs
+    # A batch without the precomputed encoder outputs.
     mock_batch = {
         "mz_array": torch.zeros((1, 10)),
         "intensity_array": torch.zeros((1, 10)),
@@ -2564,7 +2597,5 @@ def test_db_spec2pep_forward_no_cache(tiny_config):
         "seq": torch.randint(1, 20, (1, 8)),
     }
 
-    db_model.forward(mock_batch)
-
-    # Assert that the non-cached path was taken
-    db_model._forward_step.assert_called_once()
+    with pytest.raises(ValueError, match="cached encoder output"):
+        db_model.forward(mock_batch)
