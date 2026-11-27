@@ -200,7 +200,12 @@ class PeptideDecoder(AnalyteTransformerDecoder):
         of them is padding.
         """
         if tokens is None:
-            tokens = torch.tensor([[]]).to(self.device)
+            # No frames, only the precursor token: one empty row per
+            # spectrum.
+            precursors = args[0] if args else kwargs["precursors"]
+            tokens = torch.empty(
+                (precursors.shape[0], 0), dtype=torch.long, device=self.device
+            )
         encoded = self.token_encoder(tokens)
         global_token = self.global_token_hook(tokens, *args, **kwargs)
         encoded = torch.cat([global_token[:, None, :], encoded], dim=1)

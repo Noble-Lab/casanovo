@@ -105,6 +105,19 @@ def test_deprecated(tmp_path, tiny_config):
     with pytest.warns(DeprecationWarning):
         Config(filename)
 
+    with (
+        open(tiny_config, "r", encoding="utf-8") as f_in,
+        open(filename, "w", encoding="utf-8") as f_out,
+    ):
+        cfg = yaml.safe_load(f_in)
+        # A pre-CTC config still sets label smoothing.
+        cfg["train_label_smoothing"] = 0.01
+        yaml.safe_dump(cfg, f_out)
+
+    with pytest.warns(DeprecationWarning, match="train_label_smoothing"):
+        config = Config(filename)
+    assert "train_label_smoothing" not in config._params
+
 
 def test_val_check_interval(tmp_path, tiny_config):
     """val_check_interval accepts an int or a float in [0, 1]."""
@@ -134,3 +147,31 @@ def test_val_check_interval(tmp_path, tiny_config):
     for bad in (1.5, 0, True):
         with pytest.raises(TypeError, match="val_check_interval"):
             Config(_write(bad))
+
+
+def test_bad_ranges(tmp_path, tiny_config):
+    """Reversed isotope ranges and nonpositive frame counts are rejected."""
+
+    def _write(**values):
+        filename = str(tmp_path / "config_ranges.yml")
+        with (
+            open(tiny_config, "r", encoding="utf-8") as f_in,
+            open(filename, "w", encoding="utf-8") as f_out,
+        ):
+            cfg = yaml.safe_load(f_in)
+            cfg.update(values)
+            yaml.safe_dump(cfg, f_out)
+        return filename
+
+    assert Config(_write(isotope_error_range=[1, 1])).isotope_error_range == (
+        1,
+        1,
+    )
+    with pytest.raises(ValueError, match="isotope_error_range"):
+        Config(_write(isotope_error_range=[3, 0]))
+    with pytest.raises(ValueError, match="must be positive"):
+        Config(_write(decoder_frames=-1, max_peptide_len=-1))
+    with pytest.raises(ValueError, match="inter_ctc_weight"):
+        Config(_write(inter_ctc_weight=2.0))
+    with pytest.raises(ValueError, match="below max_peptide_len"):
+        Config(_write(decoder_frames=10, max_peptide_len=20))

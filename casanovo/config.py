@@ -23,6 +23,7 @@ _config_deprecated = dict(
     save_top_k=None,
     model_save_folder_path=None,
     reverse_peptides=None,
+    train_label_smoothing=None,
 )
 
 
@@ -123,7 +124,6 @@ class Config:
         muon_momentum=float,
         inter_ctc_layers=list,
         inter_ctc_weight=float,
-        train_label_smoothing=float,
         train_batch_size=int,
         max_epochs=int,
         shuffle=bool,
@@ -193,6 +193,22 @@ class Config:
         for key, val in self._config_types.items():
             self.validate_param(key, val)
 
+        low, high = self._params["isotope_error_range"]
+        if low > high:
+            raise ValueError(
+                f"isotope_error_range ({low}, {high}) must run from low to "
+                "high"
+            )
+        weight = self._params["inter_ctc_weight"]
+        if not 0.0 <= weight <= 1.0:
+            raise ValueError(
+                f"inter_ctc_weight ({weight}) must be between 0 and 1"
+            )
+        if self._params["decoder_frames"] < 1:
+            raise ValueError(
+                f"decoder_frames ({self._params['decoder_frames']}) must be "
+                "positive"
+            )
         # CTC needs a frame per residue, so the budget has to cover the
         # longest peptide considered. Repeats need one more each, which
         # only the data knows; training warns about those.

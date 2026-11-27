@@ -573,7 +573,6 @@ class ModelRunner:
             muon_momentum=self.config.muon_momentum,
             inter_ctc_layers=self.config.inter_ctc_layers,
             inter_ctc_weight=self.config.inter_ctc_weight,
-            train_label_smoothing=self.config.train_label_smoothing,
             calculate_precision=self.config.calculate_precision,
             out_writer=self.writer,
             tokenizer=tokenizer,
@@ -596,7 +595,6 @@ class ModelRunner:
             muon_lr=self.config.muon_lr,
             muon_momentum=self.config.muon_momentum,
             inter_ctc_weight=self.config.inter_ctc_weight,
-            train_label_smoothing=self.config.train_label_smoothing,
             calculate_precision=self.config.calculate_precision,
             out_writer=self.writer,
         )
@@ -639,6 +637,7 @@ class ModelRunner:
             ckpt_tokenizer = self.model.hparams.get("tokenizer")
             self.model.tokenizer = tokenizer
             self._remap_decoder_vocab(ckpt_tokenizer, tokenizer)
+            self.model._init_tokenizer_state()
 
             architecture_params = set(model_params.keys()) - set(
                 loaded_model_params.keys()
@@ -672,8 +671,16 @@ class ModelRunner:
                 ckpt_tokenizer = self.model.hparams.get("tokenizer")
                 self.model.tokenizer = tokenizer
                 self._remap_decoder_vocab(ckpt_tokenizer, tokenizer)
+                self.model._init_tokenizer_state()
 
             except RuntimeError:
+                if _is_autoregressive_checkpoint(self.model_filename):
+                    raise RuntimeError(
+                        "Weights file is from autoregressive Casanovo: its "
+                        "output layer has no CTC blank row. This version "
+                        "decodes non-autoregressively and needs weights "
+                        "trained with it; pass them with --model."
+                    )
                 raise RuntimeError(
                     "Weights file incompatible with the current version of "
                     "Casanovo."
@@ -988,6 +995,35 @@ class ModelRunner:
             blank=self.model.blank_token, zero_infinity=True
         )
         self.model.hparams["tokenizer"] = new_tokenizer
+
+
+def _is_autoregressive_checkpoint(model_filename: str) -> bool:
+    """
+    Check whether a checkpoint has the autoregressive decoder layout.
+
+    The autoregressive output layer has one row per embedding row. The
+    CTC output layer has one more, for the blank.
+
+    Parameters
+    ----------
+    model_filename : str
+        The checkpoint file.
+
+    Returns
+    -------
+    bool
+        True if the output layer and the token embedding have the same
+        number of rows.
+    """
+    try:
+        state = torch.load(
+            model_filename, map_location="cpu", weights_only=False
+        )["state_dict"]
+        n_out = state["decoder.final.weight"].shape[0]
+        n_emb = state["decoder.token_encoder.weight"].shape[0]
+    except Exception:
+        return False
+    return n_out == n_emb
 
 
 def _get_peak_filenames(

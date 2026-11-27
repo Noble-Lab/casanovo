@@ -34,7 +34,8 @@ def _zeropower_via_newtonschulz5(
         The orthogonalized matrix, in ``G``'s dtype.
     """
     a, b, c = (3.4445, -4.7750, 2.0315)
-    X = G.bfloat16()
+    # MPS before macOS 14 has no bfloat16, so take float32 there.
+    X = G.float() if G.device.type == "mps" else G.bfloat16()
     transposed = G.size(0) > G.size(1)
     if transposed:
         X = X.mT
@@ -80,6 +81,9 @@ class MuonWithAuxAdamW(torch.optim.Optimizer):
 
     def __init__(self, param_groups: List[Dict[str, Any]]):
         for group in param_groups:
+            # Materialize once: a one-shot iterator would be exhausted by
+            # the check below and reach the base class empty.
+            group["params"] = list(group["params"])
             group["use_muon"] = bool(group.get("use_muon", False))
             if group["use_muon"]:
                 for p in group["params"]:
@@ -94,6 +98,14 @@ class MuonWithAuxAdamW(torch.optim.Optimizer):
                 group.setdefault("weight_decay", 0.0)
                 group.setdefault("ns_steps", 5)
             else:
+                # Options torch's AdamW takes that change the update.
+                # This one does plain descent without AMSGrad, so turning
+                # either on must fail rather than be ignored.
+                for option in ("maximize", "amsgrad"):
+                    if group.get(option):
+                        raise ValueError(
+                            f"MuonWithAuxAdamW does not support {option}"
+                        )
                 group.setdefault("lr", 5e-4)
                 group.setdefault("betas", (0.9, 0.999))
                 group.setdefault("eps", 1e-8)

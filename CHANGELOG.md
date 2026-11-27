@@ -20,6 +20,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ### Changed
 
 - `decoder_frames` is the CTC frame count, which `max_peptide_len` used to serve alongside its own meaning. Both are now required in the config, and `max_peptide_len` filters only the database search.
+- Custom config files need five new keys: `decoder_frames`, `inter_ctc_layers`, `inter_ctc_weight`, `muon_lr` and `muon_momentum`. Generate a fresh config with `casanovo configure` and reapply your changes to it.
 - `precursor_mass_tol` and `isotope_error_range` apply in *de novo* mode again: they set the window that precise mass control searches. `isotope_error_range` defaults to `[0, 3]`, because precursors are often picked at the +2 or +3 isotope peak.
 - Changed default gradient clipping to a norm of 2.0.
 - Upgraded minimum DepthCharge version to 0.5.0.
@@ -33,7 +34,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Decoder frames can attend to one another. Every frame is fed the padding token, whose embedding is zero, so the inferred target padding mask marked them all as padding and left only the precursor token visible.
 - Database-search candidates are no longer scored against the padding of whichever batch they landed in.
 - De novo predictions shorter than `min_peptide_len` are withheld again; beam search enforced this and CTC decoding replaced it.
-- Training on Apple Silicon computes the CTC loss on the CPU, because PyTorch has no MPS kernel for it. The rest of training and all of inference stay on MPS.
+- Training on Apple Silicon computes the CTC loss on the CPU, because PyTorch has no MPS kernel for it. Precise mass control also runs on the CPU, because it needs float64. The model's forward pass stays on MPS.
 - The database search progress bar now updates in place instead of printing a new line per refresh, by disabling Lightning's competing progress bar during database search.
 - Fixed the mass of the carbamylation + ammonia-loss N-terminal token to `25.979265`. The token name is deliberately left as `[+25.980265]-` because it appears in released checkpoint vocabularies.
 - Fixed training from a checkpoint failing with `TypeError` when configuration values that are not optimizer arguments (e.g. `precursor_mass_tol`) leaked into the Adam optimizer.
@@ -43,6 +44,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ### Removed
 
 - Removed the override that forced `accelerator: "auto"` to `"cpu"` on Apple Silicon devices.
+- Removed `train_label_smoothing`, since the CTC loss has no label smoothing. A config file that still sets it gets a warning and the value is ignored.
 
 ## [5.2.1] - 2026-08-12
 

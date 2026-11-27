@@ -572,7 +572,6 @@ def test_train_val_step_functions():
         n_beams=1,
         residues="massivekb",
         min_peptide_len=4,
-        train_label_smoothing=0.1,
         tokenizer=tokenizer,
     )
 
@@ -1152,6 +1151,225 @@ def test_predict_step_counts_missing(monkeypatch):
     assert model.n_missing_predictions == 1
     model.on_predict_start()
     assert model.n_missing_predictions == 0
+
+
+def test_predict_step_keeps_greedy_over_short_pmc(monkeypatch):
+    """A PMC correction below min_peptide_len leaves the greedy peptide."""
+    model = _pmc_model()
+    model.min_peptide_len = 3
+    tokens = [model.tokenizer.index[aa] for aa in ("K", "A", "E")]
+
+    logits = torch.full((1, 4, model.vocab_size), -10.0)
+    for frame, token in enumerate(tokens):
+        logits[0, frame, token] = 5.0
+    logits[0, 3, model.blank_token] = 5.0
+    # The greedy peptide misses this precursor; the stub correction
+    # matches it but has only two residues.
+    precursors = torch.tensor([[5_000.0]])
+    monkeypatch.setattr(model, "_forward_step", lambda batch: (logits, None))
+    monkeypatch.setattr(
+        model, "_process_batch", lambda batch: (None, None, precursors, None)
+    )
+    monkeypatch.setattr(
+        model, "_pmc_decode", lambda *args: (tokens[:2], [0.9, 0.9], None)
+    )
+
+    batch = {
+        "peak_file": ["a.mgf"],
+        "scan_id": ["index=0"],
+        "precursor_charge": torch.tensor([2]),
+        "precursor_mz": torch.tensor([100.0]),
+    }
+    predictions = model.predict_step(batch)
+    assert len(predictions) == 1
+    assert predictions[0].sequence == "".join(
+        model.tokenizer.detokenize(torch.tensor([tokens]), join=False)[0]
+    )
+    assert model.n_missing_predictions == 0
+
+
+def test_pmc_alphabet_allows_heavy_residue_after_negative_mod():
+    """A residue above the axis top stays emittable when a negative
+    N-terminal modification can offset it."""
+    model = _pmc_model()
+    neg = min(model.token_masses[c].item() for c in model.neg_mass_idx)
+    aa_w = model.tokenizer.index["W"]
+    w_mass = model.token_masses[aa_w].item()
+    hi_max = w_mass + neg + 1.0
+    alphabet = model._pmc_alphabet(model.vocab_size, hi_max, 0.01, "cpu")
+    assert aa_w in alphabet[0].tolist()
+
+
+def test_spec2pep_rejects_bad_settings():
+    """Direct construction checks what the config checks."""
+    with pytest.raises(ValueError, match="inter_ctc_weight"):
+        Spec2Pep(inter_ctc_weight=1.5)
+    with pytest.raises(ValueError, match="inter_ctc_weight"):
+        Spec2Pep(inter_ctc_weight=float("nan"))
+    with pytest.raises(ValueError, match="isotope_error_range"):
+        Spec2Pep(isotope_error_range=(3, 0))
+    Spec2Pep(isotope_error_range=(0, 0))
+
+
+@pytest.mark.parametrize("dtype", [torch.float16, torch.bfloat16])
+def test_ctc_log_probs_promotes_half_precision(dtype):
+    """Half-precision scores reach the CTC loss as float32."""
+    scores = torch.randn(2, 5, 7).to(dtype)
+    log_probs = denovo.model._ctc_log_probs(scores)
+    assert log_probs.dtype == torch.float32
+    assert log_probs.shape == (5, 2, 7)
+    assert torch.allclose(log_probs.exp().sum(-1), torch.ones(5, 2))
+
+
+def test_validation_withholds_short_predictions(monkeypatch):
+    """Validation precision counts a too-short peptide as missing."""
+    model = _pmc_model()
+    model.calculate_precision = True
+    model.min_peptide_len = 4
+    tokens = [model.tokenizer.index[aa] for aa in ("K", "A", "E")]
+    monkeypatch.setattr(
+        model,
+        "_ctc_decode",
+        lambda logits: ([tokens], [[0.9] * 3], [None]),
+    )
+    monkeypatch.setattr(model, "forward", lambda batch: (None, None))
+    monkeypatch.setattr(
+        model, "_ctc_losses", lambda batch: (*[torch.tensor(1.0)] * 2, None, 1)
+    )
+    seen = {}
+
+    def _match(peptides_true, peptides_pred, residues):
+        seen["pred"] = peptides_pred
+        return [], 0, 0
+
+    monkeypatch.setattr(denovo.model.evaluate, "aa_match_batch", _match)
+    monkeypatch.setattr(
+        denovo.model.evaluate, "aa_match_metrics", lambda *a: (0.0, 0.0, 0.0)
+    )
+    model.log = lambda *args, **kwargs: None
+    batch = {"seq": model.tokenizer.tokenize(["KAE"])}
+    model.validation_step(batch, 0)
+    assert seen["pred"] == [None]
+
+
+@pytest.mark.parametrize("option", ["maximize", "amsgrad"])
+def test_muon_rejects_unsupported_adamw_options(option):
+    """AdamW options this optimizer does not implement fail loudly."""
+    bias = torch.nn.Parameter(torch.zeros(3))
+    with pytest.raises(ValueError, match=option):
+        MuonWithAuxAdamW(
+            [dict(params=[bias], use_muon=False, **{option: True})]
+        )
+
+
+def test_ctc_warns_on_peptides_longer_than_the_frames(caplog):
+    """A peptide CTC cannot align is reported once, not silently lost."""
+    model = _pmc_model()
+    model.decoder_frames = 2
+    batch = {
+        "mz_array": torch.linspace(100.0, 1000.0, 12).unsqueeze(0),
+        "intensity_array": torch.rand(1, 12),
+        "precursor_mz": torch.tensor([600.0]),
+        "precursor_charge": torch.tensor([2.0]),
+        "seq": model.tokenizer.tokenize(["PEPTIDEK"]),
+    }
+    with caplog.at_level(logging.WARNING):
+        model._ctc_losses(batch)
+    assert "need more CTC frames" in caplog.text
+    caplog.clear()
+    with caplog.at_level(logging.WARNING):
+        model._ctc_losses(batch)
+    assert "need more CTC frames" not in caplog.text
+
+
+def test_pmc_decode_declines(monkeypatch, caplog):
+    """PMC returns no match, keeping the greedy peptide, when it cannot
+    search: no positive mass window, an infinite tolerance, a table over
+    budget, or a vocabulary its int8 pointers cannot index."""
+    model = _pmc_model()
+    tokens = [model.tokenizer.index[aa] for aa in ("K", "A", "E")]
+    logits = torch.full((4, model.vocab_size), -10.0)
+    for frame, token in enumerate(tokens):
+        logits[frame, token] = 5.0
+    logits[3, model.blank_token] = 5.0
+    mass = sum(model.token_masses[t].item() for t in tokens)
+    mass += denovo.model.H2O_MASS
+    assert model._pmc_decode(logits, mass) is not None
+
+    assert model._pmc_decode(logits, 0.0) is None
+
+    model.precursor_mass_tol = float("inf")
+    assert model._pmc_decode(logits, mass) is None
+    model.precursor_mass_tol = 50
+
+    with monkeypatch.context() as m:
+        m.setattr(denovo.model, "PMC_MAX_POINTER_BYTES", 10)
+        assert model._pmc_decode(logits, mass) is None
+
+    wide = torch.full((4, 130), -10.0)
+    wide[:, : model.vocab_size] = logits
+    with caplog.at_level(logging.WARNING):
+        assert model._pmc_decode(wide, mass) is None
+    assert "at most 127" in caplog.text
+
+
+def test_muon_rejects_vectors_and_skips_missing_grads():
+    """Muon groups hold matrices only, and parameters without a gradient
+    are left alone by both update rules."""
+    with pytest.raises(ValueError, match="only matrices"):
+        MuonWithAuxAdamW(
+            [dict(params=[torch.nn.Parameter(torch.zeros(3))], use_muon=True)]
+        )
+
+    matrix = torch.nn.Parameter(torch.randn(4, 3))
+    filters = torch.nn.Parameter(torch.randn(4, 2, 3))
+    frozen = torch.nn.Parameter(torch.randn(4, 3))
+    bias = torch.nn.Parameter(torch.zeros(3))
+    idle = torch.nn.Parameter(torch.zeros(3))
+    opt = MuonWithAuxAdamW(
+        [
+            dict(params=[matrix, filters, frozen], use_muon=True),
+            dict(params=[bias, idle], use_muon=False),
+        ]
+    )
+    (matrix.sum() + filters.sum() + bias.sum()).backward()
+    before = [
+        p.detach().clone() for p in (matrix, filters, frozen, bias, idle)
+    ]
+    opt.step()
+    after = [p.detach() for p in (matrix, filters, frozen, bias, idle)]
+    # Updated: the matrix, the 3-D filters (flattened for Newton-Schulz),
+    # and the bias. Untouched: the two without a gradient.
+    assert [not torch.equal(b, a) for b, a in zip(before, after)] == [
+        True,
+        True,
+        False,
+        True,
+        False,
+    ]
+
+
+def test_muon_accepts_iterator_params():
+    """One-shot iterators of parameters are not lost to validation."""
+    weight = torch.nn.Parameter(torch.randn(3, 3))
+    bias = torch.nn.Parameter(torch.zeros(3))
+    opt = MuonWithAuxAdamW(
+        [
+            dict(params=iter([weight]), use_muon=True),
+            dict(params=iter([bias]), use_muon=False),
+        ]
+    )
+    assert opt.param_groups[0]["params"] == [weight]
+    assert opt.param_groups[1]["params"] == [bias]
+
+
+def test_decoder_embed_without_tokens():
+    """tokens=None embeds only the precursor, one row per spectrum."""
+    model = _pmc_model()
+    precursors = torch.tensor([[1000.0, 2.0], [1500.0, 3.0]])
+    memory = torch.randn(2, 5, 8)
+    out = model.decoder.embed(None, precursors, memory=memory)
+    assert out.shape == (2, 1, 8)
 
 
 def test_on_predict_epoch_end_aggregates(tiny_config):

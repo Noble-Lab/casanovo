@@ -105,9 +105,6 @@ class Spec2Pep(pl.LightningModule):
         Number of PSMs to return for each spectrum.
     n_log : int
         The number of epochs to wait between logging messages.
-    train_label_smoothing : float
-        Unused; retained for configuration compatibility. The CTC loss
-        does not support label smoothing.
     warmup_iters : int
         The number of iterations for the linear warm-up of the learning
         rate.
@@ -156,7 +153,6 @@ class Spec2Pep(pl.LightningModule):
         n_beams: int = 1,
         top_match: int = 1,
         n_log: int = 10,
-        train_label_smoothing: float = 0.01,
         warmup_iters: int = 100_000,
         cosine_schedule_period_iters: int = 600_000,
         inter_ctc_layers: Sequence[int] = (),
@@ -193,6 +189,13 @@ class Spec2Pep(pl.LightningModule):
         # model is then identical to the plain CTC decoder.
         self.inter_ctc_layers = tuple(inter_ctc_layers or ())
         self.inter_ctc_weight = float(inter_ctc_weight)
+        # Outside [0, 1] the mix rewards a worse final prediction; NaN
+        # fails the comparison too.
+        if not 0.0 <= self.inter_ctc_weight <= 1.0:
+            raise ValueError(
+                f"inter_ctc_weight ({inter_ctc_weight}) must be between 0 "
+                "and 1"
+            )
         self.decoder = PeptideDecoder(
             n_tokens=self.tokenizer,
             d_model=dim_model,
@@ -239,11 +242,15 @@ class Spec2Pep(pl.LightningModule):
         self.decoder_frames = decoder_frames
         self.residues = residues
         self.precursor_mass_tol = precursor_mass_tol
+        if isotope_error_range[0] > isotope_error_range[1]:
+            raise ValueError(
+                f"isotope_error_range {tuple(isotope_error_range)} must run "
+                "from low to high"
+            )
         self.isotope_error_range = isotope_error_range
         self.min_peptide_len = min_peptide_len
         self.n_beams = n_beams
         self.top_match = top_match
-        self.stop_token = self.tokenizer.stop_int
 
         # Logging.
         self.calculate_precision = calculate_precision
@@ -258,6 +265,24 @@ class Spec2Pep(pl.LightningModule):
         # Output writer during predicting.
         self.out_writer = out_writer
 
+        self._init_tokenizer_state()
+
+    def _init_tokenizer_state(self) -> None:
+        """
+        Derive the decoding tables from the current tokenizer.
+
+        Called again by ``ModelRunner`` after it swaps in a tokenizer
+        with a different vocabulary, so that the stop token, the
+        N-terminal and negative-mass token indices, and the token masses
+        follow the new token ids.
+        """
+        # On a rebuild the buffers already sit on the model's device.
+        device = (
+            self.nterm_idx.device
+            if "nterm_idx" in self._buffers
+            else torch.device("cpu")
+        )
+        self.stop_token = self.tokenizer.stop_int
         # Get n-term mod tokens
         self.n_term = [
             aa
@@ -274,6 +299,7 @@ class Spec2Pep(pl.LightningModule):
                     if mass < 0
                 ],
                 dtype=torch.int,
+                device=device,
             ),
             persistent=False,
         )
@@ -284,6 +310,7 @@ class Spec2Pep(pl.LightningModule):
             torch.tensor(
                 [self.tokenizer.index[aa] for aa in self.n_term],
                 dtype=torch.int,
+                device=device,
             ),
             persistent=False,
         )
@@ -391,7 +418,9 @@ class Spec2Pep(pl.LightningModule):
             dtype=torch.long,
             device=self.device,
         )
-        if self.inter_ctc_layers or return_intermediates:
+        # Score the intermediate layers only when the caller uses them;
+        # inference would discard them.
+        if return_intermediates and self.inter_ctc_layers:
             scores, intermediates = self.decoder.forward_with_intermediates(
                 tokens=zero_tokens,
                 memory=memories,
@@ -444,7 +473,7 @@ class Spec2Pep(pl.LightningModule):
             batch, return_intermediates=True
         )
 
-        log_probs = pred.log_softmax(-1).transpose(0, 1)  # (T, B, V)
+        log_probs = _ctc_log_probs(pred)  # (T, B, V)
         input_lengths = torch.full(
             (truth.shape[0],),
             log_probs.shape[0],
@@ -478,7 +507,7 @@ class Spec2Pep(pl.LightningModule):
         aux = torch.stack(
             [
                 self._ctc(
-                    scores.log_softmax(-1).transpose(0, 1),
+                    _ctc_log_probs(scores),
                     truth,
                     input_lengths,
                     target_lengths,
@@ -662,6 +691,8 @@ class Spec2Pep(pl.LightningModule):
         # metrics from the predicted peptides (main files only).
         peptides_true = self.tokenizer.detokenize(batch["seq"])
         logits, _ = self.forward(batch)
+        # Withheld as predict_step withholds them; None is what the
+        # evaluator counts as a missing prediction.
         peptides_pred = [
             (
                 "".join(
@@ -669,8 +700,8 @@ class Spec2Pep(pl.LightningModule):
                         torch.tensor([tokens]), join=False
                     )[0]
                 )
-                if tokens
-                else ""
+                if tokens and len(tokens) >= self.min_peptide_len
+                else None
             )
             for tokens in self._ctc_decode(logits)[0]
         ]
@@ -888,6 +919,11 @@ class Spec2Pep(pl.LightningModule):
             resolution = hi_max / max(1, max_bins - zero_bin - 3)
             zero_bin = int(np.ceil(max(0.0, -neg_mass) / resolution)) + 1
             n_bins = zero_bin + int(hi_max / resolution) + 3
+        # The floor of four bins above can still leave the table over
+        # budget for very long frame counts. Decline the search then;
+        # the caller keeps the greedy peptide.
+        if n_frames * n_bins * vocab > PMC_MAX_POINTER_BYTES:
+            return None
         if resolution > PMC_RESOLUTION and not self._pmc_size_warned:
             self._pmc_size_warned = True
             logger.warning(
@@ -921,10 +957,19 @@ class Spec2Pep(pl.LightningModule):
         # order, since the reversed tokenizer puts it last and the frames
         # are flipped. Both are therefore emitted from the zero-mass bin.
         pinned = set(self.nterm_idx.tolist()) | {self.stop_token}
+        # A negative N-terminal modification lowers the running total
+        # before any residue lands, so a residue may weigh up to its
+        # magnitude more than the axis top: [Ammonia-loss]-W totals
+        # about 169 Da although W alone is about 186 Da.
+        neg_mass = min(
+            (self.token_masses[c].item() for c in self.neg_mass_idx.tolist()),
+            default=0.0,
+        )
+        mass_cap = hi_max - min(0.0, neg_mass)
         emit_tokens, emit_deltas, emit_pinned, emit_is_stop = [], [], [], []
         for c in range(min(vocab, self.token_masses.shape[0])):
             mass = self.token_masses[c].item()
-            if c in excluded or mass > hi_max:
+            if c in excluded or mass > mass_cap:
                 continue
             if mass <= 0 and c not in pinned:
                 # A non-terminal residue of zero or negative mass could
@@ -1010,9 +1055,9 @@ class Spec2Pep(pl.LightningModule):
         Precise mass control (PMC) decoding for a single spectrum.
 
         Knapsack-like dynamic programming over the CTC lattice: find
-        the highest-probability CTC path whose
-        collapsed peptide's total residue mass matches the precursor
-        mass within tolerance, considering all allowed isotope errors.
+        the highest-probability CTC path whose collapsed peptide's total
+        residue mass matches the precursor mass within tolerance,
+        considering all allowed isotope errors.
 
         The DP state is (discretized emitted mass, last path symbol);
         the last symbol is needed to apply the CTC collapse rules
@@ -1020,7 +1065,13 @@ class Spec2Pep(pl.LightningModule):
         Each state also carries the exact residue mass of its best path,
         and the readout tests that rather than the bin, so rounding
         cannot make the search commit to a path the final mass check
-        rejects.
+        rejects. Each state keeps only its best path, though, so the
+        search can miss a match: two paths that share a bin and a last
+        symbol but differ in exact mass merge into the higher-scoring
+        one, and if that one falls outside the window while the other
+        is inside, the search returns no match and the greedy peptide is
+        kept. Coarser bins, used for heavy precursors, make such merges
+        more likely.
 
         Padding is excluded from the search, as is any residue of zero
         or negative mass that is not pinned (it could repeat without
@@ -1321,8 +1372,10 @@ class Spec2Pep(pl.LightningModule):
             )
             if not fit:
                 pmc = self._pmc_decode(logits[i], precursor_mass)
-                if pmc is not None:
-                    # PMC only returns mass-matching paths.
+                # PMC only returns mass-matching paths. A correction
+                # shorter than min_peptide_len would be dropped below,
+                # so keep the greedy peptide instead.
+                if pmc is not None and len(pmc[0]) >= self.min_peptide_len:
                     sequences[i], scores[i], stop_scores[i] = pmc
 
         predictions = []
@@ -1848,6 +1901,29 @@ class DbSpec2Pep(Spec2Pep):
                 progress.update(len(batch_candidates))
         finally:
             progress.close()
+
+
+def _ctc_log_probs(scores: torch.Tensor) -> torch.Tensor:
+    """
+    Frame log-probabilities in the layout the CTC loss takes.
+
+    Half-precision scores are promoted to float32 first: the CTC loss
+    kernels take float32 or float64 only, and a log-softmax in half
+    precision loses the small probabilities CTC sums over.
+
+    Parameters
+    ----------
+    scores : torch.Tensor of shape (batch, n_frames, n_tokens)
+        The frame-level scores.
+
+    Returns
+    -------
+    torch.Tensor of shape (n_frames, batch, n_tokens)
+        The log-probabilities, in float32 or float64.
+    """
+    if scores.dtype in (torch.float16, torch.bfloat16):
+        scores = scores.float()
+    return scores.log_softmax(-1).transpose(0, 1)
 
 
 def _calc_match_score(

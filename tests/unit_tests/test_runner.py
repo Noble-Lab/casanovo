@@ -984,6 +984,16 @@ def test_remap_decoder_vocab_extends(tmp_path, mgf_small, tiny_config):
     assert torch.equal(emb_w[new_k_mod_idx], emb_w[new_k_idx])
     assert torch.equal(final_w[new_k_mod_idx], final_w[new_k_idx])
 
+    # The decoding tables follow the new token ids.
+    assert runner.model.stop_token == new_tokenizer.stop_int
+    assert runner.model.token_masses.shape[0] == new_n + 1
+    assert runner.model.token_masses[new_k_mod_idx].item() == pytest.approx(
+        new_residues["K[Acetyl]"]
+    )
+    assert runner.model.token_masses[new_k_idx].item() == pytest.approx(
+        new_residues["K"]
+    )
+
 
 def test_remap_decoder_vocab_missing_init_raises(
     tmp_path, mgf_small, tiny_config
@@ -1121,3 +1131,37 @@ def test_initialize_trainer_progress_bar(tmp_path, tiny_config):
     ) as runner:
         runner.initialize_trainer(train=True, enable_progress_bar=False)
         assert runner.trainer.progress_bar_callback is None
+
+
+def test_is_autoregressive_checkpoint_unreadable(tmp_path):
+    """A file that is not a checkpoint is not called autoregressive."""
+    from casanovo.denovo.model_runner import _is_autoregressive_checkpoint
+
+    path = tmp_path / "junk.ckpt"
+    path.write_bytes(b"not a checkpoint")
+    assert not _is_autoregressive_checkpoint(str(path))
+
+
+def test_autoregressive_checkpoint_error(tmp_path, mgf_small, tiny_config):
+    """Loading weights without the CTC blank row names the layout."""
+    config = Config(tiny_config)
+    config.max_epochs = 1
+    config.n_layers = 1
+
+    with ModelRunner(config=config, output_dir=tmp_path) as runner:
+        runner.train([mgf_small], [mgf_small])
+        runner.trainer.save_checkpoint(tmp_path / "ctc.ckpt")
+
+    # Drop the blank row, as in an autoregressive checkpoint.
+    ckpt = torch.load(tmp_path / "ctc.ckpt", weights_only=False)
+    state = ckpt["state_dict"]
+    state["decoder.final.weight"] = state["decoder.final.weight"][:-1]
+    state["decoder.final.bias"] = state["decoder.final.bias"][:-1]
+    torch.save(ckpt, tmp_path / "ar.ckpt")
+
+    runner = ModelRunner(
+        config=config, model_filename=str(tmp_path / "ar.ckpt")
+    )
+    runner.initialize_tokenizer()
+    with pytest.raises(RuntimeError, match="autoregressive Casanovo"):
+        runner.initialize_model(train=False)

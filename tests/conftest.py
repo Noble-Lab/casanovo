@@ -373,7 +373,6 @@ def _get_config_file(file_path, file_name, additional_cfg=None):
         "cosine_schedule_period_iters": 600,
         "learning_rate": 5e-4,
         "weight_decay": 1e-5,
-        "train_label_smoothing": 0.01,
         "train_batch_size": 32,
         "max_epochs": 300,
         "shuffle": False,
