@@ -137,6 +137,7 @@ def test_save_and_load_weights(tmp_path, mgf_small, tiny_config):
     # Try changing model arch:
     other_config = Config(tiny_config)
     other_config.n_layers = 50  # lol
+    other_config.inter_ctc_layers = [1]
     other_config.n_beams = 12
     other_config.cosine_schedule_period_iters = 2
     with torch.device("meta"):
@@ -148,6 +149,7 @@ def test_save_and_load_weights(tmp_path, mgf_small, tiny_config):
 
     obs_layers = runner.model.encoder.transformer_encoder.num_layers
     assert obs_layers == 1  # Match the original arch.
+    assert runner.model.inter_ctc_layers == ()  # Match the original arch.
     assert runner.model.n_beams == 12  # Match the config
     assert runner.model.cosine_schedule_period_iters == 2  # Match the config
     assert next(runner.model.parameters()).device == torch.device("meta")
@@ -262,6 +264,9 @@ def test_save_final_model(tmp_path, mgf_small, tiny_config):
     """Test that final model checkpoints are saved."""
     # Test checkpoint saving when val_check_interval is greater than training steps
     config = Config(tiny_config)
+    # The checkpoint names below assume 30 epochs of one batch each;
+    # tiny_config's max_epochs is set for tests that need to converge.
+    config.max_epochs = 30
     config.val_check_interval = 50
     model_file = tmp_path / "epoch=29-step=30.ckpt"
     with ModelRunner(config, output_dir=tmp_path) as runner:
@@ -816,8 +821,9 @@ def test_validate_vocab_compatibility():
     with pytest.raises(ValueError, match="vocabulary of size"):
         runner._validate_vocab_compatibility()
 
-    # Should pass silently when vocab sizes match and tokenizers match.
-    runner.model.vocab_size = 6
+    # Should pass silently when vocab sizes match and tokenizers match:
+    # 5 tokens plus padding plus the CTC blank.
+    runner.model.vocab_size = 7
     runner._validate_vocab_compatibility()  # no exception
 
     # Should raise even when sizes match if tokenizer vocab differs.
@@ -963,15 +969,30 @@ def test_remap_decoder_vocab_extends(tmp_path, mgf_small, tiny_config):
     new_tokenizer = runner.tokenizer
     new_k_mod_idx = new_tokenizer.index["K[Acetyl]"]
     new_k_idx = new_tokenizer.index["K"]
+    # Padding plus the tokens, then the CTC blank in the output layer only.
     new_n = len(new_tokenizer) + 1
 
-    assert runner.model.vocab_size == new_n
+    assert runner.model.vocab_size == new_n + 1
+    assert runner.model.blank_token == new_n
+    assert runner.model.ctc_loss.blank == new_n
     assert runner.model.hparams["tokenizer"] is new_tokenizer
 
     emb_w = runner.model.decoder.token_encoder.weight.data
     final_w = runner.model.decoder.final.weight.data
+    assert emb_w.shape[0] == new_n
+    assert final_w.shape[0] == new_n + 1
     assert torch.equal(emb_w[new_k_mod_idx], emb_w[new_k_idx])
     assert torch.equal(final_w[new_k_mod_idx], final_w[new_k_idx])
+
+    # The decoding tables follow the new token ids.
+    assert runner.model.stop_token == new_tokenizer.stop_int
+    assert runner.model.token_masses.shape[0] == new_n + 1
+    assert runner.model.token_masses[new_k_mod_idx].item() == pytest.approx(
+        new_residues["K[Acetyl]"]
+    )
+    assert runner.model.token_masses[new_k_idx].item() == pytest.approx(
+        new_residues["K"]
+    )
 
 
 def test_remap_decoder_vocab_missing_init_raises(
@@ -1110,3 +1131,37 @@ def test_initialize_trainer_progress_bar(tmp_path, tiny_config):
     ) as runner:
         runner.initialize_trainer(train=True, enable_progress_bar=False)
         assert runner.trainer.progress_bar_callback is None
+
+
+def test_is_autoregressive_checkpoint_unreadable(tmp_path):
+    """A file that is not a checkpoint is not called autoregressive."""
+    from casanovo.denovo.model_runner import _is_autoregressive_checkpoint
+
+    path = tmp_path / "junk.ckpt"
+    path.write_bytes(b"not a checkpoint")
+    assert not _is_autoregressive_checkpoint(str(path))
+
+
+def test_autoregressive_checkpoint_error(tmp_path, mgf_small, tiny_config):
+    """Loading weights without the CTC blank row names the layout."""
+    config = Config(tiny_config)
+    config.max_epochs = 1
+    config.n_layers = 1
+
+    with ModelRunner(config=config, output_dir=tmp_path) as runner:
+        runner.train([mgf_small], [mgf_small])
+        runner.trainer.save_checkpoint(tmp_path / "ctc.ckpt")
+
+    # Drop the blank row, as in an autoregressive checkpoint.
+    ckpt = torch.load(tmp_path / "ctc.ckpt", weights_only=False)
+    state = ckpt["state_dict"]
+    state["decoder.final.weight"] = state["decoder.final.weight"][:-1]
+    state["decoder.final.bias"] = state["decoder.final.bias"][:-1]
+    torch.save(ckpt, tmp_path / "ar.ckpt")
+
+    runner = ModelRunner(
+        config=config, model_filename=str(tmp_path / "ar.ckpt")
+    )
+    runner.initialize_tokenizer()
+    with pytest.raises(RuntimeError, match="autoregressive Casanovo"):
+        runner.initialize_model(train=False)

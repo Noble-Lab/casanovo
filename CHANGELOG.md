@@ -8,6 +8,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Added
 
+- Non-autoregressive decoding with a CTC loss: the decoder emits `decoder_frames` frames at once and CTC aligns them to the peptide.
+- Precise mass control, a dynamic program that searches for the highest-probability CTC path whose residue mass falls in a precursor window, used when the greedy peptide misses it.
+- Intermediate CTC: `inter_ctc_layers` names decoder layers that also score their hidden states for an auxiliary loss, weighted by `inter_ctc_weight`. Scoring reuses the output layer, so it adds no parameters and nothing at inference.
+- The Muon optimizer for hidden weight matrices, with an auxiliary AdamW group for embeddings, the output head and vectors (`muon_lr`, `muon_momentum`).
 - The end-of-run sequencing report now includes additional score thresholds between 0.5 and 0.9 and excludes 0.95 and 0.99, selected based on full MassIVE-KB and multi-enzyme test runs. It also reports throughput in distinct spectra per second and labels score-distribution counts as PSMs.
 - Added the `replace_n_and_q_deamidated_with_d_and_e` config option, which replaces deamidated N and Q residues with D and E residues, because they are indistinguishable by de novo sequencing.
 - The number of spectra that receive no prediction because beam search did not return a valid peptide is now counted and logged at the end of a sequencing run.
@@ -15,6 +19,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Changed
 
+- `decoder_frames` is the CTC frame count, which `max_peptide_len` used to serve alongside its own meaning. Both are now required in the config, and `max_peptide_len` filters only the database search.
+- Custom config files need five new keys: `decoder_frames`, `inter_ctc_layers`, `inter_ctc_weight`, `muon_lr` and `muon_momentum`. Generate a fresh config with `casanovo configure` and reapply your changes to it.
+- `precursor_mass_tol` and `isotope_error_range` apply in *de novo* mode again: they set the window that precise mass control searches. `isotope_error_range` defaults to `[0, 3]`, because precursors are often picked at the +2 or +3 isotope peak.
+- Changed default gradient clipping to a norm of 2.0.
 - Upgraded minimum DepthCharge version to 0.5.0.
 - Spectra with invalid information, such as a missing `SEQ` annotation, are now skipped with a warning instead of raising an error. As a result, when evaluating, training, or validating on a mix of annotated and unannotated peak files, only the annotated spectra are used. An error is still raised if no valid spectra remain; when sequencing, its message now points to the "Skipped N spectra" warning for the cause instead of assuming an unannotated peak file.
 - `val_check_interval` now accepts a float in `[0, 1]` to validate at a fraction of each training epoch, in addition to an integer number of training steps.
@@ -23,6 +31,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Fixed
 
+- Decoder frames can attend to one another. Every frame is fed the padding token, whose embedding is zero, so the inferred target padding mask marked them all as padding and left only the precursor token visible.
+- Database-search candidates are no longer scored against the padding of whichever batch they landed in.
+- De novo predictions shorter than `min_peptide_len` are withheld again; beam search enforced this and CTC decoding replaced it.
+- Training on Apple Silicon computes the CTC loss on the CPU, because PyTorch has no MPS kernel for it. Precise mass control also runs on the CPU, because it needs float64. The model's forward pass stays on MPS.
 - The database search progress bar now updates in place instead of printing a new line per refresh, by disabling Lightning's competing progress bar during database search.
 - Fixed the mass of the carbamylation + ammonia-loss N-terminal token to `25.979265`. The token name is deliberately left as `[+25.980265]-` because it appears in released checkpoint vocabularies.
 - Fixed training from a checkpoint failing with `TypeError` when configuration values that are not optimizer arguments (e.g. `precursor_mass_tol`) leaked into the Adam optimizer.
@@ -32,6 +44,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ### Removed
 
 - Removed the override that forced `accelerator: "auto"` to `"cpu"` on Apple Silicon devices.
+- Removed `train_label_smoothing`, since the CTC loss has no label smoothing. A config file that still sets it gets a warning and the value is ignored.
 
 ## [5.2.1] - 2026-08-12
 

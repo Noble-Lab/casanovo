@@ -23,6 +23,7 @@ _config_deprecated = dict(
     save_top_k=None,
     model_save_folder_path=None,
     reverse_peptides=None,
+    train_label_smoothing=None,
 )
 
 
@@ -83,6 +84,7 @@ class Config:
         isotope_error_range=lambda min_max: (int(min_max[0]), int(min_max[1])),
         min_peptide_len=int,
         max_peptide_len=int,
+        decoder_frames=int,
         predict_batch_size=int,
         top_match=int,
         accelerator=str,
@@ -118,7 +120,10 @@ class Config:
         cosine_schedule_period_iters=int,
         learning_rate=float,
         weight_decay=float,
-        train_label_smoothing=float,
+        muon_lr=float,
+        muon_momentum=float,
+        inter_ctc_layers=list,
+        inter_ctc_weight=float,
         train_batch_size=int,
         max_epochs=int,
         shuffle=bool,
@@ -187,6 +192,32 @@ class Config:
         # Validate.
         for key, val in self._config_types.items():
             self.validate_param(key, val)
+
+        low, high = self._params["isotope_error_range"]
+        if low > high:
+            raise ValueError(
+                f"isotope_error_range ({low}, {high}) must run from low to "
+                "high"
+            )
+        weight = self._params["inter_ctc_weight"]
+        if not 0.0 <= weight <= 1.0:
+            raise ValueError(
+                f"inter_ctc_weight ({weight}) must be between 0 and 1"
+            )
+        if self._params["decoder_frames"] < 1:
+            raise ValueError(
+                f"decoder_frames ({self._params['decoder_frames']}) must be "
+                "positive"
+            )
+        # CTC needs a frame per residue, so the budget has to cover the
+        # longest peptide considered. Repeats need one more each, which
+        # only the data knows; training warns about those.
+        if self._params["decoder_frames"] < self._params["max_peptide_len"]:
+            raise ValueError(
+                f"decoder_frames ({self._params['decoder_frames']}) is below "
+                f"max_peptide_len ({self._params['max_peptide_len']}); "
+                "peptides that long could not be decoded"
+            )
 
         self._params["n_workers"] = utils.n_workers()
 

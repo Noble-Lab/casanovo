@@ -198,7 +198,7 @@ def log_annotate_report(
         Confidence scores for creating confidence score distribution.
     n_missing_predictions : int, default=0
         The number of spectra that did not receive a prediction because
-        beam search did not return a valid peptide.
+        decoding did not return a valid peptide.
     average_precision : Optional[float], default=None
         The average precision (area under the precision-coverage curve),
         reported when sequencing with evaluation.
@@ -260,7 +260,7 @@ def log_annotate_report(
 
     if n_missing_predictions > 0:
         logger.info(
-            "%d spectra did not receive a prediction because beam search "
+            "%d spectra did not receive a prediction because decoding "
             "did not return a valid peptide",
             n_missing_predictions,
         )

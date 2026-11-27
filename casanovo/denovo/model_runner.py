@@ -109,7 +109,7 @@ class ModelRunner:
             ),
             ModelCheckpoint(
                 dirpath=output_dir,
-                monitor="valid_CELoss",
+                monitor="valid_CTCLoss",
                 filename=best_filename,
                 enable_version_counter=False,
             ),
@@ -552,7 +552,10 @@ class ModelRunner:
             )
 
         model_params = dict(
+            precursor_mass_tol=self.config.precursor_mass_tol,
+            isotope_error_range=self.config.isotope_error_range,
             min_peptide_len=self.config.min_peptide_len,
+            decoder_frames=self.config.decoder_frames,
             top_match=self.config.top_match,
             n_beams=self.config.n_beams,
             n_log=self.config.n_log,
@@ -566,7 +569,10 @@ class ModelRunner:
             cosine_schedule_period_iters=self.config.cosine_schedule_period_iters,
             lr=self.config.learning_rate,
             weight_decay=self.config.weight_decay,
-            train_label_smoothing=self.config.train_label_smoothing,
+            muon_lr=self.config.muon_lr,
+            muon_momentum=self.config.muon_momentum,
+            inter_ctc_layers=self.config.inter_ctc_layers,
+            inter_ctc_weight=self.config.inter_ctc_weight,
             calculate_precision=self.config.calculate_precision,
             out_writer=self.writer,
             tokenizer=tokenizer,
@@ -575,8 +581,10 @@ class ModelRunner:
         # Reconfigurable non-architecture related parameters for a
         # loaded model.
         loaded_model_params = dict(
+            precursor_mass_tol=self.config.precursor_mass_tol,
+            isotope_error_range=self.config.isotope_error_range,
             min_peptide_len=self.config.min_peptide_len,
-            max_peptide_len=self.config.max_peptide_len,
+            decoder_frames=self.config.decoder_frames,
             top_match=self.config.top_match,
             n_beams=self.config.n_beams,
             n_log=self.config.n_log,
@@ -584,7 +592,9 @@ class ModelRunner:
             cosine_schedule_period_iters=self.config.cosine_schedule_period_iters,
             lr=self.config.learning_rate,
             weight_decay=self.config.weight_decay,
-            train_label_smoothing=self.config.train_label_smoothing,
+            muon_lr=self.config.muon_lr,
+            muon_momentum=self.config.muon_momentum,
+            inter_ctc_weight=self.config.inter_ctc_weight,
             calculate_precision=self.config.calculate_precision,
             out_writer=self.writer,
         )
@@ -627,11 +637,14 @@ class ModelRunner:
             ckpt_tokenizer = self.model.hparams.get("tokenizer")
             self.model.tokenizer = tokenizer
             self._remap_decoder_vocab(ckpt_tokenizer, tokenizer)
+            self.model._init_tokenizer_state()
 
             architecture_params = set(model_params.keys()) - set(
                 loaded_model_params.keys()
             )
             for param in architecture_params:
+                if param not in self.model.hparams:
+                    continue
                 if model_params[param] != self.model.hparams[param]:
                     if param == "tokenizer":
                         self._verify_tokenizer(
@@ -658,8 +671,16 @@ class ModelRunner:
                 ckpt_tokenizer = self.model.hparams.get("tokenizer")
                 self.model.tokenizer = tokenizer
                 self._remap_decoder_vocab(ckpt_tokenizer, tokenizer)
+                self.model._init_tokenizer_state()
 
             except RuntimeError:
+                if _is_autoregressive_checkpoint(self.model_filename):
+                    raise RuntimeError(
+                        "Weights file is from autoregressive Casanovo: its "
+                        "output layer has no CTC blank row. This version "
+                        "decodes non-autoregressively and needs weights "
+                        "trained with it; pass them with --model."
+                    )
                 raise RuntimeError(
                     "Weights file incompatible with the current version of "
                     "Casanovo."
@@ -835,7 +856,8 @@ class ModelRunner:
             )
 
         model_vocab_size = self.model.vocab_size
-        tokenizer_vocab_size = len(self.tokenizer) + 1
+        # Padding plus the CTC blank, which the model appends last.
+        tokenizer_vocab_size = len(self.tokenizer) + 2
         if model_vocab_size != tokenizer_vocab_size:
             raise ValueError(
                 "The model was trained with a vocabulary of size "
@@ -943,27 +965,65 @@ class ModelRunner:
         decoder.token_encoder.weight.data.copy_(new_emb)
 
         # Replace the output projection (vector -> logit per token).
+        # It has one row beyond the embedding: the CTC blank, last, which
+        # belongs to no token and is carried over unchanged.
         # Capture bias BEFORE replacing the layer to avoid reading
         # the new (zero-initialized) bias instead of the checkpoint bias.
+        def _remap_output(old: torch.Tensor) -> torch.Tensor:
+            return torch.cat([_remap_rows(old), old[-1:]])
+
         old_w = decoder.final.weight.data
         old_b = (
             decoder.final.bias.data.clone()
             if decoder.final.bias is not None
             else None
         )
-        new_w = _remap_rows(old_w)
+        new_w = _remap_output(old_w)
         decoder.final = torch.nn.Linear(
-            old_w.shape[1], new_n_tokens, bias=old_b is not None
+            old_w.shape[1], new_n_tokens + 1, bias=old_b is not None
         ).to(old_w.device)
         decoder.final.weight.data.copy_(new_w)
         if old_b is not None:
-            decoder.final.bias.data.copy_(_remap_rows(old_b))
+            decoder.final.bias.data.copy_(_remap_output(old_b))
 
         # Keep vocab_size and the checkpoint's hyperparameter record in sync
         # with the new layers so downstream comparisons and checkpoint saves
         # see the updated vocabulary.
-        self.model.vocab_size = new_n_tokens
+        self.model.vocab_size = new_n_tokens + 1
+        self.model.blank_token = self.model.vocab_size - 1
+        self.model.ctc_loss = torch.nn.CTCLoss(
+            blank=self.model.blank_token, zero_infinity=True
+        )
         self.model.hparams["tokenizer"] = new_tokenizer
+
+
+def _is_autoregressive_checkpoint(model_filename: str) -> bool:
+    """
+    Check whether a checkpoint has the autoregressive decoder layout.
+
+    The autoregressive output layer has one row per embedding row. The
+    CTC output layer has one more, for the blank.
+
+    Parameters
+    ----------
+    model_filename : str
+        The checkpoint file.
+
+    Returns
+    -------
+    bool
+        True if the output layer and the token embedding have the same
+        number of rows.
+    """
+    try:
+        state = torch.load(
+            model_filename, map_location="cpu", weights_only=False
+        )["state_dict"]
+        n_out = state["decoder.final.weight"].shape[0]
+        n_emb = state["decoder.token_encoder.weight"].shape[0]
+    except Exception:
+        return False
+    return n_out == n_emb
 
 
 def _get_peak_filenames(
