@@ -26,6 +26,36 @@ _config_deprecated = dict(
 )
 
 
+def _int_or_float(value: Union[int, float]) -> Union[int, float]:
+    """Cast the validation interval to an int (steps) or float in [0, 1]."""
+    if isinstance(value, bool):
+        msg = (
+            "val_check_interval must be a positive integer number of "
+            "training steps or a float in [0, 1] giving a fraction of an "
+            "epoch, not a bool"
+        )
+        logger.error(msg)
+        raise TypeError(msg)
+    if isinstance(value, int):
+        if value < 1:
+            msg = (
+                "val_check_interval as a number of training steps must be "
+                "a positive integer"
+            )
+            logger.error(msg)
+            raise ValueError(msg)
+        return value
+    value = float(value)
+    if not 0.0 <= value <= 1.0:
+        msg = (
+            "val_check_interval as a fraction of an epoch must be a float "
+            "in [0, 1]"
+        )
+        logger.error(msg)
+        raise ValueError(msg)
+    return value
+
+
 class Config:
     """
     The Casanovo configuration options.
@@ -71,7 +101,7 @@ class Config:
         log_metrics=bool,
         log_every_n_steps=int,
         lance_dir=str,
-        val_check_interval=int,
+        val_check_interval=_int_or_float,
         min_peaks=int,
         max_peaks=int,
         min_mz=float,
@@ -105,21 +135,29 @@ class Config:
         gradient_clip_algorithm=str,
         precision=str,
         replace_isoleucine_with_leucine=bool,
+        replace_n_and_q_deamidated_with_d_and_e=bool,
         massivekb_tokenizer=bool,
         residues=dict,
+        new_token_init=dict,
     )
 
     def __init__(self, config_file: Optional[str] = None):
         """Initialize a Config object."""
         self.file = str(config_file) if config_file is not None else "default"
-        with self._default_config.open() as f_in:
+        with self._default_config.open(encoding="utf-8") as f_in:
             self._params = yaml.safe_load(f_in)
 
         if config_file is None:
             self._user_config = {}
         else:
-            with Path(config_file).open() as f_in:
+            with Path(config_file).open(encoding="utf-8") as f_in:
                 self._user_config = yaml.safe_load(f_in)
+                if self._user_config is None:
+                    self._user_config = {}
+                elif not isinstance(self._user_config, dict):
+                    raise TypeError(
+                        "Configuration file must define a mapping of options"
+                    )
                 # Remap deprecated config entries.
                 for old, new in _config_deprecated.items():
                     if old in self._user_config:
@@ -166,15 +204,6 @@ class Config:
             )
 
         self._params["n_workers"] = utils.n_workers()
-
-        if self._params["accelerator"] == "auto" and utils.is_apple_silicon():
-            self._params["accelerator"] = "cpu"
-            logger.warning(
-                "accelerator='auto' will be overwritten to 'cpu' on Apple Silicon"
-                " devices due to incompatibility with MPS accelerators.\n"
-                "Note: If you want to use a different accelerator (other than MPS),"
-                " please specify it explicitly in the config file."
-            )
 
     def __getitem__(self, param: str) -> Union[int, bool, str, Tuple, Dict]:
         """Retrieve a parameter."""

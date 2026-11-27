@@ -24,7 +24,7 @@ You can find the `config.yaml` configuration file that is used by default [here]
 
 ### How do I solve a "PermissionError: GitHub API rate limit exceeded" error when trying to run Casanovo?
 
-When running Casanovo in `denovo` or `eval` mode, Casanovo needs compatible pretrained model weights to make predictions.
+When running Casanovo in `sequence` or `db-search` mode, Casanovo needs compatible pretrained model weights to make predictions.
 If no model weights file is specified using the `--model` command-line parameter, Casanovo will automatically try to download the latest compatible model file from GitHub and save it to its cache for subsequent use.
 However, the GitHub API is limited to maximum 60 requests per hour per IP address.
 Consequently, if Casanovo has been executed multiple times already, it might temporarily not be able to communicate with GitHub.
@@ -54,7 +54,7 @@ Include full information about your system setup, the installed CUDA toolkit and
 ### Why do I get a "CUDA out of memory" error when trying to run Casanovo?
 
 This means that there was not enough (free) memory available on your GPU to run Casanovo, which is especially likely to happen when you are using a smaller, consumer-grade GPU.
-Depending on whether the error occurred during `train` or `denovo` mode, we recommend decreasing the `train_batch_size` or `predict_batch_size` options, respectively, in the [config file](https://github.com/Noble-Lab/casanovo/blob/main/casanovo/config.yaml) to reduce the number of spectra that are processed simultaneously.
+Depending on whether the error occurred during `train` or `sequence` (or `db-search`) mode, we recommend decreasing the `train_batch_size` or `predict_batch_size` options, respectively, in the [config file](https://github.com/Noble-Lab/casanovo/blob/main/casanovo/config.yaml) to reduce the number of spectra that are processed simultaneously.
 Additionally, we recommend shutting down any other processes that may be running on the GPU, so that Casanovo can exclusively use the GPU.
 
 ### How can I run Casanovo on a specific GPU device?
@@ -135,10 +135,8 @@ After the training job is finished, the validation snapshot that achieved the lo
 Additionally, a snapshot of the model weights at the end of each **training** epoch will be saved to the output directory as `epoch=<epoch>-step=<step>.ckpt`.
 Snapshots from previous training epochs will be overwritten with the latest training snapshot at the end of each training epoch.
 
-By default, Casanovo runs model validation every 50,000 training steps.
-Note that the number of samples that are processed during a single training step depends on the batch size.
-Therefore, the default training batch size of 32 corresponds to saving a model snapshot after every 1.6 million training samples.
-You can optionally modify the validation run frequency in the [config file](https://github.com/Noble-Lab/casanovo/blob/main/casanovo/config.yaml) (parameter `val_check_interval`), depending on your dataset size.
+By default, Casanovo runs model validation every 50,000 training steps (`val_check_interval: 50_000`).
+You can change this via the `val_check_interval` parameter in the [config file](https://github.com/Noble-Lab/casanovo/blob/main/casanovo/config.yaml): a float in `[0, 1]` sets it as a fraction of an epoch (where `0.0` validates after every step), while a positive integer (`>= 1`) sets it as a number of training steps (where the samples per step depend on the batch size).
 Note that running model validation very frequently will result in slower training time because Casanovo will evaluate its performance on the validation data for every validation check.
 
 ### Even though I added new post-translational modifications to the configuration file, Casanovo didn't identify those peptides.
@@ -159,8 +157,67 @@ To include new PTMs in Casanovo, you need to:
 2. Compile a large training dataset that includes those PTMs and format this as an annotated MGF file. Note that you can include some or all of the data that was originally used to train Casanovo (see above), in addition to the data that includes your new types of PTMs.
 3. Train a new version of Casanovo on this dataset.
 
-It is unfortunately not possible to finetune a pre-trained Casanovo model to add new types of PTMs.
-Instead, such a model must be trained from scratch.
+Alternatively, you can fine-tune an existing pre-trained Casanovo model on data with new PTMs instead of training from scratch.
+See the next question for a step-by-step guide.
+
+### How do I fine-tune Casanovo on data with new PTMs?
+
+Instead of training a new model from scratch, Casanovo can fine-tune a pre-trained checkpoint with an extended residue vocabulary.
+When loading the checkpoint, Casanovo copies the learned weights for all tokens that the checkpoint already knows, and initializes new tokens from existing ones using the `new_token_init` configuration option.
+
+To fine-tune Casanovo with new PTMs:
+
+1. **Add the new PTM to the `residues` dictionary** in the [configuration file](https://github.com/Noble-Lab/casanovo/blob/main/casanovo/config.yaml).
+   For example, to add acetylation of lysine:
+
+   ```yaml
+   residues:
+     # ... existing residues ...
+     "K[Acetyl]": 170.105528
+   ```
+
+2. **Map each new token to an initialization source** in the `new_token_init` configuration option.
+   This tells Casanovo which existing token's learned weights to copy as a starting point for the new token:
+
+   ```yaml
+   new_token_init:
+     "K[Acetyl]": "K"
+   ```
+
+3. **Prepare an annotated MGF training dataset** that includes spectra with the new PTMs.
+   You can combine this with some or all of the data that was originally used to train Casanovo (see above).
+
+4. **Run fine-tuning**, specifying the pre-trained checkpoint with `--model`:
+
+   ```sh
+   casanovo train --model pretrained.ckpt -p validation_spectra.mgf training_spectra.mgf
+   ```
+
+```{tip}
+The initialization source in `new_token_init` should be the unmodified amino acid (e.g. `"K"` for `"K[Acetyl]"`) or an amino acid with a similar PTM that the model already knows.
+This gives the model a reasonable starting point for the new token's weights.
+```
+
+```{warning}
+Every new token in `residues` that is not present in the checkpoint must have a corresponding entry in `new_token_init`.
+Omitting an entry will cause Casanovo to raise a `ValueError` at startup.
+```
+
+**Monitoring for catastrophic forgetting.**
+When fine-tuning, the model may lose performance on its original training distribution.
+To monitor this, use the `--tracking_peak_path` (`-t`) option to track validation loss on additional files without influencing checkpoint selection:
+
+```sh
+casanovo train --model pretrained.ckpt -p new_ptm_validation.mgf -t original_validation.mgf training_spectra.mgf
+```
+
+Files specified with `-p` (`--validation_peak_path`) contribute to the aggregate `valid_CELoss` metric used for selecting the best checkpoint.
+Files specified with `-t` (`--tracking_peak_path`) are logged per-file only (as `valid/<file_stem>` in the console and CSV logs, e.g. `valid/original_validation`) and do not influence which checkpoint is saved as best.
+This makes it easy to detect if the model is forgetting what it previously learned.
+
+```{tip}
+To view per-file tracking losses, enable `tb_summarywriter: true` or `log_metrics: true` in the [configuration file](https://github.com/Noble-Lab/casanovo/blob/main/casanovo/config.yaml).
+```
 
 ### How can I change the learning rate schedule used during training?
 
@@ -193,7 +250,7 @@ For general-purpose usage of Casanovo, use its [default weights](https://casanov
 
 You can evaluate a trained Casanovo model compared to ground-truth peptide labels using a precision–coverage curve.
 
-1. Run Casanovo in sequencing or evaluation mode on your MS/MS data, [as described here](https://casanovo.readthedocs.io/en/latest/getting_started.html#running-casanovo).
+1. Run Casanovo with `casanovo sequence` (optionally with `--evaluate`) on your MS/MS data, [as described here](https://casanovo.readthedocs.io/en/latest/getting_started.html#running-casanovo).
 2. Collect the ground-truth peptide labels as well as the peptide labels predicted by Casanovo. Note that Casanovo might not report a peptide for every spectrum if the spectra are invalid (e.g. not enough peaks), so make sure that both pieces of information are correctly linked to each other (using the `spectra_ref` column in the mzTab output file produced by Casanovo).
 3. Use the following script to plot a precision–coverage curve:
 ```python

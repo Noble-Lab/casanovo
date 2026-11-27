@@ -19,7 +19,8 @@ Why choose Casanovo?
 hidden: true
 maxdepth: 1
 ---
-Getting Started <getting_started.md>
+Getting Started: Command Line Interface <getting_started.md>
+Getting Started: Graphical User Interface <getting_started_gui.md>
 File Formats <file_formats.md>
 Downstream Tools <downstream_tools.md>
 FAQs <faq.md>

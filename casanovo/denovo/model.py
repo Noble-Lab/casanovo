@@ -1,7 +1,7 @@
 """A de novo peptide sequencing model."""
 
 import collections
-import heapq
+import inspect
 import itertools
 import logging
 import warnings
@@ -22,10 +22,12 @@ import einops
 import lightning.pytorch as pl
 import numpy as np
 import torch
+import tqdm
 from depthcharge.tokenizers import PeptideTokenizer
 
 from .. import config
 from ..data import ms_io, psm
+from ..data.db_utils import PROTON
 from ..denovo.transformers import PeptideDecoder, SpectrumEncoder
 from . import evaluate
 from .muon import MuonWithAuxAdamW
@@ -87,14 +89,14 @@ class Spec2Pep(pl.LightningModule):
     max_charge : int
         The maximum precursor charge to consider.
     precursor_mass_tol : float
-        The maximum allowable precursor mass tolerance (in ppm) for
-        correct predictions.
+        The precursor mass tolerance (in ppm). It sets the window that
+        precise mass control searches when the greedy prediction misses
+        the precursor mass. Set to ``inf`` to turn precise mass control
+        off.
     isotope_error_range : Tuple[int, int]
-        Take into account the error introduced by choosing a
-        non-monoisotopic peak for fragmentation by not penalizing
-        predicted precursor m/z's that fit the specified isotope error:
-        `abs(calc_mz - (precursor_mz - isotope * 1.00335 / precursor_charge))
-        < precursor_mass_tol`
+        The isotope errors, from low to high and inclusive, that precise
+        mass control considers. Each one moves the window down by that
+        many isotope spacings (1.00335 Da) of the neutral precursor mass.
     min_peptide_len : int
         The minimum length of predicted peptides.
     n_beams : int
@@ -134,7 +136,8 @@ class Spec2Pep(pl.LightningModule):
     muon_momentum : float
         Momentum for the Muon parameter group.
     **kwargs : Dict
-        Additional keyword arguments for the auxiliary AdamW group.
+        Additional keyword arguments for the auxiliary AdamW group. Only
+        valid Adam parameters are retained; any other values are ignored.
     """
 
     def __init__(
@@ -227,7 +230,10 @@ class Spec2Pep(pl.LightningModule):
                 f"Deprecated hyperparameter '{k}' removed from the model.",
                 DeprecationWarning,
             )
-        self.opt_kwargs = kwargs
+        # Keep only valid Adam arguments; other configuration values
+        # (e.g. loaded from a checkpoint) must not reach the optimizer.
+        adam_kwargs = set(inspect.signature(torch.optim.Adam).parameters)
+        self.opt_kwargs = {k: v for k, v in kwargs.items() if k in adam_kwargs}
 
         # Data properties.
         self.decoder_frames = decoder_frames
@@ -243,6 +249,11 @@ class Spec2Pep(pl.LightningModule):
         self.calculate_precision = calculate_precision
         self.n_log = n_log
         self._history = []
+        # Count of spectra for which decoding returned no valid peptide.
+        self.n_missing_predictions = 0
+        # Per-file validation metadata; set by ModelRunner.train() before fit.
+        self.val_stems: list = []
+        self.n_main_loaders: int = 0
 
         # Output writer during predicting.
         self.out_writer = out_writer
@@ -277,12 +288,10 @@ class Spec2Pep(pl.LightningModule):
             persistent=False,
         )
 
-        # Register tensor buffer for amino acid token masses
-        self.register_buffer(
-            "token_masses",
-            torch.zeros(self.vocab_size, dtype=torch.float64),
-            persistent=False,
-        )
+        # Amino acid token masses, in float64 for precise mass control.
+        # A plain CPU tensor rather than a buffer: MPS has no float64, so
+        # moving it with the model would fail there.
+        self.token_masses = torch.zeros(self.vocab_size, dtype=torch.float64)
         # Populate token masses from tokenizer residues
         for aa, mass in self.tokenizer.residues.items():
             idx = self.tokenizer.index.get(aa)
@@ -402,14 +411,11 @@ class Spec2Pep(pl.LightningModule):
             return scores, seqs, intermediates
         return scores, seqs
 
-    def training_step(
-        self,
-        batch: Dict[str, torch.Tensor],
-        *args,
-        mode: str = "train",
-    ) -> torch.Tensor:
+    def _ctc_losses(
+        self, batch: Dict[str, torch.Tensor]
+    ) -> Tuple[torch.Tensor, torch.Tensor, Optional[torch.Tensor], int]:
         """
-        A single training step.
+        Compute the CTC losses for a batch.
 
         Parameters
         ----------
@@ -419,15 +425,21 @@ class Spec2Pep(pl.LightningModule):
             ``precursor_charge``, each pointing to tensors with the
             corresponding data. The ``seq`` key is optional and
             contains the peptide sequences for training.
-        mode : str
-            Logging key to describe the current stage.
 
         Returns
         -------
-        torch.Tensor
-            The loss of the training step.
+        loss : torch.Tensor
+            The final layer's CTC loss.
+        total : torch.Tensor
+            The objective the optimizer sees: ``loss`` mixed with the
+            intermediate CTC loss when ``inter_ctc_layers`` is set, else
+            ``loss`` itself.
+        aux : Optional[torch.Tensor]
+            The mean intermediate CTC loss, or ``None`` without
+            intermediate layers.
+        batch_size : int
+            The number of spectra in the batch.
         """
-
         pred, truth, intermediates = self._forward_step(
             batch, return_intermediates=True
         )
@@ -456,63 +468,117 @@ class Spec2Pep(pl.LightningModule):
                 infeasible.sum().item(),
                 self.decoder_frames + 1,
             )
-        loss = self.ctc_loss(log_probs, truth, input_lengths, target_lengths)
-        # The final layer's CTC loss is what gets logged as `*_CTCLoss`, so it
-        # stays comparable with runs that predate intermediate CTC and keeps
-        # driving best-checkpoint selection. The combined objective below is
-        # what the optimizer sees; logging that instead would mix in the
-        # shallower layers' worse predictions and both compare wrongly against
-        # earlier curves and pick checkpoints on the wrong quantity.
-        self.log(
-            f"{mode}_CTCLoss",
-            loss.detach(),
-            on_step=False,
-            on_epoch=True,
-            sync_dist=True,
-            batch_size=truth.shape[0],
-        )
-        if intermediates:
-            # Intermediate CTC: the same objective on each intermediate
-            # layer's own prediction, so the layers below the last one are
-            # supervised directly rather than only through it.
-            aux = torch.stack(
-                [
-                    self.ctc_loss(
-                        scores.log_softmax(-1).transpose(0, 1),
-                        truth,
-                        input_lengths,
-                        target_lengths,
-                    )
-                    for scores in intermediates
-                ]
-            ).mean()
-            loss = (1 - self.inter_ctc_weight) * loss + (
-                self.inter_ctc_weight * aux
-            )
-            for key, value in (
-                (f"{mode}_CTCLoss_intermediate", aux),
-                (f"{mode}_CTCLoss_total", loss),
-            ):
-                self.log(
-                    key,
-                    value.detach(),
-                    on_step=False,
-                    on_epoch=True,
-                    sync_dist=True,
-                    batch_size=truth.shape[0],
-                )
-        return loss
+        loss = self._ctc(log_probs, truth, input_lengths, target_lengths)
+        if not intermediates:
+            return loss, loss, None, truth.shape[0]
 
-    def validation_step(
-        self, batch: Dict[str, torch.Tensor], *args
+        # Intermediate CTC: the same objective on each intermediate
+        # layer's own prediction, so the layers below the last one are
+        # supervised directly rather than only through it.
+        aux = torch.stack(
+            [
+                self._ctc(
+                    scores.log_softmax(-1).transpose(0, 1),
+                    truth,
+                    input_lengths,
+                    target_lengths,
+                )
+                for scores in intermediates
+            ]
+        ).mean()
+        total = (1 - self.inter_ctc_weight) * loss + (
+            self.inter_ctc_weight * aux
+        )
+        return loss, total, aux, truth.shape[0]
+
+    def _ctc(
+        self,
+        log_probs: torch.Tensor,
+        targets: torch.Tensor,
+        input_lengths: torch.Tensor,
+        target_lengths: torch.Tensor,
     ) -> torch.Tensor:
         """
-        A single validation step.
+        The CTC loss, computed on the CPU when the inputs are on MPS.
+
+        PyTorch has no MPS kernel for CTC loss. Moving its inputs to the
+        CPU keeps the rest of training on MPS, and the move is
+        differentiable, so gradients still reach the model.
+
+        Parameters
+        ----------
+        log_probs : torch.Tensor of shape (n_frames, batch, n_tokens)
+            Frame-level log-probabilities.
+        targets : torch.Tensor of shape (batch, max_target_len)
+            The target token indices.
+        input_lengths : torch.Tensor of shape (batch,)
+            The number of frames per spectrum.
+        target_lengths : torch.Tensor of shape (batch,)
+            The number of target tokens per spectrum.
+
+        Returns
+        -------
+        torch.Tensor
+            The CTC loss, on the device of ``log_probs``.
+        """
+        device = log_probs.device
+        if device.type != "mps":
+            return self.ctc_loss(
+                log_probs, targets, input_lengths, target_lengths
+            )
+        return self.ctc_loss(
+            log_probs.cpu(),
+            targets.cpu(),
+            input_lengths.cpu(),
+            target_lengths.cpu(),
+        ).to(device)
+
+    def _log_ctc_losses(
+        self,
+        prefix: str,
+        loss: torch.Tensor,
+        total: torch.Tensor,
+        aux: Optional[torch.Tensor],
+        **log_kwargs,
+    ) -> None:
+        """
+        Log the CTC losses under ``prefix``.
+
+        The final layer's CTC loss is what gets logged as
+        ``{prefix}_CTCLoss``, so it stays comparable with runs that
+        predate intermediate CTC and keeps driving best-checkpoint
+        selection. The combined objective is what the optimizer sees;
+        logging that instead would mix in the shallower layers' worse
+        predictions and both compare wrongly against earlier curves and
+        pick checkpoints on the wrong quantity.
+
+        Parameters
+        ----------
+        prefix : str
+            Logging key to describe the current stage.
+        loss, total, aux
+            The losses returned by ``_ctc_losses``.
+        **log_kwargs
+            Keyword arguments passed on to ``self.log``.
+        """
+        self.log(f"{prefix}_CTCLoss", loss.detach(), **log_kwargs)
+        if aux is not None:
+            self.log(
+                f"{prefix}_CTCLoss_intermediate", aux.detach(), **log_kwargs
+            )
+            self.log(f"{prefix}_CTCLoss_total", total.detach(), **log_kwargs)
+
+    def training_step(
+        self,
+        batch: Dict[str, torch.Tensor],
+        *args,
+    ) -> torch.Tensor:
+        """
+        A single training step.
 
         Parameters
         ----------
         batch : Dict[str, torch.Tensor]
-            A batch from the SpectrumDataset, which contains keys:
             A batch from the SpectrumDataset, which contains keys:
             ``mz_array``, ``intensity_array``, ``precursor_mz``, and
             ``precursor_charge``, each pointing to tensors with the
@@ -522,22 +588,79 @@ class Spec2Pep(pl.LightningModule):
         Returns
         -------
         torch.Tensor
+            The loss of the training step.
+        """
+        loss, total, aux, batch_size = self._ctc_losses(batch)
+        self._log_ctc_losses(
+            "train",
+            loss,
+            total,
+            aux,
+            on_step=False,
+            on_epoch=True,
+            sync_dist=True,
+            batch_size=batch_size,
+        )
+        return total
+
+    def validation_step(
+        self,
+        batch: Dict[str, torch.Tensor],
+        batch_idx: int,
+        dataloader_idx: int = 0,
+    ) -> torch.Tensor:
+        """
+        A single validation step.
+
+        Parameters
+        ----------
+        batch : Dict[str, torch.Tensor]
+            A batch from the SpectrumDataset, which contains keys:
+            ``mz_array``, ``intensity_array``, ``precursor_mz``, and
+            ``precursor_charge``, each pointing to tensors with the
+            corresponding data. The ``seq`` key is optional and
+            contains the peptide sequences for training.
+        batch_idx : int
+            Index of the current batch within its dataloader.
+        dataloader_idx : int
+            Index of the dataloader this batch comes from. Dataloaders
+            0..n_main_loaders-1 are "main" validation files that contribute
+            to the aggregate ``valid_CTCLoss`` used for checkpoint selection.
+            Higher indices are "tracking" files logged per-file only.
+
+        Returns
+        -------
+        torch.Tensor
             The loss of the validation step.
         """
-        # Record the loss.
-        loss = self.training_step(batch, mode="valid")
-        if not self.calculate_precision:
-            return loss
+        loss, total, aux, batch_size = self._ctc_losses(batch)
+        log_kwargs = dict(
+            add_dataloader_idx=False,
+            on_step=False,
+            on_epoch=True,
+            sync_dist=True,
+            batch_size=batch_size,
+        )
+
+        # Determine per-file stem and main/tracking classification.
+        n_main = self.n_main_loaders if self.n_main_loaders > 0 else 1
+        is_main = dataloader_idx < n_main
+
+        if self.val_stems and dataloader_idx < len(self.val_stems):
+            stem = self.val_stems[dataloader_idx]
+            self.log(f"valid_CTCLoss/{stem}", loss.detach(), **log_kwargs)
+
+        if is_main:
+            # Contributes to the aggregate ``valid_CTCLoss`` monitored by
+            # ModelCheckpoint for best-checkpoint selection.
+            self._log_ctc_losses("valid", loss, total, aux, **log_kwargs)
+
+        if not self.calculate_precision or not is_main:
+            return total
 
         # Calculate and log amino acid and peptide match evaluation
-        # metrics from the predicted peptides.
-        # FIXME: Remove work around when depthcharge reverse detokenization
-        # bug is fixed.
-        # peptides_true = self.tokenizer.detokenize(batch["seq"])
-        peptides_true = [
-            "".join(pep)
-            for pep in self.tokenizer.detokenize(batch["seq"], join=False)
-        ]
+        # metrics from the predicted peptides (main files only).
+        peptides_true = self.tokenizer.detokenize(batch["seq"])
         logits, _ = self.forward(batch)
         peptides_pred = [
             (
@@ -558,20 +681,23 @@ class Spec2Pep(pl.LightningModule):
         )
 
         batch_size = len(peptides_true)
-        log_args = dict(on_step=False, on_epoch=True, sync_dist=True)
+        log_args = dict(
+            add_dataloader_idx=False,
+            on_step=False,
+            on_epoch=True,
+            sync_dist=True,
+        )
         self.log(
             "pep_precision", pep_precision, **log_args, batch_size=batch_size
         )
         self.log(
             "aa_precision", aa_precision, **log_args, batch_size=batch_size
         )
-        return loss
+        return total
 
     def _ctc_decode(
         self, logits: torch.Tensor
-    ) -> Tuple[
-        List[List[int]], List[List[float]], List[Optional[float]]
-    ]:
+    ) -> Tuple[List[List[int]], List[List[float]], List[Optional[float]]]:
         """
         Greedy CTC decoding of frame-level logits.
 
@@ -823,7 +949,7 @@ class Spec2Pep(pl.LightningModule):
         delta_idx = torch.tensor(emit_deltas, device=device)
         # The unrounded masses, added to the running total alongside the
         # rounded ones that move the state along the axis.
-        emit_exact = self.token_masses[emit_idx]
+        emit_exact = self.token_masses.to(device)[emit_idx]
         return (
             emit_idx,
             delta_idx,
@@ -939,6 +1065,10 @@ class Spec2Pep(pl.LightningModule):
             outgrew the int8 backtracking pointers, or the tokenizer is
             not reversed. The caller keeps the greedy peptide either way.
         """
+        # MPS has no float64, which the exact masses need, so PMC runs
+        # on the CPU there.
+        if logits.device.type == "mps":
+            logits = logits.cpu()
         device = logits.device
         n_frames, vocab = logits.shape
         # The stop is pinned to the zero-mass bin, which is where the frame
@@ -1208,6 +1338,7 @@ class Spec2Pep(pl.LightningModule):
             # Beam search withheld these; CTC decoding replaced it
             # without replacing the rule.
             if not tokens or len(tokens) < self.min_peptide_len:
+                self.n_missing_predictions += 1
                 continue
 
             peptide = "".join(
@@ -1219,13 +1350,11 @@ class Spec2Pep(pl.LightningModule):
             if self.tokenizer.reverse:
                 aa_scores = aa_scores[::-1]
 
-            # Upstream's aggregation, the product of the residue scores,
-            # without its 1 subtracted from a peptide that misses the
-            # precursor (see _peptide_score). The
-            # product also survives the N-terminal score merge in
-            # `on_predict_batch_end`, which a mean does not. The stop is
-            # scored with the peptide, as upstream counts it, but is not
-            # reported among the residues.
+            # The peptide score is the product of the residue scores
+            # (see _peptide_score). The product also survives the
+            # N-terminal score merge in `on_predict_batch_end`, which a
+            # mean does not. The stop is scored with the peptide, as
+            # upstream counts it, but is not reported among the residues.
             scored = aa_scores
             if stop is not None:
                 scored = np.append(aa_scores, stop)
@@ -1264,20 +1393,43 @@ class Spec2Pep(pl.LightningModule):
         Log the validation metrics at the end of each epoch.
         """
         callback_metrics = self.trainer.callback_metrics
-        metrics = {
-            "step": self.trainer.global_step,
-            "valid": callback_metrics["valid_CTCLoss"].detach().item(),
-        }
+        metrics = {"step": self.trainer.global_step}
+
+        if "valid_CTCLoss" in callback_metrics:
+            metrics["valid"] = (
+                callback_metrics["valid_CTCLoss"].detach().item()
+            )
+
+        for stem in self.val_stems:
+            key = f"valid_CTCLoss/{stem}"
+            if key in callback_metrics:
+                metrics[f"valid/{stem}"] = (
+                    callback_metrics[key].detach().item()
+                )
 
         if self.calculate_precision:
-            metrics["valid_aa_precision"] = (
-                callback_metrics["aa_precision"].detach().item()
-            )
-            metrics["valid_pep_precision"] = (
-                callback_metrics["pep_precision"].detach().item()
-            )
+            if "aa_precision" in callback_metrics:
+                metrics["valid_aa_precision"] = (
+                    callback_metrics["aa_precision"].detach().item()
+                )
+            if "pep_precision" in callback_metrics:
+                metrics["valid_pep_precision"] = (
+                    callback_metrics["pep_precision"].detach().item()
+                )
         self._history.append(metrics)
         self._log_history()
+
+    def on_predict_start(self) -> None:
+        """Reset the count of spectra without a prediction."""
+        self.n_missing_predictions = 0
+
+    def on_predict_epoch_end(self) -> None:
+        """Aggregate the missing-prediction count across devices."""
+        self.n_missing_predictions = int(
+            self.all_gather(
+                torch.tensor(self.n_missing_predictions, device=self.device)
+            ).sum()
+        )
 
     def on_predict_batch_end(
         self, outputs: List[psm.PepSpecMatch], *args
@@ -1304,10 +1456,13 @@ class Spec2Pep(pl.LightningModule):
                 spec_match.aa_scores[1] *= spec_match.aa_scores[0]
                 spec_match.aa_scores = spec_match.aa_scores[1:]
 
-            # Compute the precursor m/z of the predicted peptide.
-            spec_match.calc_mz = self.tokenizer.calculate_precursor_ions(
-                spec_match.sequence, torch.tensor(spec_match.charge)
-            ).item()
+            # Compute the precursor m/z if not already set (e.g. from the
+            # peptide database in DB search mode).
+            if np.isnan(spec_match.calc_mz):
+                spec_match.calc_mz = self.tokenizer.calculate_precursor_ions(
+                    spec_match.sequence,
+                    torch.tensor(spec_match.charge),
+                ).item()
 
             self.out_writer.psms.append(spec_match)
 
@@ -1564,11 +1719,15 @@ class DbSpec2Pep(Spec2Pep):
             )
         )
 
-        # Determine the parent proteins only for the retained PSMs.
+        # Determine the parent proteins and calc_mz only for the retained PSMs.
         for pred in predictions:
             pred.protein = self.protein_database.get_associated_protein(
                 pred.sequence
             )
+            calc_mass = self.protein_database.db_peptides.loc[
+                pred.sequence, "calc_mass"
+            ]
+            pred.calc_mz = float(calc_mass) / pred.charge + PROTON
 
         return predictions
 
@@ -1615,8 +1774,8 @@ class DbSpec2Pep(Spec2Pep):
         batch_size = batch["precursor_charge"].shape[0]
 
         # Iterate precursor charges and m/z values per spectrum.
-        charge_iter = batch["precursor_charge"]  # tensor[B]
-        mz_iter = batch["precursor_mz"]  # tensor[B]
+        charge_iter = batch["precursor_charge"].detach().cpu().tolist()
+        mz_iter = batch["precursor_mz"].detach().cpu().tolist()
 
         # Use pre-computed encoder outputs if available; otherwise compute once here.
         if enc_cache is None:
@@ -1632,26 +1791,34 @@ class DbSpec2Pep(Spec2Pep):
         for i, (precursor_charge, precursor_mz) in enumerate(
             zip(charge_iter, mz_iter)
         ):
-            for cand in self.protein_database.get_candidates(
+            spec_cands = self.protein_database.get_candidates(
                 precursor_mz, precursor_charge
-            ):
-                candidates.append((i, cand))
+            )
+            candidates.extend((i, cand) for cand in spec_cands)
 
-            # Yield a batch if sufficient candidates are found or all spectra have been processed.
-            while len(candidates) >= batch_size or (
-                i == batch_size - 1 and len(candidates) > 0
-            ):
-                batch_candidates = candidates[:batch_size]
+        if len(candidates) == 0:
+            return
+
+        # Yield PSM sub-batches with a progress bar.
+        progress = tqdm.tqdm(
+            total=len(candidates),
+            desc="Scoring candidates",
+            unit="PSM",
+            leave=False,
+        )
+        try:
+            for start in range(0, len(candidates), batch_size):
+                batch_candidates = candidates[start : start + batch_size]
 
                 # Repeat the spectrum information for each candidate to be matched.
                 psm_batch = {key: [] for key in [*batch.keys(), "seq"]}
                 for spec_i, cand in batch_candidates:
-                    for key in batch.keys():
+                    for key in batch:
                         psm_batch[key].append(batch[key][spec_i])
                     psm_batch["seq"].append(cand)
 
                 # Convert tensor items to batched tensors on the correct device.
-                for key in psm_batch.keys():
+                for key in psm_batch:
                     if isinstance(psm_batch[key][0], torch.Tensor):
                         psm_batch[key] = torch.stack(psm_batch[key]).to(
                             self.decoder.device
@@ -1675,12 +1842,12 @@ class DbSpec2Pep(Spec2Pep):
                 psm_batch["precursors"] = precursors_all.index_select(
                     0, spec_idx
                 )
-
                 # Yield the PSM batch for processing.
                 yield psm_batch
 
-                # Remove the processed candidates and continue.
-                candidates = candidates[batch_size:]
+                progress.update(len(batch_candidates))
+        finally:
+            progress.close()
 
 
 def _calc_match_score(
@@ -1782,80 +1949,63 @@ class CosineWarmupScheduler(torch.optim.lr_scheduler._LRScheduler):
         return lr_factor
 
 
-def _calc_mass_error(
-    calc_mz: float, obs_mz: float, charge: int, isotope: int = 0
-) -> float:
-    """
-    Calculate the mass error in ppm between the theoretical m/z and the
-    observed m/z, optionally accounting for an isotopologue mismatch.
-
-    Parameters
-    ----------
-    calc_mz : float
-        The theoretical m/z.
-    obs_mz : float
-        The observed m/z.
-    charge : int
-        The charge.
-    isotope : int
-        Correct for the given number of C13 isotopes (default: 0).
-
-    Returns
-    -------
-    float
-        The mass error in ppm.
-    """
-    return (calc_mz - (obs_mz - isotope * 1.00335 / charge)) / obs_mz * 10**6
-
-
 def _peptide_score(
-    aa_scores: np.ndarray,
-    lengths: Optional[np.ndarray] = None,
-) -> Union[float, np.ndarray]:
+    aa_scores: Union[np.ndarray, torch.Tensor],
+    lengths: Optional[Union[np.ndarray, torch.Tensor]] = None,
+) -> Union[float, np.ndarray, torch.Tensor]:
     """
     Calculate the peptide-level confidence score from the raw
     amino acid scores.
 
     The peptide score is the product of the raw amino acid scores.
-    This function contains paths for both single peptide inputs
-    (de novo mode) and batched peptide inputs (database search mode).
-
-    Unlike upstream Casanovo, a peptide whose mass misses the precursor
-    does not have 1 subtracted from its score: on chimeric spectra such
-    a prediction is often the co-isolated peptide, a real peptide whose
-    mass misses the recorded precursor, and the penalty would rank it
-    below every mass-matching prediction.
+    This function accepts both NumPy arrays and PyTorch tensors.
+    NumPy inputs are converted to tensors for computation (zero-copy
+    for contiguous CPU arrays) and the result is returned in the
+    original type.
 
     Parameters
     ----------
-    aa_scores : np.ndarray
+    aa_scores : np.ndarray or torch.Tensor
         A 1D array of amino acid scores for a single peptide, or a 2D
         padded array for a batch of peptides.
-    lengths : Optional[np.ndarray]
+    lengths : Optional[np.ndarray or torch.Tensor]
         An array of peptide lengths, required when `aa_scores` is a 2D
         (batched) array.
 
     Returns
     -------
-    peptide_score : float or np.ndarray
+    peptide_score : float, np.ndarray, or torch.Tensor
         The calculated peptide score or an array of scores for the batch.
     """
-    eps = np.finfo(np.float64).eps
+    # Track whether the input was numpy to return the appropriate type.
+    return_numpy = isinstance(aa_scores, np.ndarray)
 
-    # FAST PATH: de novo inference
+    # Convert numpy arrays to tensors without copying data (zero-copy for
+    # contiguous CPU arrays), enabling a single unified computation path.
+    if return_numpy:
+        # Reversed views (negative strides) cannot be wrapped as tensors;
+        # ascontiguousarray copies only those.
+        aa_scores = torch.as_tensor(np.ascontiguousarray(aa_scores))
+
+    eps = torch.finfo(torch.float64).eps
+    log_scores = torch.log(torch.clamp(aa_scores, eps, 1))
+
     if aa_scores.ndim == 1:
-        log_scores = np.log(np.clip(aa_scores, eps, 1))
-        peptide_log_score = np.sum(log_scores)
-        return np.exp(peptide_log_score)
+        # FAST PATH: de novo inference — single peptide.
+        peptide_score = torch.exp(torch.sum(log_scores))
+        return peptide_score.item() if return_numpy else peptide_score
 
-    # BATCH PATH: database search
+    # BATCH PATH: database search — padded batch of peptides.
+    if lengths is None:
+        raise ValueError("`lengths` must be provided for batched input.")
+    if not isinstance(lengths, torch.Tensor):
+        lengths = torch.tensor(
+            lengths, dtype=torch.long, device=aa_scores.device
+        )
     else:
-        if lengths is None:
-            raise ValueError("`lengths` must be provided for batched input.")
-
-        log_scores = np.log(np.clip(aa_scores, eps, 1))
-        cumsum = np.cumsum(log_scores, axis=1)
-        batch_size = aa_scores.shape[0]
-        idx = np.arange(batch_size)
-        peptide_log_scores = cumsum[idx, np.maximum(lengths - 1, 0)]
-        return np.exp(peptide_log_scores)
+        lengths = lengths.to(dtype=torch.long, device=aa_scores.device)
+    cumsum = torch.cumsum(log_scores, dim=1)
+    batch_size = aa_scores.shape[0]
+    idx = torch.arange(batch_size, device=aa_scores.device)
+    peptide_scores = torch.exp(cumsum[idx, torch.clamp(lengths - 1, min=0)])
+    return peptide_scores.numpy() if return_numpy else peptide_scores

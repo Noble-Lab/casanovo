@@ -10,8 +10,8 @@
 ###
 
 # Max absolute difference allowed with respect to observed precursor m/z.
-# de novo: Predictions outside the tolerance range are assigned a negative
-# peptide score.
+# de novo: precise mass control searches for a peptide inside this window
+# when the greedy prediction misses it.
 # database search: Select candidate peptides within the specified precursor m/z
 # tolerance.
 # Set to "inf" (with quotation marks) to disable the filter entirely, which
@@ -20,8 +20,7 @@ precursor_mass_tol: 50  # ppm
 # Isotopes to consider when comparing predicted and observed precursor m/z's.
 # PMC needs [0, 3]: precursors are often picked at the +2 or +3 isotope peak.
 isotope_error_range: [0, 3]
-# The minimum length of considered peptides. Database search only: this model
-# does not filter what it decodes, as the autoregressive one did.
+# The minimum length of considered peptides.
 min_peptide_len: 6
 # The maximum length of considered peptides. Database search only, and the
 # floor for decoder_frames.
@@ -97,7 +96,8 @@ log_metrics: false
 log_every_n_steps: 50
 # Path to save Lance instances.
 lance_dir:
-# Model validation and checkpointing frequency in training steps.
+# Validation/checkpointing frequency: int = training steps, float in
+# [0, 1] = fraction of an epoch (1.0 = once per epoch).
 val_check_interval: 50_000
 
 # SPECTRUM PROCESSING OPTIONS
@@ -152,6 +152,11 @@ train_label_smoothing: 0.01
 
 # TRAINING/INFERENCE OPTIONS
 # Number of spectra in one training batch.
+# Per-device micro-batch is train_batch_size // n on n devices.
+# Effective optimization batch size is:
+# (per-device micro-batch) * n * accumulate_grad_batches.
+# `train_batch_size` should be >= n and preferably divisible by n; otherwise
+# floor division drops the remainder.
 train_batch_size: 32
 # Max number of training epochs.
 max_epochs: 30
@@ -167,11 +172,15 @@ calculate_precision: false
 
 # Accumulates gradients over `k` batches before stepping the optimizer.
 accumulate_grad_batches: 1
-# The value at which to clip gradients. `None` disables gradient clipping.
+# The value at which to clip gradients. Leave blank / set to `None` to disable
+# gradient clipping.
 gradient_clip_val: 2.0
 # The gradient clipping algorithm to use.
 # Must be one of: "value", "norm", or `None`.
-gradient_clip_algorithm: 'norm'
+# "value": The gradient values are clipped to the range [-gradient_clip_val, gradient_clip_val]
+# "norm": If the total L2 norm of the gradients exceeds gradient_clip_val, the gradients
+#         are rescaled so the total L2 norm equals gradient_clip_val
+gradient_clip_algorithm: "norm"
 # Floating point precision.
 # Must be one of: "16-true", "16-mixed", "bf16-true", "bf16-mixed", "32-true",
 # "64-true", "64", "32", "16", or "bf16".
@@ -179,6 +188,8 @@ precision: "32-true"
 
 # Replace I by L in peptide sequences.
 replace_isoleucine_with_leucine: true
+# Replace deamidated N and Q by D and E in peptide sequences.
+replace_n_and_q_deamidated_with_d_and_e: false
 # MassIVE-KB style tokenizer, otherwise ProForma syntax.
 massivekb_tokenizer: false
 
@@ -212,5 +223,16 @@ residues:
   "[Acetyl]-": 42.010565                  # Acetylation
   "[Carbamyl]-": 43.005814                # Carbamylation
   "[Ammonia-loss]-": -17.026549           # Ammonia loss
-  "[+25.980265]-": 25.980265              # Carbamylation and ammonia loss
-  #"[Carbamyl][Ammonia-loss]-": 25.980265  # Carbamylation and ammonia loss
+  # NOTE: the token NAME retains the older number; the MASS is authoritative and now correct.
+  # 43.005814 + (-17.026549) = 25.979265 exactly. The name retains the older value because it appears
+  # in released checkpoint vocabularies and renaming it would invalidate them.
+  "[+25.980265]-": 25.979265              # Carbamylation and ammonia loss: 43.005814 - 17.026549
+  #"[Carbamyl][Ammonia-loss]-": 25.979265  # Carbamylation and ammonia loss (alias; see #654)
+
+# When fine-tuning with a vocabulary that extends the checkpoint's, map each
+# new token to an existing token whose weights should be used for initialization.
+# Example:
+#   new_token_init:
+#     "K[Acetyl]": "K"
+# Leave empty when training from scratch or when vocabs already match.
+new_token_init: {}

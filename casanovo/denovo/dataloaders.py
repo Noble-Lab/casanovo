@@ -2,14 +2,17 @@
 
 import functools
 import logging
+import math
 import os
 import pathlib
-from typing import Optional, Sequence
+from typing import Generator, Optional, Sequence
 
+import lance.sampler
 import lightning.pytorch as pl
 import numpy as np
 import pyarrow as pa
 import spectrum_utils.spectrum as sus
+import torch.distributed as dist
 import torch.utils.data._utils.collate
 from depthcharge.data import (
     AnnotatedSpectrumDataset,
@@ -21,8 +24,130 @@ from depthcharge.tokenizers import PeptideTokenizer
 from torch.utils.data import DataLoader
 from torch.utils.data.datapipes.iter.combinatorics import ShufflerIterDataPipe
 
-
 logger = logging.getLogger("casanovo")
+
+
+class DistributedBatchSampler(lance.sampler.Sampler):
+    """
+    Lance sampler that shards the data across DDP ranks.
+
+    Lance datasets are iterable, so Lightning cannot inject a
+    ``DistributedSampler`` and every rank would otherwise read the full
+    dataset. Instead, the rank and world size are looked up from
+    ``torch.distributed`` each time the dataset is iterated, because
+    the process group only exists once training has started.
+
+    Rank ``r`` of ``W`` ranks reads batches ``r, r + W, r + 2W, ...``
+    of ``batch_size`` consecutive rows. Every rank gets the same number
+    of full batches, because an extra batch on one rank would leave it
+    waiting forever in a gradient all-reduce. Up to
+    ``W * batch_size - 1`` rows, less than one global batch, are
+    therefore skipped each epoch. Without an initialized process group,
+    or with a single rank, the full dataset is read.
+    """
+
+    def __call__(
+        self,
+        dataset: lance.LanceDataset,
+        *args,
+        batch_size: int = 128,
+        filter: Optional[str] = None,
+        **kwargs,
+    ) -> Generator[pa.RecordBatch, None, None]:
+        """
+        Yield the record batches for the current rank.
+
+        Parameters
+        ----------
+        dataset : lance.LanceDataset
+            The Lance dataset to read from.
+        *args
+            Additional positional arguments for the Lance sampler.
+        batch_size : int
+            The number of rows per batch.
+        filter : Optional[str]
+            A Lance filter expression to select rows.
+        **kwargs
+            Additional keyword arguments for the Lance sampler.
+
+        Yields
+        ------
+        pa.RecordBatch
+            The record batches assigned to the current rank.
+
+        Raises
+        ------
+        ValueError
+            If the dataset has fewer rows than one global batch.
+        """
+        if not (dist.is_available() and dist.is_initialized()):
+            world_size = 1
+        else:
+            world_size = dist.get_world_size()
+        if world_size == 1:
+            yield from lance.sampler.FullScanSampler()(
+                dataset, *args, batch_size=batch_size, filter=filter, **kwargs
+            )
+            return
+
+        rank = dist.get_rank()
+        n_rows = dataset.count_rows(filter)
+        n_rows_rank = n_rows // (world_size * batch_size) * batch_size
+        if n_rows_rank == 0:
+            raise ValueError(
+                f"{n_rows} spectra are too few to give each of {world_size} "
+                f"devices a batch of {batch_size} spectra"
+            )
+        # Lance's ShardedBatchSampler warns whenever `with_row_id` is passed,
+        # even if it is False.
+        if not kwargs.get("with_row_id"):
+            kwargs.pop("with_row_id", None)
+        batches = lance.sampler.ShardedBatchSampler(rank, world_size)(
+            dataset, *args, batch_size=batch_size, filter=filter, **kwargs
+        )
+        for batch in batches:
+            if batch.num_rows >= n_rows_rank:
+                yield batch.slice(0, n_rows_rank)
+                return
+            n_rows_rank -= batch.num_rows
+            yield batch
+
+
+def _unique_stems(paths: list) -> list:
+    """Return unique file stems for a list of paths.
+
+    Extract the file stem from each path. When the same stem appears
+    more than once, subsequent occurrences are disambiguated with a
+    ``_1``, ``_2``, ... suffix. The suffix probe skips names that are
+    already in use (e.g. an organic ``data_1`` file will not collide
+    with a duplicate ``data``).
+
+    Parameters
+    ----------
+    paths : list
+        File paths (strings or Path objects) to extract stems from.
+
+    Returns
+    -------
+    list of str
+        Stems in the same order as *paths*, with duplicates
+        disambiguated.
+    """
+    used: set = set()
+    stems = []
+    for p in paths:
+        stem = pathlib.Path(p).stem
+        if stem not in used:
+            used.add(stem)
+            stems.append(stem)
+        else:
+            i = 1
+            while f"{stem}_{i}" in used:
+                i += 1
+            unique = f"{stem}_{i}"
+            used.add(unique)
+            stems.append(unique)
+    return stems
 
 
 class DeNovoDataModule(pl.LightningDataModule):
@@ -36,9 +161,14 @@ class DeNovoDataModule(pl.LightningDataModule):
     train_paths : Sequence[str], optional
         Spectrum Lance path(s) for model training.
     valid_paths : Sequence[str], optional
-        Spectrum Lance path(s) for validation.
+        Spectrum Lance path(s) for validation. Each file gets its own
+        DataLoader and contributes to the aggregate ``valid_CELoss``.
     test_paths : Sequence[str], optional
         Spectrum Lance path(s) for evaluation or inference.
+    tracking_paths : Sequence[str], optional
+        Additional annotated spectrum files logged per-file for monitoring
+        only (e.g. detecting catastrophic forgetting); excluded from the
+        aggregate ``valid_CELoss`` used for checkpoint selection.
     train_batch_size : int
         The batch size to use for training.
     eval_batch_size : int
@@ -80,6 +210,7 @@ class DeNovoDataModule(pl.LightningDataModule):
         train_paths: Optional[Sequence[str]] = None,
         valid_paths: Optional[Sequence[str]] = None,
         test_paths: Optional[Sequence[str]] = None,
+        tracking_paths: Optional[Sequence[str]] = None,
         train_batch_size: int = 128,
         eval_batch_size: int = 1028,
         min_peaks: Optional[int] = 20,
@@ -99,8 +230,9 @@ class DeNovoDataModule(pl.LightningDataModule):
         self.lance_dir = lance_dir
 
         self.train_paths = train_paths
-        self.valid_paths = valid_paths
+        self.valid_paths = list(valid_paths or [])
         self.test_paths = test_paths
+        self.tracking_paths = list(tracking_paths or [])
 
         self.train_batch_size = train_batch_size
         self.eval_batch_size = eval_batch_size
@@ -128,9 +260,14 @@ class DeNovoDataModule(pl.LightningDataModule):
         self.custom_field_anno = CustomField(
             "seq", lambda x: x["params"]["seq"], pa.string()
         )
-
         self.train_dataset = None
-        self.valid_dataset = None
+        # Per-file validation datasets: main (monitored) + tracking (log-only).
+        self.valid_datasets: list = []
+        self.tracking_datasets: list = []
+        # val_stems[i] is the filename stem for the i-th val dataloader.
+        # Dataloaders 0..n_main_loaders-1 are main; the rest are tracking.
+        self.val_stems: list = []
+        self.n_main_loaders: int = 0
         self.test_dataset = None
         self.protein_database = None
 
@@ -155,13 +292,41 @@ class DeNovoDataModule(pl.LightningDataModule):
                     mode="train",
                     shuffle=self.shuffle,
                 )
-            if self.valid_paths is not None:
-                self.valid_dataset = self._make_dataset(
-                    self.valid_paths,
-                    annotated=True,
-                    mode="valid",
-                    shuffle=False,
+                logger.info(
+                    "Training dataset contains %d spectra.",
+                    self._get_n_spectra(self.train_dataset),
                 )
+            # Build one dataset per validation file so each gets its own
+            # DataLoader and its loss can be logged separately.
+            self.valid_datasets = []
+            for i, path in enumerate(self.valid_paths):
+                self.valid_datasets.append(
+                    self._make_dataset(
+                        [path],
+                        annotated=True,
+                        mode=f"valid_{i}",
+                        shuffle=False,
+                    )
+                )
+            self.tracking_datasets = []
+            for i, path in enumerate(self.tracking_paths):
+                self.tracking_datasets.append(
+                    self._make_dataset(
+                        [path],
+                        annotated=True,
+                        mode=f"tracking_{i}",
+                        shuffle=False,
+                    )
+                )
+            self.n_main_loaders = len(self.valid_datasets)
+            self.val_stems = _unique_stems(
+                [*self.valid_paths, *self.tracking_paths]
+            )
+            if self.valid_datasets:
+                total = sum(
+                    self._get_n_spectra(ds) for ds in self.valid_datasets
+                )
+                logger.info("Validation dataset contains %d spectra.", total)
         if stage in (None, "test"):
             if self.test_paths is not None:
                 self.test_dataset = self._make_dataset(
@@ -170,6 +335,30 @@ class DeNovoDataModule(pl.LightningDataModule):
                     mode="test",
                     shuffle=False,
                 )
+                logger.info(
+                    "Test dataset contains %d spectra.",
+                    self._get_n_spectra(self.test_dataset),
+                )
+
+    @staticmethod
+    def _get_n_spectra(dataset: torch.utils.data.Dataset) -> int:
+        """
+        Get the number of spectra in a dataset.
+
+        Parameters
+        ----------
+        dataset : torch.utils.data.Dataset
+            The dataset from which to get the number of spectra. This
+            may be wrapped in a ShufflerIterDataPipe.
+
+        Returns
+        -------
+        int
+            The number of spectra in the dataset.
+        """
+        if isinstance(dataset, ShufflerIterDataPipe):
+            dataset = dataset.datapipe
+        return dataset.n_spectra
 
     def _make_dataset(
         self, paths, annotated, mode, shuffle
@@ -233,10 +422,16 @@ class DeNovoDataModule(pl.LightningDataModule):
                 **params,
             )
 
+        if mode == "train":
+            # Shard before shuffling, so that each rank shuffles only its
+            # own part of the training data.
+            dataset.sampler = DistributedBatchSampler()
+
         if shuffle:
-            dataset = ShufflerIterDataPipe(
-                dataset, buffer_size=self.shuffle_buffer_size
+            buffer_batches = max(
+                1, math.ceil(self.shuffle_buffer_size / self.train_batch_size)
             )
+            dataset = ShufflerIterDataPipe(dataset, buffer_size=buffer_batches)
 
         return dataset
 
@@ -270,9 +465,24 @@ class DeNovoDataModule(pl.LightningDataModule):
         """Get the training DataLoader."""
         return self._make_loader(self.train_dataset, shuffle=self.shuffle)
 
-    def val_dataloader(self) -> torch.utils.data.DataLoader:
-        """Get the validation DataLoader."""
-        return self._make_loader(self.valid_dataset)
+    def val_dataloader(self) -> list:
+        """Get validation DataLoaders.
+
+        Returns one DataLoader per validation file, ordered with main
+        files first (indices ``0..n_main_loaders-1``) followed by
+        tracking-only files. Lightning dispatches each loader's
+        batches with a ``dataloader_idx`` that maps 1-to-1 to the
+        entries in ``val_stems``.
+
+        Returns
+        -------
+        list of torch.utils.data.DataLoader
+            One loader per validation and tracking file.
+        """
+        return [
+            self._make_loader(ds)
+            for ds in self.valid_datasets + self.tracking_datasets
+        ]
 
     def test_dataloader(self) -> torch.utils.data.DataLoader:
         """Get the test DataLoader."""

@@ -14,6 +14,35 @@ from casanovo.data.psm import PepSpecMatch
 from casanovo.denovo.model_runner import ModelRunner
 
 
+def test_loading_timstof_folders(tmp_path, monkeypatch):
+    # Mocking constructor of ModelRunner
+    def minimal_init(self):
+        pass
+
+    monkeypatch.setattr(ModelRunner, "__init__", minimal_init)
+    runner = ModelRunner()
+
+    # Testing real path
+    real_path = tmp_path / "sample.d"
+    real_path.mkdir()
+
+    paths = runner._get_input_paths(
+        peak_path=(str(real_path),), annotated=False, mode="validation"
+    )
+
+    assert len(paths) == 1
+    assert Path(paths[0]).name == "sample.d"
+
+    # Testing unsupported extension (but directory is real)
+    # (should raise FileNotFoundError and RuntimeWarning)
+    fake_path = tmp_path / "test.hi"
+    fake_path.mkdir()
+    with pytest.warns(RuntimeWarning), pytest.raises(FileNotFoundError):
+        runner._get_input_paths(
+            peak_path=(str(fake_path),), annotated=False, mode="validation"
+        )
+
+
 def test_initialize_model(tmp_path, mgf_small):
     """Test initializing a new or existing model."""
     config = Config()
@@ -75,17 +104,22 @@ def test_initialize_model(tmp_path, mgf_small):
         runner.initialize_model(train=False)
 
 
-def test_no_model(tiny_config_db, mgf_small, tiny_fasta_file):
-    """Test running a model with no weights"""
+def test_db_search_no_model_raises(
+    tiny_config_db, mgf_small, tiny_fasta_file, tmp_path
+):
+    """DB search must require an explicit model file."""
     config = Config(tiny_config_db)
-    with ModelRunner(config=config) as runner:
-        results_path = "test.mztab"
-        with pytest.raises(
+    with (
+        ModelRunner(config=config) as runner,
+        pytest.raises(
             ValueError, match="A model file must be provided for DB search"
-        ):
-            runner.db_search(
-                (str(mgf_small),), str(tiny_fasta_file), str(results_path)
-            )
+        ),
+    ):
+        runner.db_search(
+            (str(mgf_small),),
+            str(tiny_fasta_file),
+            str(tmp_path / "test.mztab"),
+        )
 
 
 def test_save_and_load_weights(tmp_path, mgf_small, tiny_config):
@@ -230,11 +264,11 @@ def test_save_final_model(tmp_path, mgf_small, tiny_config):
     """Test that final model checkpoints are saved."""
     # Test checkpoint saving when val_check_interval is greater than training steps
     config = Config(tiny_config)
-    # The checkpoint names below assume 20 epochs of one batch each;
+    # The checkpoint names below assume 30 epochs of one batch each;
     # tiny_config's max_epochs is set for tests that need to converge.
-    config.max_epochs = 20
+    config.max_epochs = 30
     config.val_check_interval = 50
-    model_file = tmp_path / "epoch=19-step=20.ckpt"
+    model_file = tmp_path / "epoch=29-step=30.ckpt"
     with ModelRunner(config, output_dir=tmp_path) as runner:
         runner.train([mgf_small], [mgf_small])
 
@@ -251,7 +285,7 @@ def test_save_final_model(tmp_path, mgf_small, tiny_config):
     # Test checkpoint saving when val_check_interval is not a factor of training steps
     config.val_check_interval = 15
     validation_file = tmp_path / "foobar.best.ckpt"
-    model_file = tmp_path / "foobar.epoch=19-step=20.ckpt"
+    model_file = tmp_path / "foobar.epoch=29-step=30.ckpt"
     with ModelRunner(
         config, output_dir=tmp_path, output_rootname="foobar"
     ) as runner:
@@ -261,92 +295,202 @@ def test_save_final_model(tmp_path, mgf_small, tiny_config):
     assert validation_file.exists()
 
 
-def test_evaluate(
-    tmp_path, mgf_small, mzml_small, mgf_small_unannotated, tiny_config
-):
-    """Test model evaluation during sequencing"""
-    # Train tiny model
+def test_val_check_interval_float(tmp_path, tiny_config):
+    """A float val_check_interval builds a valid trainer (#627)."""
+    config = Config(tiny_config)
+
+    config.val_check_interval = 0.5
+    with ModelRunner(
+        config, output_dir=tmp_path, overwrite_ckpt_check=False
+    ) as runner:
+        runner.initialize_trainer(train=True)
+        assert runner.trainer.val_check_interval == 0.5
+        assert runner.trainer.check_val_every_n_epoch == 1
+
+    config.val_check_interval = 50
+    with ModelRunner(
+        config, output_dir=tmp_path, overwrite_ckpt_check=False
+    ) as runner:
+        runner.initialize_trainer(train=True)
+        assert runner.trainer.val_check_interval == 50
+        assert runner.trainer.check_val_every_n_epoch is None
+
+
+def test_evaluate_success(tmp_path, mgf_small, tiny_config):
+    """Test successful model evaluation with annotated peak files."""
     config = Config(tiny_config)
     config.max_epochs = 1
+
     model_file = tmp_path / "epoch=0-step=1.ckpt"
+    result_file = tmp_path / "result.mztab"
+
     with ModelRunner(config, output_dir=tmp_path) as runner:
         runner.train([mgf_small], [mgf_small])
 
     assert model_file.is_file()
 
-    # Test evaluation with annotated peak file
-    result_file = tmp_path / "result.mztab"
     with ModelRunner(
         config, model_filename=str(model_file), overwrite_ckpt_check=False
     ) as runner:
         runner.predict([mgf_small], result_file, evaluate=True)
 
     assert result_file.is_file()
-    result_file.unlink()
 
+
+@pytest.mark.parametrize(
+    "input_files, expect_error",
+    [
+        pytest.param(["mzml_small"], True, id="mzml_only"),
+        pytest.param(
+            ["mgf_small_unannotated"], True, id="unannotated_mgf_only"
+        ),
+        pytest.param(
+            ["mgf_small_unannotated", "mzml_small"],
+            True,
+            id="unannotated_mgf_and_mzml",
+        ),
+        pytest.param(
+            ["improperly_annotated_file"],
+            True,
+            id="improperly_annotated_mgf_missing_seq",
+        ),
+        pytest.param(
+            ["mgf_small", "mzml_small"], False, id="annotated_mgf_and_mzml"
+        ),
+        pytest.param(
+            ["mgf_small", "mgf_small_unannotated"],
+            False,
+            id="annotated_and_unannotated_mgf",
+        ),
+        pytest.param(
+            ["mgf_small", "mgf_small_unannotated", "mzml_small"],
+            False,
+            id="annotated_unannotated_and_mzml",
+        ),
+    ],
+)
+def test_evaluate_failure_cases(
+    tmp_path,
+    mgf_small,
+    mzml_small,
+    mgf_small_unannotated,
+    tiny_config,
+    input_files,
+    expect_error,
+):
+    """Test evaluation with unannotated peak files.
+
+    Evaluation fails if no annotated spectra remain, and otherwise skips the
+    unannotated spectra with a warning.
+    """
     exception_string = (
-        "Error creating annotated spectrum dataloaders. This may "
-        "be the result of having an unannotated peak file present "
-        "in the validation peak file path list."
+        "No annotated spectra could be read from the input peak files."
     )
 
-    with pytest.raises(TypeError):
+    config = Config(tiny_config)
+    config.max_epochs = 1
+
+    model_file = tmp_path / "epoch=0-step=1.ckpt"
+    result_file = tmp_path / "result.mztab"
+
+    with ModelRunner(config, output_dir=tmp_path) as runner:
+        runner.train([mgf_small], [mgf_small])
+
+    assert model_file.is_file()
+
+    mgf_path = Path(mgf_small)
+    improperly_annotated_file = mgf_path.parent / "improperly_annotated.mgf"
+    improperly_annotated_file.write_text(
+        mgf_path.read_text().replace("SEQ=", "PEPTIDE=")
+    )
+
+    file_map = {
+        "mgf_small": mgf_small,
+        "mzml_small": mzml_small,
+        "mgf_small_unannotated": mgf_small_unannotated,
+        "improperly_annotated_file": improperly_annotated_file,
+    }
+
+    files = [file_map[name] for name in input_files]
+
+    if expect_error:
+        context = pytest.raises(TypeError, match=exception_string)
+    else:
+        context = pytest.warns(UserWarning, match="Skipped")
+    with context:
         with ModelRunner(
             config, model_filename=str(model_file), overwrite_ckpt_check=False
         ) as runner:
-            runner.predict([mzml_small], result_file, evaluate=True)
+            runner.predict(files, result_file, evaluate=True)
 
-    with pytest.raises(TypeError, match=exception_string):
-        with ModelRunner(
-            config, model_filename=str(model_file), overwrite_ckpt_check=False
-        ) as runner:
-            runner.predict([mgf_small_unannotated], result_file, evaluate=True)
-
-    with pytest.raises(TypeError, match=exception_string):
-        with ModelRunner(
-            config, model_filename=str(model_file), overwrite_ckpt_check=False
-        ) as runner:
-            runner.predict(
-                [mgf_small_unannotated, mzml_small], result_file, evaluate=True
-            )
-
-    # MzTab with just metadata is written in the case of FileNotFound
-    # or TypeError early exit
+    # Metadata-only MzTab should still be written
     assert result_file.is_file()
-    result_file.unlink()
+    if not expect_error:
+        # Average precision is only computed if evaluation ran.
+        assert runner.average_precision is not None
 
-    # Test mix of annotated an unannotated peak files
-    with pytest.raises(TypeError):
-        with ModelRunner(
-            config, model_filename=str(model_file), overwrite_ckpt_check=False
-        ) as runner:
-            runner.predict([mgf_small, mzml_small], result_file, evaluate=True)
 
-    assert result_file.is_file()
-    result_file.unlink()
+def test_predict_no_valid_spectra(
+    tmp_path, mgf_small_unannotated, tiny_config
+):
+    """Sequencing fails with a descriptive error if every spectrum is
+    skipped."""
+    no_pepmass_file = tmp_path / "no_pepmass.mgf"
+    no_pepmass_file.write_text(
+        "".join(
+            line
+            for line in Path(mgf_small_unannotated)
+            .read_text()
+            .splitlines(keepends=True)
+            if not line.startswith("PEPMASS=")
+        )
+    )
 
-    with pytest.raises(TypeError, match=exception_string):
-        with ModelRunner(
-            config, model_filename=str(model_file), overwrite_ckpt_check=False
-        ) as runner:
-            runner.predict(
-                [mgf_small, mgf_small_unannotated], result_file, evaluate=True
-            )
+    config = Config(tiny_config)
+    with ModelRunner(config, output_dir=tmp_path) as runner:
+        # The error is raised before the model is used.
+        runner.initialize_model = lambda train: setattr(
+            runner, "model", unittest.mock.MagicMock()
+        )
+        with pytest.warns(UserWarning, match="Skipped"):
+            with pytest.raises(
+                ValueError, match="No valid spectra could be read"
+            ):
+                runner.predict(
+                    [str(no_pepmass_file)],
+                    tmp_path / "result.mztab",
+                    evaluate=False,
+                )
 
-    assert result_file.is_file()
-    result_file.unlink()
 
-    with pytest.raises(TypeError, match=exception_string):
-        with ModelRunner(
-            config, model_filename=str(model_file), overwrite_ckpt_check=False
-        ) as runner:
-            runner.predict(
-                [mgf_small, mgf_small_unannotated, mzml_small],
-                result_file,
-                evaluate=True,
-            )
-
-    result_file.unlink()
+@pytest.mark.parametrize(
+    "evaluate, expected_error, match",
+    [
+        (True, TypeError, "Error creating annotated spectrum dataloaders"),
+        (False, KeyError, "seq"),
+    ],
+)
+def test_predict_dataloader_error(
+    tmp_path, mgf_small, tiny_config, evaluate, expected_error, match
+):
+    """Errors while reading the peak files get a descriptive message when
+    evaluating, and are re-raised otherwise."""
+    config = Config(tiny_config)
+    with ModelRunner(config, output_dir=tmp_path) as runner:
+        # The error is raised before the model is used.
+        runner.initialize_model = lambda train: setattr(
+            runner, "model", unittest.mock.MagicMock()
+        )
+        with unittest.mock.patch(
+            "casanovo.denovo.dataloaders.DeNovoDataModule.setup",
+            side_effect=KeyError("seq"),
+        ):
+            with pytest.raises(expected_error, match=match):
+                runner.predict(
+                    [str(mgf_small)],
+                    tmp_path / "result.mztab",
+                    evaluate=evaluate,
+                )
 
 
 def test_metrics_logging(tmp_path, mgf_small, tiny_config):
@@ -505,6 +649,51 @@ def test_log_metrics(
             assert pep_precision == pytest.approx(expected_pep)
             assert aa_precision == pytest.approx(expected_aa_prec)
             assert aa_recall == pytest.approx(expected_aa_rec)
+            # Scores are NaN in this fixture, so no prediction is ranked.
+            assert runner.average_precision == 0.0
+
+
+def test_log_metrics_attaches_eval(monkeypatch, tiny_config):
+    """Precision, coverage, and the ground truth are attached to PSMs."""
+    tokenizer = depthcharge.tokenizers.peptides.PeptideTokenizer()
+
+    def mock_psm(sequence, idx, score):
+        return PepSpecMatch(
+            sequence=sequence,
+            spectrum_id=("foo", f"index={idx}"),
+            peptide_score=score,
+            charge=2,
+            calc_mz=0.0,
+            exp_mz=0.0,
+            aa_scores=[],
+        )
+
+    # Two spectra: the first prediction is correct, the second is wrong.
+    true_psms = [mock_psm("PEPK", 0, np.nan), mock_psm("PEPR", 1, np.nan)]
+    pred_psms = [mock_psm("PEPK", 0, 0.9), mock_psm("PEPT", 1, 0.4)]
+    loader = [
+        {
+            "peak_file": [p.spectrum_id[0] for p in true_psms],
+            "scan_id": [p.spectrum_id[1] for p in true_psms],
+            "seq": tokenizer.tokenize([p.sequence for p in true_psms]),
+        }
+    ]
+
+    with ModelRunner(Config(tiny_config)) as runner:
+        runner.writer = unittest.mock.MagicMock()
+        runner.writer.psms = pred_psms
+        runner.tokenizer = tokenizer
+        runner.log_metrics(loader)
+
+    # Ranked by score: PEPK (0.9, correct) then PEPT (0.4, wrong).
+    assert pred_psms[0].ground_truth_sequence == "PEPK"
+    assert pred_psms[0].precision == pytest.approx(1.0)
+    assert pred_psms[0].coverage == pytest.approx(0.5)
+    assert pred_psms[1].ground_truth_sequence == "PEPR"
+    assert pred_psms[1].precision == pytest.approx(0.5)
+    assert pred_psms[1].coverage == pytest.approx(1.0)
+    # Average precision = 1.0 * 0.5 + 0.5 * 0.5 = 0.75.
+    assert runner.average_precision == pytest.approx(0.75)
 
 
 @pytest.mark.parametrize(
@@ -560,16 +749,375 @@ def test_verify_tokenizer(
         assert not any(rec.levelname == "WARNING" for rec in caplog.records)
 
 
-def test_initialize_tokenizer(caplog):
+def test_initialize_tokenizer():
     mock_config = unittest.mock.MagicMock()
+    mock_config.massivekb_tokenizer = True
     mock_config.residues = {"foo": 100}
+    mock_config.replace_isoleucine_with_leucine = True
+    mock_config.replace_n_and_q_deamidated_with_d_and_e = True
 
     runner = ModelRunner(config=mock_config)
 
-    with caplog.at_level("WARNING"):
+    with unittest.mock.patch(
+        "casanovo.denovo.model_runner.MskbPeptideTokenizer"
+    ) as mock_tokenizer_cls:
+        mock_tokenizer = unittest.mock.MagicMock()
+        mock_tokenizer_cls.return_value = mock_tokenizer
         runner.initialize_tokenizer()
 
-    assert any(
-        "Configured residue(s) not in model alphabet: foo" in msg
-        for msg in caplog.messages
+    mock_tokenizer_cls.assert_called_once_with(
+        residues=mock_config.residues,
+        replace_isoleucine_with_leucine=True,
+        replace_n_and_q_deamidated_with_d_and_e=True,
+        reverse=True,
+        start_token=None,
+        stop_token="$",
     )
+    assert runner.tokenizer is mock_tokenizer
+
+
+@pytest.mark.parametrize("replace", [True, False])
+def test_initialize_tokenizer_deamidation(replace):
+    """Deamidated N and Q are replaced with D and E only if configured."""
+    config = Config()
+    config.replace_n_and_q_deamidated_with_d_and_e = replace
+
+    runner = ModelRunner(config=config)
+    runner.initialize_tokenizer()
+    tokenizer = runner.tokenizer
+
+    deamidated = tokenizer.tokenize("PEN[Deamidated]Q[Deamidated]K")
+    unmodified = tokenizer.tokenize("PEDEK")
+    if replace:
+        assert "N[Deamidated]" not in tokenizer.residues
+        assert "Q[Deamidated]" not in tokenizer.residues
+        assert torch.equal(deamidated, unmodified)
+    else:
+        assert "N[Deamidated]" in tokenizer.residues
+        assert "Q[Deamidated]" in tokenizer.residues
+        assert not torch.equal(deamidated, unmodified)
+
+
+def test_validate_vocab_compatibility():
+    """Test ModelRunner._validate_vocab_compatibility strict checks."""
+    config = Config()
+    runner = ModelRunner(config=config)
+    runner.model = unittest.mock.MagicMock()
+
+    # Set up a mock tokenizer on the runner.
+    runner_tokenizer = unittest.mock.MagicMock()
+    runner_tokenizer.__len__ = unittest.mock.Mock(return_value=5)
+    runner_tokenizer.residues = {"A": 71.03711, "C": 103.00919}
+    runner_tokenizer.index = {"A": 1, "C": 2}
+    runner.tokenizer = runner_tokenizer
+
+    checkpoint_tokenizer = unittest.mock.MagicMock()
+    checkpoint_tokenizer.residues = {"A": 71.03711, "C": 103.00919}
+    checkpoint_tokenizer.index = {"A": 1, "C": 2}
+    runner.model.hparams = {"tokenizer": checkpoint_tokenizer}
+
+    # Should raise ValueError when vocab sizes differ.
+    runner.model.vocab_size = 10
+    with pytest.raises(ValueError, match="vocabulary of size"):
+        runner._validate_vocab_compatibility()
+
+    # Should pass silently when vocab sizes match and tokenizers match:
+    # 5 tokens plus padding plus the CTC blank.
+    runner.model.vocab_size = 7
+    runner._validate_vocab_compatibility()  # no exception
+
+    # Should raise even when sizes match if tokenizer vocab differs.
+    checkpoint_tokenizer.residues = {"A": 71.03711, "B": 114.04293}
+    checkpoint_tokenizer.index = {"A": 1, "B": 2}
+    with pytest.raises(ValueError, match="checkpoint tokenizer"):
+        runner._validate_vocab_compatibility()
+
+
+def test_initialize_model_calls_validate_vocab_compatibility(
+    tmp_path, mgf_small, tiny_config
+):
+    """Test that initialize_model calls _validate_vocab_compatibility when loading
+    from a checkpoint."""
+    config = Config(tiny_config)
+    config.max_epochs = 1
+    config.n_layers = 1
+    ckpt = tmp_path / "test.ckpt"
+
+    # Train a quick model and save a checkpoint.
+    with ModelRunner(config=config, output_dir=tmp_path) as runner:
+        runner.train([mgf_small], [mgf_small])
+        runner.trainer.save_checkpoint(ckpt)
+
+    # Loading from checkpoint should call _validate_vocab_compatibility.
+    runner = ModelRunner(config=config, model_filename=str(ckpt))
+    runner.initialize_tokenizer()
+    with unittest.mock.patch.object(
+        ModelRunner,
+        "_validate_vocab_compatibility",
+        autospec=True,
+    ) as mock_validate:
+        runner.initialize_model(train=False)
+        mock_validate.assert_called_once()
+
+    # Same check during training (resume from checkpoint).
+    runner = ModelRunner(config=config, model_filename=str(ckpt))
+    runner.initialize_tokenizer()
+    with unittest.mock.patch.object(
+        ModelRunner,
+        "_validate_vocab_compatibility",
+        autospec=True,
+    ) as mock_validate:
+        runner.initialize_model(train=True)
+        mock_validate.assert_called_once()
+
+
+def test_train_no_tracking_peak_path_backward_compat(
+    tmp_path, mgf_small, tiny_config
+):
+    """train() with no tracking_peak_path sets n_main_loaders == len(valid_paths)."""
+    config = Config(tiny_config)
+    config.max_epochs = 1
+    config.n_layers = 1
+
+    with ModelRunner(
+        config, output_dir=tmp_path, output_rootname="compat"
+    ) as runner:
+        runner.train([mgf_small], [mgf_small])
+        assert runner.model.n_main_loaders == 1
+        assert runner.model.val_stems == [Path(mgf_small).stem]
+
+
+def test_train_with_tracking_peak_path(tmp_path, mgf_small, tiny_config):
+    """train() with tracking_peak_path logs per-file metrics for tracking files."""
+    config = Config(tiny_config)
+    config.max_epochs = 1
+    config.n_layers = 1
+
+    mgf_track = tmp_path / "track.mgf"
+    shutil.copy(mgf_small, mgf_track)
+
+    with ModelRunner(
+        config, output_dir=tmp_path, output_rootname="track"
+    ) as runner:
+        runner.train([mgf_small], [mgf_small], tracking_peak_path=[mgf_track])
+        # main loader is mgf_small (index 0); tracking is mgf_track (index 1)
+        assert runner.model.n_main_loaders == 1
+        assert runner.model.val_stems[0] == Path(mgf_small).stem
+        assert runner.model.val_stems[1] == Path(mgf_track).stem
+        # Per-file key must appear in logged metrics history.
+        track_key = f"valid/{Path(mgf_track).stem}"
+        assert any(track_key in metrics for metrics in runner.model._history)
+
+
+def test_remap_decoder_vocab_no_change(tmp_path, mgf_small, tiny_config):
+    """Identical vocabs: weights unchanged and layers not rebuilt."""
+    config = Config(tiny_config)
+    config.max_epochs = 1
+    config.n_layers = 1
+
+    with ModelRunner(config=config, output_dir=tmp_path) as runner:
+        runner.train([mgf_small], [mgf_small])
+
+        old_emb = runner.model.decoder.token_encoder
+        old_final = runner.model.decoder.final
+        old_emb_data = old_emb.weight.data.clone()
+        old_final_data = old_final.weight.data.clone()
+
+        runner._remap_decoder_vocab(runner.tokenizer, runner.tokenizer)
+
+        assert runner.model.decoder.token_encoder is old_emb
+        assert runner.model.decoder.final is old_final
+        assert torch.equal(old_emb.weight.data, old_emb_data)
+        assert torch.equal(old_final.weight.data, old_final_data)
+
+
+def test_remap_decoder_vocab_extends(tmp_path, mgf_small, tiny_config):
+    """Extending vocab copies shared rows and inits new token from source."""
+    config = Config(tiny_config)
+    config.max_epochs = 1
+    config.n_layers = 1
+
+    with ModelRunner(config=config, output_dir=tmp_path) as runner:
+        runner.train([mgf_small], [mgf_small])
+        runner.trainer.save_checkpoint(tmp_path / "base.ckpt")
+
+    new_residues = dict(config.residues)
+    new_residues["K[Acetyl]"] = 128.094963 + 42.010565
+
+    ext_config = Config(tiny_config)
+    ext_config.residues = new_residues
+    ext_config.new_token_init = {"K[Acetyl]": "K"}
+    ext_config.n_layers = 1
+
+    runner = ModelRunner(
+        config=ext_config, model_filename=str(tmp_path / "base.ckpt")
+    )
+    runner.initialize_tokenizer()
+
+    from depthcharge.tokenizers import PeptideTokenizer
+
+    ckpt_tokenizer = PeptideTokenizer(
+        residues=config.residues,
+        replace_isoleucine_with_leucine=config.replace_isoleucine_with_leucine,
+        reverse=True,
+        start_token=None,
+        stop_token="$",
+    )
+    old_k_idx = ckpt_tokenizer.index["K"]
+    runner.initialize_model(train=True)
+
+    new_tokenizer = runner.tokenizer
+    new_k_mod_idx = new_tokenizer.index["K[Acetyl]"]
+    new_k_idx = new_tokenizer.index["K"]
+    # Padding plus the tokens, then the CTC blank in the output layer only.
+    new_n = len(new_tokenizer) + 1
+
+    assert runner.model.vocab_size == new_n + 1
+    assert runner.model.blank_token == new_n
+    assert runner.model.ctc_loss.blank == new_n
+    assert runner.model.hparams["tokenizer"] is new_tokenizer
+
+    emb_w = runner.model.decoder.token_encoder.weight.data
+    final_w = runner.model.decoder.final.weight.data
+    assert emb_w.shape[0] == new_n
+    assert final_w.shape[0] == new_n + 1
+    assert torch.equal(emb_w[new_k_mod_idx], emb_w[new_k_idx])
+    assert torch.equal(final_w[new_k_mod_idx], final_w[new_k_idx])
+
+
+def test_remap_decoder_vocab_missing_init_raises(
+    tmp_path, mgf_small, tiny_config
+):
+    """Extending vocab with no new_token_init entry raises ValueError."""
+    config = Config(tiny_config)
+    config.max_epochs = 1
+    config.n_layers = 1
+
+    with ModelRunner(config=config, output_dir=tmp_path) as runner:
+        runner.train([mgf_small], [mgf_small])
+        runner.trainer.save_checkpoint(tmp_path / "base.ckpt")
+
+    new_residues = dict(config.residues)
+    new_residues["K[Acetyl]"] = 128.094963 + 42.010565
+
+    ext_config = Config(tiny_config)
+    ext_config.residues = new_residues
+    ext_config.new_token_init = {}
+    ext_config.n_layers = 1
+
+    runner = ModelRunner(
+        config=ext_config, model_filename=str(tmp_path / "base.ckpt")
+    )
+    runner.initialize_tokenizer()
+    with pytest.raises(ValueError, match="no initialization source"):
+        runner.initialize_model(train=True)
+
+
+def test_remap_decoder_vocab_bad_init_source_raises(
+    tmp_path, mgf_small, tiny_config
+):
+    """Init source not in checkpoint vocab raises ValueError."""
+    config = Config(tiny_config)
+    config.max_epochs = 1
+    config.n_layers = 1
+
+    with ModelRunner(config=config, output_dir=tmp_path) as runner:
+        runner.train([mgf_small], [mgf_small])
+        runner.trainer.save_checkpoint(tmp_path / "base.ckpt")
+
+    new_residues = dict(config.residues)
+    new_residues["K[Acetyl]"] = 128.094963 + 42.010565
+
+    ext_config = Config(tiny_config)
+    ext_config.residues = new_residues
+    ext_config.new_token_init = {"K[Acetyl]": "NONEXISTENT"}
+    ext_config.n_layers = 1
+
+    runner = ModelRunner(
+        config=ext_config, model_filename=str(tmp_path / "base.ckpt")
+    )
+    runner.initialize_tokenizer()
+    with pytest.raises(ValueError, match="not in checkpoint vocabulary"):
+        runner.initialize_model(train=True)
+
+
+def test_remap_decoder_vocab_drops_token_warns(
+    tmp_path, mgf_small, tiny_config, caplog
+):
+    """Checkpoint token absent from new vocab logs a warning."""
+    config = Config(tiny_config)
+    config.max_epochs = 1
+    config.n_layers = 1
+
+    with ModelRunner(config=config, output_dir=tmp_path) as runner:
+        runner.train([mgf_small], [mgf_small])
+        runner.trainer.save_checkpoint(tmp_path / "base.ckpt")
+
+    reduced_residues = {
+        k: v for k, v in config.residues.items() if k != "M[Oxidation]"
+    }
+
+    red_config = Config(tiny_config)
+    red_config.residues = reduced_residues
+    red_config.n_layers = 1
+
+    runner = ModelRunner(
+        config=red_config, model_filename=str(tmp_path / "base.ckpt")
+    )
+    runner.initialize_tokenizer()
+    with caplog.at_level("WARNING"):
+        runner.initialize_model(train=True)
+
+    assert any("dropped" in rec.message.lower() for rec in caplog.records)
+
+
+def test_initialize_model_with_new_token_init_passes_validate(
+    tmp_path, mgf_small, tiny_config
+):
+    """End-to-end: load checkpoint with extended vocab passes validation."""
+    config = Config(tiny_config)
+    config.max_epochs = 1
+    config.n_layers = 1
+    ckpt = tmp_path / "base.ckpt"
+
+    with ModelRunner(config=config, output_dir=tmp_path) as runner:
+        runner.train([mgf_small], [mgf_small])
+        runner.trainer.save_checkpoint(ckpt)
+
+    orig_n = runner.model.vocab_size
+
+    new_residues = dict(config.residues)
+    new_residues["K[Acetyl]"] = 128.094963 + 42.010565
+
+    ext_config = Config(tiny_config)
+    ext_config.residues = new_residues
+    ext_config.new_token_init = {"K[Acetyl]": "K"}
+    ext_config.n_layers = 1
+
+    runner = ModelRunner(config=ext_config, model_filename=str(ckpt))
+    runner.initialize_tokenizer()
+    with unittest.mock.patch.object(
+        ModelRunner,
+        "_validate_vocab_compatibility",
+        wraps=runner._validate_vocab_compatibility,
+    ) as mock_validate:
+        runner.initialize_model(train=True)
+        mock_validate.assert_called_once()
+
+    assert runner.model.vocab_size == orig_n + 1
+
+
+def test_initialize_trainer_progress_bar(tmp_path, tiny_config):
+    """db_search hides Lightning's progress bar (#655)."""
+    config = Config(tiny_config)
+    with ModelRunner(
+        config, output_dir=tmp_path, overwrite_ckpt_check=False
+    ) as runner:
+        runner.initialize_trainer(train=True)
+        assert runner.trainer.progress_bar_callback is not None
+
+    with ModelRunner(
+        config, output_dir=tmp_path, overwrite_ckpt_check=False
+    ) as runner:
+        runner.initialize_trainer(train=True, enable_progress_bar=False)
+        assert runner.trainer.progress_bar_callback is None

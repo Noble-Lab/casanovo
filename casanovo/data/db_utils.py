@@ -76,6 +76,31 @@ class ProteinDatabase:
         self.fixed_mods, self.var_mods, self.swap_map = _construct_mods_dict(
             allowed_fixed_mods, allowed_var_mods
         )
+        # Warn about modified residues in the model vocabulary
+        # Variable mods are only effective when max_mods > 0.
+        configured_mods = set()
+        mods_to_check = (
+            [self.fixed_mods, self.var_mods]
+            if max_mods > 0
+            else [self.fixed_mods]
+        )
+        for mod_dict in mods_to_check:
+            for mod_id, val in mod_dict.items():
+                if isinstance(val, list):
+                    for aa in val:
+                        key = f"{mod_id}{aa}"
+                        if key in self.swap_map:
+                            configured_mods.add(self.swap_map[key])
+                elif mod_id in self.swap_map:
+                    configured_mods.add(self.swap_map[mod_id])
+        for residue in tokenizer.residues:
+            if "[" in residue and residue not in configured_mods:
+                logger.warning(
+                    "Modified residue '%s' is not specified as a fixed or "
+                    "variable modification for database search. Peptides with "
+                    "this modification will not be considered.",
+                    residue,
+                )
         self.max_mods = max_mods
         self.swap_regex = re.compile(
             "(%s)" % "|".join(map(re.escape, self.swap_map.keys()))
@@ -217,7 +242,7 @@ class ProteinDatabase:
         self,
         precursor_mz: float,
         charge: int,
-    ) -> pd.Series:
+    ) -> pd.Index:
         """
         Returns candidate peptides that fall within the search
         parameter's precursor mass tolerance.
@@ -231,24 +256,27 @@ class ProteinDatabase:
 
         Returns
         -------
-        candidates : pd.Series
-            A series of candidate peptides.
+        candidates : pd.Index
+            An index of candidate peptides.
         """
-        # FIXME: This could potentially be sped up with only a single pass
-        #  through the database.
-        mask = np.zeros(len(self.db_peptides), dtype=bool)
+        masses = self.db_peptides["calc_mass"].values
         precursor_tol_ppm = self.precursor_tolerance / 1e6
-        for e in range(self.isotope_error[0], self.isotope_error[1] + 1):
-            iso_shift = ISOTOPE_SPACING * e
-            shift_raw_mass = float(
-                _to_neutral_mass(precursor_mz, charge) - iso_shift
-            )
-            upper_bound = shift_raw_mass * (1 + precursor_tol_ppm)
-            lower_bound = shift_raw_mass * (1 - precursor_tol_ppm)
-            mask |= (self.db_peptides["calc_mass"] >= lower_bound) & (
-                self.db_peptides["calc_mass"] <= upper_bound
-            )
-        return self.db_peptides.index[mask]
+        neutral_mass = float(_to_neutral_mass(precursor_mz, charge))
+        isotope_offsets = np.arange(
+            self.isotope_error[0], self.isotope_error[1] + 1
+        )
+        shifted_masses = neutral_mass - ISOTOPE_SPACING * isotope_offsets
+        lower_bounds = shifted_masses * (1 - precursor_tol_ppm)
+        upper_bounds = shifted_masses * (1 + precursor_tol_ppm)
+        los = np.searchsorted(masses, lower_bounds, side="left")
+        his = np.searchsorted(masses, upper_bounds, side="right")
+        positions = [np.array([], dtype=np.intp)]
+        for lo, hi in zip(los, his, strict=True):
+            if lo < hi:
+                positions.append(np.arange(lo, hi, dtype=np.intp))
+        return self.db_peptides.index.take(
+            np.unique(np.concatenate(positions))
+        )
 
     def get_associated_protein(self, peptide: str) -> str:
         """

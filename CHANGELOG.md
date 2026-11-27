@@ -8,17 +8,73 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Added
 
-- A TSV file with all candidate peptides can be exported during database searching with the `--export` flag.
 - Non-autoregressive decoding with a CTC loss: the decoder emits `decoder_frames` frames at once and CTC aligns them to the peptide.
 - Precise mass control, a dynamic program that searches for the highest-probability CTC path whose residue mass falls in a precursor window, used when the greedy peptide misses it.
 - Intermediate CTC: `inter_ctc_layers` names decoder layers that also score their hidden states for an auxiliary loss, weighted by `inter_ctc_weight`. Scoring reuses the output layer, so it adds no parameters and nothing at inference.
 - The Muon optimizer for hidden weight matrices, with an auxiliary AdamW group for embeddings, the output head and vectors (`muon_lr`, `muon_momentum`).
+- The end-of-run sequencing report now includes additional score thresholds between 0.5 and 0.9 and excludes 0.95 and 0.99, selected based on full MassIVE-KB and multi-enzyme test runs. It also reports throughput in distinct spectra per second and labels score-distribution counts as PSMs.
+- Added the `replace_n_and_q_deamidated_with_d_and_e` config option, which replaces deamidated N and Q residues with D and E residues, because they are indistinguishable by de novo sequencing.
+- The number of spectra that receive no prediction because beam search did not return a valid peptide is now counted and logged at the end of a sequencing run.
+- When sequencing with `--evaluate`, the ground truth sequence and the precision and coverage at each prediction are added as columns to the mzTab output, and the average precision (area under the precision-coverage curve) is reported in the end-of-run report.
 
 ### Changed
 
-- Increased minimum Python version from 3.8 to 3.10.
 - `decoder_frames` is the CTC frame count, which `max_peptide_len` used to serve alongside its own meaning. Both are now required in the config, and `max_peptide_len` filters only the database search.
-- `isotope_error_range` defaults to `[0, 3]`: precise mass control needs the wider range because precursors are often picked at the +2 or +3 isotope peak.
+- `precursor_mass_tol` and `isotope_error_range` apply in *de novo* mode again: they set the window that precise mass control searches. `isotope_error_range` defaults to `[0, 3]`, because precursors are often picked at the +2 or +3 isotope peak.
+- Changed default gradient clipping to a norm of 2.0.
+- Upgraded minimum DepthCharge version to 0.5.0.
+- Spectra with invalid information, such as a missing `SEQ` annotation, are now skipped with a warning instead of raising an error. As a result, when evaluating, training, or validating on a mix of annotated and unannotated peak files, only the annotated spectra are used. An error is still raised if no valid spectra remain; when sequencing, its message now points to the "Skipped N spectra" warning for the cause instead of assuming an unannotated peak file.
+- `val_check_interval` now accepts a float in `[0, 1]` to validate at a fraction of each training epoch, in addition to an integer number of training steps.
+- Beam search is sped up by caching finished beams and selecting the top-scoring beam fully on the GPU.
+- `--load_all_states` was renamed to `--continue_training`. 
+
+### Fixed
+
+- Decoder frames can attend to one another. Every frame is fed the padding token, whose embedding is zero, so the inferred target padding mask marked them all as padding and left only the precursor token visible.
+- Database-search candidates are no longer scored against the padding of whichever batch they landed in.
+- De novo predictions shorter than `min_peptide_len` are withheld again; beam search enforced this and CTC decoding replaced it.
+- Training on Apple Silicon computes the CTC loss on the CPU, because PyTorch has no MPS kernel for it. The rest of training and all of inference stay on MPS.
+- The database search progress bar now updates in place instead of printing a new line per refresh, by disabling Lightning's competing progress bar during database search.
+- Fixed the mass of the carbamylation + ammonia-loss N-terminal token to `25.979265`. The token name is deliberately left as `[+25.980265]-` because it appears in released checkpoint vocabularies.
+- Fixed training from a checkpoint failing with `TypeError` when configuration values that are not optimizer arguments (e.g. `precursor_mass_tol`) leaked into the Adam optimizer.
+- Fixed multi-GPU training using the same spectra on every device. Since v5.0.0, each device read the full training set in the same order, so all devices trained on identical batches. Each device now trains on its own share of the spectra, so an epoch takes `n` times fewer steps on `n` devices and `train_batch_size` is the true global batch size. To keep the devices in step, fewer than `train_batch_size` spectra are skipped per epoch.
+- Fixed logging state leaking between tests. Calling `setup_logging` more than once in the same process no longer adds duplicate log handlers or stops warnings from being written to the log, and a test fixture now restores the logging state after each test.
+
+### Removed
+
+- Removed the override that forced `accelerator: "auto"` to `"cpu"` on Apple Silicon devices.
+
+## [5.2.1] - 2026-08-12
+
+### Fixed
+
+- Fixed the placement check for N-terminal modifications during decoding, whose two branches were swapped. This silently discarded every peptide with an N-terminal modification, and could instead retain a malformed peptide that fails to parse. Note that this changes *de novo* sequencing results: peptides with N-terminal modifications will now appear in the output, so any evaluation metrics computed with version 5.2.0 should be recomputed.
+
+## [5.2.0] - 2026-06-02
+
+### Added
+
+- Support timsTOF files (as .d folders) as spectra input files.
+- Added `--load_all_states` flag to load all model states when resuming training.
+- A TSV file with all candidate peptides can be exported during database searching with the `--export` flag.
+- Track instrument-assigned scan numbers from MGF `SCANS`, `SCAN`, and `SCAN ID` header fields in a new `opt_global_cv_MS:1003057_scan_number` mzTab column.
+- Modified weights loading to match based on model selectors (e.g., `orbitrap` and `timstof` are currently supported) and major/minor versions.
+- Support fine-tuning a pretrained checkpoint with an extended residue vocabulary via the `new_token_init` config option.
+- Per-file validation loss logging via `valid_CELoss/<stem>` keys.
+- New `--tracking_peak_path/-t` CLI option for monitoring catastrophic forgetting on additional validation files without affecting checkpoint selection.
+
+### Changed
+
+- Upgraded minimum Lightning version to 2.6.
+- Increased minimum Python version from 3.8 to 3.10.
+- Black version upgraded for Python 3.10.
+- Upgraded minimum DepthCharge version to 0.4.10.
+- Changed default gradient clipping to a norm of 1.0.
+- Updated `train_batch_size` documentation to reflect per-device/effective batch computation.
+- A more descriptive error message is logged for some annotated spectrum file parsing failure cases.
+- The precursor mass filter is no longer applied in *de novo* mode, and correspondingly peptide-level scores are no longer penalized based on the precursor mass. The config options `precursor_mass_tol` and `isotope_error_range` now only apply to database search mode.
+- The amino acid scores and ProForma columns in the output mzTab files have been renamed to `opt_global_aa_scores` and `opt_global_cv_MS:1003169_proforma_peptidoform_sequence`, according to the mzTab specification.
+- Minor speedup during database searching through optimized candidate selection.
 
 ### Fixed
 
@@ -26,9 +82,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Removed erroneous tokenizer vocabulary warning.
 - Fixed an issue which led the reported peptide precision to be 0 during evaluation mode.
 - Peptide predictions failing the minimum peptide length are not reported, irrespective of whether they match or exceed the precursor mass.
-- Decoder frames can attend to one another. Every frame is fed the padding token, whose embedding is zero, so the inferred target padding mask marked them all as padding and left only the precursor token visible.
-- Database-search candidates are no longer scored against the padding of whichever batch they landed in.
-- De novo predictions shorter than `min_peptide_len` are withheld again; beam search enforced this and CTC decoding replaced it.
+- Setting `--output_root` to a directory will no longer cause an error.
+- The `--force_overwrite` flag now also checks whether mzTab output files would be overwritten.
+- Fixed an issue where some predictions that are one residue less than the configured minimum peptide length are reported.
 
 ## [5.1.2] - 2025-12-11
 
@@ -347,7 +403,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 - Initial Casanovo version.
 
-[Unreleased]: https://github.com/Noble-Lab/casanovo/compare/v5.1.2...HEAD
+[Unreleased]: https://github.com/Noble-Lab/casanovo/compare/v5.2.1...HEAD
+[5.2.1]: https://github.com/Noble-Lab/casanovo/compare/v5.2.0...v5.2.1
+[5.2.0]: https://github.com/Noble-Lab/casanovo/compare/v5.1.2...v5.2.0
 [5.1.2]: https://github.com/Noble-Lab/casanovo/compare/v5.1.1...v5.1.2
 [5.1.1]: https://github.com/Noble-Lab/casanovo/compare/v5.1.0...v5.1.1
 [5.1.0]: https://github.com/Noble-Lab/casanovo/compare/v5.0.0...v5.1.0
