@@ -34,8 +34,10 @@ def _zeropower_via_newtonschulz5(
         The orthogonalized matrix, in ``G``'s dtype.
     """
     a, b, c = (3.4445, -4.7750, 2.0315)
-    # MPS before macOS 14 has no bfloat16, so take float32 there.
-    X = G.float() if G.device.type == "mps" else G.bfloat16()
+    # bfloat16 only on CUDA, where its matrix multiplies are fast. CPUs
+    # have no native bfloat16 matmul, and the fallback is about 175
+    # times slower than float32 here; MPS before macOS 14 has none.
+    X = G.bfloat16() if G.device.type == "cuda" else G.float()
     transposed = G.size(0) > G.size(1)
     if transposed:
         X = X.mT
