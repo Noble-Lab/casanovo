@@ -10,6 +10,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 - A TSV file with all candidate peptides can be exported during database searching with the `--export` flag.
 - Non-autoregressive decoding with a CTC loss: the decoder emits `decoder_frames` frames at once and CTC aligns them to the peptide.
+- Precise mass control, a dynamic program that searches for the highest-probability CTC path whose residue mass falls in a precursor window, used when the greedy peptide misses it.
 - Intermediate CTC: `inter_ctc_layers` names decoder layers that also score their hidden states for an auxiliary loss, weighted by `inter_ctc_weight`. Scoring reuses the output layer, so it adds no parameters and nothing at inference.
 - The Muon optimizer for hidden weight matrices, with an auxiliary AdamW group for embeddings, the output head and vectors (`muon_lr`, `muon_momentum`).
 
@@ -17,6 +18,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 - Increased minimum Python version from 3.8 to 3.10.
 - `decoder_frames` is the CTC frame count, which `max_peptide_len` used to serve alongside its own meaning. Both are now required in the config, and `max_peptide_len` filters only the database search.
+- `isotope_error_range` defaults to `[0, 3]`: precise mass control needs the wider range because precursors are often picked at the +2 or +3 isotope peak.
 
 ### Fixed
 

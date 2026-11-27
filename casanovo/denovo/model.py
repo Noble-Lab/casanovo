@@ -17,6 +17,7 @@ from typing import (
     Union,
 )
 
+import depthcharge.constants
 import einops
 import lightning.pytorch as pl
 import numpy as np
@@ -30,6 +31,19 @@ from . import evaluate
 from .muon import MuonWithAuxAdamW
 
 logger = logging.getLogger("casanovo")
+
+H2O_MASS = depthcharge.constants.H2O
+ISOTOPE_SPACING = depthcharge.constants.C13
+# Precise mass control (PMC) decoding: the mass discretization step, the
+# headroom that keeps rounding from carrying a valid path off the end of
+# the mass axis, a cap on the backtracking table, and the frame
+# probability below which a token is not considered at that frame. The
+# last prunes hard because CTC output is blank-dominated: only a handful
+# of frames per spectrum carry a plausible residue.
+PMC_RESOLUTION = 0.01
+PMC_MASS_GUARD = 0.1
+PMC_MAX_POINTER_BYTES = 1_000_000_000
+PMC_MIN_EMIT_PROB = 1e-4
 
 
 class Spec2Pep(pl.LightningModule):
@@ -134,7 +148,7 @@ class Spec2Pep(pl.LightningModule):
         residues: str | Dict[str, float] = "canonical",
         max_charge: int = 5,
         precursor_mass_tol: float = 50,
-        isotope_error_range: Tuple[int, int] = (0, 1),
+        isotope_error_range: Tuple[int, int] = (0, 3),
         min_peptide_len: int = 6,
         n_beams: int = 1,
         top_match: int = 1,
@@ -154,7 +168,10 @@ class Spec2Pep(pl.LightningModule):
         super().__init__()
         self.save_hyperparameters()
 
-        self.tokenizer = tokenizer or PeptideTokenizer()
+        # Reversed, as `model_runner` builds it. Precise mass control needs
+        # that direction, and depthcharge defaults to the other, so a bare
+        # model would otherwise lose mass control without saying so.
+        self.tokenizer = tokenizer or PeptideTokenizer(reverse=True)
         # Vocabulary: tokenizer tokens incl. padding (0), plus a
         # dedicated CTC blank class as the last index.
         self.vocab_size = len(self.tokenizer) + 2
@@ -193,6 +210,9 @@ class Spec2Pep(pl.LightningModule):
             blank=self.blank_token, zero_infinity=True
         )
         self._ctc_infeasible_warned = False
+        self._pmc_size_warned = False
+        self._pmc_vocab_warned = False
+        self._pmc_reverse_warned = False
         # Optimizer settings.
         self.warmup_iters = warmup_iters
         self.cosine_schedule_period_iters = cosine_schedule_period_iters
@@ -625,11 +645,523 @@ class Spec2Pep(pl.LightningModule):
             stop_scores.append(stop_conf)
         return sequences, scores, stop_scores
 
+    def _residue_mass_windows(
+        self, precursor_mass: float, guard: float = 0.0
+    ) -> List[Tuple[float, float]]:
+        """
+        Acceptable total residue mass windows for a precursor.
+
+        One window per isotope error in ``isotope_error_range``, each
+        spanning the precursor mass tolerance (in ppm), expressed in
+        residue-sum space (i.e. with the water mass removed).
+
+        Parameters
+        ----------
+        precursor_mass : float
+            The observed precursor neutral mass.
+        guard : float
+            Extra widening (in Da) applied to both window edges.
+
+        Returns
+        -------
+        List[Tuple[float, float]]
+            The (lower, upper) bounds of each window.
+        """
+        tol = self.precursor_mass_tol * precursor_mass / 1e6
+        return [
+            (center - tol - guard, center + tol + guard)
+            for iso in range(
+                self.isotope_error_range[0], self.isotope_error_range[1] + 1
+            )
+            for center in [precursor_mass - iso * ISOTOPE_SPACING - H2O_MASS]
+        ]
+
+    def _fits_precursor_mass(
+        self, tokens: List[int], precursor_mass: float
+    ) -> bool:
+        """
+        Check whether a peptide matches the precursor mass.
+
+        Parameters
+        ----------
+        tokens : List[int]
+            The decoded token indices.
+        precursor_mass : float
+            The observed precursor neutral mass.
+
+        Returns
+        -------
+        bool
+            True if the total residue mass falls within the precursor
+            mass tolerance for any allowed isotope error.
+        """
+        mass = (
+            self.token_masses[torch.tensor(tokens, dtype=torch.long)]
+            .sum()
+            .item()
+        )
+        return any(
+            lo <= mass <= hi
+            for lo, hi in self._residue_mass_windows(precursor_mass)
+        )
+
+    def _pmc_grid(
+        self, precursor_mass: float, n_frames: int, vocab: int
+    ) -> Optional[Tuple[float, int, int, float, List[Tuple[float, float]]]]:
+        """
+        Size the mass axis the PMC search runs over.
+
+        Returns ``(resolution, zero_bin, n_bins, hi_max, accept_windows)``,
+        or None when no finite window bounds the search.
+        """
+        # Mass discretization. The pointer table is the memory
+        # bottleneck, so pick the finest resolution whose table fits in
+        # PMC_MAX_POINTER_BYTES rather than giving up on mass control
+        # for heavy precursors. The guard widens the mass axis to hold
+        # accumulated rounding, which grows with the resolution and the
+        # number of emissions; acceptance tests the exact mass.
+        base = self._residue_mass_windows(precursor_mass, PMC_MASS_GUARD)
+        hi_base = max(hi for _, hi in base)
+        if hi_base <= 0:
+            return None
+        # An unbounded window constrains nothing: precursor_mass_tol is
+        # "inf", which is how PMC is turned off. Bail out rather than build
+        # a mass axis of infinite extent, whose resolution would come out
+        # inf and whose bin count would be NaN. Only an empty greedy
+        # peptide reaches here under an infinite tolerance, since a
+        # non-empty one already "fits" and predict_step skips the search.
+        if not np.isfinite(hi_base):
+            return None
+        max_bins = max(4, PMC_MAX_POINTER_BYTES // (n_frames * vocab))
+        resolution = max(PMC_RESOLUTION, hi_base / (max_bins - 2))
+        guard = max(PMC_MASS_GUARD, float(np.sqrt(n_frames)) * resolution)
+        axis_windows = self._residue_mass_windows(precursor_mass, guard)
+        hi_max = max(hi for _, hi in axis_windows)
+        # What the readout accepts: the true windows, unguarded. The
+        # states carry exact masses, so this is the same predicate
+        # `_fits_precursor_mass` applies to the finished peptide.
+        accept_windows = self._residue_mass_windows(precursor_mass)
+        # Negative-mass tokens (the ammonia-loss N-terminal modification)
+        # push the running total below zero, so the axis starts below it.
+        # Only N-terminal modifications may be negative and only one may be
+        # emitted, so one token's worth of headroom is enough.
+        neg_mass = min(
+            (self.token_masses[c].item() for c in self.neg_mass_idx.tolist()),
+            default=0.0,
+        )
+        # One bin above that for the stop, which carries no mass but moves
+        # the state anyway so that it cannot be emitted twice. A path that
+        # emitted one runs one bin above a path of the same mass that did
+        # not, so the axis needs the room.
+        zero_bin = int(np.ceil(max(0.0, -neg_mass) / resolution)) + 1
+        n_bins = zero_bin + int(hi_max / resolution) + 3
+        if n_bins > max_bins:
+            # The widened guard pushed the table back over budget. The
+            # offset bins have to come out of the budget too, so solve for
+            # the resolution with them already reserved.
+            resolution = hi_max / max(1, max_bins - zero_bin - 3)
+            zero_bin = int(np.ceil(max(0.0, -neg_mass) / resolution)) + 1
+            n_bins = zero_bin + int(hi_max / resolution) + 3
+        if resolution > PMC_RESOLUTION and not self._pmc_size_warned:
+            self._pmc_size_warned = True
+            logger.warning(
+                "Coarsening precise mass control decoding to %.4f Da for "
+                "large precursor masses to keep the DP table under %d "
+                "bytes.",
+                resolution,
+                PMC_MAX_POINTER_BYTES,
+            )
+        return resolution, zero_bin, n_bins, hi_max, accept_windows
+
+    def _pmc_alphabet(
+        self, vocab: int, hi_max: float, resolution: float, device
+    ) -> Optional[
+        Tuple[Any, Any, Any, List[bool], List[bool], Dict[int, int]]
+    ]:
+        """
+        Which tokens the PMC search may emit, and by how much mass.
+
+        Returns ``(emit_idx, delta_idx, emit_exact, emit_pinned,
+        emit_is_stop, deltas)``, or None when nothing is emittable within
+        the mass axis.
+        """
+        # Emittable tokens and their discretized masses. Only padding and
+        # the blank never emit; the blank stays traversable, as CTC needs.
+        excluded = {0, self.blank_token}
+        # Pinned tokens may only be emitted at one point on the mass
+        # axis, which is what lets a token of zero or negative mass in at
+        # all: it cannot then repeat without bound. An N-terminal
+        # modification opens the peptide, and the stop opens PMC's own
+        # order, since the reversed tokenizer puts it last and the frames
+        # are flipped. Both are therefore emitted from the zero-mass bin.
+        pinned = set(self.nterm_idx.tolist()) | {self.stop_token}
+        emit_tokens, emit_deltas, emit_pinned, emit_is_stop = [], [], [], []
+        for c in range(min(vocab, self.token_masses.shape[0])):
+            mass = self.token_masses[c].item()
+            if c in excluded or mass > hi_max:
+                continue
+            if mass <= 0 and c not in pinned:
+                # A non-terminal residue of zero or negative mass could
+                # repeat without bound, which the fixed axis cannot hold.
+                continue
+            emit_tokens.append(c)
+            # The stop carries no mass, so pinning it to the zero-mass bin
+            # leaves that bin still satisfying the pin: a blank could
+            # return there and emit another. Step it one bin instead. The
+            # bin is not the mass, which `state_mass` carries exactly and
+            # the readout tests, so this only moves the state out of reach
+            # of its own pin. One stop per path, without a state bit.
+            emit_deltas.append(
+                1 if c == self.stop_token else round(mass / resolution)
+            )
+            emit_pinned.append(c in pinned)
+            emit_is_stop.append(c == self.stop_token)
+        if not emit_tokens:
+            return None
+        deltas = dict(zip(emit_tokens, emit_deltas))
+        emit_idx = torch.tensor(emit_tokens, device=device)
+        delta_idx = torch.tensor(emit_deltas, device=device)
+        # The unrounded masses, added to the running total alongside the
+        # rounded ones that move the state along the axis.
+        emit_exact = self.token_masses[emit_idx]
+        return (
+            emit_idx,
+            delta_idx,
+            emit_exact,
+            emit_pinned,
+            emit_is_stop,
+            deltas,
+        )
+
+    def _pmc_transitions(
+        self,
+        delta_idx,
+        emit_pinned: List[bool],
+        emit_is_stop: List[bool],
+        n_bins: int,
+        zero_bin: int,
+        device,
+    ) -> Tuple[Any, Any]:
+        """
+        Where each emission comes from on the mass axis, and whether it may.
+
+        Returns ``(src_bins, valid)``, both of shape (emissions, bins).
+        """
+        # Per-token mass shifts as gather indices over the mass axis:
+        # src_bins[e, m] = m - delta_e. A negative delta moves the source
+        # ABOVE the target, so both ends of the axis have to be checked.
+        bins = torch.arange(n_bins, device=device)
+        raw_src = bins.unsqueeze(0) - delta_idx.unsqueeze(1)
+        valid = (raw_src >= 0) & (raw_src < n_bins)
+        src_bins = raw_src.clamp(0, n_bins - 1)
+        # A pinned token may only be emitted before any residue mass has
+        # accumulated. "Nothing emitted yet" is the zero-mass bin, so
+        # requiring the source to be `zero_bin` means requiring the
+        # target to be zero_bin + delta.
+        pinned_only = torch.tensor(emit_pinned, device=device).unsqueeze(1)
+        is_stop = torch.tensor(emit_is_stop, device=device).unsqueeze(1)
+        from_open = bins.unsqueeze(0) == zero_bin + delta_idx.unsqueeze(1)
+        # The stop steps one bin without carrying mass, so a path that
+        # emitted one sits at zero_bin + 1 with nothing emitted yet. An
+        # N-terminal modification opens the peptide after it, since the
+        # frame flip puts the stop first, so it may start from either.
+        # The stop itself may not: leaving it with the single source is
+        # what stops a second one. Only a modification of exactly minus
+        # one bin could step back and re-open that door, and the real
+        # ones are +25.98, +42.01, -17.03 and +43.01 Da, thousands away.
+        from_stopped = bins.unsqueeze(0) == zero_bin + 1 + delta_idx.unsqueeze(
+            1
+        )
+        valid &= ~pinned_only | torch.where(
+            is_stop, from_open, from_open | from_stopped
+        )
+        return src_bins, valid
+
+    def _pmc_decode(
+        self, logits: torch.Tensor, precursor_mass: float
+    ) -> Optional[Tuple[List[int], List[float], Optional[float]]]:
+        """
+        Precise mass control (PMC) decoding for a single spectrum.
+
+        Knapsack-like dynamic programming over the CTC lattice: find
+        the highest-probability CTC path whose
+        collapsed peptide's total residue mass matches the precursor
+        mass within tolerance, considering all allowed isotope errors.
+
+        The DP state is (discretized emitted mass, last path symbol);
+        the last symbol is needed to apply the CTC collapse rules
+        (a repeated symbol without an intervening blank does not emit).
+        Each state also carries the exact residue mass of its best path,
+        and the readout tests that rather than the bin, so rounding
+        cannot make the search commit to a path the final mass check
+        rejects.
+
+        Padding is excluded from the search, as is any residue of zero
+        or negative mass that is not pinned (it could repeat without
+        bound, which a fixed axis cannot hold). A pinned token may only
+        be emitted before any residue mass has accumulated, which is
+        also what bounds the axis below zero: only pinned tokens may
+        carry a negative mass, so at most one such step is ever taken.
+        N-terminal modifications are pinned because they open the
+        peptide, and the stop because the frame flip puts it at the
+        opening of this search's order; it is returned separately, since
+        it is scored with the peptide but is not part of it. The stop
+        also steps one bin without carrying any mass, so that emitting
+        it moves the path out of reach of its own pin and no second one
+        can follow; the readout tests the exact mass, not the bin, so
+        the offset costs only a bin of headroom. As an
+        approximation for speed, a token takes part in a
+        frame only where its probability exceeds ``PMC_MIN_EMIT_PROB``:
+        it cannot be emitted there, and a run of it cannot span that
+        frame either, since the state is dropped rather than carried.
+        Frames with no such token reduce to a blank-only update, which
+        is most of them.
+
+        The mass grid is discretized at ``PMC_RESOLUTION``, coarsened
+        for heavy precursors so that the backtracking table stays under
+        ``PMC_MAX_POINTER_BYTES``. Bin ``zero_bin`` holds zero mass, with
+        the bins below it reserved for the negative excursion.
+
+        Parameters
+        ----------
+        logits : torch.Tensor of shape (n_frames, n_tokens)
+            The frame-level amino acid scores for one spectrum.
+        precursor_mass : float
+            The observed precursor neutral mass.
+
+        Returns
+        -------
+        Optional[Tuple[List[int], List[float], Optional[float]]]
+            The decoded token indices, their per-token confidences, and
+            the stop's confidence if the path emitted one, or None if no
+            mass-matching path exists. None also means the search was
+            declined: the DP table would be too large, the vocabulary
+            outgrew the int8 backtracking pointers, or the tokenizer is
+            not reversed. The caller keeps the greedy peptide either way.
+        """
+        device = logits.device
+        n_frames, vocab = logits.shape
+        # The stop is pinned to the zero-mass bin, which is where the frame
+        # flip puts it for a reversed tokenizer: it closes that tokenizer's
+        # order, so flipping opens this search's. Without the flip the stop
+        # closes the frames instead, at full residue mass, and the pin
+        # cannot place it there. `model_runner` always builds a reversed
+        # tokenizer, so this only guards a directly constructed model.
+        if not self.tokenizer.reverse:
+            if not self._pmc_reverse_warned:
+                self._pmc_reverse_warned = True
+                logger.warning(
+                    "Skipping precise mass control: it places the stop token "
+                    "by flipping the frames, which needs a reversed "
+                    "tokenizer."
+                )
+            return None
+        # A reversed tokenizer emits the peptide C-terminus first, which
+        # would put an N-terminal modification last. Decoding the frames
+        # back to front puts it first, so the "N-terminal tokens open the
+        # peptide" rule below is the only one needed; the emitted tokens
+        # are flipped back before returning.
+        logits = logits.flip(0)
+
+        grid = self._pmc_grid(precursor_mass, n_frames, vocab)
+        if grid is None:
+            return None
+        resolution, zero_bin, n_bins, hi_max, accept_windows = grid
+
+        alphabet = self._pmc_alphabet(vocab, hi_max, resolution, device)
+        if alphabet is None:
+            return None
+        (
+            emit_idx,
+            delta_idx,
+            emit_exact,
+            emit_pinned,
+            emit_is_stop,
+            deltas,
+        ) = alphabet
+        emit_i8 = emit_idx.unsqueeze(1).to(torch.int8)
+
+        src_bins, valid = self._pmc_transitions(
+            delta_idx, emit_pinned, emit_is_stop, n_bins, zero_bin, device
+        )
+
+        log_probs = logits.log_softmax(-1)
+        neg_inf = float("-inf")
+        blank = self.blank_token
+        # score[m, c]: best log-probability of any path prefix with
+        # discretized emitted mass m and last symbol c.
+        score = torch.full((n_bins, vocab), neg_inf, device=device)
+        score[zero_bin, blank] = 0.0
+        # state_mass[m, c]: the exact residue mass of that same best
+        # prefix, accumulated from the unrounded token masses. NaN marks
+        # a state no path has reached; it compares false against every
+        # window, so an unreachable state can never be read out.
+        state_mass = torch.full(
+            (n_bins, vocab), float("nan"), dtype=torch.float64, device=device
+        )
+        state_mass[zero_bin, blank] = 0.0
+        # pointers[t, m, c]: last symbol of the predecessor state; a
+        # pointer equal to c itself encodes a repeat (no new emission).
+        # Kept on the model device; backtracking reads single entries.
+        # int8 holds the symbol index, so the alphabet has to fit in it:
+        # above 127 the cast would wrap and backtracking would follow the
+        # wrong symbols without any error. Nothing checks the residue
+        # dictionary against this bound, so a model trains normally and
+        # only reaches it here. Decline the search rather than raise; the
+        # caller then keeps the greedy peptide, as it does whenever no
+        # mass-matching path exists.
+        if vocab > 127:
+            if not self._pmc_vocab_warned:
+                self._pmc_vocab_warned = True
+                logger.warning(
+                    "Skipping precise mass control: it holds at most 127 "
+                    "tokens, and this vocabulary has %d.",
+                    vocab,
+                )
+            return None
+        pointers = torch.empty(
+            (n_frames, n_bins, vocab), dtype=torch.int8, device=device
+        )
+        # Tokens below PMC_MIN_EMIT_PROB at a frame drop out of that
+        # frame entirely: they cannot be emitted, and an ongoing run of
+        # one cannot continue through it, because the state is left at
+        # -inf rather than carried forward. Frames with no candidate at
+        # all reduce to a blank-only update, which is the usual case and
+        # the reason this is affordable: measured 7 of 101 frames doing
+        # emission work on a typical spectrum, 120 ms against 1,378 ms
+        # with the threshold removed.
+        min_lp = float(np.log(PMC_MIN_EMIT_PROB))
+        candidates = log_probs[:, emit_idx] > min_lp  # (n_frames, E)
+        for t in range(n_frames):
+            lp = log_probs[t]
+            sel = candidates[t].nonzero(as_tuple=True)[0]
+            new_score = torch.full_like(score, neg_inf)
+            new_ptr = torch.full(
+                (n_bins, vocab), -1, dtype=torch.int8, device=device
+            )
+            new_mass = torch.full_like(state_mass, float("nan"))
+            if sel.numel() == 0:
+                # Blank-only frame: every state transitions to blank.
+                best, best_arg = score.max(dim=1)
+                new_score[:, blank] = best + lp[blank]
+                new_ptr[:, blank] = best_arg.to(torch.int8)
+                # A blank emits nothing, so the mass rides along.
+                new_mass[:, blank] = state_mass.gather(
+                    1, best_arg.unsqueeze(1)
+                ).squeeze(1)
+                score = new_score
+                state_mass = new_mass
+                pointers[t] = new_ptr
+                continue
+            top2 = score.topk(2, dim=1)
+            best, best_arg = top2.values[:, 0], top2.indices[:, 0]
+            second, second_arg = top2.values[:, 1], top2.indices[:, 1]
+            # The blank column's predecessor mass; the emission columns
+            # read theirs off `emit_arg` below, which already names the
+            # predecessor the score chose.
+            mass_best = state_mass.gather(1, best_arg.unsqueeze(1)).squeeze(1)
+            sel_tokens = emit_idx[sel]
+            # Best predecessor excluding each candidate token itself,
+            # shifted by that token's mass: a new emission of token e at
+            # mass m extends the best path at mass m - delta_e whose
+            # last symbol differs from e.
+            is_self = best_arg.unsqueeze(0) == sel_tokens.unsqueeze(1)
+            excl_val = torch.where(
+                is_self, second.unsqueeze(0), best.unsqueeze(0)
+            )
+            excl_arg = torch.where(
+                is_self, second_arg.unsqueeze(0), best_arg.unsqueeze(0)
+            )
+            emit_val = excl_val.gather(1, src_bins[sel]) + lp[
+                sel_tokens
+            ].unsqueeze(1)
+            emit_val = emit_val.masked_fill(~valid[sel], neg_inf)
+            emit_arg = excl_arg.gather(1, src_bins[sel])
+            # The exact mass follows the same predecessor the score
+            # does, state (src_bins, emit_arg), gaining the unrounded
+            # residue mass rather than its bin.
+            emit_mass = state_mass.view(-1)[
+                src_bins[sel] * vocab + emit_arg
+            ] + emit_exact[sel].unsqueeze(1)
+            # Continue the current run: no new emission.
+            repeat = score[:, sel_tokens].T + lp[sel_tokens].unsqueeze(1)
+            repeat_mass = state_mass[:, sel_tokens].T
+            use_emit = emit_val > repeat
+            emit_score = torch.where(use_emit, emit_val, repeat)
+            emit_state_mass = torch.where(use_emit, emit_mass, repeat_mass)
+            emit_ptr = torch.where(
+                use_emit,
+                emit_arg.to(torch.int8),
+                emit_i8[sel].expand_as(use_emit),
+            )
+            # Blank keeps the mass and may follow any symbol.
+            new_score[:, blank] = best + lp[blank]
+            new_ptr[:, blank] = best_arg.to(torch.int8)
+            new_mass[:, blank] = mass_best
+            new_score[:, sel_tokens] = emit_score.T
+            new_ptr[:, sel_tokens] = emit_ptr.T
+            new_mass[:, sel_tokens] = emit_state_mass.T
+            score = new_score
+            state_mass = new_mass
+            pointers[t] = new_ptr
+
+        # Read out the best final state whose exact mass is in tolerance.
+        allowed = torch.zeros_like(score, dtype=torch.bool)
+        for lo, hi in accept_windows:
+            allowed |= (state_mass >= lo) & (state_mass <= hi)
+        score = score.masked_fill(~allowed, neg_inf)
+        best_val, flat_idx = score.flatten().max(dim=0)
+        if not torch.isfinite(best_val):
+            return None
+        m = int(flat_idx.item()) // vocab
+        c = int(flat_idx.item()) % vocab
+
+        # Backtrack, aggregating each emission's confidence as the
+        # maximum probability over its merged frames.
+        probs = log_probs.exp().cpu()
+        emissions = []
+        run_conf = None
+        for t in reversed(range(n_frames)):
+            prev = int(pointers[t, m, c])
+            if c != blank:
+                prob = probs[t, c].item()
+                run_conf = prob if run_conf is None else max(run_conf, prob)
+                if prev != c:
+                    # Frame t started this emission of c.
+                    emissions.append((c, run_conf))
+                    run_conf = None
+                    m -= deltas[c]
+            c = prev
+
+        # Undo the frame flip so the caller still receives the tokens in
+        # the tokenizer's own order. The guard above left only the
+        # reversed case, so this is unconditional.
+        tokens = [c for c, _ in emissions]
+        confs = [s for _, s in emissions]
+        # The stop is scored like the peptide's other emissions but is
+        # not part of it, so it leaves here on its own, as it does from
+        # `_ctc_decode`. The pin allows only one, and taking the best
+        # keeps the readout total if that ever stops holding.
+        stop_conf = max(
+            (s for c, s in zip(tokens, confs) if c == self.stop_token),
+            default=None,
+        )
+        if stop_conf is not None:
+            keep = [c != self.stop_token for c in tokens]
+            tokens = [c for c, k in zip(tokens, keep) if k]
+            confs = [s for s, k in zip(confs, keep) if k]
+        # Agrees with the readout by construction; kept as the guard on
+        # an empty decode.
+        if not tokens or not self._fits_precursor_mass(tokens, precursor_mass):
+            return None
+        return tokens, confs, stop_conf
+
     def predict_step(
         self, batch: Dict[str, torch.Tensor], *args
     ) -> List[psm.PepSpecMatch]:
         """
-        A single prediction step: greedy CTC decoding.
+        A single prediction step: greedy CTC decoding, then precise mass
+        control when the greedy peptide misses the precursor window.
 
         Parameters
         ----------
@@ -646,6 +1178,22 @@ class Spec2Pep(pl.LightningModule):
         """
         logits, _ = self._forward_step(batch)
         sequences, scores, stop_scores = self._ctc_decode(logits)
+
+        # Precise mass control: when the greedy peptide does not match
+        # the precursor mass, search for the best CTC path that does.
+        # If PMC finds none, the greedy peptide is kept, unpenalized
+        # (_peptide_score).
+        _, _, precursors, _ = self._process_batch(batch)
+        for i, tokens in enumerate(sequences):
+            precursor_mass = precursors[i, 0].item()
+            fit = bool(tokens) and self._fits_precursor_mass(
+                tokens, precursor_mass
+            )
+            if not fit:
+                pmc = self._pmc_decode(logits[i], precursor_mass)
+                if pmc is not None:
+                    # PMC only returns mass-matching paths.
+                    sequences[i], scores[i], stop_scores[i] = pmc
 
         predictions = []
         for filename, scan, charge, prec_mz, tokens, confs, stop in zip(

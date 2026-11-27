@@ -5,6 +5,7 @@ import functools
 import hashlib
 import heapq
 import io
+import logging
 import math
 import os
 import pathlib
@@ -1916,6 +1917,397 @@ def test_intermediate_ctc_adds_no_parameters():
     assert unfed.training_step(batch) > 0
 
 
+def test_pmc_decode():
+    """Test precise mass control CTC decoding."""
+    tokenizer = depthcharge.tokenizers.peptides.MskbPeptideTokenizer(
+        reverse=True, start_token=None, stop_token="$"
+    )
+    model = Spec2Pep(
+        dim_model=8,
+        n_head=2,
+        dim_feedforward=8,
+        n_layers=1,
+        residues="massivekb",
+        tokenizer=tokenizer,
+    )
+    idx = tokenizer.index
+    aa_k, aa_g, aa_a, aa_e = idx["K"], idx["G"], idx["A"], idx["E"]
+
+    # Greedy decoding prefers G at the second frame, but the precursor
+    # mass matches K + A + E.
+    logits = torch.full((4, model.vocab_size), -10.0)
+    logits[0, aa_k] = 5.0
+    logits[1, aa_g] = 5.0
+    logits[1, aa_a] = 4.9
+    logits[2, aa_e] = 5.0
+    logits[3, model.blank_token] = 5.0
+
+    greedy = model._ctc_decode(logits.unsqueeze(0))[0][0]
+    assert greedy == [aa_k, aa_g, aa_e]
+
+    masses = model.token_masses
+    precursor_mass = (
+        masses[aa_k] + masses[aa_a] + masses[aa_e]
+    ).item() + 18.010565
+
+    tokens, confs, _ = model._pmc_decode(logits, precursor_mass)
+    assert tokens == [aa_k, aa_a, aa_e]
+    assert len(confs) == len(tokens)
+    assert model._fits_precursor_mass(tokens, precursor_mass)
+    assert not model._fits_precursor_mass(greedy, precursor_mass)
+
+    # An observed precursor mass off by one isotope is still matched.
+    tokens, *_ = model._pmc_decode(logits, precursor_mass + 1.00335)
+    assert tokens == [aa_k, aa_a, aa_e]
+
+    # No path can reach an infeasible precursor mass.
+    assert model._pmc_decode(logits, 5_000.0) is None
+
+
+def test_default_tokenizer_is_reversed():
+    """A model built without a tokenizer still supports PMC.
+
+    depthcharge's own default is a forward tokenizer, which PMC declines,
+    so a bare model would quietly decode without mass control.
+    """
+    model = Spec2Pep(dim_model=8, n_head=2, dim_feedforward=8, n_layers=1)
+    assert model.tokenizer.reverse
+
+
+def test_pmc_decode_declines_forward_tokenizer(caplog):
+    """PMC places the stop by flipping the frames, so it needs a flip."""
+    tokenizer = depthcharge.tokenizers.peptides.MskbPeptideTokenizer(
+        reverse=False, start_token=None, stop_token="$"
+    )
+    model = Spec2Pep(
+        dim_model=8,
+        n_head=2,
+        dim_feedforward=8,
+        n_layers=1,
+        residues="massivekb",
+        tokenizer=tokenizer,
+    )
+    idx = tokenizer.index
+    aa_k, aa_a, aa_e = idx["K"], idx["A"], idx["E"]
+    masses = model.token_masses
+    precursor_mass = (
+        masses[aa_k] + masses[aa_a] + masses[aa_e]
+    ).item() + denovo.model.H2O_MASS
+
+    logits = torch.full((4, model.vocab_size), -10.0)
+    logits[0, aa_k] = 5.0
+    logits[1, aa_a] = 5.0
+    logits[2, aa_e] = 5.0
+    logits[3, model.blank_token] = 5.0
+
+    # Declined rather than decoded against a stop it cannot place.
+    with caplog.at_level(logging.WARNING):
+        assert model._pmc_decode(logits, precursor_mass) is None
+    assert "reversed" in caplog.text
+    # Warned once, so a full run does not repeat it per spectrum.
+    caplog.clear()
+    with caplog.at_level(logging.WARNING):
+        assert model._pmc_decode(logits, precursor_mass) is None
+    assert "reversed" not in caplog.text
+
+
+def _pmc_model():
+    """A small model with the MassIVE-KB tokenizer for PMC tests."""
+    # from_massivekb carries the modification tokens, including the
+    # N-terminal ones; MskbPeptideTokenizer alone is canonical-only.
+    tokenizer = depthcharge.tokenizers.PeptideTokenizer.from_massivekb(
+        reverse=True, start_token=None, stop_token="$"
+    )
+    return Spec2Pep(
+        dim_model=8,
+        n_head=2,
+        dim_feedforward=8,
+        n_layers=1,
+        residues="massivekb",
+        tokenizer=tokenizer,
+    )
+
+
+def test_pmc_decode_nterm_mod():
+    """N-terminal modifications decode only at the N-terminus."""
+    model = _pmc_model()
+    idx = model.tokenizer.index
+    aa_g, aa_k = idx["G"], idx["K"]
+    nterm = next(
+        i for i in model.nterm_idx.tolist() if model.token_masses[i].item() > 0
+    )
+
+    # The tokenizer is reversed, so frames run C-terminus first and the
+    # modification belongs at the last frame.
+    logits = torch.full((3, model.vocab_size), -10.0)
+    logits[0, aa_k] = 5.0
+    logits[1, aa_g] = 5.0
+    logits[2, nterm] = 5.0
+    masses = model.token_masses
+    precursor_mass = (
+        masses[aa_k] + masses[aa_g] + masses[nterm]
+    ).item() + 18.010565
+
+    tokens, confs, _ = model._pmc_decode(logits, precursor_mass)
+    assert tokens == [aa_k, aa_g, nterm]
+    assert len(confs) == len(tokens)
+    assert model._fits_precursor_mass(tokens, precursor_mass)
+
+    # The same evidence with the modification at the C-terminal end
+    # describes an invalid peptide, so no path is returned.
+    assert model._pmc_decode(logits.flip(0), precursor_mass) is None
+
+
+def test_pmc_decode_all_nterm_mods():
+    """Every N-terminal modification decodes, negative mass included."""
+    model = _pmc_model()
+    idx = model.tokenizer.index
+    aa_g, aa_k = idx["G"], idx["K"]
+    masses = model.token_masses
+
+    for label in (
+        "[Ammonia-loss]-",
+        "[Acetyl]-",
+        "[+25.980265]-",
+        "[Carbamyl]-",
+    ):
+        nterm = idx[label]
+        logits = torch.full((3, model.vocab_size), -10.0)
+        logits[0, aa_k] = 5.0
+        logits[1, aa_g] = 5.0
+        logits[2, nterm] = 5.0
+        precursor_mass = (
+            masses[aa_k] + masses[aa_g] + masses[nterm]
+        ).item() + 18.010565
+
+        tokens, *_ = model._pmc_decode(logits, precursor_mass)
+        assert tokens == [aa_k, aa_g, nterm], label
+        assert model._fits_precursor_mass(tokens, precursor_mass), label
+        # Still rejected at the wrong end, negative mass or not.
+        assert model._pmc_decode(logits.flip(0), precursor_mass) is None, label
+
+    # Ammonia loss is the one that needs bins below zero.
+    assert masses[idx["[Ammonia-loss]-"]].item() < 0
+
+
+def test_pmc_decode_keeps_predicted_nterm_mod():
+    """A mass correction leaves the modification where it was.
+
+    The tests above hand PMC evidence the greedy path already agrees
+    with, so it only confirms them. Here the precursor forces a residue
+    to change, which is the case PMC actually runs for.
+    """
+    model = _pmc_model()
+    idx = model.tokenizer.index
+    masses = model.token_masses
+    aa_k, aa_g, aa_a, aa_e = idx["K"], idx["G"], idx["A"], idx["E"]
+
+    for label in (
+        "[Ammonia-loss]-",
+        "[Acetyl]-",
+        "[+25.980265]-",
+        "[Carbamyl]-",
+    ):
+        nterm = idx[label]
+        # Reversed tokenizer, so frames run C-terminus first and the
+        # modification sits last, ahead of the blank tail.
+        logits = torch.full((12, model.vocab_size), -10.0)
+        logits[0, aa_k] = 5.0
+        logits[1, aa_g] = 5.0
+        logits[1, aa_a] = 4.9
+        logits[2, aa_e] = 5.0
+        logits[3, nterm] = 5.0
+        logits[4:, model.blank_token] = 5.0
+
+        precursor_mass = (
+            masses[aa_k] + masses[aa_a] + masses[aa_e] + masses[nterm]
+        ).item() + denovo.model.H2O_MASS
+        greedy = model._ctc_decode(logits.unsqueeze(0))[0][0]
+        assert greedy == [aa_k, aa_g, aa_e, nterm], label
+        assert not model._fits_precursor_mass(greedy, precursor_mass), label
+
+        tokens, *_ = model._pmc_decode(logits, precursor_mass)
+        assert tokens == [aa_k, aa_a, aa_e, nterm], label
+        assert model._fits_precursor_mass(tokens, precursor_mass), label
+
+        # A precursor that accounts for no modification drops it.
+        bare = (
+            masses[aa_k] + masses[aa_a] + masses[aa_e]
+        ).item() + denovo.model.H2O_MASS
+        tokens, *_ = model._pmc_decode(logits, bare)
+        assert tokens == [aa_k, aa_a, aa_e], label
+
+
+def test_pmc_decode_coarse_resolution(monkeypatch):
+    """A precursor too heavy for the fine mass grid still decodes."""
+    model = _pmc_model()
+    idx = model.tokenizer.index
+    aa_k, aa_g, aa_a, aa_e = idx["K"], idx["G"], idx["A"], idx["E"]
+
+    logits = torch.full((4, model.vocab_size), -10.0)
+    logits[0, aa_k] = 5.0
+    logits[1, aa_g] = 5.0
+    logits[1, aa_a] = 4.9
+    logits[2, aa_e] = 5.0
+    logits[3, model.blank_token] = 5.0
+    masses = model.token_masses
+    precursor_mass = (
+        masses[aa_k] + masses[aa_a] + masses[aa_e]
+    ).item() + 18.010565
+
+    # A budget this small cannot hold the 0.01 Da grid; decoding should
+    # coarsen the grid instead of giving up on mass control.
+    monkeypatch.setattr(denovo.model, "PMC_MAX_POINTER_BYTES", 50_000)
+    tokens, *_ = model._pmc_decode(logits, precursor_mass)
+    assert tokens == [aa_k, aa_a, aa_e]
+    assert model._fits_precursor_mass(tokens, precursor_mass)
+
+
+def test_pmc_decode_emits_one_stop():
+    """The stop is scored once, however tempting a second one is.
+
+    It carries no mass, so pinning it to the zero-mass bin left that bin
+    still satisfying the pin: a blank could return there and emit
+    another, counting its log-probability twice in a path score that
+    reports only one stop. A continuous run is a single CTC emission, so
+    the second one needs a blank-dominant frame between two
+    stop-dominant ones.
+    """
+    model = _pmc_model()
+    idx = model.tokenizer.index
+    aa_k, aa_a, aa_e = idx["K"], idx["A"], idx["E"]
+    stop, blank = model.stop_token, model.blank_token
+    masses = model.token_masses
+    precursor_mass = (
+        masses[aa_k] + masses[aa_a] + masses[aa_e]
+    ).item() + denovo.model.H2O_MASS
+
+    # Built in the DP's own order, then flipped, so the model's flip for
+    # a reversed tokenizer restores exactly this.
+    dp = torch.full((10, model.vocab_size), -10.0)
+    dp[:, blank] = 0.0
+    dp[0, stop] = 3.0
+    dp[1, blank] = 3.0
+    dp[2, stop] = 3.0
+    dp[4, aa_k] = 5.0
+    dp[6, aa_a] = 5.0
+    dp[8, aa_e] = 5.0
+
+    tokens, confs, stop_conf = model._pmc_decode(dp.flip(0), precursor_mass)
+    # The stop leaves separately, so it is never among the residues.
+    assert tokens == [aa_e, aa_a, aa_k]
+    assert len(confs) == len(tokens)
+    assert stop_conf is not None
+    assert model._fits_precursor_mass(tokens, precursor_mass)
+
+    # The decoded peptide alone does not show the double emission, since
+    # the stops are stripped either way, so check the rule that forbids
+    # it: the stop has one legal target and it is not where it starts.
+    resolution = denovo.model.PMC_RESOLUTION
+    emit_idx, delta_idx, _, emit_pinned, emit_is_stop, deltas = (
+        model._pmc_alphabet(model.vocab_size, 5_000.0, resolution, "cpu")
+    )
+    assert masses[stop].item() == 0.0, "the stop must carry no mass"
+    assert deltas[stop] == 1, "yet it must still move the state"
+
+    zero_bin, n_bins = 5, 40
+    src_bins, valid = model._pmc_transitions(
+        delta_idx, emit_pinned, emit_is_stop, n_bins, zero_bin, "cpu"
+    )
+    row = emit_idx.tolist().index(stop)
+    targets = valid[row].nonzero().flatten().tolist()
+    assert targets == [zero_bin + 1]
+    assert int(src_bins[row, zero_bin + 1]) == zero_bin
+
+
+def test_pmc_decode_near_miss_does_not_shadow_a_match():
+    """A near-isobaric decoy must not shadow a mass-matching path.
+
+    The mass axis is widened by PMC_MASS_GUARD, far beyond the 50 ppm
+    tolerance. A readout testing bins against those widened windows would
+    take a decoy inside the guard on score, fail the exact mass check,
+    and fall back to the greedy peptide. The states carry exact masses,
+    so the decoy is never a candidate.
+    """
+    model = _pmc_model()
+    idx = model.tokenizer.index
+    aa_k, aa_q, aa_a, aa_e = idx["K"], idx["Q"], idx["A"], idx["E"]
+
+    masses = model.token_masses
+    # K and Q are 0.0364 Da apart: inside PMC_MASS_GUARD (0.1 Da), well
+    # outside 50 ppm of this precursor (0.017 Da).
+    gap = abs((masses[aa_k] - masses[aa_q]).item())
+    precursor_mass = (
+        masses[aa_k] + masses[aa_a] + masses[aa_e]
+    ).item() + denovo.model.H2O_MASS
+    tol = model.precursor_mass_tol * precursor_mass / 1e6
+    assert tol < gap < denovo.model.PMC_MASS_GUARD
+
+    # Q outscores K, so the decoy is the highest-probability path.
+    logits = torch.full((4, model.vocab_size), -10.0)
+    logits[0, aa_q] = 5.0
+    logits[0, aa_k] = 4.9
+    logits[1, aa_a] = 5.0
+    logits[2, aa_e] = 5.0
+    logits[3, model.blank_token] = 5.0
+
+    greedy = model._ctc_decode(logits.unsqueeze(0))[0][0]
+    assert greedy == [aa_q, aa_a, aa_e]
+    assert not model._fits_precursor_mass(greedy, precursor_mass)
+
+    result = model._pmc_decode(logits, precursor_mass)
+    assert result is not None, "the decoy shadowed a real match"
+    tokens, *_ = result
+    assert tokens == [aa_k, aa_a, aa_e]
+    assert model._fits_precursor_mass(tokens, precursor_mass)
+
+
+def test_predict_step_keeps_mass_mismatch_unpenalized(monkeypatch):
+    """PMC may give up; the greedy peptide it leaves behind keeps its score.
+
+    Upstream subtracts 1 from such a peptide. Here it is not penalized: on
+    chimeric spectra it is often the co-isolated peptide, whose mass misses
+    the recorded precursor.
+    """
+    model = _pmc_model()
+    model.min_peptide_len = 0
+    idx = model.tokenizer.index
+    tokens = [idx["K"], idx["A"], idx["E"]]
+
+    logits = torch.full((2, 4, model.vocab_size), -10.0)
+    for frame, token in enumerate(tokens):
+        logits[:, frame, token] = 5.0
+    logits[:, 3, model.blank_token] = 5.0
+
+    mass = sum(model.token_masses[t].item() for t in tokens)
+    mass += denovo.model.H2O_MASS
+    # The second precursor is out of reach for any path, so PMC returns
+    # None and the unmatched greedy peptide survives.
+    precursors = torch.tensor([[mass], [5_000.0]])
+    monkeypatch.setattr(model, "_forward_step", lambda batch: (logits, None))
+    monkeypatch.setattr(
+        model, "_process_batch", lambda batch: (None, None, precursors, None)
+    )
+
+    matched, missed = model.predict_step(
+        {
+            "peak_file": ["a.mgf", "a.mgf"],
+            "scan_id": [1, 2],
+            "precursor_charge": torch.tensor([2, 2]),
+            "precursor_mz": torch.tensor([400.0, 400.0]),
+        }
+    )
+
+    assert matched.sequence == missed.sequence
+    # Same peptide, same logits: the same score whether or not it fits.
+    assert 0 <= missed.peptide_score == pytest.approx(matched.peptide_score)
+    # Aggregated as upstream does, so the reported score stays the
+    # product of the reported residue scores.
+    assert matched.peptide_score == pytest.approx(
+        float(np.prod(matched.aa_scores))
+    )
+
+
 def test_run_map(mgf_small):
     out_writer = ms_io.MztabWriter("dummy.mztab")
     # Set peak file by base file name only.
@@ -2639,3 +3031,50 @@ def test_db_spec2pep_forward_no_cache(tiny_config):
 
     with pytest.raises(ValueError, match="cached encoder output"):
         db_model.forward(mock_batch)
+
+
+def test_stop_token_is_scored_with_the_peptide(monkeypatch):
+    """The stop is trained as an emission, so it counts in the score.
+
+    CTC supervises it (`add_stop` puts it in the target), and upstream's
+    peptide score counts it, so decoding scores it too. It is not part
+    of the peptide, so it stays out of the reported residue scores.
+    """
+    model = _pmc_model()
+    model.min_peptide_len = 0
+    seq = [model.tokenizer.index[a] for a in ("K", "A", "E")]
+
+    logits = torch.full((1, 8, model.vocab_size), -10.0)
+    for frame, token in enumerate(seq):
+        logits[0, frame, token] = 5.0
+    # Deliberately less certain than the residues, so its contribution
+    # to the product is visible.
+    logits[0, 3, model.stop_token] = 2.0
+    logits[0, 4:, model.blank_token] = 5.0
+
+    mass = sum(model.token_masses[t].item() for t in seq)
+    mass += denovo.model.H2O_MASS
+    monkeypatch.setattr(model, "_forward_step", lambda batch: (logits, None))
+    monkeypatch.setattr(
+        model,
+        "_process_batch",
+        lambda batch: (None, None, torch.tensor([[mass]]), None),
+    )
+
+    (pred,) = model.predict_step(
+        {
+            "peak_file": ["a.mgf"],
+            "scan_id": [1],
+            "precursor_charge": torch.tensor([2]),
+            "precursor_mz": torch.tensor([400.0]),
+        }
+    )
+
+    _, _, (stop_conf,) = model._ctc_decode(logits)
+    assert stop_conf is not None and stop_conf < 1
+    # Reported residues exclude the stop; the peptide score includes it.
+    assert len(pred.aa_scores) == len(seq)
+    assert pred.peptide_score == pytest.approx(
+        float(np.prod(pred.aa_scores)) * stop_conf
+    )
+    assert pred.peptide_score < float(np.prod(pred.aa_scores))

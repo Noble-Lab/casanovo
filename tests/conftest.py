@@ -263,7 +263,7 @@ def _get_config_file(file_path, file_name, additional_cfg=None):
     """A standard config for a tiny model."""
     cfg = {
         "precursor_mass_tol": 50,
-        "isotope_error_range": [0, 1],
+        "isotope_error_range": [0, 3],
         "min_peptide_len": 6,
         "max_peptide_len": 100,
         "decoder_frames": 100,

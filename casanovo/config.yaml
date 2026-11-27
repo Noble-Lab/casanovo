@@ -14,10 +14,12 @@
 # peptide score.
 # database search: Select candidate peptides within the specified precursor m/z
 # tolerance.
-# Set to "inf" (with quotation marks) to disable the filter entirely.
+# Set to "inf" (with quotation marks) to disable the filter entirely, which
+# is also how precise mass control (PMC) is turned off.
 precursor_mass_tol: 50  # ppm
 # Isotopes to consider when comparing predicted and observed precursor m/z's.
-isotope_error_range: [0, 1]
+# PMC needs [0, 3]: precursors are often picked at the +2 or +3 isotope peak.
+isotope_error_range: [0, 3]
 # The minimum length of considered peptides. Database search only: this model
 # does not filter what it decodes, as the autoregressive one did.
 min_peptide_len: 6
